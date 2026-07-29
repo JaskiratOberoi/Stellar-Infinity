@@ -209,7 +209,8 @@
 
   function hide() {
     splash.classList.add("splash--hidden");
-    app.hidden = false;
+    // reduced motion skips the feature reel and lands on the banner directly
+    if (reducedMotion) { app.hidden = false; } else { playCinematic(); }
     // stop the particle loop once the fade completes
     setTimeout(function () {
       if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
@@ -220,6 +221,7 @@
     finished = false;
     setProgress(0, "Initializing analyzers");
     app.hidden = true;
+    resetCinematic();
     splash.classList.remove("splash--hidden");
     if (!rafId) frame();
     runDemo();
@@ -263,6 +265,100 @@
     if ((e.key === "r" || e.key === "R") && splash.classList.contains("splash--hidden")) {
       show();
     }
+  });
+
+  /* ---------- cinematic feature reel ---------- */
+
+  var cine = document.getElementById("cinematic");
+  var cineScenes = cine.querySelectorAll(".cine__scene");
+  var cineDotsWrap = document.getElementById("cine-dots");
+  var cineSkipBtn = document.getElementById("cine-skip");
+  var cineDots = [];
+  var cineIndex = 0;
+  var cineTimer = null;
+  var cineRunning = false;
+
+  var SCENE_HOLD = 3400;      // entrance + read time per scene
+  var SCENE_HOLD_LAST = 4200; // the chips montage needs a beat longer
+  var SCENE_EXIT = 460;
+
+  for (var d = 0; d < cineScenes.length; d++) {
+    var dot = document.createElement("span");
+    dot.className = "cine__dot";
+    cineDotsWrap.appendChild(dot);
+    cineDots.push(dot);
+  }
+
+  function cineMarkDots() {
+    for (var k = 0; k < cineDots.length; k++) {
+      cineDots[k].classList.toggle("cine__dot--on", k === cineIndex);
+    }
+  }
+
+  function playCinematic() {
+    cineRunning = true;
+    cineIndex = 0;
+    cine.hidden = false;
+    cine.classList.remove("cine--hidden");
+    enterScene();
+  }
+
+  function enterScene() {
+    for (var s = 0; s < cineScenes.length; s++) {
+      cineScenes[s].classList.remove("cine__scene--active", "cine__scene--exit");
+    }
+    cineScenes[cineIndex].classList.add("cine__scene--active");
+    cineMarkDots();
+    var hold = cineIndex === cineScenes.length - 1 ? SCENE_HOLD_LAST : SCENE_HOLD;
+    clearTimeout(cineTimer);
+    cineTimer = setTimeout(leaveScene, hold);
+  }
+
+  function leaveScene() {
+    if (!cineRunning) return;
+    cineScenes[cineIndex].classList.add("cine__scene--exit");
+    clearTimeout(cineTimer);
+    cineTimer = setTimeout(function () {
+      if (!cineRunning) return;
+      if (cineIndex < cineScenes.length - 1) {
+        cineIndex++;
+        enterScene();
+      } else {
+        endCinematic();
+      }
+    }, SCENE_EXIT);
+  }
+
+  function endCinematic() {
+    cineRunning = false;
+    clearTimeout(cineTimer);
+    app.hidden = false;
+    cine.classList.add("cine--hidden");
+    setTimeout(function () { cine.hidden = true; }, 650);
+  }
+
+  function resetCinematic() {
+    cineRunning = false;
+    clearTimeout(cineTimer);
+    cine.classList.remove("cine--hidden");
+    cine.hidden = true;
+    for (var s = 0; s < cineScenes.length; s++) {
+      cineScenes[s].classList.remove("cine__scene--active", "cine__scene--exit");
+    }
+  }
+
+  cineSkipBtn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    endCinematic();
+  });
+
+  // click / Escape advance the reel
+  cine.addEventListener("click", function () {
+    if (cineRunning) leaveScene();
+  });
+
+  window.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && cineRunning) endCinematic();
   });
 
   window.InfinitySplash = { setProgress: setProgress, finish: finish, show: show };

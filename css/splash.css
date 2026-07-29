@@ -33,8 +33,9 @@ body {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  display: grid;
-  place-items: center;
+  display: flex;
+  overflow-y: auto;
+  overflow-x: hidden;
   background:
     /* faint ECG graph-paper grid */
     repeating-linear-gradient(0deg,   var(--si-line) 0 1px, transparent 1px 32px),
@@ -44,10 +45,12 @@ body {
   transition: opacity 900ms ease, visibility 900ms ease;
 }
 
-/* vignette: grid fades out toward the edges */
+/* vignette: grid fades out toward the edges.
+   fixed (not absolute): keeps it glued to the viewport and out of the
+   scroll area now that .splash can scroll on short screens */
 .splash::after {
   content: "";
-  position: absolute;
+  position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 0;
@@ -61,7 +64,7 @@ body {
 }
 
 .splash__particles {
-  position: absolute;
+  position: fixed;
   inset: 0;
   width: 100%;
   height: 100%;
@@ -70,7 +73,8 @@ body {
 /* ---------- ambient glows ---------- */
 
 .splash__glow {
-  position: absolute;
+  /* fixed so the offscreen halves don't add scrollable overflow */
+  position: fixed;
   border-radius: 50%;
   filter: blur(90px);
   opacity: 0.45;
@@ -206,6 +210,7 @@ body {
 .splash__vitals {
   display: flex;
   justify-content: center;
+  flex-wrap: wrap;
   gap: 0.7rem;
   margin-top: 1.4rem;
   animation: word-in 1100ms ease 1050ms both;
@@ -278,12 +283,15 @@ body {
 .splash__content {
   position: relative;
   z-index: 1;
+  /* auto margins center the block but still allow scrolling when the
+     viewport is shorter than the content (grid centering would clip) */
+  margin: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.5rem;
   text-align: center;
-  padding: 0 1.5rem;
+  padding: 2rem 1.5rem 3.5rem; /* bottom padding clears the fixed footer */
   animation: content-rise 1200ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
@@ -519,10 +527,11 @@ body {
 
 .app {
   position: relative;
-  min-height: 100dvh;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
+  height: 100dvh;
+  display: flex;
+  padding: clamp(1rem, 4vw, 2.5rem);
+  overflow-y: auto;
+  overflow-x: hidden;
   background:
     repeating-linear-gradient(0deg,   var(--si-line) 0 1px, transparent 1px 32px),
     repeating-linear-gradient(90deg,  var(--si-line) 0 1px, transparent 1px 32px),
@@ -530,7 +539,8 @@ body {
 }
 
 .app__glow {
-  position: absolute;
+  /* fixed so the offscreen halves don't add scrollable overflow */
+  position: fixed;
   border-radius: 50%;
   filter: blur(90px);
   opacity: 0.45;
@@ -558,6 +568,9 @@ body {
 .cs {
   position: relative;
   z-index: 1;
+  margin: auto; /* centers, but lets the card scroll on short viewports */
+  width: fit-content;
+  max-width: min(92vw, 640px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -749,6 +762,386 @@ body {
   border-radius: 4px;
   padding: 0.05em 0.4em;
   font-size: 0.85em;
+}
+
+/* ---------- cinematic feature reel ---------- */
+
+.cine {
+  position: fixed;
+  inset: 0;
+  z-index: 9998; /* under the splash, over the app */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background:
+    repeating-linear-gradient(0deg,   var(--si-line) 0 1px, transparent 1px 32px),
+    repeating-linear-gradient(90deg,  var(--si-line) 0 1px, transparent 1px 32px),
+    linear-gradient(180deg, var(--si-bg-top) 0%, var(--si-bg-bottom) 100%);
+  opacity: 1;
+  transition: opacity 600ms ease;
+}
+
+.cine[hidden] { display: none; }
+
+.cine--hidden { opacity: 0; pointer-events: none; }
+
+.cine__stage {
+  position: relative;
+  width: 100%;
+  max-width: 760px;
+  padding: 0 1.5rem;
+  text-align: center;
+}
+
+.cine__scene {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.cine__scene--active { display: flex; }
+
+.cine__scene--exit { animation: scene-out 450ms ease both; }
+
+@keyframes scene-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(-16px) scale(0.985); }
+}
+
+.cine__visual {
+  width: clamp(110px, 22vh, 170px);
+  animation: visual-in 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.cine__visual svg { width: 100%; height: auto; display: block; overflow: visible; }
+
+@keyframes visual-in {
+  from { opacity: 0; transform: translateY(18px) scale(0.92); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.cine__kicker {
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.5em;
+  margin-right: -0.5em;
+  text-transform: uppercase;
+  color: var(--si-teal);
+  animation: word-in 900ms cubic-bezier(0.16, 1, 0.3, 1) 150ms both;
+}
+
+.cine__title {
+  font-size: clamp(1.6rem, 5vw, 2.8rem);
+  font-weight: 275;
+  letter-spacing: 0.14em;
+  margin-right: -0.14em;
+  background: linear-gradient(92deg, var(--si-cyan), var(--si-teal) 45%, var(--si-blue));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: word-in 900ms cubic-bezier(0.16, 1, 0.3, 1) 280ms both;
+}
+
+.cine__sub {
+  max-width: 34em;
+  font-size: clamp(0.82rem, 2vw, 1rem);
+  line-height: 1.7;
+  font-weight: 300;
+  letter-spacing: 0.04em;
+  color: var(--si-ink-dim);
+  animation: word-in 900ms cubic-bezier(0.16, 1, 0.3, 1) 420ms both;
+}
+
+/* scene 5 chips */
+.cine__chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.55rem;
+  max-width: 32em;
+  margin-top: 0.4rem;
+}
+
+.cine__chip {
+  padding: 0.55em 1.1em;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--si-ink-dim);
+  border: 1px solid rgba(13, 148, 136, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  animation: chip-pop 650ms cubic-bezier(0.34, 1.4, 0.64, 1) calc(300ms + var(--i) * 90ms) both;
+}
+
+@keyframes chip-pop {
+  from { opacity: 0; transform: translateY(12px) scale(0.9); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* skip + dots */
+.cine__skip {
+  position: absolute;
+  top: 1.4rem;
+  right: 1.6rem;
+  z-index: 2;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--si-ink-dim);
+  background: transparent;
+  border: 1px solid rgba(15, 34, 51, 0.16);
+  border-radius: 999px;
+  padding: 0.55em 1.2em;
+  cursor: pointer;
+  transition: color 200ms ease, border-color 200ms ease;
+}
+
+.cine__skip:hover { color: var(--si-ink); border-color: var(--si-teal); }
+
+.cine__dots {
+  position: absolute;
+  bottom: 2rem;
+  display: flex;
+  gap: 0.55rem;
+}
+
+.cine__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid rgba(13, 148, 136, 0.5);
+  background: transparent;
+  transition: background 250ms ease, transform 250ms ease;
+}
+
+.cine__dot--on {
+  background: var(--si-teal);
+  transform: scale(1.25);
+  box-shadow: 0 0 8px rgba(13, 148, 136, 0.5);
+}
+
+/* --- scene artwork animations (restart on display toggle) --- */
+
+.cine-stroke {
+  fill: none;
+  stroke: rgba(15, 34, 51, 0.35);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+/* rising tube liquid */
+.cine-fill {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: tube-fill 1400ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.cine-tube:nth-of-type(1) .cine-fill { animation-delay: 300ms; }
+.cine-tube:nth-of-type(2) .cine-fill { animation-delay: 500ms; }
+.cine-tube:nth-of-type(3) .cine-fill { animation-delay: 700ms; }
+
+.cine-fill--cyan { fill: var(--si-cyan); opacity: 0.85; }
+.cine-fill--teal { fill: var(--si-teal); opacity: 0.85; }
+.cine-fill--blue { fill: var(--si-blue); opacity: 0.85; }
+
+@keyframes tube-fill {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+
+/* barcode scan sweep */
+.cine-scan {
+  stroke: var(--si-cyan);
+  stroke-width: 2;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 5px rgba(6, 182, 212, 0.8));
+  animation: scan-sweep 2.4s ease-in-out 600ms infinite;
+}
+
+@keyframes scan-sweep {
+  0%, 100% { transform: translateY(-26px); opacity: 0; }
+  15%, 85% { opacity: 0.9; }
+  50%      { transform: translateY(26px); }
+}
+
+/* report lines typing in */
+.cine-line {
+  stroke: var(--si-teal);
+  stroke-width: 3;
+  stroke-linecap: round;
+  opacity: 0.7;
+  transform-box: fill-box;
+  transform-origin: left;
+  animation: line-grow 600ms cubic-bezier(0.16, 1, 0.3, 1) calc(350ms + var(--i) * 180ms) both;
+}
+
+@keyframes line-grow {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+/* report check draw */
+.cine-check-ring {
+  fill: rgba(255, 255, 255, 0.8);
+  stroke: var(--si-teal);
+  stroke-width: 2.5;
+  stroke-dasharray: 88;
+  stroke-dashoffset: 88;
+  animation: draw-in 700ms ease 1150ms both;
+}
+
+.cine-check {
+  fill: none;
+  stroke: var(--si-teal);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 22;
+  stroke-dashoffset: 22;
+  animation: draw-in 450ms ease 1650ms both;
+}
+
+@keyframes draw-in { to { stroke-dashoffset: 0; } }
+
+/* AI graph */
+.cine-link {
+  stroke: rgba(13, 148, 136, 0.4);
+  stroke-width: 1.6;
+  stroke-dasharray: 90;
+  stroke-dashoffset: 90;
+  animation: draw-in 800ms ease calc(250ms + var(--i) * 140ms) both;
+}
+
+.cine-node {
+  fill: #ffffff;
+  stroke: var(--si-blue);
+  stroke-width: 2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation:
+    chip-pop 500ms cubic-bezier(0.34, 1.4, 0.64, 1) calc(300ms + var(--i) * 140ms) both,
+    node-breathe 2.4s ease-in-out calc(1200ms + var(--i) * 300ms) infinite;
+}
+
+.cine-node--hub {
+  stroke: var(--si-teal);
+  filter: drop-shadow(0 0 8px rgba(13, 148, 136, 0.6));
+}
+
+@keyframes node-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.18); }
+}
+
+/* interfacing data streams */
+.cine-stream {
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 5 7;
+  animation: stream-flow 900ms linear infinite;
+}
+
+.cine-stream--fwd  { stroke: var(--si-cyan); }
+.cine-stream--back { stroke: var(--si-blue); animation-direction: reverse; }
+
+@keyframes stream-flow {
+  from { stroke-dashoffset: 12; }
+  to   { stroke-dashoffset: 0; }
+}
+
+.cine-arrow {
+  fill: none;
+  stroke: rgba(15, 34, 51, 0.45);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cine-dot-led {
+  fill: var(--si-teal);
+  animation: dot-pulse 1.6s ease-in-out infinite;
+}
+
+/* ---------- responsive ---------- */
+
+/* narrow phones */
+@media (max-width: 480px) {
+  .splash__mark { width: min(230px, 62vw); }
+
+  .splash__word--infinity {
+    font-size: clamp(1.9rem, 9.5vw, 2.6rem);
+    letter-spacing: 0.24em;
+    margin-right: -0.24em;
+  }
+
+  .splash__word--sub {
+    font-size: 0.68rem;
+    letter-spacing: 0.42em;
+    margin-right: -0.42em;
+  }
+
+  .splash__tagline { letter-spacing: 0.3em; margin-right: -0.3em; }
+
+  .splash__ecg,
+  .splash__progress { width: min(300px, 84vw); margin-top: 1.2rem; }
+
+  .splash__status { font-size: 0.66rem; }
+
+  .vital { padding: 0.45em 0.75em; font-size: 0.64rem; }
+  .vital b { font-size: 0.9rem; }
+
+  .cs { gap: 0.75rem; border-radius: 18px; }
+  .cs__copy br { display: none; } /* let the copy wrap naturally */
+  .cs__title { letter-spacing: 0.14em; margin-right: -0.14em; }
+  .cs__badge { font-size: 0.6rem; letter-spacing: 0.2em; padding: 0.45em 0.9em; }
+  .cs__ecg { width: min(260px, 74vw); }
+  .cs__replay { font-size: 0.7rem; padding: 0.65em 1.3em; }
+  .helix--strip { gap: 9px; }
+  .helix--strip span { height: 34px; }
+
+  .cine__skip { top: 1rem; right: 1rem; font-size: 0.62rem; padding: 0.5em 1em; }
+  .cine__chip { font-size: 0.64rem; padding: 0.5em 0.9em; }
+  .cine__title { letter-spacing: 0.08em; margin-right: -0.08em; }
+}
+
+/* modest heights — tighten the vertical rhythm */
+@media (max-height: 720px) {
+  .splash__mark { width: min(240px, 52vw); }
+  .splash__ecg,
+  .splash__progress { margin-top: 1.1rem; }
+  .splash__vitals { margin-top: 1rem; }
+}
+
+/* short viewports (landscape phones) — drop secondary chrome */
+@media (max-height: 560px) {
+  .splash__content { gap: 0.35rem; padding-bottom: 2rem; }
+  .splash__mark { width: min(150px, 34vw); }
+  .splash__word--infinity { font-size: clamp(1.5rem, 6.5vh, 2.4rem); }
+  .splash__ecg,
+  .splash__vitals,
+  .splash__footer { display: none; }
+  .splash__progress { margin-top: 0.9rem; }
+
+  .cine__visual { width: clamp(80px, 18vh, 120px); }
+  .cine__scene { gap: 0.55rem; }
+  .cine__sub { font-size: 0.78rem; }
+  .cine__dots { bottom: 1rem; }
+
+  .cs { gap: 0.55rem; padding: 1.1rem 1.8rem; }
+  .cs__mark { width: min(96px, 22vw); }
+  .cs__ecg,
+  .cs__vitals { display: none; }
+  .cs__title { font-size: clamp(1.5rem, 7vh, 2.4rem); }
+  .cs__copy { font-size: 0.78rem; }
+  .helix--strip span { height: 28px; }
+  .cs__replay { margin-top: 0.2rem; padding: 0.5em 1.2em; }
 }
 
 /* ---------- reduced motion ---------- */

@@ -1,0 +1,7 @@
+services:
+  web:
+    build: .
+    image: stellarinfinity-web
+    ports:
+      - "127.0.0.1:3120:80"
+    restart: unless-stopped
