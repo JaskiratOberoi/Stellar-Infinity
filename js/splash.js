@@ -429,6 +429,98 @@
   buildHelix(helixRight, 14);
   buildHelix(document.getElementById("helix-strip"), 18);
 
+  /* ---------- the infinity symbol IS the DNA strand ----------
+     Two sine strands crossing at the ends and the center form exactly
+     two lens-shaped loops — a helix ribbon laid horizontal reads as an
+     infinity sign. Rungs ladder each loop; the comet + trails sweep a
+     closed circuit (out along one strand, back along the other). */
+
+  function dnaSymbol(svg, gradId) {
+    if (!svg) return;
+
+    /* Rounded sideways-8: each strand is a smooth S-curve — around the
+       top of one lobe, diagonally through the center, around the bottom
+       of the other. Vertical end tangents make the outer caps round. */
+    var dA = "M60,120 C60,58 170,58 240,120 C310,182 420,182 420,120";
+    var dB = "M60,120 C60,182 170,182 240,120 C310,58 420,58 420,120";
+    var dLoop = dA + " C420,58 310,58 240,120 C170,182 60,182 60,120 Z";
+
+    var NS = "http://www.w3.org/2000/svg";
+
+    // sampler: y position of a strand at a given x (strands are monotonic in x)
+    function sampler(d) {
+      var p = document.createElementNS(NS, "path");
+      p.setAttribute("d", d);
+      svg.appendChild(p);
+      var L = p.getTotalLength();
+      var pts = [];
+      for (var i = 0; i <= 200; i++) pts.push(p.getPointAtLength((L * i) / 200));
+      svg.removeChild(p);
+      return function (x) {
+        var best = pts[0];
+        for (var j = 1; j < pts.length; j++) {
+          if (Math.abs(pts[j].x - x) < Math.abs(best.x - x)) best = pts[j];
+        }
+        return best.y;
+      };
+    }
+
+    var yA = sampler(dA), yB = sampler(dB);
+
+    // back strand: reuse the existing faint track path
+    var track = svg.querySelector(".mark__track, .cs-mark__track");
+    track.setAttribute("d", dB);
+
+    // trails, dash stroke and comet ride the closed circuit
+    svg.querySelectorAll(".mark__trail").forEach(function (p) { p.setAttribute("d", dLoop); });
+    var csStroke = svg.querySelector(".cs-mark__stroke");
+    if (csStroke) {
+      csStroke.setAttribute("d", dLoop);
+      csStroke.setAttribute("pathLength", "100");
+    }
+    var motion = svg.querySelector("animateMotion");
+    if (motion) motion.setAttribute("path", dLoop);
+
+    function mk(d, stroke, width, opacity) {
+      var p = document.createElementNS(NS, "path");
+      p.setAttribute("d", d);
+      p.setAttribute("fill", "none");
+      p.setAttribute("stroke", stroke);
+      p.setAttribute("stroke-width", width);
+      p.setAttribute("stroke-linecap", "round");
+      p.setAttribute("stroke-linejoin", "round");
+      p.setAttribute("opacity", opacity);
+      return p;
+    }
+
+    /* rungs styled like the page's other helixes: a soft bar with a
+       glowing cyan bead on top and a blue one below */
+    var g = document.createElementNS(NS, "g");
+    var dRungs = "";
+    [96, 132, 168, 312, 348, 384].forEach(function (x) {
+      var y1 = yA(x), y2 = yB(x);
+      var top = Math.min(y1, y2), bot = Math.max(y1, y2);
+      var inset = (bot - top) * 0.14;
+      top += inset; bot -= inset;
+      if (bot - top < 8) return; // too close to a crossing
+      dRungs += "M" + x + "," + top.toFixed(1) + "L" + x + "," + bot.toFixed(1);
+      var dotT = document.createElementNS(NS, "circle");
+      dotT.setAttribute("cx", x); dotT.setAttribute("cy", top.toFixed(1)); dotT.setAttribute("r", 3);
+      dotT.setAttribute("class", "rung-dot rung-dot--cyan");
+      var dotB = document.createElementNS(NS, "circle");
+      dotB.setAttribute("cx", x); dotB.setAttribute("cy", bot.toFixed(1)); dotB.setAttribute("r", 3);
+      dotB.setAttribute("class", "rung-dot rung-dot--blue");
+      g.appendChild(dotT); g.appendChild(dotB);
+    });
+    g.insertBefore(mk(dRungs, "rgba(13, 148, 136, 0.25)", 1.6, 1), g.firstChild);
+
+    svg.insertBefore(g, track);                                                              // rungs behind
+    track.parentNode.insertBefore(mk(dA, "url(#" + gradId + ")", 5, 0.9), track.nextSibling); // front strand
+  }
+
+  dnaSymbol(document.querySelector(".mark"), "mark-grad");
+  dnaSymbol(document.querySelector(".cs__mark svg"), "cs-grad");
+
   /* ---------- live vitals (random walk within healthy ranges) ---------- */
 
   var vitals = { hr: 72, spo2: 98, temp: 36.6 };
