@@ -427,8 +427,8 @@ body {
 .splash__word--sub {
   font-size: clamp(0.72rem, 1.9vw, 0.95rem);
   font-weight: 500;
-  letter-spacing: 0.6em;
-  margin-right: -0.6em;
+  letter-spacing: 0.42em;
+  margin-right: -0.42em;
   color: var(--si-ink-dim);
   animation-delay: 420ms;
 }
@@ -887,6 +887,40 @@ body {
   animation: word-in 900ms cubic-bezier(0.16, 1, 0.3, 1) 420ms both;
 }
 
+/* acronym reveal scene */
+.cine__acronym {
+  display: flex;
+  flex-direction: column;
+  gap: 0.32rem;
+  margin-top: 0.4rem;
+  text-align: left;
+}
+
+.acro {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+  animation: chip-pop 650ms cubic-bezier(0.34, 1.4, 0.64, 1) calc(350ms + var(--i) * 110ms) both;
+}
+
+.acro b {
+  width: 1.1em;
+  font-size: clamp(1.3rem, 3.4vw, 1.8rem);
+  font-weight: 350;
+  background: linear-gradient(92deg, var(--si-cyan), var(--si-teal) 45%, var(--si-blue));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.acro span {
+  font-size: clamp(0.66rem, 1.6vw, 0.78rem);
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--si-ink-dim);
+}
+
 /* scene 5 chips */
 .cine__chips {
   display: flex;
@@ -1219,7 +1253,11 @@ body {
   .splash__progress { margin-top: 0.9rem; }
 
   .cine__visual { width: clamp(80px, 18vh, 120px); }
+  .cine__visual--wide { width: clamp(140px, 30vh, 200px); }
   .cine__scene { gap: 0.55rem; }
+  .cine__acronym { gap: 0.16rem; }
+  .acro b { font-size: 1.05rem; }
+  .acro span { font-size: 0.6rem; }
   .cine__sub { font-size: 0.78rem; }
   .cine__dots { bottom: 1rem; }
 
