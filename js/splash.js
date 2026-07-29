@@ -161,4 +161,55 @@
   });
 
   window.InfinitySplash = { setProgress: setProgress, finish: finish, show: show };
+
+  /* ---------- coming-soon card interactivity ---------- */
+
+  var card = document.getElementById("cs-card");
+  var title = document.getElementById("cs-title");
+  var replayBtn = document.getElementById("cs-replay");
+
+  // split the title into per-letter spans for staggered entry + hover pop
+  var text = title.textContent;
+  title.textContent = "";
+  for (var c = 0; c < text.length; c++) {
+    var span = document.createElement("span");
+    span.className = "cs__letter";
+    span.style.setProperty("--i", c);
+    span.textContent = text[c] === " " ? " " : text[c];
+    title.appendChild(span);
+  }
+
+  // tilt toward the cursor + move the spotlight
+  card.addEventListener("pointermove", function (e) {
+    if (reducedMotion) return;
+    var rect = card.getBoundingClientRect();
+    var px = (e.clientX - rect.left) / rect.width;   // 0..1
+    var py = (e.clientY - rect.top) / rect.height;
+    card.style.setProperty("--ry", ((px - 0.5) * 7).toFixed(2) + "deg");
+    card.style.setProperty("--rx", ((0.5 - py) * 7).toFixed(2) + "deg");
+    card.style.setProperty("--mx", (px * 100).toFixed(1) + "%");
+    card.style.setProperty("--my", (py * 100).toFixed(1) + "%");
+  });
+
+  card.addEventListener("pointerleave", function () {
+    card.style.setProperty("--rx", "0deg");
+    card.style.setProperty("--ry", "0deg");
+  });
+
+  // sonar ping where the user clicks
+  card.addEventListener("click", function (e) {
+    if (reducedMotion) return;
+    var rect = card.getBoundingClientRect();
+    var ripple = document.createElement("span");
+    ripple.className = "cs__ripple";
+    ripple.style.left = (e.clientX - rect.left) + "px";
+    ripple.style.top = (e.clientY - rect.top) + "px";
+    card.appendChild(ripple);
+    ripple.addEventListener("animationend", function () { ripple.remove(); });
+  });
+
+  replayBtn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    show();
+  });
 })();

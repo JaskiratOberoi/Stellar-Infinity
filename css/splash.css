@@ -300,30 +300,236 @@ body {
   text-transform: uppercase;
 }
 
-/* ---------- placeholder app ---------- */
+/* ---------- coming soon ---------- */
 
 .app {
+  position: relative;
   min-height: 100dvh;
   display: grid;
   place-items: center;
-  background: linear-gradient(180deg, var(--si-bg-top) 0%, var(--si-bg-bottom) 100%);
+  overflow: hidden;
+  background:
+    repeating-linear-gradient(0deg,   var(--si-line) 0 1px, transparent 1px 32px),
+    repeating-linear-gradient(90deg,  var(--si-line) 0 1px, transparent 1px 32px),
+    linear-gradient(180deg, var(--si-bg-top) 0%, var(--si-bg-bottom) 100%);
 }
 
-.app__inner {
+.app__glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.45;
+  animation: glow-drift 24s ease-in-out infinite alternate;
+}
+
+.app__glow--a {
+  width: 55vmax;
+  height: 40vmax;
+  left: -14vmax;
+  top: -10vmax;
+  background: radial-gradient(circle at 40% 40%, rgba(6, 182, 212, 0.28) 0%, transparent 70%);
+}
+
+.app__glow--b {
+  width: 50vmax;
+  height: 38vmax;
+  right: -14vmax;
+  bottom: -10vmax;
+  background: radial-gradient(circle at 60% 60%, rgba(37, 99, 235, 0.20) 0%, transparent 70%);
+  animation-delay: -12s;
+}
+
+/* card — tilts toward the cursor (driven by --rx / --ry from JS) */
+.cs {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
   text-align: center;
+  padding: clamp(2rem, 5vw, 3.2rem) clamp(2rem, 6vw, 4rem);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(13, 148, 136, 0.14);
+  box-shadow:
+    0 24px 60px rgba(15, 34, 51, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+  transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  transition: transform 180ms ease;
+  animation: cs-rise 1100ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  overflow: hidden;
+}
+
+@keyframes cs-rise {
+  from { opacity: 0; transform: perspective(900px) translateY(22px) scale(0.97); }
+  to   { opacity: 1; }
+}
+
+/* spotlight follows the cursor (driven by --mx / --my from JS) */
+.cs__spotlight {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(220px circle at var(--mx, 50%) var(--my, 40%),
+              rgba(6, 182, 212, 0.12), transparent 70%);
+  transition: opacity 300ms ease;
+}
+
+/* click ripple (sonar ping) */
+.cs__ripple {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  border: 2px solid var(--si-cyan);
+  pointer-events: none;
+  animation: cs-ping 900ms ease-out forwards;
+}
+
+@keyframes cs-ping {
+  from { transform: scale(1); opacity: 0.7; }
+  to   { transform: scale(22); opacity: 0; }
+}
+
+.cs__mark { width: min(150px, 40vw); }
+
+.cs__mark svg { width: 100%; height: auto; display: block; }
+
+.cs-mark__track {
+  stroke: rgba(13, 148, 136, 0.14);
+  stroke-width: 7;
+  stroke-linecap: round;
+}
+
+.cs-mark__stroke {
+  stroke: url(#cs-grad);
+  stroke-width: 7;
+  stroke-linecap: round;
+  stroke-dasharray: 320 620;
+  animation: mark-trace 5s linear infinite;
+}
+
+.cs__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--si-teal);
+  border: 1px solid rgba(13, 148, 136, 0.25);
+  border-radius: 999px;
+  padding: 0.45em 1.1em;
+  background: rgba(13, 148, 136, 0.06);
+}
+
+.cs__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--si-teal);
+  animation: dot-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(13, 148, 136, 0.45); }
+  50%      { box-shadow: 0 0 0 6px rgba(13, 148, 136, 0); }
+}
+
+/* title — gradient shimmer; letters are split into spans by JS.
+   The gradient + clip live on each letter (not the h2): background-clip:text
+   doesn't paint through transformed inline-block descendants in Chrome. */
+.cs__title {
+  font-size: clamp(2rem, 6.5vw, 3.6rem);
+  font-weight: 250;
+  letter-spacing: 0.22em;
+  margin-right: -0.22em;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+@keyframes cs-shimmer {
+  from { background-position: 0% 0; }
+  to   { background-position: -200% 0; }
+}
+
+.cs__letter {
+  display: inline-block;
+  background: linear-gradient(100deg,
+    var(--si-cyan) 0%, var(--si-teal) 30%, var(--si-blue) 50%,
+    var(--si-teal) 70%, var(--si-cyan) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation:
+    cs-letter-in 900ms cubic-bezier(0.16, 1, 0.3, 1) calc(var(--i) * 55ms) both,
+    cs-shimmer 6s linear calc(var(--i) * -280ms) infinite;
+  transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.cs__letter:hover { transform: translateY(-8px); }
+
+@keyframes cs-letter-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; }
+}
+
+.cs__copy {
+  font-size: clamp(0.8rem, 2vw, 0.95rem);
+  line-height: 1.7;
   color: var(--si-ink-dim);
   font-weight: 300;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
 }
 
-.app__inner h2 {
+.cs__ecg {
+  width: min(300px, 60vw);
+  height: 40px;
+  margin-top: 0.3rem;
+}
+
+.cs__ecg svg { width: 100%; height: 100%; overflow: visible; }
+
+.cs__replay {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7em;
+  margin-top: 0.6rem;
+  padding: 0.7em 1.6em;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
   color: var(--si-ink);
-  font-weight: 200;
-  font-size: 2rem;
-  margin-bottom: 0.5rem;
+  background: transparent;
+  border: 1px solid rgba(15, 34, 51, 0.2);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: border-color 200ms ease, box-shadow 200ms ease, transform 200ms ease;
 }
 
-.app kbd {
+.cs__replay:hover {
+  border-color: var(--si-teal);
+  box-shadow: 0 0 18px rgba(13, 148, 136, 0.25);
+  transform: translateY(-1px);
+}
+
+.cs__replay:active { transform: translateY(0); }
+
+.cs__hint {
+  font-size: 0.85em;
+  color: var(--si-ink-dim);
+  letter-spacing: 0.1em;
+  text-transform: none;
+}
+
+.cs kbd {
   border: 1px solid rgba(15, 34, 51, 0.25);
   border-radius: 4px;
   padding: 0.05em 0.4em;
@@ -343,4 +549,13 @@ body {
   .splash__content { animation: none; }
   .mark__comet { display: none; }
   .splash { transition: opacity 300ms ease; }
+  .app__glow,
+  .cs,
+  .cs__title,
+  .cs__letter,
+  .cs__dot,
+  .cs-mark__stroke,
+  .cs__ripple { animation: none; }
+  .cs { transform: none; }
+  .cs__letter:hover { transform: none; }
 }
