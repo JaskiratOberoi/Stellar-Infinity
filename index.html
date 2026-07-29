@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Infinity — Laboratory Systems</title>
+  <meta name="description" content="Infinity Laboratory Systems — precision without end." />
+  <link rel="stylesheet" href="css/splash.css" />
+</head>
+<body>
+
+  <!-- ============ SPLASH / LOADING SCREEN ============ -->
+  <div id="splash" class="splash" role="status" aria-live="polite" aria-label="Infinity Laboratory Systems is loading">
+
+    <!-- floating particles (cells / molecules) -->
+    <canvas id="splash-particles" class="splash__particles" aria-hidden="true"></canvas>
+
+    <!-- soft ambient glows -->
+    <div class="splash__glow splash__glow--a" aria-hidden="true"></div>
+    <div class="splash__glow splash__glow--b" aria-hidden="true"></div>
+
+    <div class="splash__content">
+
+      <!-- infinity mark -->
+      <div class="splash__mark" aria-hidden="true">
+        <svg class="mark" viewBox="0 0 480 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="mark-grad" x1="0" y1="0" x2="480" y2="240" gradientUnits="userSpaceOnUse">
+              <stop offset="0%"  stop-color="#06b6d4" />
+              <stop offset="50%" stop-color="#0d9488" />
+              <stop offset="100%" stop-color="#2563eb" />
+            </linearGradient>
+            <filter id="mark-glow" x="-60%" y="-60%" width="220%" height="220%">
+              <feGaussianBlur stdDeviation="8" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+
+          <!-- faint base track -->
+          <path class="mark__track"
+                d="M240,120 C200,52 96,52 72,120 C48,188 152,188 192,120 C232,52 336,52 360,120 C384,188 280,188 240,120 Z" />
+
+          <!-- animated gradient stroke -->
+          <path class="mark__stroke" filter="url(#mark-glow)"
+                d="M240,120 C200,52 96,52 72,120 C48,188 152,188 192,120 C232,52 336,52 360,120 C384,188 280,188 240,120 Z" />
+
+          <!-- tracer head following the path -->
+          <circle class="mark__comet" r="5">
+            <animateMotion dur="4.2s" repeatCount="indefinite" rotate="auto"
+              path="M240,120 C200,52 96,52 72,120 C48,188 152,188 192,120 C232,52 336,52 360,120 C384,188 280,188 240,120 Z" />
+          </circle>
+        </svg>
+      </div>
+
+      <!-- wordmark -->
+      <h1 class="splash__wordmark">
+        <span class="splash__word splash__word--infinity">INFINITY</span>
+        <span class="splash__word splash__word--sub">LABORATORY SYSTEMS</span>
+      </h1>
+
+      <p class="splash__tagline">precision without end</p>
+
+      <!-- ECG pulse trace -->
+      <div class="splash__ecg" aria-hidden="true">
+        <svg viewBox="0 0 360 48" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+          <path class="ecg__base"
+                d="M0,24 H60 l6,-6 6,6 h18 l6,-22 8,34 6,-12 h18 H180 l6,-6 6,6 h18 l6,-22 8,34 6,-12 h18 H360" />
+          <path class="ecg__sweep"
+                d="M0,24 H60 l6,-6 6,6 h18 l6,-22 8,34 6,-12 h18 H180 l6,-6 6,6 h18 l6,-22 8,34 6,-12 h18 H360" />
+        </svg>
+      </div>
+
+      <!-- progress -->
+      <div class="splash__progress" aria-hidden="true">
+        <div class="splash__bar">
+          <div class="splash__bar-fill" id="splash-bar"></div>
+        </div>
+        <div class="splash__status">
+          <span id="splash-message">Initializing analyzers</span>
+          <span id="splash-percent">0%</span>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="splash__footer" aria-hidden="true">© 2026 Infinity Laboratory Systems</div>
+  </div>
+
+  <!-- ============ APP (placeholder until the platform exists) ============ -->
+  <main id="app" class="app" hidden>
+    <div class="app__inner">
+      <h2>Welcome to Infinity.</h2>
+      <p>The platform goes here. Press <kbd>R</kbd> to replay the splash.</p>
+    </div>
+  </main>
+
+  <script src="js/splash.js"></script>
+</body>
+</html>
