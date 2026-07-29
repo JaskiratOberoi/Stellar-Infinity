@@ -99,6 +99,180 @@ body {
   to   { transform: translate3d(4vmax, 2vmax, 0) scale(1.1); }
 }
 
+/* ---------- DNA helixes ---------- */
+
+/* vertical helix: stacked rungs, each rotating in 3D with a phase delay
+   so the stack reads as a turning double strand. Parallax via --hx/--hy. */
+.helix {
+  position: absolute;
+  z-index: 0;
+  top: calc(50% - 110px);
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  perspective: 700px;
+  opacity: 0.5;
+  pointer-events: none;
+  translate: var(--hx, 0px) var(--hy, 0px);
+}
+
+.helix--left  { left:  clamp(1.5rem, 8vw, 8rem); }
+.helix--right { right: clamp(1.5rem, 8vw, 8rem); }
+
+.helix span {
+  position: relative;
+  display: block;
+  width: 62px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--si-cyan), rgba(13, 148, 136, 0.10) 30% 70%, var(--si-blue));
+  animation: helix-turn 3.8s linear infinite;
+  animation-delay: calc(var(--i) * -0.22s);
+}
+
+.helix span::before,
+.helix span::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  transform: translateY(-50%);
+}
+
+.helix span::before {
+  left: -3px;
+  background: var(--si-cyan);
+  box-shadow: 0 0 8px rgba(6, 182, 212, 0.8);
+}
+
+.helix span::after {
+  right: -3px;
+  background: var(--si-blue);
+  box-shadow: 0 0 8px rgba(37, 99, 235, 0.7);
+}
+
+@keyframes helix-turn {
+  from { transform: rotateY(0deg); }
+  to   { transform: rotateY(360deg); }
+}
+
+/* horizontal strip variant (coming-soon card divider) */
+.helix--strip {
+  position: relative;
+  top: auto;
+  left: auto;
+  right: auto;
+  flex-direction: row;
+  gap: 11px;
+  opacity: 0.65;
+  margin-top: 0.2rem;
+  translate: none;
+}
+
+.helix--strip span {
+  width: 2px;
+  height: 42px;
+  background: linear-gradient(180deg, var(--si-cyan), rgba(13, 148, 136, 0.10) 30% 70%, var(--si-blue));
+  animation-name: helix-turn-x;
+}
+
+.helix--strip span::before {
+  left: 50%;
+  top: -3px;
+  transform: translateX(-50%);
+}
+
+.helix--strip span::after {
+  right: auto;
+  left: 50%;
+  top: auto;
+  bottom: -3px;
+  transform: translateX(-50%);
+}
+
+@keyframes helix-turn-x {
+  from { transform: rotateX(0deg); }
+  to   { transform: rotateX(360deg); }
+}
+
+@media (max-width: 760px) {
+  .helix--left, .helix--right { display: none; }
+}
+
+/* ---------- vitals HUD ---------- */
+
+.splash__vitals {
+  display: flex;
+  justify-content: center;
+  gap: 0.7rem;
+  margin-top: 1.4rem;
+  animation: word-in 1100ms ease 1050ms both;
+}
+
+.cs__vitals {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.2rem;
+}
+
+.vital {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45em;
+  padding: 0.5em 0.95em;
+  border: 1px solid rgba(13, 148, 136, 0.18);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.5);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--si-ink-dim);
+  font-variant-numeric: tabular-nums;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.vital:hover {
+  border-color: rgba(13, 148, 136, 0.45);
+  box-shadow: 0 0 14px rgba(13, 148, 136, 0.18);
+}
+
+.vital b {
+  color: var(--si-ink);
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.vital small { font-size: 0.62rem; letter-spacing: 0.16em; }
+
+.vital__heart {
+  width: 14px;
+  height: 14px;
+  fill: #e11d48;
+  align-self: center;
+  transform-origin: center;
+  animation: heart-beat 0.85s ease-in-out infinite;
+}
+
+@keyframes heart-beat {
+  0%, 100% { transform: scale(1); }
+  12%      { transform: scale(1.28); }
+  24%      { transform: scale(1.05); }
+  36%      { transform: scale(1.2); }
+}
+
+.vital__pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--si-cyan);
+  align-self: center;
+  animation: dot-pulse 1.6s ease-in-out infinite;
+}
+
 /* ---------- content ---------- */
 
 .splash__content {
@@ -120,9 +294,17 @@ body {
 
 /* ---------- infinity mark ---------- */
 
-.splash__mark { width: min(300px, 64vw); }
+.splash__mark {
+  width: min(300px, 64vw);
+  animation: mark-breathe 4.2s ease-in-out infinite;
+}
 
-.mark { width: 100%; height: auto; display: block; }
+@keyframes mark-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.035); }
+}
+
+.mark { width: 100%; height: auto; display: block; overflow: visible; }
 
 .mark__track {
   stroke: rgba(13, 148, 136, 0.14);
@@ -130,17 +312,44 @@ body {
   stroke-linecap: round;
 }
 
-.mark__stroke {
+/* tapered trail: three phase-locked layers behind the tracer head.
+   pathLength=100 normalizes the loop, so a full cycle is 100 units and
+   each layer starts at offset var(--len) — leading edges align at the
+   path start, exactly where the comet's animateMotion begins. */
+.mark__trail {
+  fill: none;
   stroke: url(#mark-grad);
-  stroke-width: 6;
   stroke-linecap: round;
-  stroke-dasharray: 320 620;
-  animation: mark-trace 4.2s linear infinite;
+  animation: trail-flow 4.2s linear infinite;
 }
 
+.mark__trail--outer { stroke-width: 10;  opacity: 0.16; --len: 40; stroke-dasharray: 40 60; }
+.mark__trail--mid   { stroke-width: 6.5; opacity: 0.5;  --len: 27; stroke-dasharray: 27 73; }
+.mark__trail--head  { stroke-width: 6;   opacity: 1;    --len: 14; stroke-dasharray: 14 86; }
+
+@keyframes trail-flow {
+  from { stroke-dashoffset: var(--len); }
+  to   { stroke-dashoffset: calc(var(--len) - 100); }
+}
+
+/* kept for the coming-soon card's smaller mark */
 @keyframes mark-trace {
   from { stroke-dashoffset: 0; }
   to   { stroke-dashoffset: -940; }
+}
+
+/* nucleus at the crossing — pings each time the tracer passes center
+   (t = 0 and t = 2.1s of the 4.2s loop) */
+.mark__nucleus {
+  fill: var(--si-teal);
+  opacity: 0;
+  animation: nucleus-ping 2.1s linear infinite;
+}
+
+@keyframes nucleus-ping {
+  0%   { opacity: 0.55; r: 3px; }
+  35%  { opacity: 0;    r: 11px; }
+  100% { opacity: 0;    r: 3px; }
 }
 
 .mark__comet {
@@ -148,6 +357,12 @@ body {
   stroke: var(--si-cyan);
   stroke-width: 2;
   filter: drop-shadow(0 0 6px rgba(6, 182, 212, 0.9)) drop-shadow(0 0 16px rgba(37, 99, 235, 0.5));
+  animation: comet-pulse 2.1s ease-in-out infinite;
+}
+
+@keyframes comet-pulse {
+  0%, 100% { r: 5px; }
+  50%      { r: 6.5px; }
 }
 
 /* ---------- wordmark ---------- */
@@ -540,7 +755,9 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .splash__glow,
-  .mark__stroke,
+  .splash__mark,
+  .mark__trail,
+  .mark__nucleus,
   .ecg__sweep,
   .splash__word,
   .splash__tagline,
@@ -549,6 +766,15 @@ body {
   .splash__content { animation: none; }
   .mark__comet { display: none; }
   .splash { transition: opacity 300ms ease; }
+  /* static full ring instead of frozen dash fragments */
+  .mark__trail--outer,
+  .mark__trail--head,
+  .mark__nucleus { display: none; }
+  .mark__trail--mid { stroke-dasharray: none; opacity: 1; }
+  .helix { display: none; }
+  .vital__heart,
+  .vital__pulse,
+  .splash__vitals { animation: none; }
   .app__glow,
   .cs,
   .cs__title,
