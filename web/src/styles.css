@@ -379,6 +379,42 @@ tbody tr:hover { background: var(--accent-softer); }
 }
 .kv dd { margin: 0; }
 
+/* ---------- worksheet ---------- */
+
+/* The result grid is dense and horizontal — a 520px modal cannot hold it. */
+.modal--wide { width: min(1180px, 100%); }
+
+/* Compact controls so a twenty-analyte panel fits on one screen without
+   scrolling, which is what bench entry actually needs. */
+.input--sm { padding: .35rem .5rem; border-radius: 8px; font-size: .82rem; width: 100%; }
+
+/* An out-of-range value is outlined as well as flagged. Colour alone would be
+   the only signal for a red/green colour-blind operator, and this is a clinical
+   flag — the letter H or L next to it carries the same meaning independently. */
+.input--flag { border-color: var(--danger-line); background: var(--danger-soft); }
+
+.flag {
+  font-size: .68rem; font-weight: 700; line-height: 1;
+  padding: .2rem .3rem; border-radius: 5px;
+  border: 1px solid var(--danger-line);
+  color: var(--danger); background: var(--danger-soft);
+}
+.flag--low  { transform: rotate(0deg); }
+.flag--high { transform: rotate(0deg); }
+
+.worksheet-grid td { padding: .4rem .6rem; }
+
+/* Head and Profile rows are the printed report's section headings, not data. */
+.worksheet-grid__heading td {
+  font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--teal); background: var(--accent-softer);
+  padding-top: .6rem; padding-bottom: .6rem;
+}
+.worksheet-grid__heading:hover td { background: var(--accent-softer); }
+
+/* Unsaved edits stay visible while the operator works down the column. */
+.worksheet-grid__touched > td { background: var(--accent-soft); }
+
 @media (max-width: 640px) {
   .topbar { flex-wrap: wrap; gap: .7rem; }
   .topbar__nav { order: 3; width: 100%; margin-left: 0; overflow-x: auto; }
@@ -388,3 +424,57 @@ tbody tr:hover { background: var(--accent-softer); }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation-duration: .01ms !important; }
 }
+
+/* ---------- tabs (account settings) ---------- */
+
+.tabs {
+  display: flex;
+  gap: .25rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: .2rem;
+  overflow-x: auto;
+}
+
+.tab {
+  padding: .5rem .9rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ink-dim);
+  font-size: .78rem;
+  letter-spacing: .06em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color .15s, border-color .15s;
+}
+
+.tab:hover { color: var(--ink); }
+.tab--on { color: var(--teal); border-bottom-color: var(--teal); }
+.tab:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); border-radius: 6px 6px 0 0; }
+
+/* ---------- removable chip (granted client codes) ---------- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .4em;
+  padding: .3em .7em;
+  border-radius: 999px;
+  border: 1px solid var(--accent-ring);
+  background: var(--accent-soft);
+  color: var(--teal);
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  cursor: pointer;
+  transition: border-color .15s, background .15s, color .15s;
+}
+
+.chip:hover:not(:disabled) {
+  border-color: var(--danger-line);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.chip:disabled { opacity: .5; cursor: not-allowed; }
+.chip:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }

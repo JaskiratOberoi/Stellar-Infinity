@@ -19,6 +19,10 @@ public static class AdminEndpoints
                        .RequireCapability(Capabilities.UserManage);
 
         admin.MapGet("/users", ListUsers).WithName("ListUsers");
+        admin.MapGet("/users/{userId:int}", GetUserDetail).WithName("GetUserDetail");
+        admin.MapGet("/users/{userId:int}/client-codes/search", SearchClientCodes).WithName("SearchClientCodes");
+        admin.MapPut("/users/{userId:int}/client-codes", SetClientCodes).WithName("SetClientCodes");
+        admin.MapPut("/users/{userId:int}/profile", UpdateProfile).WithName("UpdateProfile");
         admin.MapPost("/users", CreateUser).WithName("CreateUser");
         admin.MapPut("/users/{userId:int}/lis-access", SetLisAccess).WithName("SetLisAccess");
         admin.MapPut("/users/{userId:int}/active", SetActive).WithName("SetActive");
@@ -43,6 +47,102 @@ public static class AdminEndpoints
         var result = await repo.ListUsersAsync(search, page, pageSize, ct).ConfigureAwait(false);
         return Results.Ok(result);
     }
+
+    public sealed record SetClientCodesRequest(IReadOnlyList<string> Codes);
+
+    private static async Task<IResult> GetUserDetail(int userId, AdminRepository repo, CancellationToken ct)
+    {
+        var detail = await repo.GetUserDetailAsync(userId, ct).ConfigureAwait(false);
+        return detail is null ? Results.NotFound() : Results.Ok(detail);
+    }
+
+    private static async Task<IResult> SearchClientCodes(
+        int userId, AdminRepository repo, CancellationToken ct, string? search = null, int top = 50)
+    {
+        var options = await repo.SearchClientCodesAsync(userId, search, top, ct).ConfigureAwait(false);
+        return Results.Ok(options);
+    }
+
+    /// <summary>
+    /// Replace a user's client-code access.
+    ///
+    /// This decides whose patients the user can see, so the result is audited
+    /// per code with the previous owner of each removed mapping — "access
+    /// changed" alone would not survive a later question about who lost what.
+    /// The in-process scope cache is invalidated immediately; the procedure has
+    /// already bumped the session version so outstanding tokens die too.
+    /// </summary>
+    private static async Task<IResult> SetClientCodes(
+        int userId,
+        SetClientCodesRequest request,
+        AdminRepository repo,
+        ScopeRepository scopes,
+        Audit.AuditRepository audit,
+        ClaimsPrincipal principal,
+        HttpContext http,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int actor) return Results.Unauthorized();
+        if (request.Codes is null) return Results.BadRequest(new { error = "A codes array is required (send [] to revoke all)." });
+        if (request.Codes.Count > 2000) return Results.BadRequest(new { error = "Too many codes in one request." });
+
+        var result = await repo.SetClientCodesAsync(userId, request.Codes, actor, ct).ConfigureAwait(false);
+
+        if (!result.Ok)
+        {
+            return MapFailure(new SpResult(false, result.ErrorCode, result.Message));
+        }
+
+        scopes.Invalidate(userId);
+
+        if (result.Changes.Count > 0)
+        {
+            var granted = result.Changes.Where(c => c.Change == "added").Select(c => c.ClientCode);
+            var revoked = result.Changes.Where(c => c.Change == "removed")
+                                        .Select(c => c.PriorOwner is { Length: > 0 } o && !o.StartsWith("inf:", StringComparison.OrdinalIgnoreCase)
+                                            ? $"{c.ClientCode}(was {o})"
+                                            : c.ClientCode);
+
+            await audit.WriteAuthEventAsync(new Audit.AuthAuditEntry
+            {
+                Event = Audit.AuthEvent.ScopeChange,
+                ActorUserId = actor,
+                TargetUserId = userId,
+                Detail = Trim500($"granted=[{string.Join(' ', granted)}] revoked=[{string.Join(' ', revoked)}]"),
+            }, Audit.AuditActorAccessor.For(http), ct).ConfigureAwait(false);
+        }
+
+        return Results.Ok(new { added = result.Added, removed = result.Removed, changes = result.Changes });
+    }
+
+    private static async Task<IResult> UpdateProfile(
+        int userId,
+        UpdateProfileRequest request,
+        AdminRepository repo,
+        Audit.AuditRepository audit,
+        ClaimsPrincipal principal,
+        HttpContext http,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int actor) return Results.Unauthorized();
+        if (string.IsNullOrWhiteSpace(request.FirstName))
+            return Results.BadRequest(new { error = "A first name is required." });
+
+        var result = await repo.UpdateProfileAsync(userId, request, actor, ct).ConfigureAwait(false);
+        if (!result.Ok) return MapFailure(result);
+
+        await audit.WriteAuthEventAsync(new Audit.AuthAuditEntry
+        {
+            Event = Audit.AuthEvent.ProfileChange,
+            ActorUserId = actor,
+            TargetUserId = userId,
+            Detail = Trim500($"name={request.FirstName} {request.LastName} email={request.Email}"),
+        }, Audit.AuditActorAccessor.For(http), ct).ConfigureAwait(false);
+
+        return Results.NoContent();
+    }
+
+    private static string Trim500(string s) => s.Length <= 500 ? s : s[..500];
 
     private static async Task<IResult> CreateUser(
         CreateUserRequest request,

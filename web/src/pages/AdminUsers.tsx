@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { adminApi, ApiError, type AdminUserRow } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { CreateUserModal } from './CreateUserModal';
+import { UserSettings } from './UserSettings';
 
 export function AdminUsers() {
   const { user } = useAuth();
@@ -13,6 +14,7 @@ export function AdminUsers() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [settingsFor, setSettingsFor] = useState<number | null>(null);
   const [roles, setRoles] = useState<string[]>([]);
 
   const load = useCallback(async (q: string) => {
@@ -183,19 +185,14 @@ export function AdminUsers() {
                       )}
                     </td>
 
-                    <td style={{ textAlign: 'right' }}>
-                      {isInfinity && (
-                        <button
-                          className="btn btn--ghost btn--sm"
-                          disabled={busy}
-                          onClick={() => {
-                            const pw = window.prompt(`New password for ${r.username}:`);
-                            if (pw) void act(r.userId, () => adminApi.resetPassword(r.userId, pw), `Password reset for ${r.username}.`);
-                          }}
-                        >
-                          Reset password
-                        </button>
-                      )}
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {/* Settings is available for EVERY account, including
+                          native LIS ones — client-code access and role are
+                          Infinity's to manage even when sign-in is not. */}
+                      <button className="btn btn--primary btn--sm" disabled={busy}
+                              onClick={() => setSettingsFor(r.userId)}>
+                        Settings
+                      </button>
                       {busy && <span className="spinner" style={{ display: 'inline-block', marginLeft: '.5rem', verticalAlign: 'middle' }} />}
                     </td>
                   </tr>
@@ -208,6 +205,15 @@ export function AdminUsers() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {settingsFor !== null && (
+        <UserSettings
+          userId={settingsFor}
+          roles={roles}
+          onClose={() => setSettingsFor(null)}
+          onChanged={() => void load(search)}
+        />
       )}
 
       {showCreate && (

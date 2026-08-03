@@ -48,6 +48,11 @@ public static class AuthEvent
     public const string RoleChange = "role_change";
     public const string LisAccessChange = "lis_access_change";
     public const string ActiveChange = "active_change";
+
+    /// <summary>Client-code access granted or revoked — see procedure 60.</summary>
+    public const string ScopeChange = "scope_change";
+    public const string ProfileChange = "profile_change";
+    public const string UserCreated = "user_created";
 }
 
 /// <summary>
