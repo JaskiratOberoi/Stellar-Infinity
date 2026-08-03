@@ -1,0 +1,30 @@
+# The Infinity platform: API + SPA.
+#
+# Separate from docker-compose.yml, which serves only the public marketing
+# splash on 3120 and is already live — this file must not disturb it.
+#
+#   docker compose -f docker-compose.app.yml -p infinity up -d --build
+#
+# The SPA is published on 3121 and proxies /api to the API over the internal
+# network. The API is deliberately NOT published: it holds Noble credentials and
+# should only ever be reachable through the SPA's nginx.
+
+services:
+  api:
+    build: ./api
+    image: infinity-api
+    env_file: ./api/.env
+    environment:
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+    expose:
+      - "8080"
+    restart: unless-stopped
+
+  web:
+    build: ./web
+    image: infinity-web
+    ports:
+      - "127.0.0.1:3121:80"
+    depends_on:
+      - api
+    restart: unless-stopped
