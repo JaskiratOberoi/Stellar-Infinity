@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Infinity.DeploySql</RootNamespace>
+    <!-- Microsoft.Data.SqlClient does not support invariant globalization. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="6.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Linked, not project-referenced: the deploy tool must build its
+         connection string with byte-identical logic to the API, so a TLS or
+         bare-IP quirk that works at runtime also works at deploy time. -->
+    <Compile Include="../../src/Infinity.Api/Data/NobleOptions.cs" Link="NobleOptions.cs" />
+  </ItemGroup>
+
+</Project>
