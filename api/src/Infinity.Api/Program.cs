@@ -37,6 +37,24 @@ builder.Services.AddSingleton<ReportsRepository>();
 builder.Services.AddSingleton<Infinity.Api.Reports.SmartMeta>();
 builder.Services.AddSingleton<Infinity.Api.Reports.SmartReportService>();
 builder.Services.AddSingleton<ScopeRepository>();
+builder.Services.AddSingleton<Infinity.Api.Audit.AuditRepository>();
+
+// Trust the forwarded headers from our own reverse proxy, and ONLY it.
+//
+// The API is deliberately not published: the sole peer that can reach it is the
+// SPA's nginx on the compose network, so the immediate connection is always the
+// proxy and its X-Forwarded-For is ours. If the API is ever exposed directly,
+// this becomes forgeable and must be tightened to explicit KnownProxies —
+// getting it wrong means an attacker chooses what the audit trail records as
+// their IP, which is precisely the legacy defect being fixed here.
+builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(o =>
+{
+    o.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor
+                       | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
+    o.ForwardLimit = 1;
+    o.KnownNetworks.Clear();
+    o.KnownProxies.Clear();
+});
 builder.Services.AddSingleton<AuthRepository>();
 builder.Services.AddSingleton<AdminRepository>();
 builder.Services.AddSingleton<JwtIssuer>();
@@ -73,6 +91,9 @@ var app = builder.Build();
     var smartMeta = app.Services.GetRequiredService<Infinity.Api.Reports.SmartMeta>();
     app.Logger.LogInformation("smartmeta.loaded categories={Categories}", smartMeta.Categories.Count);
 }
+
+// Must run before anything that reads the client IP.
+app.UseForwardedHeaders();
 
 app.UseExceptionHandler();
 app.UseRateLimiter();

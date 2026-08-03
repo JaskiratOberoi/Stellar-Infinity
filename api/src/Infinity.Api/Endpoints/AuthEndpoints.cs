@@ -31,6 +31,7 @@ public static class AuthEndpoints
         LoginRequest request,
         AuthRepository authRepo,
         JwtIssuer jwt,
+        Audit.AuditRepository audit,
         ILoggerFactory loggerFactory,
         HttpContext http,
         CancellationToken ct)
@@ -38,6 +39,8 @@ public static class AuthEndpoints
         var logger = loggerFactory.CreateLogger("Auth");
 
         var username = request.Username?.Trim() ?? "";
+        var actor = Audit.AuditActorAccessor.ForAnonymous(http, username);
+
         if (username.Length is 0 or > 50 || string.IsNullOrEmpty(request.Password) || request.Password.Length > 50)
         {
             return Unauthorized();
@@ -47,9 +50,17 @@ public static class AuthEndpoints
 
         if (row is null)
         {
-            // Log the attempt, never the password.
-            logger.LogInformation("auth.login.failure username={Username} ip={Ip}",
-                username, http.Connection.RemoteIpAddress?.ToString() ?? "unknown");
+            // Log the attempt, never the password. The audit write is
+            // best-effort and cannot turn a logging fault into an outage.
+            logger.LogInformation("auth.login.failure username={Username}", username);
+            await audit.WriteAuthEventAsync(new Audit.AuthAuditEntry
+            {
+                Event = Audit.AuthEvent.LoginFailed,
+                ActorUsername = username,
+                Succeeded = false,
+                Detail = "Invalid credentials, or the account is not permitted to use Infinity.",
+            }, actor, ct).ConfigureAwait(false);
+
             return Unauthorized();
         }
 
@@ -58,6 +69,14 @@ public static class AuthEndpoints
 
         logger.LogInformation("auth.login.success userId={UserId} role={Role} managedBy={ManagedBy}",
             row.UserId, user.Role, user.ManagedBy);
+
+        await audit.WriteAuthEventAsync(new Audit.AuthAuditEntry
+        {
+            Event = Audit.AuthEvent.Login,
+            ActorUserId = row.UserId,
+            ActorUsername = row.Username,
+            Detail = $"role={user.Role} managedBy={user.ManagedBy}",
+        }, actor with { UserId = row.UserId, Username = row.Username }, ct).ConfigureAwait(false);
 
         return Results.Ok(new LoginResponse(token, expiresAt, user));
     }

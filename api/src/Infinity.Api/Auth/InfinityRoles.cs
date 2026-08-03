@@ -42,6 +42,7 @@ public static class InfinityRoles
                 Capabilities.OrderCreate, Capabilities.OrderView, Capabilities.OrderAccession,
                 Capabilities.PatientCreate, Capabilities.PatientView,
                 Capabilities.ResultEnter, Capabilities.ResultAuthorize,
+                Capabilities.ResultAmend, Capabilities.ResultReopen, Capabilities.SampleReject,
                 Capabilities.ReportView, Capabilities.ReportRelease,
                 Capabilities.BillingView, Capabilities.PaymentCapture,
                 Capabilities.AnalyticsView),
@@ -52,14 +53,18 @@ public static class InfinityRoles
                 Capabilities.OrderCreate, Capabilities.OrderView, Capabilities.OrderAccession,
                 Capabilities.PatientCreate, Capabilities.PatientView,
                 Capabilities.ResultEnter, Capabilities.ResultAuthorize,
+                Capabilities.ResultAmend, Capabilities.ResultReopen, Capabilities.SampleReject,
                 Capabilities.ReportView, Capabilities.ReportRelease,
                 Capabilities.BillingView, Capabilities.PaymentCapture,
                 Capabilities.AnalyticsView),
 
+            // Amends and rejects, but NOT reopen — reversing a completed
+            // sign-off stays with Admin and above.
             [LabManager] = Caps(
                 Capabilities.OrderCreate, Capabilities.OrderView, Capabilities.OrderAccession,
                 Capabilities.PatientCreate, Capabilities.PatientView,
                 Capabilities.ResultEnter, Capabilities.ResultAuthorize,
+                Capabilities.ResultAmend, Capabilities.SampleReject,
                 Capabilities.ReportView, Capabilities.ReportRelease,
                 Capabilities.AnalyticsView),
 
@@ -143,6 +148,25 @@ public static class Capabilities
     public const string PatientView = "patient:view";
     public const string ResultEnter = "result:enter";
     public const string ResultAuthorize = "result:authorize";
+
+    /// <summary>
+    /// Overwriting an EXISTING result value. Deliberately separate from
+    /// <see cref="ResultEnter"/> — this is the legacy Result_Edit flag, and it
+    /// is the gate that should have stopped the legacy defect where any user
+    /// could overwrite an authorised value in place. Lab Manager and above.
+    /// </summary>
+    public const string ResultAmend = "result:amend";
+
+    /// <summary>
+    /// Re-opening an authorised sample. Strictly ABOVE
+    /// <see cref="ResultAuthorize"/>: authorising is routine, reversing a
+    /// sign-off is not. Requires a structured reason and writes an amendment
+    /// record. In the legacy system this needed only a non-empty string.
+    /// </summary>
+    public const string ResultReopen = "result:reopen";
+
+    /// <summary>The legacy Reject_Sample flag, which was never reachable in its UI.</summary>
+    public const string SampleReject = "sample:reject";
     public const string ReportView = "report:view";
     public const string ReportRelease = "report:release";
     public const string BillingView = "billing:view";
