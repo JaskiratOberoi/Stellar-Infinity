@@ -1,0 +1,66 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { authApi, setUnauthorizedHandler, tokenStore, type AuthenticatedUser } from '../api/client';
+
+interface AuthState {
+  user: AuthenticatedUser | null;
+  loading: boolean;
+  signIn: (username: string, password: string) => Promise<void>;
+  signOut: () => void;
+  can: (capability: string) => boolean;
+}
+
+const AuthContext = createContext<AuthState | null>(null);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<AuthenticatedUser | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const signOut = useCallback(() => {
+    tokenStore.clear();
+    setUser(null);
+  }, []);
+
+  // A 401 from anywhere in the app means the token is gone or revoked.
+  useEffect(() => {
+    setUnauthorizedHandler(() => setUser(null));
+  }, []);
+
+  // Restore a session on reload. The token may have been revoked server-side
+  // while the tab was closed, so /me is the authority — never trust the cached
+  // token's own claims.
+  useEffect(() => {
+    if (!tokenStore.get()) {
+      setLoading(false);
+      return;
+    }
+    authApi
+      .me()
+      .then(setUser)
+      .catch(() => tokenStore.clear())
+      .finally(() => setLoading(false));
+  }, []);
+
+  const signIn = useCallback(async (username: string, password: string) => {
+    const res = await authApi.login(username, password);
+    tokenStore.set(res.accessToken);
+    setUser(res.user);
+  }, []);
+
+  const can = useCallback(
+    (capability: string) => user?.capabilities.includes(capability) ?? false,
+    [user],
+  );
+
+  const value = useMemo(
+    () => ({ user, loading, signIn, signOut, can }),
+    [user, loading, signIn, signOut, can],
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth(): AuthState {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used inside <AuthProvider>');
+  return ctx;
+}

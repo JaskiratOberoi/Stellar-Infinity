@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Infinity — Laboratory Command Centre</title>
+    <!--
+      Theme, applied before first paint.
+
+      This MUST stay inline and synchronous, above the stylesheet. If the theme
+      were applied from React instead, the page would paint light and then snap
+      to dark on hydration — the flash-of-wrong-theme. Telo gets this for free
+      from next-themes' injected script; here it is explicit.
+
+      Default is light, matching Telo's deliberate "explicit default + manual
+      toggle" rather than following the OS preference.
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('infinity-theme');
+          var dark = stored === 'dark';
+          if (dark) document.documentElement.classList.add('dark');
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+        } catch (e) {
+          /* storage blocked — light default is already correct */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
