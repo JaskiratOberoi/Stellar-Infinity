@@ -1,0 +1,16 @@
+# .NET build output
+**/bin/
+**/obj/
+
+# Secrets — passwords live only in gitignored env files
+.env
+api/.env
+*.user
+
+# Node
+node_modules/
+web/dist/
+*.tsbuildinfo
+
+# Generated intermediates from tools/smartmeta-export.mjs
+api/tools/.smartmeta.tmp.*

@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Infinity.Api</RootNamespace>
+    <!-- Do NOT set InvariantGlobalization=true here. It looks like free savings
+         (NobleTime uses a fixed +05:30 offset and never needs the ICU timezone
+         database), but Microsoft.Data.SqlClient throws
+         "Globalization Invariant Mode is not supported" on every Open(). -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Smart Report knowledge base, generated from Telo's smartMeta.ts by
+         tools/smartmeta-export.mjs. Embedded so the API has no runtime file
+         dependency and the content ships with the binary. -->
+    <EmbeddedResource Include="Resources\smart-meta.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="6.0.1" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
+  </ItemGroup>
+
+</Project>
