@@ -280,7 +280,7 @@
 
   var SCENE_HOLD = 3400;      // entrance + read time per scene
   var SCENE_HOLD_LAST = 4200; // the chips montage needs a beat longer
-  var SCENE_EXIT = 460;
+  var SCENE_EXIT = 390; // a touch over the 380ms scene-out animation
 
   for (var d = 0; d < cineScenes.length; d++) {
     var dot = document.createElement("span");
