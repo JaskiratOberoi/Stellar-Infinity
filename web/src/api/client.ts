@@ -143,6 +143,219 @@ export const authApi = {
   me: () => api.get<AuthenticatedUser>('/api/auth/me'),
 };
 
+/* ---- worksheet ---- */
+
+export interface WorksheetSampleHeader {
+  sid: string;
+  pid: number;
+  patientName: string | null;
+  sex: string | null;
+  age: number | null;
+  ageUnit: string | null;
+  clientCode: string | null;
+  shortName: string | null;
+  orderNumber: string | null;
+  billNumber: string | null;
+  sampleDrawn: string | null;
+  registeredAt: string | null;
+  lastModifiedAt: string | null;
+  statusCode: number | null;
+  status: string | null;
+  sampleComments: string | null;
+  sampleClinicalHistory: string | null;
+  patientClinicalHistory: string | null;
+  rejectComments: string | null;
+  authorisedBy: number | null;
+  authorisedByUsername: string | null;
+  signatureId: number | null;
+  signatoryName: string | null;
+  signatoryDesignation: string | null;
+  isEditable: boolean;
+  needsReopen: boolean;
+  isRejected: boolean;
+}
+
+export interface WorksheetResultRow {
+  resultId: number;
+  testId: number | null;
+  paramId: number | null;
+  testCode: string | null;
+  testName: string | null;
+  /** Test | Param | Head | Profile — the last two are display scaffolding. */
+  testType: string | null;
+  value: string | null;
+  unit: string | null;
+  /** The frozen display string that the report prints. */
+  normalRange: string | null;
+  /** Live numeric bounds for THIS patient's age and sex, or null if undefined. */
+  rangeLow: number | null;
+  rangeHigh: number | null;
+  abnormal: boolean;
+  authorized: boolean;
+  comments: string | null;
+  profileId: number | null;
+  masterProfileId: number | null;
+  machineName: string | null;
+  enteredBy: string | null;
+  enteredAt: string | null;
+  updatedBy: string | null;
+  updatedAt: string | null;
+  hasAttachment: boolean;
+  departmentCode: string | null;
+  departmentName: string | null;
+  departmentId: number | null;
+  codedOptions: string[];
+  isNumericRange: boolean;
+  /** A configured rule would sign this row automatically once it is in range. */
+  autoAuthEligible: boolean;
+}
+
+export interface AutoAuthRuleInForce {
+  scopeType: string;
+  scopeKey: string;
+  scopeLabel: string | null;
+  requireInRange: boolean;
+  allowOutOfRange: boolean;
+  numericOnly: boolean;
+}
+
+export interface WorksheetPermissions {
+  canEnter: boolean;
+  canAmend: boolean;
+  canAuthorize: boolean;
+  canReopen: boolean;
+  canReject: boolean;
+}
+
+export interface WorksheetSampleResponse {
+  header: WorksheetSampleHeader;
+  rows: WorksheetResultRow[];
+  autoAuthRules: AutoAuthRuleInForce[];
+  permissions: WorksheetPermissions;
+}
+
+/**
+ * One edit. `value`/`comments` use null to mean "not touched" and "" to mean
+ * "clear it" — the distinction survives all the way into the SQL table type,
+ * so an untouched row can never wipe a value someone else entered since the
+ * page loaded.
+ *
+ * There is deliberately no `abnormal`: the flag is derived server-side from the
+ * reference ranges and anything a client sent would be ignored.
+ */
+export interface ResultEdit {
+  resultId: number;
+  value?: string | null;
+  comments?: string | null;
+  setAuth?: boolean | null;
+  reason?: string | null;
+}
+
+export interface SaveResultsOutcome {
+  applied: number;
+  autoAuthorized: number;
+  statusBefore: number | null;
+  statusAfter: number | null;
+}
+
+export interface ResultAuditRow {
+  id: number;
+  resultId: number | null;
+  testName: string | null;
+  testCode: string | null;
+  action: string;
+  field: string | null;
+  oldValue: string | null;
+  newValue: string | null;
+  reason: string | null;
+  actorUsername: string | null;
+  actorIp: string | null;
+  source: string;
+  occurredAt: string;
+}
+
+export interface AutoAuthScopeRow {
+  scopeType: string;
+  scopeKey: string;
+  label: string | null;
+  departmentName: string | null;
+  enabled: boolean;
+  requireInRange: boolean;
+  allowOutOfRange: boolean;
+  numericOnly: boolean;
+  updatedAt: string | null;
+  updatedByUsername: string | null;
+}
+
+export interface AutoAuthAuditRow {
+  id: number;
+  action: string;
+  scopeType: string | null;
+  scopeKey: string | null;
+  scopeLabel: string | null;
+  oldEnabled: boolean | null;
+  newEnabled: boolean | null;
+  detail: string | null;
+  actorUsername: string | null;
+  actorIp: string | null;
+  occurredAt: string;
+}
+
+export const worksheetApi = {
+  getSample: (sid: string) =>
+    api.get<WorksheetSampleResponse>(`/api/worksheet/${encodeURIComponent(sid)}`),
+
+  saveResults: (
+    sid: string,
+    edits: ResultEdit[],
+    sampleComments?: string | null,
+    sampleClinicalHistory?: string | null,
+  ) =>
+    api.post<SaveResultsOutcome>(`/api/worksheet/${encodeURIComponent(sid)}/results`, {
+      edits,
+      sampleComments: sampleComments ?? null,
+      sampleClinicalHistory: sampleClinicalHistory ?? null,
+    }),
+
+  reopen: (sid: string, reason: string) =>
+    api.post<{ statusBefore: number; statusAfter: number }>(
+      `/api/worksheet/${encodeURIComponent(sid)}/reopen`,
+      { reason },
+    ),
+
+  audit: (sid: string, top = 200) =>
+    api.get<{ rows: ResultAuditRow[]; count: number }>(
+      `/api/worksheet/${encodeURIComponent(sid)}/audit?top=${top}`,
+    ),
+};
+
+export const autoAuthApi = {
+  list: (search: string, onlyEnabled = false, top = 200) =>
+    api.get<{ rows: AutoAuthScopeRow[]; count: number; featureEnabled: boolean }>(
+      `/api/worksheet-settings/auto-auth/?search=${encodeURIComponent(search)}&onlyEnabled=${onlyEnabled}&top=${top}`,
+    ),
+
+  // The password travels in the body of a POST over TLS and is never stored by
+  // the browser beyond the lifetime of the page — see AutoAuthSettings.
+  set: (body: {
+    scopeType: string;
+    scopeKey: string;
+    scopeLabel?: string | null;
+    enabled: boolean;
+    requireInRange: boolean;
+    allowOutOfRange: boolean;
+    password: string;
+  }) => api.post<{ scopeType: string; scopeKey: string; enabled: boolean }>(
+    '/api/worksheet-settings/auto-auth/',
+    body,
+  ),
+
+  audit: (top = 100) =>
+    api.get<{ rows: AutoAuthAuditRow[]; count: number }>(
+      `/api/worksheet-settings/auto-auth/audit?top=${top}`,
+    ),
+};
+
 export const adminApi = {
   listUsers: (search: string, page = 1, pageSize = 50) =>
     api.get<AdminUserPage>(

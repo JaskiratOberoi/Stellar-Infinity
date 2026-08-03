@@ -43,6 +43,7 @@ public static class InfinityRoles
                 Capabilities.PatientCreate, Capabilities.PatientView,
                 Capabilities.ResultEnter, Capabilities.ResultAuthorize,
                 Capabilities.ResultAmend, Capabilities.ResultReopen, Capabilities.SampleReject,
+                Capabilities.AutoAuthManage,
                 Capabilities.ReportView, Capabilities.ReportRelease,
                 Capabilities.BillingView, Capabilities.PaymentCapture,
                 Capabilities.AnalyticsView),
@@ -54,6 +55,7 @@ public static class InfinityRoles
                 Capabilities.PatientCreate, Capabilities.PatientView,
                 Capabilities.ResultEnter, Capabilities.ResultAuthorize,
                 Capabilities.ResultAmend, Capabilities.ResultReopen, Capabilities.SampleReject,
+                Capabilities.AutoAuthManage,
                 Capabilities.ReportView, Capabilities.ReportRelease,
                 Capabilities.BillingView, Capabilities.PaymentCapture,
                 Capabilities.AnalyticsView),
@@ -70,10 +72,19 @@ public static class InfinityRoles
 
             // Bench work: accession samples and enter results, but never
             // authorize their own results or release a report.
+            //
+            // ResultAmend is included, and is safe by construction rather than
+            // by trust: usp_inf_result_save refuses outright to touch a sample
+            // in status 7/8/9, so the only values a technician can overwrite are
+            // ones not yet signed out. Correcting a transcription error before
+            // authorization is ordinary bench work, and every amend carries a
+            // mandatory reason into the audit trail. Amending an AUTHORIZED
+            // result still needs ResultReopen, which stops at Admin.
             [Technician] = Caps(
                 Capabilities.OrderView, Capabilities.OrderAccession,
                 Capabilities.PatientView,
-                Capabilities.ResultEnter),
+                Capabilities.ResultEnter, Capabilities.ResultAmend,
+                Capabilities.SampleReject),
 
             [Reporting] = Caps(
                 Capabilities.ReportView, Capabilities.ReportRelease,
@@ -167,6 +178,15 @@ public static class Capabilities
 
     /// <summary>The legacy Reject_Sample flag, which was never reachable in its UI.</summary>
     public const string SampleReject = "sample:reject";
+
+    /// <summary>
+    /// Turning auto-authorization on or off for a test, profile or department.
+    /// Admin and above ONLY, and additionally gated by a separate password the
+    /// API verifies before it will call usp_inf_auto_auth_set — this is the one
+    /// setting that lets results reach a patient without a person reading them,
+    /// so holding the capability is necessary but not sufficient.
+    /// </summary>
+    public const string AutoAuthManage = "autoauth:manage";
     public const string ReportView = "report:view";
     public const string ReportRelease = "report:release";
     public const string BillingView = "billing:view";

@@ -128,6 +128,65 @@ a database error — an outage must not sign out every lab in the country.
 Verified by test: forged signature → 401, valid token lacking the capability →
 403, rate limiter cuts login off after 8 attempts per username+IP per 15 min.
 
+## The worksheet
+
+Result entry, authorisation and the amendment trail. `Worksheet/` on the API
+side, `usp_inf_worksheet_sample` / `usp_inf_result_save` /
+`usp_inf_result_reopen` in SQL.
+
+Three things are deliberately different from the legacy LIS, and each one is a
+defect it actually has (see `docs/worksheet-lis-analysis.md`):
+
+**The audit records values, not events.** `inf_result_audit` holds one row per
+FIELD change with both the old and the new value, written inside the same
+transaction as the change itself. Placing it in the procedure rather than in C#
+matters: an audit written after the update can be lost to a crash between the
+two, leaving a changed clinical result with no record of the change.
+
+**Permissions are enforced on the write, not on the control.** The caller's
+rights arrive at `usp_inf_result_save` as explicit flags and a violation aborts
+the whole batch. The legacy checks permissions only to enable or disable a
+checkbox — and because a disabled ASP.NET `CheckBox` posts back as *unchecked*,
+a user without the authorise right silently **cleared** existing authorisations
+by pressing Save.
+
+**Amending and reopening are separate capabilities.** `result:amend` requires a
+reason of real length; `result:reopen` is needed before an authorised sample can
+be touched at all and stops at Admin. In the legacy system, re-opening a signed
+report needed nothing but any non-empty string, from any user who could see the
+worksheet.
+
+### Auto-authorisation
+
+Off by default, per test / profile / department, and enabling it needs **two**
+independent things: the `autoauth:manage` capability and a separate unlock
+password. Only in-range numeric results are ever signed automatically —
+narratives, coded results and out-of-range values never are.
+
+The password is stored as a salted PBKDF2-HMAC-SHA256 digest
+(`AutoAuth__UnlockHash`), verified in constant time. Rotate it with:
+
+```bash
+dotnet run --project api/tools/HashPassword -- '<new password>'
+```
+
+Set the result as an environment variable so the change is config, not a commit.
+`AutoAuth__Enabled=false` refuses every rule change regardless of password.
+
+Every automatic authorisation is written as action `auto_authorize` with source
+`auto`, so "which results reached a patient without a human reading them" is a
+one-line query. The legacy equivalent — the worksheet's "Check" button — signs
+every in-range result and writes a row indistinguishable from a pathologist's.
+
+### Two SET-option traps, both found by running the scripts
+
+`QUOTED_IDENTIFIER` is captured at CREATE time and baked into the object, not
+taken from the caller. A filtered index and a `MERGE` both refuse to run without
+it. Microsoft.Data.SqlClient connects with it ON, sqlcmd does not — so a script
+that deploys fine through `DeploySql` fails when a DBA runs it by hand, and a
+procedure created that way fails on **every** call thereafter. The affected
+scripts set it explicitly.
+
 ## Not built yet
 
 - **MCC scope** — which client codes a user may see. Until this lands, any

@@ -39,6 +39,23 @@ builder.Services.AddSingleton<Infinity.Api.Reports.SmartReportService>();
 builder.Services.AddSingleton<ScopeRepository>();
 builder.Services.AddSingleton<Infinity.Api.Audit.AuditRepository>();
 
+// ---- worksheet -----------------------------------------------------------
+builder.Services.AddSingleton<Infinity.Api.Worksheet.WorksheetRepository>();
+builder.Services.AddSingleton<Infinity.Api.Worksheet.ResultWriteRepository>();
+builder.Services.AddSingleton<Infinity.Api.Worksheet.AutoAuthRepository>();
+builder.Services.AddSingleton<Infinity.Api.Worksheet.AutoAuthGate>();
+
+// Auto-authorization unlock secret. Validated at STARTUP rather than on first
+// use: a malformed hash makes the gate fail closed, and an operator would
+// otherwise discover that only when they tried to change a setting and were
+// told, unhelpfully, that their password was wrong.
+builder.Services
+    .AddOptions<Infinity.Api.Worksheet.AutoAuthOptions>()
+    .Bind(builder.Configuration.GetSection(Infinity.Api.Worksheet.AutoAuthOptions.SectionName))
+    .Validate(o => o.Validate().Count == 0,
+        "AutoAuth settings are invalid — AutoAuth__UnlockHash must be a pbkdf2-sha256 digest.")
+    .ValidateOnStart();
+
 // Trust the forwarded headers from our own reverse proxy, and ONLY it.
 //
 // The API is deliberately not published: the sole peer that can reach it is the
@@ -103,5 +120,6 @@ app.UseAuthorization();
 app.MapInfinityEndpoints();
 app.MapAuthEndpoints();
 app.MapAdminEndpoints();
+app.MapWorksheetEndpoints();
 
 app.Run();

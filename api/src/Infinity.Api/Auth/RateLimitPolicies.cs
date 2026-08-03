@@ -8,6 +8,13 @@ public static class RateLimitPolicies
     public const string Login = "login";
 
     /// <summary>
+    /// Guards the auto-authorization unlock password. See
+    /// <see cref="AddInfinityRateLimiting"/> for the limit and why it is
+    /// partitioned by user rather than by IP.
+    /// </summary>
+    public const string AutoAuth = "autoauth";
+
+    /// <summary>
     /// Brute-force protection on /api/auth/login: 8 attempts per 15 minutes,
     /// partitioned by username + client IP (matching Telo's limits).
     ///
@@ -39,6 +46,34 @@ public static class RateLimitPolicies
                 return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
                 {
                     PermitLimit = 8,
+                    Window = TimeSpan.FromMinutes(15),
+                    QueueLimit = 0,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                });
+            });
+
+            // The auto-authorization unlock password is a SHARED secret that an
+            // authenticated admin can submit repeatedly, so the endpoint that
+            // checks it must not be a free guessing oracle.
+            //
+            // Partitioned by user id, not IP: every admin in a lab shares one
+            // NAT address, and one person mistyping the password must not stop
+            // their colleagues from working. The token is already validated by
+            // the time this runs, so the subject claim is trustworthy here in a
+            // way the login limiter's header is not.
+            //
+            // Tighter than login (5 per 15 min) because a legitimate admin
+            // types this once per session, not once per attempt at recalling
+            // which of their passwords it is.
+            options.AddPolicy(AutoAuth, http =>
+            {
+                var key = http.User.UserId()?.ToString()
+                          ?? http.Connection.RemoteIpAddress?.ToString()
+                          ?? "unknown";
+
+                return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 5,
                     Window = TimeSpan.FromMinutes(15),
                     QueueLimit = 0,
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
