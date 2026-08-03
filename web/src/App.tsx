@@ -7,6 +7,7 @@ import { Orders } from './pages/Orders';
 import { Reports } from './pages/Reports';
 import { Worksheet } from './pages/Worksheet';
 import { AutoAuthSettings } from './pages/AutoAuthSettings';
+import { Instruments } from './pages/Instruments';
 import { AdminUsers } from './pages/AdminUsers';
 import { ThemeToggle } from './theme/ThemeToggle';
 
@@ -29,6 +30,7 @@ export function App() {
           {can('order:view') && <NavLink to="/orders">Orders</NavLink>}
           {can('result:enter') && <NavLink to="/worksheet">Worksheet</NavLink>}
           {can('report:view') && <NavLink to="/reports">Reporting</NavLink>}
+          {can('result:enter') && <NavLink to="/instruments">Instruments</NavLink>}
           {/* Nav is hidden without the capability, but that is cosmetic — the
               API enforces every capability independently on its own routes. */}
           {can('autoauth:manage') && <NavLink to="/settings/auto-auth">Auto-auth</NavLink>}
@@ -47,6 +49,7 @@ export function App() {
         <Route path="/orders" element={can('order:view') ? <Orders /> : <Navigate to="/" replace />} />
         <Route path="/worksheet" element={can('result:enter') ? <Worksheet /> : <Navigate to="/" replace />} />
         <Route path="/reports" element={can('report:view') ? <Reports /> : <Navigate to="/" replace />} />
+        <Route path="/instruments" element={can('result:enter') ? <Instruments /> : <Navigate to="/" replace />} />
         <Route
           path="/settings/auto-auth"
           element={can('autoauth:manage') ? <AutoAuthSettings /> : <Navigate to="/" replace />}

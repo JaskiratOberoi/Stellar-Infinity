@@ -8,6 +8,14 @@ public static class RateLimitPolicies
     public const string Login = "login";
 
     /// <summary>
+    /// Instrument ingestion. Separate from the login limiter and far more
+    /// generous: a busy analyser legitimately posts continuously, and throttling
+    /// it would drop clinical results. The cap exists only to stop a
+    /// malfunctioning or misconfigured driver from saturating the API.
+    /// </summary>
+    public const string Instrument = "instrument";
+
+    /// <summary>
     /// Guards the auto-authorization unlock password. See
     /// <see cref="AddInfinityRateLimiting"/> for the limit and why it is
     /// partitioned by user rather than by IP.
@@ -47,6 +55,26 @@ public static class RateLimitPolicies
                 {
                     PermitLimit = 8,
                     Window = TimeSpan.FromMinutes(15),
+                    QueueLimit = 0,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                });
+            });
+
+            options.AddPolicy(Instrument, http =>
+            {
+                // Partitioned per analyser, so one faulty bench cannot starve
+                // the others. Falls back to IP when the header is absent — an
+                // unidentified caller is not an analyser we want to be generous
+                // with anyway.
+                var code = http.Request.Headers["X-Instrument-Code"].ToString();
+                var key = string.IsNullOrWhiteSpace(code)
+                    ? http.Connection.RemoteIpAddress?.ToString() ?? "unknown"
+                    : code.ToUpperInvariant();
+
+                return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 600,
+                    Window = TimeSpan.FromMinutes(1),
                     QueueLimit = 0,
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 });

@@ -45,6 +45,10 @@ builder.Services.AddSingleton<Infinity.Api.Worksheet.ResultWriteRepository>();
 builder.Services.AddSingleton<Infinity.Api.Worksheet.AutoAuthRepository>();
 builder.Services.AddSingleton<Infinity.Api.Worksheet.AutoAuthGate>();
 
+// ---- instruments ---------------------------------------------------------
+builder.Services.AddSingleton<Infinity.Api.Instruments.InstrumentRepository>();
+builder.Services.AddSingleton<Infinity.Api.Instruments.InstrumentAuthenticator>();
+
 // Auto-authorization unlock secret. Validated at STARTUP rather than on first
 // use: a malformed hash makes the gate fail closed, and an operator would
 // otherwise discover that only when they tried to change a setting and were
@@ -121,5 +125,6 @@ app.MapInfinityEndpoints();
 app.MapAuthEndpoints();
 app.MapAdminEndpoints();
 app.MapWorksheetEndpoints();
+app.MapInstrumentEndpoints();
 
 app.Run();
