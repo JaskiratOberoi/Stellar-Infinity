@@ -39,6 +39,10 @@ public static class ApiEndpoints
                          .RequireAuthorization()
                          .RequireCapability(Capabilities.ReportView);
 
+        orders.MapGet("/catalog", SearchCatalog)
+              .RequireCapability(Capabilities.OrderView)
+              .WithName("SearchCatalog");
+
         reports.MapGet("/", ListReports).WithName("ListReports");
         reports.MapGet("/filters", ListFilterOptions).WithName("ListWorksheetFilters");
         reports.MapGet("/{sid}", GetReport).WithName("GetReport");
@@ -272,6 +276,51 @@ public static class ApiEndpoints
             scope = scope.IsUnrestricted ? "all" : $"{scope.ClientCodes.Count} centres",
             from = fromDate,
             to = toDate,
+        });
+    }
+
+    /// <summary>
+    /// The test catalogue priced for one client.
+    ///
+    /// The MCC is checked against the caller's operational scope before pricing
+    /// anything. Rates are commercially sensitive — what one client negotiated
+    /// is not something another client's account should be able to read by
+    /// putting their MCC id in a query string.
+    /// </summary>
+    private static async Task<IResult> SearchCatalog(
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
+        CatalogRepository repo,
+        CancellationToken ct,
+        int? mcc = null,
+        string? search = null,
+        string? kind = null,
+        int page = 1,
+        int pageSize = 100)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+
+        if (mcc is int requested)
+        {
+            var scope = await scopes.GetScopeAsync(userId, ct).ConfigureAwait(false);
+            // An empty scope means unrestricted here, matching the convention
+            // the orders list already uses.
+            if (scope.Count > 0 && !scope.Contains(requested))
+            {
+                return Results.NotFound();
+            }
+        }
+
+        var result = await repo.SearchAsync(mcc, search, kind, page, pageSize, ct).ConfigureAwait(false);
+
+        return Results.Ok(new
+        {
+            rows = result.Rows,
+            count = result.Rows.Count,
+            total = result.Total,
+            page = result.Page,
+            pageSize = result.PageSize,
+            pageCount = result.PageCount,
         });
     }
 

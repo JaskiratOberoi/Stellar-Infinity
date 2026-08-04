@@ -33,6 +33,7 @@ builder.Services.AddSingleton<SampleHeaderRepository>();
 builder.Services.AddSingleton<StatsRepository>();
 builder.Services.AddSingleton<OrdersRepository>();
 builder.Services.AddSingleton<ReportsRepository>();
+builder.Services.AddSingleton<CatalogRepository>();
 // Singletons: the knowledge base is parsed once at startup, not per request.
 builder.Services.AddSingleton<Infinity.Api.Reports.SmartMeta>();
 builder.Services.AddSingleton<Infinity.Api.Reports.SmartReportService>();

@@ -34,6 +34,20 @@ internal static class SqlReaderExtensions
         return r.IsDBNull(i) ? 0m : Convert.ToDecimal(r.GetValue(i));
     }
 
+    /// <summary>
+    /// A money column that may genuinely have no value.
+    ///
+    /// Distinct from <see cref="Dec"/>, which folds NULL to zero. For a rate
+    /// that is the wrong answer: "this client has no price for this item" and
+    /// "this item is free" are different facts, and collapsing them would put a
+    /// zero-rupee line on a bill.
+    /// </summary>
+    public static decimal? NullableDec(this SqlDataReader r, string column)
+    {
+        var i = r.GetOrdinal(column);
+        return r.IsDBNull(i) ? null : Convert.ToDecimal(r.GetValue(i));
+    }
+
     public static string? Str(this SqlDataReader r, string column)
     {
         var i = r.GetOrdinal(column);

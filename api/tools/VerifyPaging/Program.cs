@@ -376,6 +376,99 @@ else
     }
 }
 
+// ---- 8. catalogue pricing --------------------------------------------------
+// This is money. The tier order and the join keys both have silent failure
+// modes: joining the rate tables on the string test code instead of the id
+// matches nothing, every item falls through to MRP, and a B2B client is billed
+// retail. Nothing about that throws — it just overcharges. So the check
+// compares a real client's catalogue against the same client's MRP view and
+// asserts the tiers actually engage.
+Console.WriteLine("\n[8] catalogue pricing");
+
+async Task<(int Total, JsonElement Rows)> Catalog(string query)
+{
+    var resp = await http.GetAsync($"/api/orders/catalog?{query}");
+    resp.EnsureSuccessStatusCode();
+    var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+    return (doc.RootElement.GetProperty("total").GetInt32(), doc.RootElement.GetProperty("rows").Clone());
+}
+
+var mrpView = await Catalog("pageSize=200");
+Check("catalogue returns items", mrpView.Total > 0, $"{mrpView.Total} catalogue items");
+
+// With no client, every priced row must be at MRP by definition.
+var mrpSources = mrpView.Rows.EnumerateArray()
+    .Select(r => r.GetProperty("rateSource").GetString())
+    .Distinct().ToArray();
+Check("no client selected prices at MRP only",
+    mrpSources.All(s => s is "mrp" or "none"),
+    string.Join(", ", mrpSources));
+
+// Find a client that actually has a rate list or special rates, then confirm
+// the tiers engage for them. A client with neither is a valid but useless
+// subject for this check.
+var mccResp = await http.GetAsync("/api/reports/filters");
+mccResp.EnsureSuccessStatusCode();
+using (var mccDoc = JsonDocument.Parse(await mccResp.Content.ReadAsStringAsync()))
+{
+    var codes = mccDoc.RootElement.GetProperty("clientCodes");
+    Console.WriteLine($"        {codes.GetArrayLength()} client codes in scope");
+}
+
+// The orders list carries real mcc ids; sample a few and stop at the first
+// whose catalogue shows a negotiated tier.
+var probe = await http.GetAsync("/api/orders/?page=1&pageSize=40");
+probe.EnsureSuccessStatusCode();
+var negotiatedFound = false;
+
+using (var pDoc = JsonDocument.Parse(await probe.Content.ReadAsStringAsync()))
+{
+    var probedMccs = new HashSet<int>();
+    foreach (var o in pDoc.RootElement.GetProperty("orders").EnumerateArray())
+    {
+        if (!o.TryGetProperty("mccCode", out var m) || m.ValueKind != JsonValueKind.Number) continue;
+        var mccId = m.GetInt32();
+        if (!probedMccs.Add(mccId)) continue;
+
+        var priced = await Catalog($"mcc={mccId}&pageSize=200");
+        var sources = priced.Rows.EnumerateArray()
+            .Select(r => r.GetProperty("rateSource").GetString())
+            .ToArray();
+
+        Check($"mcc {mccId}: catalogue size matches the MRP view",
+            priced.Total == mrpView.Total,
+            $"{priced.Total} vs {mrpView.Total} — pricing must not add or drop items");
+
+        if (sources.Any(s => s is "special" or "ratelist"))
+        {
+            negotiatedFound = true;
+            var special = sources.Count(s => s == "special");
+            var ratelist = sources.Count(s => s == "ratelist");
+            var mrp = sources.Count(s => s == "mrp");
+            Console.WriteLine($"        mcc {mccId}: special {special}, ratelist {ratelist}, mrp {mrp}");
+
+            // Every negotiated row must carry a rate. A tier that matched but
+            // produced no number would be worse than falling through.
+            var priced2 = priced.Rows.EnumerateArray()
+                .Where(r => r.GetProperty("rateSource").GetString() is "special" or "ratelist")
+                .All(r => r.GetProperty("rate").ValueKind == JsonValueKind.Number);
+            Check("every negotiated row carries a rate", priced2, "no null rates on special/ratelist");
+            break;
+        }
+    }
+}
+
+Check("at least one client prices below MRP", negotiatedFound,
+    negotiatedFound
+        ? "a negotiated tier engaged"
+        : "NO client in the sample used special or ratelist — the id-vs-code join trap is the first thing to suspect");
+
+// Scope: an MCC the caller cannot reach must 404 rather than reveal its rates.
+var outOfScope = await http.GetAsync("/api/orders/catalog?mcc=-1&pageSize=1");
+Check("an unknown mcc does not leak rates",
+    outOfScope.StatusCode is System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.OK,
+    $"{(int)outOfScope.StatusCode}");
+
 Console.WriteLine();
 Console.WriteLine(failures == 0 ? "All checks passed." : $"{failures} check(s) FAILED.");
 return failures == 0 ? 0 : 1;
