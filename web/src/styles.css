@@ -322,26 +322,104 @@ button, input, select { font: inherit; color: inherit; }
   text-align: center; margin-top: .2rem;
 }
 
-/* ---- sign-in entrance: card -> logo -> through the loop ----
-   Two stages across two components. Stage 1 (.login__takeover) plays while the
-   login screen is still mounted: the card falls away and the mark rises to
-   centre stage over an opaque backdrop. Committing the sign-in then unmounts
-   login and mounts the shell, whose .enter-veil renders the IDENTICAL frame —
-   same backdrop, same mark, same size — and zooms through the mark's left
-   loop while fading. Because both stages pin the mark to the exact viewport
-   centre at the same width, the unmount swap between them is invisible. */
+/* ---- sign-in entrance: the card MORPHS into the symbol, then zooms ----
 
-.login__card--away {
-  animation: card-away .45s ease-in both;
+   One continuous object, not a crossfade. On success:
+
+     1. The form's contents breathe out (0–.28s).
+     2. The CARD ITSELF — same element, same glass, same hairline — compresses
+        into a 2:1 capsule, exactly the logo's bounding box, while the aurora
+        sky calms behind it (.1–.75s).
+     3. The symbol condenses INSIDE the capsule as the chrome dissolves around
+        it (.4–1.0s), leaving only the mark on a still sky.
+     4. Commit swaps to the shell, whose veil opens on that IDENTICAL frame and
+        dives through the left loop.
+
+   The geometry that makes the swap invisible: the card is grid-centred in the
+   viewport and shrinks symmetrically, so its centre never moves; the morph
+   mark is absolutely centred in the card; the veil centres the same mark at
+   the same width. Centre = centre = centre, so three components hand off one
+   apparent object. --entrance-mark-w is the single size all of them share. */
+
+:root { --entrance-mark-w: min(340px, 70vw); }
+
+/* The sky stills as the card condenses — the calm is what makes the veil's
+   orb-less backdrop match seamlessly at the swap. */
+.login--leaving .login__sky { animation: sky-calm .6s ease-out both; }
+@keyframes sky-calm { to { opacity: 0; } }
+
+/* 1. Contents breathe out. Everything except the morph mark. */
+.login--leaving .login__card > :not(.login__morphmark) {
+  animation: morph-hide .28s ease-in both;
 }
-@keyframes card-away {
-  to { opacity: 0; transform: translateY(10px) scale(.955); }
+@keyframes morph-hide {
+  to { opacity: 0; transform: translateY(-4px) scale(.985); }
 }
 
-/* The backdrop both stages share: the page's own sky, made opaque so neither
-   the dying card (stage 1) nor the shell painting in (stage 2) shows through
-   before it should. */
-.login__takeover, .enter-veil {
+/* 2. The card compresses into the symbol's capsule.
+
+   Height rides max-height (a box's real height cannot be animated from auto);
+   720px comfortably exceeds the tallest card, so the first frames spend
+   themselves invisibly and the visible shrink begins almost at once. The
+   easing holds back early, then commits — a breath in, not a collapse.
+   Chrome (glass, border, shadow) dissolves only in the LAST third, after the
+   shape already reads as the symbol's container. */
+.login--leaving .login__card {
+  overflow: hidden;
+  animation: card-to-capsule .95s cubic-bezier(.7, 0, .25, 1) both;
+  animation-delay: .08s;
+}
+@keyframes card-to-capsule {
+  0% {
+    width: min(400px, 92vw);
+    max-height: 720px;
+    border-radius: 20px;
+  }
+  62% {
+    background: var(--surface-glass);
+    border-color: var(--line);
+    box-shadow: var(--shadow-card);
+  }
+  100% {
+    width: calc(var(--entrance-mark-w) + 44px);
+    max-height: calc(var(--entrance-mark-w) / 2 + 44px);
+    border-radius: 999px;
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+  }
+}
+
+/* The gradient hairline dissolves with the chrome. */
+.login--leaving .login__card::before { animation: hairline-out .95s ease both .08s; }
+@keyframes hairline-out {
+  0%, 55% { opacity: .55; }
+  100%    { opacity: 0; }
+}
+
+/* 3. The symbol condenses inside the capsule. Present in the DOM from the
+   start (opacity 0) so its appearance is a continuation, not a mount. It
+   holds back until the card is midway into the squeeze, then grows into
+   place as the walls come in around it — the card visibly BECOMES the mark. */
+.login__morphmark {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  opacity: 0;
+  pointer-events: none;
+}
+.login__morphmark .mark svg { height: auto; width: var(--entrance-mark-w); }
+.login--leaving .login__morphmark {
+  animation: mark-condense .95s cubic-bezier(.22, .8, .3, 1) both .08s;
+}
+@keyframes mark-condense {
+  0%, 30% { opacity: 0; transform: scale(.52); }
+  55%     { opacity: 1; }
+  100%    { opacity: 1; transform: scale(1); }
+}
+
+/* ---- stage 2: the dive, in the shell ---- */
+
+.enter-veil {
   position: fixed; inset: 0; z-index: 80;
   display: grid; place-items: center;
   background:
@@ -350,26 +428,11 @@ button, input, select { font: inherit; color: inherit; }
     linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
   pointer-events: none;
 }
-.login__takeover { animation: takeover-in .2s ease-out both; }
-@keyframes takeover-in { from { opacity: 0; } }
+.enter-veil__mark .mark svg { height: auto; width: var(--entrance-mark-w); }
 
-.login__takeover .mark svg,
-.enter-veil__mark .mark svg {
-  height: auto;
-  width: min(340px, 70vw);
-}
-
-.login__takeover .mark {
-  animation: mark-rise .45s cubic-bezier(.22, .8, .3, 1) both;
-}
-@keyframes mark-rise {
-  from { opacity: 0; transform: scale(.55); }
-  to   { opacity: 1; transform: scale(1); }
-}
-
-/* Stage 2. The veil's own animation is the FADE — its animationend is what
-   dismisses the overlay, so it must be on the element App listens to. The
-   zoom rides on the inner wrapper. */
+/* The veil's own animation is the FADE — its animationend is what dismisses
+   the overlay, so it must be on the element App listens to. The zoom rides on
+   the inner wrapper. */
 .enter-veil { animation: veil-fade 1s ease-in both; }
 @keyframes veil-fade {
   0%, 45% { opacity: 1; }
@@ -466,6 +529,48 @@ button, input, select { font: inherit; color: inherit; }
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--line);
   position: sticky; top: 0; z-index: 10;
+}
+
+/* ---------- Noble lockup ----------
+   Sits beside the Infinity mark, behind a divider: two identities standing
+   together, not one blended lockup. See NobleMark.tsx for why it is here. */
+
+.noble-mark {
+  display: flex;
+  align-items: center;
+  padding-left: 1.1rem;
+  /* The divider is the separation. Without it the two marks read as one
+     jumbled wordmark at a glance. */
+  border-left: 1px solid var(--line);
+  flex: none;
+}
+
+.noble-mark img {
+  /* Matched to the Infinity mark's 30px so the two sit on one optical line.
+     The supplied artwork is a full lockup — roundel, wordmark and a strapline —
+     and below about this height the wordmark stops resolving. */
+  height: 30px;
+  width: auto;
+  display: block;
+  /* The supplied artwork is navy-on-light. Dropped a shade in light mode so it
+     sits with the nav rather than shouting over it — Infinity's own mark is
+     the primary identity on its own screen. */
+  opacity: .85;
+}
+
+/* Only a one-colour navy mark, so the standard dark-mode treatment applies:
+   knock it out to white rather than floating a white plate in a dark bar,
+   which would read as a sticker stuck onto the interface. */
+.dark .noble-mark img {
+  filter: brightness(0) invert(1);
+  opacity: .78;
+}
+
+/* Below the nav's wrap point the bar is already tight, and the lab's identity
+   is the more expendable of the two — Infinity's mark tells the user which
+   application they are in. */
+@media (max-width: 720px) {
+  .noble-mark { display: none; }
 }
 
 .topbar__nav { display: flex; gap: .3rem; margin-left: auto; }
@@ -681,28 +786,59 @@ tbody tr:hover { background: var(--accent-softer); }
 }
 
 /* ---------- LIS status badge ----------
-   Background and foreground come from the legacy LIS stylesheet and are set
-   inline per status (see StatusBadge). This rule carries only the shape, and
-   drops the uppercase transform the other badges use — staff recognise these
-   by colour and wording, not by casing.
 
-   Two deliberate departures from the LIS, both forced by putting the badge on
-   a white card rather than in a coloured grid row:
+   Outline treatment: coloured text and border on a transparent ground, the
+   same shape as every other badge in the app. On a list this dense, ten solid
+   blocks of colour per screen shout louder than the data they label.
 
-   - A hairline border. The LIS palette includes #ffffff (Sample Sent) and
-     #F3F3F3 (Sample Registered), which on our surface would be an invisible
-     badge and a barely-visible one. The border costs nothing on the saturated
-     colours and makes the pale ones legible.
-   - No wrapping. "Partially Authorized" broke across two lines and pushed the
-     row taller than its neighbours, which defeats the banding it sits in. */
+   Recognition therefore comes from the HUE FAMILY rather than the exact
+   swatch — orange means tested, green means authorised, blue means printed,
+   red rejected, magenta pending, grey registered, which is the mapping the LIS
+   has taught everyone. The LIS's own fills cannot be reused literally: they
+   are pale blocks meant to sit behind black text in a grid row, and #F3F3F3 or
+   #ffffff as INK is invisible.
+
+   Within a family the "partially" variant is a neighbouring shade, so the pair
+   stays distinguishable without reading the label. One case is separated by
+   hue instead: the only green pale enough to read as "lighter than partially
+   authorised" measured 3.30:1, below AA, so partial is lime and full is green
+   — which also tracks the LIS, whose partial swatch is the more lime one. */
 
 .badge--lis-status {
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  text-transform: none;
-  letter-spacing: .01em;
-  font-weight: 600;
+  background: transparent;
+  color: var(--status-ink);
+  /* Border in the same hue, dialled back so the outline frames the word
+     without competing with it. */
+  border-color: var(--status-ink);
+  border-color: color-mix(in srgb, var(--status-ink) 42%, transparent);
+  /* "Partially Authorized" wrapped onto two lines and pushed its row taller
+     than the rest, which defeats the banding it sits in. */
   white-space: nowrap;
 }
+
+/* Light-mode inks: dark enough to read on the card. */
+.status--neutral { --status-ink: #5b7386; }
+.status--red     { --status-ink: #dc2626; }
+.status--amber   { --status-ink: #b45309; }
+.status--orange  { --status-ink: #c2410c; }
+.status--lime    { --status-ink: #4d7c0f; }
+.status--green   { --status-ink: #15803d; }
+.status--sky     { --status-ink: #0369a1; }
+.status--blue    { --status-ink: #1d4ed8; }
+.status--magenta { --status-ink: #a21caf; }
+
+/* Dark-mode inks: the light ones vanish against the dark surface, so each
+   family flips to its bright end. Measured on #131f31, every one is 5.99:1 or
+   better; the light set is 4.83:1 or better on white. */
+.dark .status--neutral { --status-ink: #8ba6bf; }
+.dark .status--red     { --status-ink: #f87171; }
+.dark .status--amber   { --status-ink: #fbbf24; }
+.dark .status--orange  { --status-ink: #fb923c; }
+.dark .status--lime    { --status-ink: #a3e635; }
+.dark .status--green   { --status-ink: #4ade80; }
+.dark .status--sky     { --status-ink: #7dd3fc; }
+.dark .status--blue    { --status-ink: #93c5fd; }
+.dark .status--magenta { --status-ink: #e879f9; }
 
 /* ---------- pager ----------
    Three zones: what you are looking at, how to move, how much per page. The

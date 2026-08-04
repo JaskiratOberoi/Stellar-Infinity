@@ -20,14 +20,19 @@ function greeting(): { title: string; sub: string } {
   return { title: 'Burning the midnight oil?', sub: 'The night bench appreciates you.' };
 }
 
+/** Card-to-symbol morph duration (.08s delay + .95s animation). Commit hands
+    over to the shell's veil the moment the morph settles. */
+const MORPH_MS = 1030;
+
 export function Login() {
-  const { signIn } = useAuth();
+  const { signInDeferred } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [leaving, setLeaving] = useState(false);
 
   const greet = useMemo(greeting, []);
 
@@ -36,17 +41,27 @@ export function Login() {
     setError(null);
     setBusy(true);
     try {
-      await signIn(username.trim(), password);
-      // No redirect here: <App> re-renders into the shell once `user` is set.
+      // Stage 1 of the entrance: the credentials are verified NOW, but nothing
+      // is committed. The card morphs into the Infinity symbol in place; only
+      // then does commit() set the user — which unmounts this screen and hands
+      // the dive-through-the-loop to <EnterVeil> in App.
+      //
+      // Reduced motion commits immediately: for someone who has asked for
+      // stillness, a second of frozen card would read as a hang, not a pause.
+      const commit = await signInDeferred(username.trim(), password);
+      const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      setLeaving(true);
+      window.setTimeout(commit, still ? 30 : MORPH_MS);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign-in failed.');
-    } finally {
       setBusy(false);
     }
+    // Deliberately no finally: on success `busy` stays true so the form cannot
+    // be resubmitted while the takeover plays.
   }
 
   return (
-    <div className="login">
+    <div className={`login${leaving ? ' login--leaving' : ''}`}>
       {/* The living background: three slow-drifting aurora orbs behind the
           card. Pure CSS transforms (GPU-composited, no layout work) and the
           global prefers-reduced-motion rule freezes them for anyone who has
@@ -62,6 +77,16 @@ export function Login() {
       <div className="login__corner"><ThemeToggle /></div>
 
       <form className="login__card" onSubmit={onSubmit}>
+        {/* The symbol the card morphs INTO. In the DOM from the start
+            (opacity 0), absolutely centred in the card, so its condensing-in
+            during the morph is a continuation of the same object — not a new
+            element popping over a dying one. <EnterVeil> in App then renders
+            this same mark at the same size and centre when the screen swaps,
+            making the whole card → symbol → dive read as one motion. */}
+        <div className="login__morphmark" aria-hidden="true">
+          <Mark withText={false} />
+        </div>
+
         <Mark />
 
         <div>

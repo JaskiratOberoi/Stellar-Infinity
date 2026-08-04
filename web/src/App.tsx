@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { Mark } from './components/Mark';
+import { NobleMark } from './components/NobleMark';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Orders } from './pages/Orders';
@@ -11,8 +13,37 @@ import { Instruments } from './pages/Instruments';
 import { AdminUsers } from './pages/AdminUsers';
 import { ThemeToggle } from './theme/ThemeToggle';
 
+/**
+ * Stage 2 of the sign-in entrance. The login screen ended with the Infinity
+ * mark centred over an opaque backdrop; this renders the identical frame the
+ * instant the shell mounts, then zooms through the mark's LEFT LOOP —
+ * transform-origin sits at that loop's centre — while fading, so the app is
+ * revealed as if the camera flew through the logo.
+ *
+ * The shell mounts and starts fetching UNDER the veil, so the ~0.9s of zoom is
+ * loading time the user never sees.
+ */
+function EnterVeil({ done }: { done: () => void }) {
+  // Belt and braces: if the animationend event never arrives (background tab
+  // throttling), the veil must still get out of the way.
+  useEffect(() => {
+    const t = window.setTimeout(done, 1600);
+    return () => window.clearTimeout(t);
+  }, [done]);
+
+  return (
+    <div
+      className="enter-veil"
+      aria-hidden="true"
+      onAnimationEnd={(e) => { if (e.target === e.currentTarget) done(); }}
+    >
+      <div className="enter-veil__mark"><Mark withText={false} /></div>
+    </div>
+  );
+}
+
 export function App() {
-  const { user, loading, signOut, can } = useAuth();
+  const { user, loading, signOut, can, entering, finishEntering } = useAuth();
 
   if (loading) {
     return <div className="center"><div className="spinner" /><span className="muted">Restoring session…</span></div>;
@@ -21,9 +52,11 @@ export function App() {
   if (!user) return <Login />;
 
   return (
-    <div className="shell">
+    <div className={`shell${entering ? ' shell--hello' : ''}`}>
+      {entering && <EnterVeil done={finishEntering} />}
       <header className="topbar">
         <Mark />
+        <NobleMark />
 
         <nav className="topbar__nav">
           <NavLink to="/" end>Dashboard</NavLink>
