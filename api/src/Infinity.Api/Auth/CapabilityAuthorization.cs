@@ -47,6 +47,14 @@ public static class CapabilityExtensions
     public static bool HasCapability(this ClaimsPrincipal user, string capability) =>
         user.HasClaim(JwtIssuer.CapabilityClaim, capability);
 
+    /// <summary>
+    /// The caller's resolved Infinity role, from the token. Needed wherever a
+    /// decision depends on the role itself rather than on a single capability —
+    /// notably report scope, where administrators are unrestricted reporters.
+    /// </summary>
+    public static string? Role(this ClaimsPrincipal user) =>
+        user.FindFirstValue(ClaimTypes.Role);
+
     public static int? UserId(this ClaimsPrincipal user) =>
         int.TryParse(user.FindFirstValue(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub), out var id)
             ? id

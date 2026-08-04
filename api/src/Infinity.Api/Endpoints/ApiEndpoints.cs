@@ -113,12 +113,19 @@ public static class ApiEndpoints
         if (principal.UserId() is not int userId) return Results.Unauthorized();
 
         var scope = await scopes.GetScopeAsync(userId, ct).ConfigureAwait(false);
-        var reportScope = await scopes.GetReportScopeAsync(userId, ct).ConfigureAwait(false);
+
+        // Resolved the same way the reporting endpoints do, role included.
+        // Reading the raw mapping count here instead would tell an administrator
+        // they have zero reporting centres while the worksheet showed them
+        // everything — the two answers must come from one resolution.
+        var reportScope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
 
         return Results.Ok(new
         {
             centres = scope.Count,
-            reportCentres = reportScope.Count,
+            reportCentres = reportScope.IsUnrestricted ? (int?)null : reportScope.ClientCodes.Count,
+            reportUnrestricted = reportScope.IsUnrestricted,
+            reportDenied = reportScope.IsDenied,
             unrestricted = scope.Count > Data.ScopeFilter.UnrestrictedThreshold,
         });
     }
@@ -196,7 +203,7 @@ public static class ApiEndpoints
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
 
-        var scope = await scopes.GetReportClientCodesAsync(userId, ct).ConfigureAwait(false);
+        var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
         if (scope.IsDenied) return Results.Ok(new { rows = Array.Empty<object>(), count = 0, scope = "none" });
 
         // Default to the last 7 days: the procedure requires a window, and an
@@ -229,7 +236,7 @@ public static class ApiEndpoints
         if (principal.UserId() is not int userId) return Results.Unauthorized();
         if (string.IsNullOrWhiteSpace(sid) || sid.Length > 50) return Results.BadRequest(new { error = "A SID is required." });
 
-        var scope = await scopes.GetReportClientCodesAsync(userId, ct).ConfigureAwait(false);
+        var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
         // Denied and not-found are the same 404: a user with no report scope
         // must not be able to tell whether a SID exists.
         if (scope.IsDenied) return Results.NotFound();
@@ -253,7 +260,7 @@ public static class ApiEndpoints
         if (principal.UserId() is not int userId) return Results.Unauthorized();
         if (string.IsNullOrWhiteSpace(sid) || sid.Length > 50) return Results.BadRequest(new { error = "A SID is required." });
 
-        var scope = await scopes.GetReportClientCodesAsync(userId, ct).ConfigureAwait(false);
+        var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
         if (scope.IsDenied) return Results.NotFound();
 
         var row = await repo.GetBySidAsync(scope.ClientCodes, sid, ct).ConfigureAwait(false);

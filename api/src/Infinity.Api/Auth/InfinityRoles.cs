@@ -142,6 +142,30 @@ public static class InfinityRoles
     public static string Resolve(string? explicitRole, int? lisUsertypeId) =>
         IsValid(explicitRole) ? explicitRole! : LisUsertypeToRole(lisUsertypeId);
 
+    /// <summary>
+    /// Roles that may view reports for EVERY client code, rather than only the
+    /// centres mapped to their account.
+    ///
+    /// This exists because the report-scope SQL has no unrestricted branch: it
+    /// is deliberately "admin-assigned mappings ∪ own centre" for every LIS
+    /// usertype, so that a CLIENT REPORTING user actually receives the codes an
+    /// admin granted them. Applied to an administrator that same rule resolves
+    /// to ZERO centres — no mappings, no own centre — and the worksheet goes
+    /// blank while orders still work.
+    ///
+    /// Telo makes the same split, in lib/reportScope.ts rather than in SQL.
+    /// Porting only the SQL half is what produced the blank worksheet.
+    ///
+    /// <c>client</c> is deliberately ABSENT and must stay absent: a client
+    /// account holds report:view, and admitting it here would show every
+    /// client's patients to every client.
+    /// </summary>
+    public static readonly IReadOnlySet<string> UnrestrictedReporters =
+        new HashSet<string>(StringComparer.Ordinal) { SuperAdmin, Admin, LabManager, Reporting };
+
+    public static bool IsUnrestrictedReporter(string? role) =>
+        role is not null && UnrestrictedReporters.Contains(role);
+
     public static IReadOnlySet<string> CapabilitiesFor(string role) =>
         RoleCapabilities.TryGetValue(role, out var caps) ? caps : RoleCapabilities[Viewer];
 

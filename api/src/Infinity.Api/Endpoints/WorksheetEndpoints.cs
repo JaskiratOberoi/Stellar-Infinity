@@ -66,7 +66,7 @@ public static class WorksheetEndpoints
         if (principal.UserId() is not int userId) return Results.Unauthorized();
         if (!IsValidSid(sid)) return Results.BadRequest(new { error = "A SID of 1-50 characters is required." });
 
-        var scope = await scopes.GetReportClientCodesAsync(userId, ct).ConfigureAwait(false);
+        var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
         // Denied and not-found are the same 404, so a user with no scope cannot
         // learn whether a SID exists by probing.
         if (scope.IsDenied) return Results.NotFound();
@@ -104,7 +104,7 @@ public static class WorksheetEndpoints
         if (principal.UserId() is not int userId) return Results.Unauthorized();
         if (!IsValidSid(sid)) return Results.BadRequest(new { error = "A SID of 1-50 characters is required." });
 
-        var scope = await scopes.GetReportClientCodesAsync(userId, ct).ConfigureAwait(false);
+        var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
         if (scope.IsDenied) return Results.NotFound();
 
         // Confirm the SID is in scope before returning its history — the audit
@@ -141,7 +141,7 @@ public static class WorksheetEndpoints
             return Results.BadRequest(new { error = "Too many edits in one save (limit 500)." });
         }
 
-        var scope = await scopes.GetReportClientCodesAsync(userId, ct).ConfigureAwait(false);
+        var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
         if (scope.IsDenied) return Results.NotFound();
 
         // Scope check BEFORE the write. The procedure does not know about client
@@ -195,7 +195,7 @@ public static class WorksheetEndpoints
             });
         }
 
-        var scope = await scopes.GetReportClientCodesAsync(userId, ct).ConfigureAwait(false);
+        var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
         if (scope.IsDenied) return Results.NotFound();
 
         var sample = await repo.GetSampleAsync(scope.ClientCodes, sid, ct).ConfigureAwait(false);

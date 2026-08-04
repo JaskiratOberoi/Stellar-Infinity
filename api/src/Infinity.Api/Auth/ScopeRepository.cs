@@ -125,8 +125,26 @@ public sealed class ScopeRepository(
     /// user the entire lab. <see cref="ReportScope.Denied"/> exists so the
     /// endpoint can short-circuit before the query is ever built.
     /// </summary>
-    public async Task<ReportScope> GetReportClientCodesAsync(int userId, CancellationToken ct = default)
+    /// <param name="role">
+    /// The caller's resolved Infinity role. Required, because whether a user is
+    /// an unrestricted reporter is a property of their ROLE, not of their
+    /// mappings — and the SQL cannot know it. Passing null falls back to the
+    /// mapping-only resolution, which for an administrator means no reports at
+    /// all; see <see cref="InfinityRoles.UnrestrictedReporters"/>.
+    /// </param>
+    /* `role` is intentionally REQUIRED rather than defaulted. Making it optional
+       would let every existing call site keep compiling while silently retaining
+       the mapping-only resolution — which is precisely the bug being fixed, and
+       it would come back the next time someone adds an endpoint. */
+    public async Task<ReportScope> GetReportClientCodesAsync(
+        int userId, string? role, CancellationToken ct = default)
     {
+        // An administrator or a dedicated reporting operator sees every centre,
+        // exactly as they do for orders. Checked BEFORE the mapping lookup: an
+        // admin has no mappings and no own centre, so the query would return
+        // nothing and deny them.
+        if (InfinityRoles.IsUnrestrictedReporter(role)) return ReportScope.Unrestricted;
+
         var ids = await GetReportScopeAsync(userId, ct).ConfigureAwait(false);
 
         if (ids.Count == 0) return ReportScope.Denied;
