@@ -79,7 +79,7 @@ export function ReportViewer({ sid, onClose }: { sid: string; onClose: () => voi
                   {row.age != null && ` · ${row.age}${row.ageUnit ?? ''}`}
                 </p>
               </div>
-              <StatusBadge status={row.status} />
+              <StatusBadge status={row.status} statusCode={row.statusCode} />
             </div>
 
             <div className="row" style={{ gap: '.5rem', flexWrap: 'wrap' }}>

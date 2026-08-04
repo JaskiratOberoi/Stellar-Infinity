@@ -131,7 +131,7 @@ export function Reports() {
                         {r.testNames ?? '—'}
                       </div>
                     </td>
-                    <td><StatusBadge status={r.status} /></td>
+                    <td><StatusBadge status={r.status} statusCode={r.statusCode} /></td>
                     <td className="muted" style={{ fontSize: '.78rem' }}>{fmtDateTime(r.registeredAt)}</td>
                     <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                       <button className="btn btn--ghost btn--sm" onClick={(e) => { e.stopPropagation(); setOpenSid(r.sid); }}>
@@ -175,13 +175,66 @@ export function Reports() {
   );
 }
 
-export function StatusBadge({ status }: { status: string | null }) {
-  if (!status) return <span className="muted">—</span>;
+/**
+ * Sample status, coloured exactly as the legacy LIS colours it.
+ *
+ * The colours are lifted verbatim from the LIS stylesheet
+ * (MedCis.UI/Styles/responsible/css/style1.css, classes .status_reg,
+ * .status_tested, .status_auth …), which the worksheet applies by status name
+ * in SampleWorksheet.aspx.cs. Staff have read this palette for years; matching
+ * it means they can scan an Infinity worklist without relearning anything.
+ *
+ * Two pairings look inverted and are NOT mistakes — they are what the LIS does,
+ * and they are reproduced rather than corrected:
+ *   - Partially Tested is the PALER orange, Tested the deeper one.
+ *   - Partially Authorized is the DEEPER green, Authorized the paler one.
+ *
+ * Matching on status_code, not on the label: the code is the LIS's own
+ * identifier, while the text has been renamed before. Labels are still matched
+ * as a fallback for callers that only carry the string.
+ */
+const LIS_STATUS_STYLE: Record<number, { bg: string; fg: string }> = {
+  1: { bg: '#ffffff', fg: '#000000' },   // Sample Sent          .status_samplesent
+  2: { bg: '#F3F3F3', fg: '#000000' },   // Sample Registered    .status_reg
+  3: { bg: '#ff0000', fg: '#ffffff' },   // Rejected             .status_rejected
+  4: { bg: '#F8CAAA', fg: '#000000' },   // Partially Tested     .status_ptested
+  5: { bg: '#F4A778', fg: '#000000' },   // Tested               .status_tested
+  6: { bg: '#A3F46C', fg: '#000000' },   // Partially Authorized .status_pauth
+  7: { bg: '#AFFD8E', fg: '#000000' },   // Authorized           .status_auth
+  8: { bg: '#BDD7ED', fg: '#000000' },   // Partially Printed    .status_pprinted
+  9: { bg: '#B7D2EC', fg: '#000000' },   // Printed              .status_printed
+  10: { bg: '#990066', fg: '#ffffff' },  // Pending              .status_pending
+};
+
+/** Fallback for callers that have the label but not the code. */
+function styleFromLabel(status: string) {
   const s = status.toLowerCase();
-  const kind = s.includes('authoris') || s.includes('authoriz') || s.includes('complete')
-    ? 'infinity'
-    : s.includes('pending') || s.includes('sent')
-      ? 'telo'
-      : 'lis';
-  return <span className={`badge badge--${kind}`}>{status}</span>;
+  if (s.includes('reject')) return LIS_STATUS_STYLE[3];
+  if (s.includes('pending')) return LIS_STATUS_STYLE[10];
+  if (s.includes('partially print')) return LIS_STATUS_STYLE[8];
+  if (s.includes('print')) return LIS_STATUS_STYLE[9];
+  if (s.includes('partially auth')) return LIS_STATUS_STYLE[6];
+  if (s.includes('auth')) return LIS_STATUS_STYLE[7];
+  if (s.includes('partially test')) return LIS_STATUS_STYLE[4];
+  if (s.includes('test')) return LIS_STATUS_STYLE[5];
+  if (s.includes('sent')) return LIS_STATUS_STYLE[1];
+  if (s.includes('regist')) return LIS_STATUS_STYLE[2];
+  return undefined;
+}
+
+export function StatusBadge({ status, statusCode }: { status: string | null; statusCode?: number | null }) {
+  if (!status) return <span className="muted">—</span>;
+
+  const style = (statusCode != null ? LIS_STATUS_STYLE[statusCode] : undefined) ?? styleFromLabel(status);
+  if (!style) return <span className="badge badge--lis">{status}</span>;
+
+  // Inline, and identical in both themes. These are literal LIS colours and
+  // each pairs its own foreground, so contrast holds either way; re-deriving
+  // them from theme tokens would mean they no longer match what the LIS shows
+  // on the next screen over, which is the entire point.
+  return (
+    <span className="badge badge--lis-status" style={{ background: style.bg, color: style.fg }}>
+      {status}
+    </span>
+  );
 }

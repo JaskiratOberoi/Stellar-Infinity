@@ -15,8 +15,10 @@ const STATUSES: { id: number; label: string }[] = [
   { id: 5, label: 'Tested' },
   { id: 6, label: 'Partially authorised' },
   { id: 7, label: 'Authorised' },
+  { id: 8, label: 'Partially printed' },
   { id: 9, label: 'Printed' },
   { id: 3, label: 'Rejected' },
+  { id: 10, label: 'Pending' },
 ];
 
 /**
@@ -31,6 +33,57 @@ const PENDING_STATUSES = [2, 4, 5, 6];
 /** Every row is reachable at any of these; the choice only trades requests
  *  against response size. */
 const PAGE_SIZES = [50, 100, 250, 500, 1000];
+
+/**
+ * What the row's button should actually say.
+ *
+ * "Enter results" was wrong for most of the list. A sample at Tested already
+ * has every value typed in and is waiting on a pathologist — the work is
+ * reading and signing, not typing — and one at Authorised has nothing left to
+ * do at all. A button that says the same thing in all three cases makes the
+ * operator open the sample to find out which it is.
+ *
+ * Derived from the LIS status code, which is already on the row, so this costs
+ * no extra query. `primary` is reserved for rows that need someone to act;
+ * finished samples get a quiet button so the eye skips them.
+ */
+function actionFor(statusCode: number | null | undefined): { label: string; primary: boolean; title: string } {
+  switch (statusCode) {
+    case 2:  return { label: 'Enter results', primary: true,
+                      title: 'Registered — no values entered yet' };
+    case 4:  return { label: 'Continue entry', primary: true,
+                      title: 'Partially tested — some values are in, the rest are not' };
+    case 5:  return { label: 'Review & authorise', primary: true,
+                      title: 'All values entered and waiting to be signed out' };
+    case 6:  return { label: 'Finish authorising', primary: true,
+                      title: 'Partially authorised — some tests are still unsigned' };
+    case 7:  return { label: 'View results', primary: false,
+                      title: 'Authorised — signed out' };
+    case 8:  return { label: 'View results', primary: false,
+                      title: 'Partially printed' };
+    case 9:  return { label: 'View results', primary: false,
+                      title: 'Printed' };
+    case 3:  return { label: 'View', primary: false,
+                      title: 'Rejected — no result will be issued' };
+    // Sample Sent (1), Pending (10), and anything the LIS adds later. Neutral
+    // wording rather than a guess at what the sample needs.
+    default: return { label: 'Open', primary: false, title: 'Open this sample' };
+  }
+}
+
+function ActionButton({ statusCode, onOpen }: { statusCode: number | null | undefined; onOpen: () => void }) {
+  const a = actionFor(statusCode);
+  return (
+    <button
+      className={`btn btn--sm ${a.primary ? 'btn--primary' : 'btn--ghost'}`}
+      title={a.title}
+      style={{ whiteSpace: 'nowrap' }}
+      onClick={(e) => { e.stopPropagation(); onOpen(); }}
+    >
+      {a.label}
+    </button>
+  );
+}
 
 function daysAgo(n: number) {
   const d = new Date();
@@ -149,6 +202,48 @@ export function Worksheet() {
 
   const multiSamplePatients = grouped.filter((g) => g.rows.length > 1).length;
 
+  /**
+   * Flattened rows carrying everything the table needs to band them.
+   *
+   * The banding unit changes with the mode, and that is the point:
+   *   - grouped   → one band per PATIENT, so a person's three tubes share a
+   *                 shade and the next patient flips. The band becomes the
+   *                 group boundary, which is far easier to follow down a dense
+   *                 list than a hairline rule.
+   *   - ungrouped → one band per ROW, ordinary zebra striping, which is what
+   *                 keeps the eye on a line across eight columns.
+   *
+   * Computed here rather than with nth-child so the two modes can differ at
+   * all — CSS cannot see where a patient group starts.
+   */
+  const tableRows = useMemo(() => {
+    const out: {
+      row: WorksheetRow;
+      band: 0 | 1;
+      indexInGroup: number;
+      groupSize: number;
+      isGroupStart: boolean;
+      isGroupEnd: boolean;
+    }[] = [];
+
+    let rowIndex = 0;
+    grouped.forEach((g, groupIndex) => {
+      g.rows.forEach((row, i) => {
+        out.push({
+          row,
+          band: (groupByPid ? groupIndex % 2 : rowIndex % 2) as 0 | 1,
+          indexInGroup: i,
+          groupSize: g.rows.length,
+          isGroupStart: i === 0,
+          isGroupEnd: i === g.rows.length - 1,
+        });
+        rowIndex += 1;
+      });
+    });
+
+    return out;
+  }, [grouped, groupByPid]);
+
   return (
     <div className="page">
       <div className="page__head">
@@ -240,13 +335,15 @@ export function Worksheet() {
                 </tr>
               </thead>
               <tbody>
-                {grouped.map((g) =>
-                  g.rows.map((r, i) => (
+                {tableRows.map(({ row: r, band, indexInGroup: i, groupSize, isGroupStart, isGroupEnd }) => (
                     <tr
                       key={r.sid}
-                      className={groupByPid && g.rows.length > 1
-                        ? (i === 0 ? 'pid-group pid-group--first' : 'pid-group')
-                        : undefined}
+                      className={[
+                        `band-${band}`,
+                        groupByPid && groupSize > 1 ? 'pid-group' : '',
+                        groupByPid && groupSize > 1 && isGroupStart ? 'pid-group--first' : '',
+                        groupByPid && groupSize > 1 && isGroupEnd ? 'pid-group--last' : '',
+                      ].filter(Boolean).join(' ')}
                       style={{ cursor: 'pointer' }}
                       onClick={() => setOpenSid(r.sid)}
                     >
@@ -257,9 +354,9 @@ export function Worksheet() {
                         {/* Only the first row of a multi-sample patient carries
                             the count, so the repetition reads as one patient
                             rather than as duplicate rows. */}
-                        {groupByPid && g.rows.length > 1 && i === 0 && (
+                        {groupByPid && groupSize > 1 && isGroupStart && (
                           <span className="badge badge--role" style={{ marginLeft: '.4rem' }}>
-                            {g.rows.length} samples
+                            {groupSize} samples
                           </span>
                         )}
                       </td>
@@ -286,17 +383,13 @@ export function Worksheet() {
                           {r.testNames ?? '—'}
                         </div>
                       </td>
-                      <td><StatusBadge status={r.status} /></td>
+                      <td><StatusBadge status={r.status} statusCode={r.statusCode} /></td>
                       <td className="muted" style={{ fontSize: '.78rem' }}>{fmtDateTime(r.registeredAt)}</td>
                       <td style={{ textAlign: 'right' }}>
-                        <button className="btn btn--primary btn--sm"
-                                onClick={(e) => { e.stopPropagation(); setOpenSid(r.sid); }}>
-                          Enter results
-                        </button>
+                        <ActionButton statusCode={r.statusCode} onOpen={() => setOpenSid(r.sid)} />
                       </td>
                     </tr>
-                  )),
-                )}
+                ))}
 
                 {visible.length === 0 && scope !== 'none' && (
                   <tr>
