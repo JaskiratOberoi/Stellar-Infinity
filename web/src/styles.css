@@ -478,3 +478,43 @@ tbody tr:hover { background: var(--accent-softer); }
 
 .chip:disabled { opacity: .5; cursor: not-allowed; }
 .chip:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
+
+/* ---------- reference-range cell (worksheet) ---------- */
+
+.range-cell { position: relative; }
+
+/* Two lines, then ellipsis. The full text is on hover / focus. */
+.range-cell__clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: pre-line;   /* the LIS stores real line breaks between bands */
+  line-height: 1.35;
+  cursor: help;
+}
+
+.range-cell__clamp[tabindex="0"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-ring);
+  border-radius: 4px;
+}
+
+/* position: fixed, not absolute — the grid is a scroll container and would
+   otherwise clip this for every row below the fold. */
+.range-cell__full {
+  position: fixed;
+  z-index: 60;
+  max-width: 320px;
+  padding: .55rem .7rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-modal);
+  font-size: .74rem;
+  line-height: 1.5;
+  white-space: pre-line;
+  pointer-events: none;    /* never steals the hover from the row beneath */
+}

@@ -16,6 +16,67 @@ interface Draft {
 }
 
 /**
+ * Reference-range cell: two lines by default, the whole thing on hover or
+ * keyboard focus.
+ *
+ * These strings routinely carry adult, paediatric, newborn and per-trimester
+ * bands. Printed in full they push one analyte to roughly 150px and a thyroid
+ * profile off the screen, which makes the grid unusable for the data entry it
+ * exists for — but the range is also exactly what an operator checks a value
+ * against, so it cannot simply be dropped.
+ *
+ * The popover is position:FIXED rather than absolute. The grid is a scroll
+ * container (maxHeight 46vh, overflow-y auto), so an absolutely positioned
+ * panel inside a cell would be clipped by it — visible for the top rows and cut
+ * off for the rest, which is worse than not having it.
+ */
+function RangeCell({ text }: { text: string }) {
+  const [at, setAt] = useState<{ left: number; top: number; flip: boolean } | null>(null);
+
+  const show = (el: HTMLElement) => {
+    const r = el.getBoundingClientRect();
+    // Flip above when there is not enough room below, so the panel is never
+    // half off-screen for rows near the bottom of the viewport.
+    const flip = r.bottom + 200 > window.innerHeight;
+    setAt({ left: r.left, top: flip ? r.top : r.bottom + 4, flip });
+  };
+
+  const multiline = text.includes('\n') || text.length > 48;
+
+  return (
+    <td className="muted range-cell" style={{ fontSize: '.75rem' }}>
+      <div
+        className="range-cell__clamp"
+        tabIndex={multiline ? 0 : -1}
+        // Native tooltip as a floor: it survives touch, high-contrast modes and
+        // anything that stops the custom panel rendering.
+        title={multiline ? text : undefined}
+        onMouseEnter={(e) => multiline && show(e.currentTarget)}
+        onMouseLeave={() => setAt(null)}
+        onFocus={(e) => multiline && show(e.currentTarget)}
+        onBlur={() => setAt(null)}
+      >
+        {text}
+      </div>
+
+      {at && (
+        <div
+          className="range-cell__full"
+          style={{
+            left: at.left,
+            top: at.top,
+            transform: at.flip ? 'translateY(-100%) translateY(-4px)' : undefined,
+          }}
+          role="tooltip"
+        >
+          {text}
+        </div>
+      )}
+    </td>
+  );
+}
+
+/**
  * Where a value sits relative to this patient's reference range.
  *
  * Computed in the browser purely for immediate feedback as the user types. The
@@ -391,12 +452,16 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
 
                         <td className="muted" style={{ fontSize: '.78rem' }}>{r.unit ?? '—'}</td>
 
-                        <td className="muted" style={{ fontSize: '.75rem' }}>
-                          {/* The frozen string is what the report prints, so it is
-                              what the operator is shown. The live bounds only
-                              drive the H/L flag. */}
-                          {r.normalRange ?? (r.rangeLow != null ? `${r.rangeLow} – ${r.rangeHigh}` : '—')}
-                        </td>
+                        {/* The frozen string is what the report prints, so it is
+                            what the operator is shown. The live bounds only
+                            drive the H/L flag.
+
+                            Clamped to two lines: these strings routinely carry
+                            paediatric, pregnancy and newborn bands, and printed
+                            in full they push a single analyte to ~150px and make
+                            the grid unusable for data entry. The whole text is
+                            revealed on hover and on keyboard focus. */}
+                        <RangeCell text={r.normalRange ?? (r.rangeLow != null ? `${r.rangeLow} – ${r.rangeHigh}` : '—')} />
 
                         <td>
                           <input
