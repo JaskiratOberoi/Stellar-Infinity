@@ -39,6 +39,89 @@ public static class InstrumentEndpoints
         admin.MapPost("/", UpsertInstrument)
              .RequireCapability(Capabilities.UserManage)
              .WithName("UpsertInstrument");
+
+        // Wide-format file import. Preview is read-only; apply writes results,
+        // so it needs the same capability as typing them into the worksheet.
+        admin.MapPost("/import/preview", PreviewImport)
+             .RequireCapability(Capabilities.ResultEnter)
+             .WithName("PreviewImport");
+
+        admin.MapPost("/import/apply", ApplyImport)
+             .RequireCapability(Capabilities.ResultEnter)
+             .WithName("ApplyImport");
+    }
+
+    public sealed record ImportRequest(string FileName, string Content);
+
+    /// <summary>
+    /// Parse an uploaded file and report what WOULD be imported, without
+    /// touching a single result.
+    ///
+    /// A wide file is a few hundred results at once. Applying it blind is how
+    /// an operator discovers at the end that the header row was misread and
+    /// every value went to the wrong analyte — so the preview is a required
+    /// step, not a nicety.
+    /// </summary>
+    private static IResult PreviewImport(ImportRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Content))
+            return Results.BadRequest(new { error = "The file is empty." });
+
+        if (request.Content.Length > 4_000_000)
+            return Results.BadRequest(new { error = "File too large; split it into smaller batches." });
+
+        var parsed = WideFormatParser.Parse(request.Content);
+
+        return Results.Ok(new
+        {
+            testCodes = parsed.TestCodes,
+            dataRows = parsed.DataRows,
+            readings = parsed.Cells.Count,
+            warnings = parsed.Warnings,
+            // Enough to eyeball that SIDs and codes landed in the right columns.
+            sample = parsed.Cells.Take(25),
+            distinctSids = parsed.Cells.Select(c => c.Sid).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+        });
+    }
+
+    /// <summary>
+    /// Apply an import. Every cell goes through the same inbox and matcher as
+    /// an instrument reading, so anything that does not match stays visible and
+    /// replayable rather than being lost.
+    /// </summary>
+    private static async Task<IResult> ApplyImport(
+        ImportRequest request,
+        InstrumentRepository repo,
+        ClaimsPrincipal principal,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int actor) return Results.Unauthorized();
+
+        if (string.IsNullOrWhiteSpace(request.Content))
+            return Results.BadRequest(new { error = "The file is empty." });
+
+        var parsed = WideFormatParser.Parse(request.Content);
+        if (parsed.Cells.Count == 0)
+            return Results.BadRequest(new { error = "Nothing to import.", warnings = parsed.Warnings });
+
+        var batchId = Guid.NewGuid();
+        var fileName = string.IsNullOrWhiteSpace(request.FileName) ? "upload.csv" : request.FileName.Trim();
+
+        var outcomes = new List<IngestOutcome>(parsed.Cells.Count);
+        foreach (var cell in parsed.Cells)
+        {
+            outcomes.Add(await repo.IngestImportedAsync(batchId, fileName, cell, actor, ct).ConfigureAwait(false));
+        }
+
+        return Results.Ok(new
+        {
+            batchId,
+            accepted = outcomes.Count,
+            applied = outcomes.Count(o => o.MatchStatus == "applied"),
+            unmatched = outcomes.Count(o => o.MatchStatus is "unmatched" or "rejected"),
+            duplicate = outcomes.Count(o => o.MatchStatus == "duplicate"),
+            warnings = parsed.Warnings,
+        });
     }
 
     /// <summary>

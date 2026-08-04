@@ -55,7 +55,11 @@ public sealed record InboxMessage(
     int? ResultId,
     DateTimeOffset ReceivedAt,
     DateTimeOffset? AppliedAt,
-    int Attempts);
+    int Attempts,
+    /// <summary>instrument | import</summary>
+    string Source,
+    /// <summary>Uploaded file name, for an imported row.</summary>
+    string? SourceName);
 
 public sealed record InboxPage(IReadOnlyList<InboxMessage> Messages, int TotalCount);
 

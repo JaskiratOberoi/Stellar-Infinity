@@ -1,3 +1,12 @@
+/* QUOTED_IDENTIFIER is baked into every procedure and index at creation
+   time, not taken from the caller. dbo.inf_instrument_result_inbox carries a
+   FILTERED index (IX_inf_inbox_batch, added in script 74), and SQL Server
+   refuses to INSERT into such a table from a procedure compiled with this
+   setting OFF. sqlcmd connects with it OFF; Microsoft.Data.SqlClient connects
+   with it ON. Without this line the ingest procedure deploys cleanly and then
+   fails on EVERY call, with an error naming the INSERT rather than the deploy. */
+SET QUOTED_IDENTIFIER ON;
+GO
 /*
  * 71_table_inf_instrument_inbox.sql
  *

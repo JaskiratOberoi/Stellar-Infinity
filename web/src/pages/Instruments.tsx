@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { fmtDateTime } from '../lib/format';
+import { ImportResults } from './ImportResults';
 
 interface Instrument {
   id: number;
@@ -26,6 +27,8 @@ interface InboxMessage {
   failureReason: string | null;
   receivedAt: string;
   attempts: number;
+  source: string;
+  sourceName: string | null;
 }
 
 const STATUSES = ['needs attention', 'applied', 'unmatched', 'rejected', 'duplicate'] as const;
@@ -41,6 +44,7 @@ export function Instruments() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -90,11 +94,16 @@ export function Instruments() {
           <h1 className="page__title">Instruments</h1>
           <p className="page__sub">Analyser results awaiting a match, and the benches that sent them</p>
         </div>
-        {can('user:manage') && (
-          <button className="btn btn--primary btn--sm" style={{ marginLeft: 'auto' }} onClick={() => setShowAdd(true)}>
-            Register analyser
+        <div className="row" style={{ marginLeft: 'auto' }}>
+          <button className="btn btn--primary btn--sm" onClick={() => setShowImport(true)}>
+            Import from file
           </button>
-        )}
+          {can('user:manage') && (
+            <button className="btn btn--ghost btn--sm" onClick={() => setShowAdd(true)}>
+              Register analyser
+            </button>
+          )}
+        </div>
       </div>
 
       {error && <div className="alert alert--error" style={{ marginBottom: '.8rem' }}>{error}</div>}
@@ -166,7 +175,13 @@ export function Instruments() {
               {inbox.map((m) => (
                 <tr key={m.id}>
                   <td className="muted" style={{ fontSize: '.76rem', whiteSpace: 'nowrap' }}>{fmtDateTime(m.receivedAt)}</td>
-                  <td className="mono" style={{ fontSize: '.78rem' }}>{m.instrumentCode ?? '—'}</td>
+                  <td style={{ fontSize: '.78rem' }}>
+                    {m.source === 'import'
+                      ? <span title={m.sourceName ?? 'file import'}>
+                          <span className="badge badge--role">file</span>
+                        </span>
+                      : <span className="mono">{m.instrumentCode ?? '—'}</span>}
+                  </td>
                   <td className="mono">{m.sid ?? <span className="muted">—</span>}</td>
                   <td className="mono" style={{ fontSize: '.78rem' }}>{m.testCode ?? '—'}</td>
                   <td className="mono">{m.value ?? '—'} <span className="muted">{m.unit}</span></td>
@@ -200,6 +215,7 @@ export function Instruments() {
       </p>
 
       {showAdd && <RegisterInstrument onClose={() => setShowAdd(false)} onDone={() => { setShowAdd(false); void load(); }} />}
+      {showImport && <ImportResults onClose={() => setShowImport(false)} onApplied={() => void load()} />}
     </div>
   );
 }
