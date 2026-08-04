@@ -518,3 +518,27 @@ tbody tr:hover { background: var(--accent-softer); }
   white-space: pre-line;
   pointer-events: none;    /* never steals the hover from the row beneath */
 }
+
+/* ---------- worksheet: samples grouped by patient ---------- */
+
+/* A patient's samples are banded together and separated from the next
+   patient, so several rows sharing a name read as one person rather than
+   as accidental duplicates. */
+.pid-group > td {
+  border-bottom-color: transparent;
+  background: var(--accent-softer);
+}
+
+.pid-group--first > td {
+  border-top: 1px solid var(--accent-ring);
+}
+
+/* Restore the divider under the LAST row of each group: the following row
+   is either a new group (which draws its own top border) or an ungrouped
+   single, so without this two adjacent groups would merge visually. */
+.pid-group + tr:not(.pid-group) > td,
+tbody tr:last-child.pid-group > td {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+tbody tr.pid-group:hover > td { background: var(--accent-soft); }

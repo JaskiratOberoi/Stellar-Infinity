@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import { fmtDateTime } from '../lib/format';
 import { StatusBadge, type WorksheetRow } from './Reports';
@@ -40,6 +40,7 @@ export function Worksheet() {
   const [sidQuery, setSidQuery] = useState('');
   const [statusId, setStatusId] = useState<number | ''>('');
   const [pendingOnly, setPendingOnly] = useState(true);
+  const [groupByPid, setGroupByPid] = useState(true);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,6 +75,39 @@ export function Worksheet() {
   const visible = pendingOnly && statusId === ''
     ? rows.filter((r) => r.statusCode != null && [2, 4, 5, 6].includes(r.statusCode))
     : rows;
+
+  /**
+   * Samples grouped by patient.
+   *
+   * One patient routinely has several samples drawn together — a CBC tube, a
+   * biochemistry tube, a urine container — and in a flat list they appear as
+   * three unrelated rows with the same name, several rows apart. Grouping keeps
+   * them adjacent so it is obvious they belong to one person, which matters
+   * both for spotting a missed tube and for not mistaking one patient's sample
+   * for another's.
+   *
+   * Order WITHIN a group and the relative order OF groups both follow the
+   * original list, which is newest-registered first. Sorting by PID instead
+   * would scramble the chronology a technologist works down.
+   */
+  const grouped = useMemo(() => {
+    if (!groupByPid) return visible.map((r) => ({ pid: r.pid, rows: [r] }));
+
+    const order: number[] = [];
+    const byPid = new Map<number, WorksheetRow[]>();
+
+    for (const r of visible) {
+      // A row with no PID cannot be grouped with anything; give each its own
+      // bucket rather than collecting unrelated samples under a shared 0.
+      const key = r.pid || -(order.length + 1);
+      if (!byPid.has(key)) { byPid.set(key, []); order.push(key); }
+      byPid.get(key)!.push(r);
+    }
+
+    return order.map((pid) => ({ pid, rows: byPid.get(pid)! }));
+  }, [visible, groupByPid]);
+
+  const multiSamplePatients = grouped.filter((g) => g.rows.length > 1).length;
 
   return (
     <div className="page">
@@ -112,6 +146,17 @@ export function Worksheet() {
         <span className="muted" style={{ fontSize: '.74rem' }}>
           Hides authorised, printed and rejected samples.
         </span>
+
+        <label className="row" style={{ gap: '.4rem', fontSize: '.8rem', cursor: 'pointer', marginLeft: '1.2rem' }}>
+          <input type="checkbox" checked={groupByPid}
+                 onChange={(e) => setGroupByPid(e.target.checked)} />
+          Group by patient
+        </label>
+        <span className="muted" style={{ fontSize: '.74rem' }}>
+          {multiSamplePatients > 0
+            ? `${multiSamplePatients} patient${multiSamplePatients === 1 ? '' : 's'} with more than one sample.`
+            : 'Keeps a patient’s samples together.'}
+        </span>
       </div>
 
       {scope === 'none' && (
@@ -132,6 +177,7 @@ export function Worksheet() {
               <thead>
                 <tr>
                   <th>SID</th>
+                  <th>PID</th>
                   <th>Patient</th>
                   <th>Client</th>
                   <th>Tests</th>
@@ -141,36 +187,67 @@ export function Worksheet() {
                 </tr>
               </thead>
               <tbody>
-                {visible.map((r) => (
-                  <tr key={r.sid} style={{ cursor: 'pointer' }} onClick={() => setOpenSid(r.sid)}>
-                    <td className="mono"><b>{r.sid}</b></td>
-                    <td>
-                      {r.patientName ?? <span className="muted">—</span>}
-                      <div className="muted" style={{ fontSize: '.72rem' }}>
-                        {[r.sex, r.age != null ? `${r.age}${r.ageUnit?.[0] ?? ''}` : null].filter(Boolean).join(' · ')}
-                      </div>
-                    </td>
-                    <td className="muted">{r.clientCode ?? '—'}</td>
-                    <td style={{ maxWidth: 240 }}>
-                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                           title={r.testNames ?? ''}>
-                        {r.testNames ?? '—'}
-                      </div>
-                    </td>
-                    <td><StatusBadge status={r.status} /></td>
-                    <td className="muted" style={{ fontSize: '.78rem' }}>{fmtDateTime(r.registeredAt)}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      <button className="btn btn--primary btn--sm"
-                              onClick={(e) => { e.stopPropagation(); setOpenSid(r.sid); }}>
-                        Enter results
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {grouped.map((g) =>
+                  g.rows.map((r, i) => (
+                    <tr
+                      key={r.sid}
+                      className={groupByPid && g.rows.length > 1
+                        ? (i === 0 ? 'pid-group pid-group--first' : 'pid-group')
+                        : undefined}
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => setOpenSid(r.sid)}
+                    >
+                      <td className="mono"><b>{r.sid}</b></td>
+
+                      <td className="mono muted" style={{ fontSize: '.78rem' }}>
+                        {r.pid || '—'}
+                        {/* Only the first row of a multi-sample patient carries
+                            the count, so the repetition reads as one patient
+                            rather than as duplicate rows. */}
+                        {groupByPid && g.rows.length > 1 && i === 0 && (
+                          <span className="badge badge--role" style={{ marginLeft: '.4rem' }}>
+                            {g.rows.length} samples
+                          </span>
+                        )}
+                      </td>
+
+                      <td>
+                        {/* Repeating the name on every sample of the same
+                            patient is noise; the grouping already says it. */}
+                        {groupByPid && i > 0 ? (
+                          <span className="muted" style={{ fontSize: '.76rem' }}>↳ same patient</span>
+                        ) : (
+                          <>
+                            {r.patientName ?? <span className="muted">—</span>}
+                            <div className="muted" style={{ fontSize: '.72rem' }}>
+                              {[r.sex, r.age != null ? `${r.age}${r.ageUnit?.[0] ?? ''}` : null].filter(Boolean).join(' · ')}
+                            </div>
+                          </>
+                        )}
+                      </td>
+
+                      <td className="muted">{r.clientCode ?? '—'}</td>
+                      <td style={{ maxWidth: 240 }}>
+                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                             title={r.testNames ?? ''}>
+                          {r.testNames ?? '—'}
+                        </div>
+                      </td>
+                      <td><StatusBadge status={r.status} /></td>
+                      <td className="muted" style={{ fontSize: '.78rem' }}>{fmtDateTime(r.registeredAt)}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button className="btn btn--primary btn--sm"
+                                onClick={(e) => { e.stopPropagation(); setOpenSid(r.sid); }}>
+                          Enter results
+                        </button>
+                      </td>
+                    </tr>
+                  )),
+                )}
 
                 {visible.length === 0 && scope !== 'none' && (
                   <tr>
-                    <td colSpan={7} className="muted" style={{ textAlign: 'center', padding: '2rem' }}>
+                    <td colSpan={8} className="muted" style={{ textAlign: 'center', padding: '2rem' }}>
                       {pendingOnly && rows.length > 0
                         ? 'Nothing outstanding in this window — untick "Outstanding only" to see completed samples.'
                         : 'No samples in this window.'}
