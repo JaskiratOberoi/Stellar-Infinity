@@ -23,7 +23,7 @@ import { useId } from 'react';
  * inside the primary button, the comet inherits the button label's colour.
  */
 export function InfinityLoader({
-  size = 56,
+  size = 120,
   mono = false,
   label = 'Loading',
 }: {
@@ -43,7 +43,7 @@ export function InfinityLoader({
     'C420,58 310,58 240,120 C170,182 60,182 60,120 Z';
 
   return (
-    <span className="infload" role="status" aria-label={label} style={{ width: size }}>
+    <span className={`infload${mono ? ' infload--mono' : ''}`} role="status" aria-label={label} style={{ width: size }}>
       <svg
         viewBox="40 58 400 124"
         width={size}

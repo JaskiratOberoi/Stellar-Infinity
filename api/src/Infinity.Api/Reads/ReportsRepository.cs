@@ -53,6 +53,35 @@ public sealed record WorksheetPage(IReadOnlyList<WorksheetRow> Rows, int Count);
 /// has to infer "is there more?" from a full page gets it wrong whenever the
 /// total is an exact multiple of the page size.
 /// </param>
+/// <summary>
+/// The worklist filters beyond name/SID/status/dates — the rest of what the
+/// legacy LIS worksheet offers. Every one narrows the result set; none can
+/// reach outside the caller's client-code scope.
+/// </summary>
+/// <param name="ClientCode">
+/// One centre. Applied IN ADDITION to the scope, so naming a code the user was
+/// not granted matches nothing rather than granting access to it.
+/// </param>
+public sealed record WorksheetFilters(
+    int? FromHour = null,
+    int? ToHour = null,
+    int? Pid = null,
+    string? ClientCode = null,
+    int? DepartmentId = null,
+    int? BusinessUnitId = null,
+    string? TestCode = null)
+{
+    public static readonly WorksheetFilters None = new();
+}
+
+/// <summary>Option lists for the worklist's dropdowns.</summary>
+public sealed record LookupItem(int Id, string? Name);
+public sealed record ClientCodeItem(string Code, string? Name);
+public sealed record WorksheetFilterOptions(
+    IReadOnlyList<LookupItem> Departments,
+    IReadOnlyList<LookupItem> BusinessUnits,
+    IReadOnlyList<ClientCodeItem> ClientCodes);
+
 /// <param name="AsOf">
 /// The instant this page describes. Echoed back by the client on every later
 /// page so that paging walks one fixed set — see 76_usp_inf_worksheet_list.sql
@@ -197,6 +226,10 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
     /// the "pending only" view be a real filter instead of the client hiding
     /// rows it has already been given.
     /// </param>
+    /// <param name="filters">
+    /// The rest of the legacy worksheet's filter set. Every field narrows;
+    /// none can widen what <paramref name="clientCodes"/> already allows.
+    /// </param>
     public async Task<WorksheetListPage> ListPageAsync(
         IReadOnlyList<string> clientCodes,
         string fromDate,
@@ -204,6 +237,7 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
         string? patientName,
         string? sid,
         IReadOnlyList<int>? statusIds,
+        WorksheetFilters filters,
         int page,
         int pageSize,
         DateTime? asOf,
@@ -215,7 +249,17 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
         // Resolved HERE rather than left to the procedure's default, so that a
         // page with no rows still reports the snapshot it used. Reading it off a
         // returned column works only when a column comes back.
-        var snapshot = asOf ?? NobleTime.NowForNoble();
+        //
+        // Truncated to the second, and that is not cosmetic. SQL Server's
+        // DATETIME has ~3.33 ms granularity, so a full-precision .NET instant
+        // sent as a parameter is ROUNDED on arrival — while the value handed
+        // back to the client keeps its sub-second part. Echoing that slightly
+        // different instant on the next page moved the boundary by a couple of
+        // milliseconds and let a newly registered sample into a set that was
+        // supposed to be frozen: the total drifted by one between two requests
+        // that were meant to be identical. Truncating DOWN makes the value the
+        // client echoes exactly the value the query used.
+        var snapshot = TruncateToSecond(asOf ?? NobleTime.NowForNoble());
 
         return await retry.ExecuteAsync("reports.worklist", token =>
             db.QueryAsync("reports.worklist", async (conn, inner) =>
@@ -247,6 +291,26 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
                     statusIds is { Count: > 0 }
                         ? string.Join(',', statusIds.Distinct())
                         : (object)DBNull.Value;
+                // Hours are clamped rather than rejected: an out-of-range hour
+                // is a malformed request, and the sane reading of one is the
+                // full day, never an empty worklist.
+                cmd.Parameters.Add("@from_hour", SqlDbType.TinyInt).Value =
+                    (byte)Math.Clamp(filters.FromHour ?? 0, 0, 24);
+                cmd.Parameters.Add("@to_hour", SqlDbType.TinyInt).Value =
+                    (byte)Math.Clamp(filters.ToHour ?? 24, 0, 24);
+                cmd.Parameters.Add("@pid", SqlDbType.Int).Value =
+                    (object?)filters.Pid ?? DBNull.Value;
+                cmd.Parameters.Add("@client_code", SqlDbType.NVarChar, 50).Value =
+                    string.IsNullOrWhiteSpace(filters.ClientCode)
+                        ? DBNull.Value : filters.ClientCode.Trim().ToUpperInvariant();
+                cmd.Parameters.Add("@department_id", SqlDbType.Int).Value =
+                    (object?)filters.DepartmentId ?? DBNull.Value;
+                cmd.Parameters.Add("@business_unit_id", SqlDbType.Int).Value =
+                    (object?)filters.BusinessUnitId ?? DBNull.Value;
+                cmd.Parameters.Add("@test_code", SqlDbType.NVarChar, 50).Value =
+                    string.IsNullOrWhiteSpace(filters.TestCode)
+                        ? DBNull.Value : filters.TestCode.Trim();
+
                 cmd.Parameters.Add("@page", SqlDbType.Int).Value = pageNo;
                 cmd.Parameters.Add("@page_size", SqlDbType.Int).Value = size;
                 cmd.Parameters.Add("@as_of", SqlDbType.DateTime).Value = snapshot;
@@ -289,6 +353,67 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
                 }
 
                 return new WorksheetListPage(rows, total, pageNo, size, NobleTime.ToIst(snapshot));
+            }, token), ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Drop sub-second precision so a DATETIME round trip is lossless.
+    /// Truncates rather than rounds: the snapshot may only ever move earlier,
+    /// never later, or echoing it could widen the window it was meant to pin.
+    /// </summary>
+    private static DateTime TruncateToSecond(DateTime t) =>
+        new(t.Ticks - (t.Ticks % TimeSpan.TicksPerSecond), t.Kind);
+
+    /// <summary>
+    /// The option lists behind the worklist's dropdowns, in one round trip.
+    ///
+    /// The client-code list is scoped to what the caller may already see: the
+    /// roster of centres is the lab's customer list, and a user restricted to
+    /// two of them has no business being handed a dropdown naming all of them.
+    /// Departments and business units are reference data and are not scoped.
+    /// </summary>
+    public async Task<WorksheetFilterOptions> GetFilterOptionsAsync(
+        IReadOnlyList<string> clientCodes, CancellationToken ct = default)
+    {
+        return await retry.ExecuteAsync("reports.filters", token =>
+            db.QueryAsync("reports.filters", async (conn, inner) =>
+            {
+                await using var cmd = db.CreateWriteCommand(conn, "dbo.usp_inf_worksheet_filters");
+
+                var tvp = new DataTable();
+                tvp.Columns.Add("code", typeof(string));
+                foreach (var c in clientCodes.Where(c => !string.IsNullOrWhiteSpace(c))
+                                             .Select(c => c.Trim().ToUpperInvariant())
+                                             .Distinct(StringComparer.Ordinal))
+                {
+                    tvp.Rows.Add(c);
+                }
+
+                var codesParam = cmd.Parameters.AddWithValue("@client_codes", tvp);
+                codesParam.SqlDbType = SqlDbType.Structured;
+                codesParam.TypeName = "dbo.ClientCodeList";
+
+                await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);
+
+                var departments = new List<LookupItem>();
+                while (await r.ReadAsync(inner).ConfigureAwait(false))
+                    departments.Add(new LookupItem(r.Int("id"), r.Str("name")));
+
+                var units = new List<LookupItem>();
+                if (await r.NextResultAsync(inner).ConfigureAwait(false))
+                {
+                    while (await r.ReadAsync(inner).ConfigureAwait(false))
+                        units.Add(new LookupItem(r.Int("id"), r.Str("name")));
+                }
+
+                var codes = new List<ClientCodeItem>();
+                if (await r.NextResultAsync(inner).ConfigureAwait(false))
+                {
+                    while (await r.ReadAsync(inner).ConfigureAwait(false))
+                        codes.Add(new ClientCodeItem(r.Str("code") ?? "", r.Str("name")));
+                }
+
+                return new WorksheetFilterOptions(departments, units, codes);
             }, token), ct).ConfigureAwait(false);
     }
 

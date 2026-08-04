@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { InfinityLoader } from '../components/InfinityLoader';
 
 interface StatusCount { status: string; count: number }
 interface TrendPoint { date: string; revenue: number }
@@ -89,7 +90,7 @@ export function Dashboard() {
       ) : error ? (
         <div className="alert alert--error">{error}</div>
       ) : loading ? (
-        <div className="center"><div className="spinner" /><span className="muted">Loading lab statistics…</span></div>
+        <div className="center"><InfinityLoader /><span className="muted">Loading lab statistics…</span></div>
       ) : stats ? (
         <>
           <div className="grid2" style={{ marginBottom: '1rem' }}>

@@ -40,6 +40,7 @@ public static class ApiEndpoints
                          .RequireCapability(Capabilities.ReportView);
 
         reports.MapGet("/", ListReports).WithName("ListReports");
+        reports.MapGet("/filters", ListFilterOptions).WithName("ListWorksheetFilters");
         reports.MapGet("/{sid}", GetReport).WithName("GetReport");
         reports.MapGet("/{sid}/smart", GetSmartReport).WithName("GetSmartReport");
     }
@@ -200,6 +201,14 @@ public static class ApiEndpoints
         // CSV, e.g. "2,4,5,6". Supersedes statusId, which only ever expressed
         // one status and forced the client to filter the rest itself.
         string? statusIds = null,
+        // ---- the rest of the legacy worksheet's filter set ----
+        int? fromHour = null,
+        int? toHour = null,
+        int? pid = null,
+        string? clientCode = null,
+        int? departmentId = null,
+        int? businessUnitId = null,
+        string? testCode = null,
         int page = 1,
         int pageSize = 100,
         // Echoed from a previous response to keep paging on one fixed set while
@@ -232,8 +241,21 @@ public static class ApiEndpoints
             ? parsed.ToOffset(Domain.NobleTime.IstOffset).DateTime
             : null;
 
+        // Note there is no TAT filter. The LIS shows a TAT checkbox and passes
+        // it into usp_worksheet_sample02072020, which never references it — the
+        // control has no effect there, and reproducing it would only convince
+        // an operator they had filtered when they had not.
+        var filters = new WorksheetFilters(
+            FromHour: fromHour,
+            ToHour: toHour,
+            Pid: pid,
+            ClientCode: clientCode,
+            DepartmentId: departmentId,
+            BusinessUnitId: businessUnitId,
+            TestCode: testCode);
+
         var result = await repo.ListPageAsync(
-            scope.ClientCodes, fromDate, toDate, patient, sid, statuses,
+            scope.ClientCodes, fromDate, toDate, patient, sid, statuses, filters,
             page, pageSize, snapshot, ct).ConfigureAwait(false);
 
         return Results.Ok(new
@@ -251,6 +273,30 @@ public static class ApiEndpoints
             from = fromDate,
             to = toDate,
         });
+    }
+
+    /// <summary>
+    /// Option lists for the worklist's dropdowns.
+    ///
+    /// Scoped with the same report scope the worklist itself uses, so the
+    /// client-code list can never name a centre whose samples the caller could
+    /// not open anyway.
+    /// </summary>
+    private static async Task<IResult> ListFilterOptions(
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
+        ReportsRepository repo,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+
+        var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
+        if (scope.IsDenied)
+        {
+            return Results.Ok(new WorksheetFilterOptions([], [], []));
+        }
+
+        return Results.Ok(await repo.GetFilterOptionsAsync(scope.ClientCodes, ct).ConfigureAwait(false));
     }
 
     /// <summary>

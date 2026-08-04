@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext';
 import { CreateUserModal } from './CreateUserModal';
 import { UserSettings } from './UserSettings';
 import { Pager } from '../components/Pager';
+import { InfinityLoader } from '../components/InfinityLoader';
 
 export function AdminUsers() {
   const { user } = useAuth();
@@ -98,7 +99,7 @@ export function AdminUsers() {
       </div>
 
       {loading ? (
-        <div className="center"><div className="spinner" /><span className="muted">Loading users…</span></div>
+        <div className="center"><InfinityLoader /><span className="muted">Loading users…</span></div>
       ) : (
         <div className="table-wrap">
           <table>
@@ -199,7 +200,7 @@ export function AdminUsers() {
                               onClick={() => setSettingsFor(r.userId)}>
                         Settings
                       </button>
-                      {busy && <span className="spinner" style={{ display: 'inline-block', marginLeft: '.5rem', verticalAlign: 'middle' }} />}
+                      {busy && <span style={{ display: 'inline-block', marginLeft: '.5rem', verticalAlign: 'middle' }}><InfinityLoader size={30} /></span>}
                     </td>
                   </tr>
                 );

@@ -3,6 +3,7 @@ import { api } from '../api/client';
 import { fmtDateTime } from '../lib/format';
 import type { WorksheetRow } from './Reports';
 import { StatusBadge } from './Reports';
+import { InfinityLoader } from '../components/InfinityLoader';
 
 interface TestResult {
   resultId: number;
@@ -61,7 +62,7 @@ export function ReportViewer({ sid, onClose }: { sid: string; onClose: () => voi
       <div className="modal" style={{ width: 'min(880px, 100%)' }} onClick={(e) => e.stopPropagation()}
            role="dialog" aria-modal="true" aria-label={`Report ${sid}`}>
         {loading ? (
-          <div className="center" style={{ minHeight: 160 }}><div className="spinner" /></div>
+          <div className="center" style={{ minHeight: 160 }}><InfinityLoader /></div>
         ) : error ? (
           <>
             <div className="alert alert--error">{error}</div>

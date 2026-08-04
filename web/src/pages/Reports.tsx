@@ -3,6 +3,7 @@ import { api } from '../api/client';
 import { fmtDateTime } from '../lib/format';
 import { ReportViewer } from './ReportViewer';
 import { SmartReportModal } from './SmartReport';
+import { InfinityLoader } from '../components/InfinityLoader';
 
 export interface WorksheetRow {
   sid: string;
@@ -98,7 +99,7 @@ export function Reports() {
       {error && <div className="alert alert--error" style={{ marginBottom: '.9rem' }}>{error}</div>}
 
       {loading ? (
-        <div className="center"><div className="spinner" /><span className="muted">Loading worksheet…</span></div>
+        <div className="center"><InfinityLoader /><span className="muted">Loading worksheet…</span></div>
       ) : (
         <>
           <div className="table-wrap">

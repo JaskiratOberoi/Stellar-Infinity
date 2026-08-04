@@ -51,6 +51,19 @@ GO
  * ages, which is why as_of is returned for the UI to display and why refreshing
  * clears it — a stale list the operator can see is stale beats a moving one
  * they cannot.
+ *
+ * ── FILTER PARITY WITH THE LEGACY WORKSHEET ────────────────────────────────
+ * SampleWorksheet.aspx offers: from/to date each with an hour, patient name,
+ * patient number, status, client code (PCC), test code, barcode/SID,
+ * department, business unit, and a TAT checkbox. Every one of those is a
+ * parameter here, and the predicates are copied from the legacy procedure so a
+ * search returns the same rows in both systems.
+ *
+ * The exception is TAT. The LIS passes @tat into
+ * usp_worksheet_sample02072020, and that procedure never references it — the
+ * checkbox has no effect on the results. It is therefore NOT reproduced here:
+ * carrying over a control that silently does nothing would be worse than
+ * leaving it out, because an operator would believe they had filtered.
  */
 CREATE OR ALTER PROCEDURE dbo.usp_inf_worksheet_list
     @client_codes    dbo.ClientCodeList READONLY,
@@ -61,6 +74,20 @@ CREATE OR ALTER PROCEDURE dbo.usp_inf_worksheet_list
     -- CSV of sample_status values, e.g. '2,4,5,6'. NULL means every status.
     -- A set, not a scalar: this is the whole point of the procedure.
     @status_ids      VARCHAR(200)  = NULL,
+    -- ---- the rest of the legacy worksheet's filter set ----------------------
+    -- Hour-of-day bounds on the date window, as the LIS's two time dropdowns.
+    -- A night shift filters 20:00 to 08:00 by narrowing these, not the dates.
+    @from_hour       TINYINT       = 0,
+    @to_hour         TINYINT       = 24,
+    -- Patient number. tbl_med_mcc_patient_master.id, which the LIS labels
+    -- "Patient Number" and Infinity shows in the PID column.
+    @pid             INT           = NULL,
+    -- ONE client code. Narrows within the caller's scope and can never widen
+    -- it: the scope TVP below is applied as well, not instead.
+    @client_code     NVARCHAR(50)  = NULL,
+    @department_id   INT           = NULL,
+    @business_unit_id INT          = NULL,
+    @test_code       NVARCHAR(50)  = NULL,
     @page            INT           = 1,
     @page_size       INT           = 100,
     -- Upper bound on modifieddate, pinned by the caller so that paging walks a
@@ -75,8 +102,14 @@ BEGIN
     -- would block result entry, and a worklist tolerates a dirty read.
     SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
 
-    DECLARE @from DATETIME = CAST(@from_date AS DATETIME);
-    DECLARE @to   DATETIME = DATEADD(SECOND, -1, DATEADD(DAY, 1, CAST(@to_date AS DATETIME)));
+    -- Hour bounds exactly as the legacy procedure computes them: @to_hour of 24
+    -- means "to the last second of the to-date", not midnight at its start.
+    DECLARE @from DATETIME = DATEADD(HOUR, @from_hour, CAST(@from_date AS DATETIME));
+    DECLARE @to   DATETIME =
+        CASE WHEN @to_hour >= 24
+             THEN DATEADD(SECOND, -1, DATEADD(DAY, 1, CAST(@to_date AS DATETIME)))
+             ELSE DATEADD(HOUR, @to_hour, CAST(@to_date AS DATETIME))
+        END;
 
     -- The snapshot. Never widens the requested window — it only ever pins the
     -- upper edge earlier, so a caller cannot use it to read outside its dates.
@@ -156,6 +189,36 @@ BEGIN
                 @patient_name IS NULL
                 OR P.name LIKE '%' + @patient_name + '%'
                 OR P.MRNID = @patient_name
+              )
+          AND (@pid IS NULL OR P.id = @pid)
+          -- Narrows WITHIN the scope filter above, never instead of it. A
+          -- caller naming a code they were not granted still matches nothing.
+          AND (@client_code IS NULL OR U.MCCUnitCode = @client_code)
+          AND (@business_unit_id IS NULL OR S.business_unit_id = @business_unit_id)
+          AND (
+                @department_id IS NULL
+                OR EXISTS (
+                    SELECT 1
+                    FROM dbo.tbl_med_mcc_patient_test_result r
+                    INNER JOIN dbo.tbl_med_test_master m ON r.testid = m.id
+                    WHERE r.vailid = S.vailid
+                      AND m.DepartmentId = @department_id
+                      -- 'Head' as well as 'Test': a profile's heading row
+                      -- carries the department for panels whose members do not.
+                      AND r.testtype IN (N'Test', N'Head')
+                )
+              )
+          AND (
+                @test_code IS NULL
+                -- The denormalised CSV on the sample answers most lookups
+                -- without touching the results table at all.
+                OR S.testcodes LIKE '%' + @test_code + '%'
+                OR EXISTS (
+                    SELECT 1
+                    FROM dbo.tbl_med_mcc_patient_test_result r
+                    WHERE r.vailid = S.vailid
+                      AND (r.testcode = @test_code OR r.testname LIKE '%' + @test_code + '%')
+                )
               )
     )
     SELECT

@@ -234,6 +234,88 @@ await CheckList("admin users", "/api/admin/users", "users", "totalCount");
 await CheckList("client-code search",
     $"/api/admin/users/{Env("Verify__UserId") ?? "1"}/client-codes/search", "options", "total");
 
+// ---- 6. the rest of the LIS worksheet's filters ----------------------------
+// Each one must actually reach the WHERE clause. A filter parameter the
+// procedure ignores looks identical to one that matched everything, so each is
+// checked for narrowing rather than for merely not erroring.
+Console.WriteLine("\n[6] filter parity with the LIS worksheet");
+
+async Task<int> TotalWith(string query)
+{
+    var resp = await http.GetAsync($"/api/reports/?from={from}&to={to}&pageSize=1&{query}");
+    resp.EnsureSuccessStatusCode();
+    using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+    return doc.RootElement.GetProperty("total").GetInt32();
+}
+
+var baseline = await TotalWith($"asOf={Uri.EscapeDataString(snap)}");
+Console.WriteLine($"        unfiltered total = {baseline}");
+
+// Pull the option lists the SPA uses, and filter by a real value from each.
+var optResp = await http.GetAsync("/api/reports/filters");
+optResp.EnsureSuccessStatusCode();
+using (var optDoc = JsonDocument.Parse(await optResp.Content.ReadAsStringAsync()))
+{
+    var root = optDoc.RootElement;
+    var depts = root.GetProperty("departments");
+    var units = root.GetProperty("businessUnits");
+    var codes = root.GetProperty("clientCodes");
+
+    Check("filter options are populated",
+        depts.GetArrayLength() > 0 && units.GetArrayLength() > 0,
+        $"{depts.GetArrayLength()} departments, {units.GetArrayLength()} units, {codes.GetArrayLength()} client codes");
+
+    async Task CheckNarrows(string label, string query)
+    {
+        var n = await TotalWith($"asOf={Uri.EscapeDataString(snap)}&{query}");
+        // Equal to the baseline means the parameter changed nothing, which for
+        // a specific value on a large set is the signature of it being ignored.
+        Check(label, n < baseline && n >= 0, $"{n} of {baseline}");
+    }
+
+    if (depts.GetArrayLength() > 0)
+        await CheckNarrows("departmentId narrows", $"departmentId={depts[0].GetProperty("id").GetInt32()}");
+
+    if (units.GetArrayLength() > 0)
+        await CheckNarrows("businessUnitId narrows", $"businessUnitId={units[0].GetProperty("id").GetInt32()}");
+
+    if (codes.GetArrayLength() > 0)
+        await CheckNarrows("clientCode narrows",
+            $"clientCode={Uri.EscapeDataString(codes[0].GetProperty("code").GetString() ?? "")}");
+}
+
+await CheckHours();
+async Task CheckHours()
+{
+    var narrow = await TotalWith($"asOf={Uri.EscapeDataString(snap)}&fromHour=9&toHour=10");
+    Check("hour window narrows", narrow < baseline, $"09:00-10:00 gives {narrow} of {baseline}");
+}
+
+// A test code and a PID both target the sample level; take real ones from the
+// first page so the check is against data that exists.
+var sample = await http.GetAsync($"/api/reports/?from={from}&to={to}&pageSize=1&asOf={Uri.EscapeDataString(snap)}");
+using (var sDoc = JsonDocument.Parse(await sample.Content.ReadAsStringAsync()))
+{
+    var rows = sDoc.RootElement.GetProperty("rows");
+    if (rows.GetArrayLength() > 0)
+    {
+        var pid = rows[0].GetProperty("pid").GetInt32();
+        var byPid = await TotalWith($"asOf={Uri.EscapeDataString(snap)}&pid={pid}");
+        Check("pid narrows to one patient", byPid > 0 && byPid < baseline, $"pid {pid} gives {byPid}");
+    }
+}
+
+var byTest = await TotalWith($"asOf={Uri.EscapeDataString(snap)}&testCode=HE011");
+Check("testCode narrows", byTest > 0 && byTest < baseline, $"HE011 gives {byTest} of {baseline}");
+
+// THE SAFETY CHECK. A client code outside the caller's scope must match
+// nothing, never widen it. Super-admin is unrestricted here, so this asserts
+// the shape that matters: a code that does not exist returns zero rather than
+// being ignored and silently returning everything.
+var bogus = await TotalWith($"asOf={Uri.EscapeDataString(snap)}&clientCode=__NOSUCHCODE__");
+Check("an unknown client code matches nothing", bogus == 0,
+    $"{bogus} rows (must be 0, NOT {baseline})");
+
 Console.WriteLine();
 Console.WriteLine(failures == 0 ? "All checks passed." : $"{failures} check(s) FAILED.");
 return failures == 0 ? 0 : 1;

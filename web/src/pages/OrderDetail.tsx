@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { inr, fmtDate, fmtDateTime, fmtAge, fmtGender } from '../lib/format';
+import { InfinityLoader } from '../components/InfinityLoader';
 
 interface OrderLine {
   lineId: number;
@@ -89,7 +90,7 @@ export function OrderDetailModal({ billId, onClose }: { billId: number; onClose:
         aria-label={`Order ${billId}`}
       >
         {loading ? (
-          <div className="center" style={{ minHeight: 160 }}><div className="spinner" /></div>
+          <div className="center" style={{ minHeight: 160 }}><InfinityLoader /></div>
         ) : error ? (
           <>
             <div className="alert alert--error">{error}</div>

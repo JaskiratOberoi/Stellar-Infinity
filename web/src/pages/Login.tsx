@@ -1,7 +1,8 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { Mark } from '../components/Mark';
 import { ThemeToggle } from '../theme/ThemeToggle';
+import { InfinityLoader } from '../components/InfinityLoader';
 
 /**
  * Time-of-day greeting. Computed once per mount — a login page is looked at
@@ -33,6 +34,7 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const cardRef = useRef<HTMLFormElement>(null);
 
   const greet = useMemo(greeting, []);
 
@@ -50,6 +52,12 @@ export function Login() {
       // stillness, a second of frozen card would read as a hang, not a pause.
       const commit = await signInDeferred(username.trim(), password);
       const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      // The morph's 0% frame must be the card's REAL height. Animating from a
+      // hard-coded ceiling means the timeline's opening moments shrink
+      // invisible slack — a visible pause, then a rush.
+      if (cardRef.current) {
+        cardRef.current.style.setProperty('--card-h', `${cardRef.current.offsetHeight}px`);
+      }
       setLeaving(true);
       window.setTimeout(commit, still ? 30 : MORPH_MS);
     } catch (err) {
@@ -76,7 +84,7 @@ export function Login() {
           have to authenticate through a white flash to reach the toggle. */}
       <div className="login__corner"><ThemeToggle /></div>
 
-      <form className="login__card" onSubmit={onSubmit}>
+      <form className="login__card" onSubmit={onSubmit} ref={cardRef}>
         {/* The symbol the card morphs INTO. In the DOM from the start
             (opacity 0), absolutely centred in the card, so its condensing-in
             during the morph is a continuation of the same object — not a new
@@ -154,7 +162,7 @@ export function Login() {
         </div>
 
         <button className="btn btn--primary login__submit" type="submit" disabled={busy || !username || !password}>
-          {busy && <span className="btn__spin" aria-hidden="true" />}
+          {busy && <InfinityLoader size={30} mono label="Signing in" />}
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
 

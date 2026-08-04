@@ -3,6 +3,7 @@ import { worksheetApi, type ResultAuditRow, type ResultTrendResponse } from '../
 import { fmtDateTime } from '../lib/format';
 import { DeltaTrend } from '../components/DeltaTrend';
 import { Pager } from '../components/Pager';
+import { InfinityLoader } from '../components/InfinityLoader';
 
 /**
  * History for one sample: what this patient's values have been doing over time,
@@ -99,7 +100,7 @@ export function WorksheetHistory({ sid, onClose }: { sid: string; onClose: () =>
           <div style={{ maxHeight: '58vh', overflowY: 'auto' }}>
             {trendError && <div className="alert alert--error">{trendError}</div>}
             {trendLoading ? (
-              <div className="center" style={{ minHeight: 140 }}><div className="spinner" /></div>
+              <div className="center" style={{ minHeight: 140 }}><InfinityLoader /></div>
             ) : trend ? (
               <DeltaTrend analytes={trend.analytes} match={trend.match} />
             ) : null}
@@ -113,7 +114,7 @@ export function WorksheetHistory({ sid, onClose }: { sid: string; onClose: () =>
         {error && <div className="alert alert--error">{error}</div>}
 
         {loading ? (
-          <div className="center" style={{ minHeight: 140 }}><div className="spinner" /></div>
+          <div className="center" style={{ minHeight: 140 }}><InfinityLoader /></div>
         ) : (
           <div className="table-wrap" style={{ maxHeight: '58vh', overflowY: 'auto' }}>
             <table>

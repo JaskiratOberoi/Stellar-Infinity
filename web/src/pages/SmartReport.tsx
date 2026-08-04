@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { fmtDateTime } from '../lib/format';
+import { InfinityLoader } from '../components/InfinityLoader';
 
 interface Gauge {
   kind: 'both' | 'max' | 'min';
@@ -78,7 +79,7 @@ export function SmartReportModal({ sid, onClose }: { sid: string; onClose: () =>
       <div className="modal" style={{ width: 'min(820px, 100%)' }} onClick={(e) => e.stopPropagation()}
            role="dialog" aria-modal="true" aria-label={`Smart report ${sid}`}>
         {loading ? (
-          <div className="center" style={{ minHeight: 160 }}><div className="spinner" /></div>
+          <div className="center" style={{ minHeight: 160 }}><InfinityLoader /></div>
         ) : error ? (
           <>
             <div className="alert alert--error">{error}</div>

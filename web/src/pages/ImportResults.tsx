@@ -1,5 +1,6 @@
 import { useState, type ChangeEvent } from 'react';
 import { api, ApiError } from '../api/client';
+import { InfinityLoader } from '../components/InfinityLoader';
 
 interface PreviewCell { rowNumber: number; sid: string; testCode: string; value: string }
 
@@ -113,7 +114,7 @@ export function ImportResults({ onClose, onApplied }: { onClose: () => void; onA
               </p>
             </details>
 
-            {busy && !preview && <div className="row"><div className="spinner" /><span className="muted">Reading…</span></div>}
+            {busy && !preview && <div className="row"><InfinityLoader /><span className="muted">Reading…</span></div>}
 
             {preview && (
               <>

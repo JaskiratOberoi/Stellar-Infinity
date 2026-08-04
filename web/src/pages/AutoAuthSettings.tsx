@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Pager } from '../components/Pager';
 import { autoAuthApi, type AutoAuthAuditRow, type AutoAuthScopeRow } from '../api/client';
 import { fmtDateTime } from '../lib/format';
+import { InfinityLoader } from '../components/InfinityLoader';
 
 /**
  * Auto-authorisation settings.
@@ -206,7 +207,7 @@ export function AutoAuthSettings() {
       {notice && <div className="alert alert--ok" style={{ marginBottom: '.9rem' }}>{notice}</div>}
 
       {loading ? (
-        <div className="center"><div className="spinner" /><span className="muted">Loading…</span></div>
+        <div className="center"><InfinityLoader /><span className="muted">Loading…</span></div>
       ) : (
         <div className="table-wrap">
           <table>

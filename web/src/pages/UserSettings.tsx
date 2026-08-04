@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pager } from '../components/Pager';
 import { api, ApiError } from '../api/client';
 import { fmtDate } from '../lib/format';
+import { InfinityLoader } from '../components/InfinityLoader';
 
 interface MappedClientCode {
   mccId: number;
@@ -112,7 +113,7 @@ export function UserSettings({
       <div className="modal" style={{ width: 'min(760px, 100%)' }} onClick={(e) => e.stopPropagation()}
            role="dialog" aria-modal="true" aria-label="Account settings">
         {loading ? (
-          <div className="center" style={{ minHeight: 180 }}><div className="spinner" /></div>
+          <div className="center" style={{ minHeight: 180 }}><InfinityLoader /></div>
         ) : !d ? (
           <>
             <div className="alert alert--error">{error ?? 'Not found.'}</div>

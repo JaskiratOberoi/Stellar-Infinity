@@ -4,6 +4,7 @@ import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { fmtDateTime } from '../lib/format';
 import { ImportResults } from './ImportResults';
+import { InfinityLoader } from '../components/InfinityLoader';
 
 interface Instrument {
   id: number;
@@ -164,7 +165,7 @@ export function Instruments() {
       </div>
 
       {loading ? (
-        <div className="center"><div className="spinner" /><span className="muted">Loading inbox…</span></div>
+        <div className="center"><InfinityLoader /><span className="muted">Loading inbox…</span></div>
       ) : (
         <div className="table-wrap">
           <table>

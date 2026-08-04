@@ -7,6 +7,7 @@ import {
 } from '../api/client';
 import { fmtDateTime } from '../lib/format';
 import { WorksheetHistory } from './WorksheetHistory';
+import { InfinityLoader } from '../components/InfinityLoader';
 
 /** A row the operator has touched but not yet saved. */
 interface Draft {
@@ -308,7 +309,7 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
         aria-label={`Worksheet ${sid}`}
       >
         {loading ? (
-          <div className="center" style={{ minHeight: 200 }}><div className="spinner" /></div>
+          <div className="center" style={{ minHeight: 200 }}><InfinityLoader /></div>
         ) : !header ? (
           <>
             <div className="alert alert--error">{error ?? 'This sample could not be found.'}</div>

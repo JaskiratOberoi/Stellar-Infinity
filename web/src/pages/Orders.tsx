@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { OrderDetailModal } from './OrderDetail';
 import { inr, fmtDate } from '../lib/format';
+import { InfinityLoader } from '../components/InfinityLoader';
 
 export interface OrderSummary {
   billId: number;
@@ -98,7 +99,7 @@ export function Orders() {
       {error && <div className="alert alert--error" style={{ marginBottom: '.9rem' }}>{error}</div>}
 
       {loading ? (
-        <div className="center"><div className="spinner" /><span className="muted">Loading orders…</span></div>
+        <div className="center"><InfinityLoader /><span className="muted">Loading orders…</span></div>
       ) : (
         <>
           <div className="table-wrap">

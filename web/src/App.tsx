@@ -12,6 +12,7 @@ import { AutoAuthSettings } from './pages/AutoAuthSettings';
 import { Instruments } from './pages/Instruments';
 import { AdminUsers } from './pages/AdminUsers';
 import { ThemeToggle } from './theme/ThemeToggle';
+import { InfinityLoader } from './components/InfinityLoader';
 
 /**
  * Stage 2 of the sign-in entrance. The login screen ended with the Infinity
@@ -46,7 +47,7 @@ export function App() {
   const { user, loading, signOut, can, entering, finishEntering } = useAuth();
 
   if (loading) {
-    return <div className="center"><div className="spinner" /><span className="muted">Restoring session…</span></div>;
+    return <div className="center"><InfinityLoader /><span className="muted">Restoring session…</span></div>;
   }
 
   if (!user) return <Login />;

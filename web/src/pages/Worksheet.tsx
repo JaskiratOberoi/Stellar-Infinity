@@ -4,6 +4,7 @@ import { fmtDateTime } from '../lib/format';
 import { StatusBadge, type WorksheetRow } from './Reports';
 import { WorksheetEntry } from './WorksheetEntry';
 import { Pager } from '../components/Pager';
+import { InfinityLoader } from '../components/InfinityLoader';
 
 /**
  * LIS sample statuses. Verified against tbl_med_mcc_patient_samples_status_master.
@@ -33,6 +34,71 @@ const PENDING_STATUSES = [2, 4, 5, 6];
 /** Every row is reachable at any of these; the choice only trades requests
  *  against response size. */
 const PAGE_SIZES = [50, 100, 250, 500, 1000];
+
+/**
+ * The LIS worksheet's filter set, minus the four that stay on the top row.
+ *
+ * These live behind a disclosure rather than on the bar. The LIS puts all
+ * eleven controls on screen at once and a technologist uses two of them on a
+ * normal shift; showing the other nine permanently costs more attention than
+ * it saves. What is NOT acceptable is hiding an active filter, so the toggle
+ * carries a count and every applied value is listed as a chip even when the
+ * panel is shut — see activeAdv.
+ */
+interface AdvancedFilters {
+  clientCode: string;
+  departmentId: number | '';
+  businessUnitId: number | '';
+  testCode: string;
+  pid: string;
+  fromHour: number;
+  toHour: number;
+}
+
+const EMPTY_ADVANCED: AdvancedFilters = {
+  clientCode: '',
+  departmentId: '',
+  businessUnitId: '',
+  testCode: '',
+  pid: '',
+  fromHour: 0,
+  toHour: 24,
+};
+
+interface FilterOptions {
+  departments: { id: number; name: string | null }[];
+  businessUnits: { id: number; name: string | null }[];
+  clientCodes: { code: string; name: string | null }[];
+}
+
+/** Human-readable labels for whatever advanced filters are currently applied. */
+function describeAdvanced(adv: AdvancedFilters, options: FilterOptions): { key: keyof AdvancedFilters; label: string }[] {
+  const out: { key: keyof AdvancedFilters; label: string }[] = [];
+
+  if (adv.clientCode) out.push({ key: 'clientCode', label: `Client ${adv.clientCode}` });
+  if (adv.departmentId !== '') {
+    const d = options.departments.find((x) => x.id === adv.departmentId);
+    out.push({ key: 'departmentId', label: d?.name ?? `Department ${adv.departmentId}` });
+  }
+  if (adv.businessUnitId !== '') {
+    const b = options.businessUnits.find((x) => x.id === adv.businessUnitId);
+    out.push({ key: 'businessUnitId', label: b?.name ?? `Unit ${adv.businessUnitId}` });
+  }
+  if (adv.testCode.trim()) out.push({ key: 'testCode', label: `Test ${adv.testCode.trim()}` });
+  if (adv.pid.trim()) out.push({ key: 'pid', label: `PID ${adv.pid.trim()}` });
+  // The two hours read as one range: "08:00–20:00" is the thing the operator
+  // set, not two independent facts.
+  if (adv.fromHour !== 0 || adv.toHour !== 24) {
+    out.push({ key: 'fromHour', label: `${pad2(adv.fromHour)}:00–${pad2(adv.toHour)}:00` });
+  }
+
+  return out;
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** 0–24. 24 is "end of the to-date", which is why it is not 23. */
+const HOURS = Array.from({ length: 25 }, (_, i) => i);
 
 /**
  * What the row's button should actually say.
@@ -124,6 +190,30 @@ export function Worksheet() {
   const [error, setError] = useState<string | null>(null);
   const [openSid, setOpenSid] = useState<string | null>(null);
 
+  /**
+   * The rest of the LIS worksheet's filter set.
+   *
+   * Held in one object rather than eight useStates so the "how many are on"
+   * count and the clear-all action cannot drift out of step with what is
+   * actually being sent.
+   */
+  const [adv, setAdv] = useState<AdvancedFilters>(EMPTY_ADVANCED);
+  const [showAdv, setShowAdv] = useState(false);
+  const [options, setOptions] = useState<FilterOptions>({ departments: [], businessUnits: [], clientCodes: [] });
+
+  const activeAdv = useMemo(() => describeAdvanced(adv, options), [adv, options]);
+
+  // Fetched once. Departments and business units are lab reference data, and
+  // the client-code list is already scoped by the API to what this user can
+  // reach — so there is nothing here to re-fetch as filters change.
+  useEffect(() => {
+    let live = true;
+    api.get<FilterOptions>('/api/reports/filters')
+      .then((r) => { if (live) setOptions(r); })
+      .catch(() => { /* Dropdowns degrade to empty; the rest of the screen works. */ });
+    return () => { live = false; };
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -136,6 +226,14 @@ export function Worksheet() {
       // describe the same set the operator is looking at.
       if (statusId !== '') p.set('statusIds', String(statusId));
       else if (pendingOnly) p.set('statusIds', PENDING_STATUSES.join(','));
+
+      if (adv.clientCode) p.set('clientCode', adv.clientCode);
+      if (adv.departmentId !== '') p.set('departmentId', String(adv.departmentId));
+      if (adv.businessUnitId !== '') p.set('businessUnitId', String(adv.businessUnitId));
+      if (adv.testCode.trim()) p.set('testCode', adv.testCode.trim());
+      if (adv.pid.trim()) p.set('pid', adv.pid.trim());
+      if (adv.fromHour !== 0) p.set('fromHour', String(adv.fromHour));
+      if (adv.toHour !== 24) p.set('toHour', String(adv.toHour));
 
       // Only while paging within one result set. Page 1 always takes a fresh
       // snapshot, so the list is never stale without the operator asking for it.
@@ -155,7 +253,7 @@ export function Worksheet() {
     } finally {
       setLoading(false);
     }
-  }, [from, to, patient, sidQuery, statusId, pendingOnly, page, pageSize]);
+  }, [from, to, patient, sidQuery, statusId, pendingOnly, adv, page, pageSize]);
 
   useEffect(() => {
     const id = setTimeout(() => void load(), 300);
@@ -164,7 +262,7 @@ export function Worksheet() {
 
   // A filter that narrows the result set must reset the page, or page 4 of the
   // old set silently shows nothing for the new one.
-  useEffect(() => { setPage(1); }, [pendingOnly, pageSize]);
+  useEffect(() => { setPage(1); }, [pendingOnly, pageSize, adv]);
 
   // Nothing is hidden after the fact: what the server returned is what shows.
   const visible = rows;
@@ -305,7 +403,117 @@ export function Worksheet() {
             ? `${multiSamplePatients} patient${multiSamplePatients === 1 ? '' : 's'} with more than one sample.`
             : 'Keeps a patient’s samples together.'}
         </span>
+
+        <button
+          className={`btn btn--ghost btn--sm${showAdv ? ' btn--on' : ''}`}
+          style={{ marginLeft: 'auto' }}
+          aria-expanded={showAdv}
+          onClick={() => setShowAdv((v) => !v)}
+        >
+          More filters
+          {activeAdv.length > 0 && <span className="tab__count">{activeAdv.length}</span>}
+        </button>
       </div>
+
+      {/* Applied filters are listed whether or not the panel is open. A filter
+          you cannot see is the same defect as a row you cannot reach: the
+          screen would be showing a narrowed list and calling it the list. */}
+      {activeAdv.length > 0 && (
+        <div className="row" style={{ flexWrap: 'wrap', gap: '.35rem', marginBottom: '.8rem' }}>
+          {activeAdv.map((f) => (
+            <button
+              key={f.key}
+              className="chip"
+              title="Remove this filter"
+              onClick={() => setAdv((a) => ({
+                ...a,
+                ...(f.key === 'fromHour'
+                  ? { fromHour: 0, toHour: 24 }
+                  : { [f.key]: EMPTY_ADVANCED[f.key] }),
+              }))}
+            >
+              {f.label} <span aria-hidden="true">×</span>
+            </button>
+          ))}
+          <button className="btn btn--ghost btn--sm" onClick={() => setAdv(EMPTY_ADVANCED)}>
+            Clear all
+          </button>
+        </div>
+      )}
+
+      {showAdv && (
+        <div className="card filter-panel">
+          <div className="filter-panel__grid">
+            <label className="field">
+              <span>Client code</span>
+              <select className="input" value={adv.clientCode}
+                      onChange={(e) => setAdv((a) => ({ ...a, clientCode: e.target.value }))}>
+                <option value="">Any centre in your scope</option>
+                {options.clientCodes.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.code}{c.name ? ` — ${c.name}` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="field">
+              <span>Department</span>
+              <select className="input" value={adv.departmentId}
+                      onChange={(e) => setAdv((a) => ({
+                        ...a, departmentId: e.target.value === '' ? '' : Number(e.target.value),
+                      }))}>
+                <option value="">Any department</option>
+                {options.departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </label>
+
+            <label className="field">
+              <span>Business unit</span>
+              <select className="input" value={adv.businessUnitId}
+                      onChange={(e) => setAdv((a) => ({
+                        ...a, businessUnitId: e.target.value === '' ? '' : Number(e.target.value),
+                      }))}>
+                <option value="">Any unit</option>
+                {options.businessUnits.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </label>
+
+            <label className="field">
+              <span>Test code</span>
+              <input className="input mono" placeholder="e.g. HE011" value={adv.testCode}
+                     onChange={(e) => setAdv((a) => ({ ...a, testCode: e.target.value }))} />
+            </label>
+
+            <label className="field">
+              <span>Patient number</span>
+              <input className="input mono" placeholder="PID" inputMode="numeric" value={adv.pid}
+                     onChange={(e) => setAdv((a) => ({ ...a, pid: e.target.value.replace(/\D/g, '') }))} />
+            </label>
+
+            <div className="field">
+              <span>Time of day</span>
+              <div className="row" style={{ gap: '.35rem' }}>
+                <select className="input" value={adv.fromHour} aria-label="From hour"
+                        onChange={(e) => setAdv((a) => ({ ...a, fromHour: Number(e.target.value) }))}>
+                  {HOURS.map((h) => <option key={h} value={h}>{pad2(h)}:00</option>)}
+                </select>
+                <span className="muted">to</span>
+                <select className="input" value={adv.toHour} aria-label="To hour"
+                        onChange={(e) => setAdv((a) => ({ ...a, toHour: Number(e.target.value) }))}>
+                  {HOURS.map((h) => <option key={h} value={h}>{pad2(h)}:00</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <p className="muted" style={{ fontSize: '.72rem', marginTop: '.7rem', lineHeight: 1.6 }}>
+            The same filters the LIS worksheet offers, with one exception: the LIS's <b>TAT</b> checkbox is
+            passed to its stored procedure but never used by it, so ticking it there changes nothing. It is
+            left out here rather than reproduced as a control that does nothing.
+          </p>
+        </div>
+      )}
 
       {scope === 'none' && (
         <div className="alert alert--info" style={{ marginBottom: '.9rem' }}>
@@ -317,7 +525,7 @@ export function Worksheet() {
       {error && <div className="alert alert--error" style={{ marginBottom: '.9rem' }}>{error}</div>}
 
       {loading ? (
-        <div className="center"><div className="spinner" /><span className="muted">Loading worklist…</span></div>
+        <div className="center"><InfinityLoader /><span className="muted">Loading worklist…</span></div>
       ) : (
         <>
           <div className="table-wrap">
