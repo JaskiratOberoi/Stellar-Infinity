@@ -148,9 +148,12 @@ public sealed class InstrumentRepository(NobleConnectionFactory db)
         }, ct);
 
     public Task<InboxPage> InboxAsync(
-        string? status, int? instrumentId, string? sid, int top, CancellationToken ct = default) =>
+        string? status, int? instrumentId, string? sid, int page, int pageSize,
+        CancellationToken ct = default) =>
         db.QueryAsync("instrument.inbox", async (conn, inner) =>
         {
+            var (p, size) = Paged<InboxMessage>.Clamp(page, pageSize, 100);
+
             await using var cmd = new SqlCommand("dbo.usp_inf_instrument_inbox", conn)
             {
                 CommandType = CommandType.StoredProcedure,
@@ -158,7 +161,8 @@ public sealed class InstrumentRepository(NobleConnectionFactory db)
             cmd.Parameters.Add("@status", SqlDbType.VarChar, 12).Value = (object?)status ?? DBNull.Value;
             cmd.Parameters.Add("@instrumentId", SqlDbType.Int).Value = (object?)instrumentId ?? DBNull.Value;
             cmd.Parameters.Add("@sid", SqlDbType.NVarChar, 50).Value = (object?)sid ?? DBNull.Value;
-            cmd.Parameters.Add("@top", SqlDbType.Int).Value = top;
+            cmd.Parameters.Add("@page", SqlDbType.Int).Value = p;
+            cmd.Parameters.Add("@page_size", SqlDbType.Int).Value = size;
 
             await using var r = await cmd.ExecuteReaderAsync(CommandBehavior.SingleResult, inner).ConfigureAwait(false);
             var list = new List<InboxMessage>();
@@ -187,7 +191,7 @@ public sealed class InstrumentRepository(NobleConnectionFactory db)
                     r.GetOrdinalString("source_name")));
                 total = r.GetOrdinalInt32("total_count") ?? total;
             }
-            return new InboxPage(list, total);
+            return new InboxPage(list, total, p, size);
         }, ct);
 
     public Task<IngestOutcome> ReplayAsync(long inboxId, int actor, CancellationToken ct = default) =>

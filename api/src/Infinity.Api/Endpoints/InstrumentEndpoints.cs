@@ -187,10 +187,11 @@ public static class InstrumentEndpoints
         string? status = null,
         int? instrumentId = null,
         string? sid = null,
-        int top = 100)
+        int page = 1,
+        int pageSize = 100)
     {
-        var page = await repo.InboxAsync(status, instrumentId, sid, top, ct).ConfigureAwait(false);
-        return Results.Ok(page);
+        var result = await repo.InboxAsync(status, instrumentId, sid, page, pageSize, ct).ConfigureAwait(false);
+        return Results.Ok(result);
     }
 
     private static async Task<IResult> Replay(

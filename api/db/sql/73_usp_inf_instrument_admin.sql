@@ -121,14 +121,23 @@ CREATE OR ALTER PROCEDURE dbo.usp_inf_instrument_inbox
     @status       VARCHAR(12)  = NULL,   -- NULL = everything needing attention
     @instrumentId INT          = NULL,
     @sid          NVARCHAR(50) = NULL,
-    @top          INT          = 100
+    @page         INT          = 1,
+    @page_size    INT          = 100
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE @n INT = CASE WHEN @top BETWEEN 1 AND 500 THEN @top ELSE 100 END;
+    -- Paged rather than TOP-capped. total_count was already returned here, but
+    -- with a hard TOP it described a set the caller could not actually reach:
+    -- the screen could say "312 unmatched" while offering only the first 100.
+    DECLARE @pageSafe INT = CASE WHEN @page < 1 THEN 1 ELSE @page END;
+    DECLARE @size INT =
+        CASE WHEN @page_size < 1 THEN 100
+             WHEN @page_size > 1000 THEN 1000
+             ELSE @page_size END;
+    DECLARE @offset INT = (@pageSafe - 1) * @size;
 
-    SELECT TOP (@n)
+    SELECT
         b.id, b.instrument_id, b.instrument_code,
         b.sid, b.test_code, b.value, b.unit, b.flags,
         b.measured_at, b.sequence_no,
@@ -146,7 +155,8 @@ BEGIN
             -- Default view: only what a human still has to deal with.
          OR (@status IS NULL AND b.match_status IN ('pending','unmatched','rejected'))
           )
-    ORDER BY b.received_at DESC, b.id DESC;
+    ORDER BY b.received_at DESC, b.id DESC
+    OFFSET @offset ROWS FETCH NEXT @size ROWS ONLY;
 END
 GO
 

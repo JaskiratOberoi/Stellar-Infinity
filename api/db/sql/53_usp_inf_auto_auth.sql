@@ -35,12 +35,23 @@ GO
  * @search keeps the payload sane — Noble carries several thousand tests.
  */
 CREATE OR ALTER PROCEDURE dbo.usp_inf_auto_auth_list
-    @search    NVARCHAR(100) = NULL,
-    @only_enabled BIT        = 0,
-    @top       INT           = 200
+    @search       NVARCHAR(100) = NULL,
+    @only_enabled BIT           = 0,
+    @page         INT           = 1,
+    @page_size    INT           = 200
 AS
 BEGIN
     SET NOCOUNT ON;
+
+    -- Paged, not TOP-capped. Noble carries several thousand tests, so a cap of
+    -- 200 meant an administrator scrolling this screen could not see most of
+    -- the catalogue and had no indication that it continued.
+    DECLARE @pageSafe INT = CASE WHEN @page < 1 THEN 1 ELSE @page END;
+    DECLARE @size INT =
+        CASE WHEN @page_size < 1 THEN 200
+             WHEN @page_size > 1000 THEN 1000
+             ELSE @page_size END;
+    DECLARE @offset INT = (@pageSafe - 1) * @size;
 
     DECLARE @like NVARCHAR(120) = '%' + LTRIM(RTRIM(ISNULL(@search, ''))) + '%';
 
@@ -64,7 +75,7 @@ BEGIN
         FROM dbo.tbl_med_department_master d
         WHERE ISNULL(d.IsActive, 1) = 1
     )
-    SELECT TOP (@top)
+    SELECT
         c.scope_type,
         c.scope_key,
         c.label,
@@ -74,14 +85,18 @@ BEGIN
         ISNULL(cfg.allow_out_of_range, 0) AS allow_out_of_range,
         ISNULL(cfg.numeric_only, 1)       AS numeric_only,
         cfg.updated_at,
-        cfg.updated_by_username
+        cfg.updated_by_username,
+        COUNT(*) OVER() AS total_count
     FROM catalogue c
     LEFT JOIN dbo.inf_auto_auth_config cfg
            ON cfg.scope_type = c.scope_type AND cfg.scope_key = c.scope_key
     WHERE (@search IS NULL OR LTRIM(RTRIM(@search)) = ''
            OR c.label LIKE @like OR c.scope_key LIKE @like)
       AND (@only_enabled = 0 OR ISNULL(cfg.enabled, 0) = 1)
-    ORDER BY ISNULL(cfg.enabled, 0) DESC, c.scope_type, c.label;
+    -- scope_type + scope_key is unique across the union, so the sort is total
+    -- and paging cannot repeat or skip a row.
+    ORDER BY ISNULL(cfg.enabled, 0) DESC, c.scope_type, c.label, c.scope_key
+    OFFSET @offset ROWS FETCH NEXT @size ROWS ONLY;
 END
 GO
 
@@ -199,16 +214,29 @@ GO
 
 /* ---- the auto-authorisation change log ----------------------------------- */
 CREATE OR ALTER PROCEDURE dbo.usp_inf_auto_auth_audit_read
-    @top INT = 100
+    @page      INT = 1,
+    @page_size INT = 100
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    SELECT TOP (@top)
+    -- This log records every time a rule that releases results without a human
+    -- reading them was switched on or off. Truncating it at 100 entries would
+    -- quietly put the oldest changes out of reach of the person auditing them.
+    DECLARE @pageSafe INT = CASE WHEN @page < 1 THEN 1 ELSE @page END;
+    DECLARE @size INT =
+        CASE WHEN @page_size < 1 THEN 100
+             WHEN @page_size > 1000 THEN 1000
+             ELSE @page_size END;
+    DECLARE @offset INT = (@pageSafe - 1) * @size;
+
+    SELECT
         id, action, scope_type, scope_key, scope_label,
         old_enabled, new_enabled, detail,
-        actor_username, actor_ip, occurred_at
+        actor_username, actor_ip, occurred_at,
+        COUNT(*) OVER() AS total_count
     FROM dbo.inf_auto_auth_audit
-    ORDER BY occurred_at DESC, id DESC;
+    ORDER BY occurred_at DESC, id DESC
+    OFFSET @offset ROWS FETCH NEXT @size ROWS ONLY;
 END
 GO

@@ -57,10 +57,18 @@ public static class AdminEndpoints
     }
 
     private static async Task<IResult> SearchClientCodes(
-        int userId, AdminRepository repo, CancellationToken ct, string? search = null, int top = 50)
+        int userId, AdminRepository repo, CancellationToken ct,
+        string? search = null, int page = 1, int pageSize = 50)
     {
-        var options = await repo.SearchClientCodesAsync(userId, search, top, ct).ConfigureAwait(false);
-        return Results.Ok(options);
+        var result = await repo.SearchClientCodesAsync(userId, search, page, pageSize, ct).ConfigureAwait(false);
+        return Results.Ok(new
+        {
+            options = result.Rows,
+            total = result.Total,
+            page = result.Page,
+            pageSize = result.PageSize,
+            pageCount = result.PageCount,
+        });
     }
 
     /// <summary>

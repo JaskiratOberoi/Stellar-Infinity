@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Pager } from '../components/Pager';
 import { autoAuthApi, type AutoAuthAuditRow, type AutoAuthScopeRow } from '../api/client';
 import { fmtDateTime } from '../lib/format';
 
@@ -35,34 +36,52 @@ export function AutoAuthSettings() {
   const [password, setPassword] = useState('');
   const [unlocked, setUnlocked] = useState(false);
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(100);
+  const [total, setTotal] = useState(0);
+
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const auditPageSize = 100;
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const r = await autoAuthApi.list(search, onlyEnabled);
+      const r = await autoAuthApi.list(search, onlyEnabled, page, pageSize);
       setRows(r.rows);
+      setTotal(r.total);
       setFeatureEnabled(r.featureEnabled);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load the settings.');
     } finally {
       setLoading(false);
     }
-  }, [search, onlyEnabled]);
+  }, [search, onlyEnabled, page, pageSize]);
 
   useEffect(() => {
     const id = setTimeout(() => void load(), 300);
     return () => clearTimeout(id);
   }, [load]);
 
-  const loadAudit = async () => {
+  // Narrowing the catalogue changes how many pages there are; page 7 of the old
+  // result would render blank against the new one.
+  useEffect(() => { setPage(1); }, [search, onlyEnabled, pageSize]);
+
+  const loadAudit = useCallback(async (p: number) => {
     try {
-      const r = await autoAuthApi.audit();
+      const r = await autoAuthApi.audit(p, auditPageSize);
       setAudit(r.rows);
+      setAuditTotal(r.total);
       setShowAudit(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load the change log.');
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (showAudit) void loadAudit(auditPage);
+  }, [showAudit, auditPage, loadAudit]);
 
   const toggle = async (row: AutoAuthScopeRow, enabled: boolean) => {
     if (!password) {
@@ -107,7 +126,11 @@ export function AutoAuthSettings() {
     }
   };
 
-  const enabledCount = rows.filter((r) => r.enabled).length;
+  // Rules active ON THIS PAGE. Said that way deliberately: with the catalogue
+  // paged, a count taken from the rows in hand is not the count for the whole
+  // catalogue, and claiming otherwise would be the same class of error this
+  // change exists to remove. Tick "Only enabled" for the true figure.
+  const enabledHere = rows.filter((r) => r.enabled).length;
 
   return (
     <div className="page">
@@ -115,13 +138,16 @@ export function AutoAuthSettings() {
         <div>
           <h1 className="page__title">Auto-authorisation</h1>
           <p className="page__sub">
-            {enabledCount > 0
-              ? `${enabledCount} rule${enabledCount === 1 ? '' : 's'} active`
-              : 'Off for every test'}
+            {onlyEnabled
+              ? `${total.toLocaleString()} rule${total === 1 ? '' : 's'} active`
+              : enabledHere > 0
+                ? `${enabledHere} active on this page · ${total.toLocaleString()} entries in the catalogue`
+                : `${total.toLocaleString()} entries · none enabled on this page`}
           </p>
         </div>
         <div className="row" style={{ marginLeft: 'auto' }}>
-          <button className="btn btn--ghost btn--sm" onClick={() => void loadAudit()}>Change log</button>
+          <button className="btn btn--ghost btn--sm"
+                  onClick={() => { setAuditPage(1); setShowAudit(true); }}>Change log</button>
         </div>
       </div>
 
@@ -238,6 +264,9 @@ export function AutoAuthSettings() {
               )}
             </tbody>
           </table>
+
+          <Pager page={page} pageSize={pageSize} total={total} noun="entry" nounPlural="entries"
+                 sizes={[50, 100, 250, 500]} onPage={setPage} onPageSize={setPageSize} />
         </div>
       )}
 
@@ -291,6 +320,10 @@ export function AutoAuthSettings() {
                 </tbody>
               </table>
             </div>
+
+            <Pager page={auditPage} pageSize={auditPageSize} total={auditTotal}
+                   noun="entry" nounPlural="entries" onPage={setAuditPage} />
+
             <div className="modal__actions">
               <button className="btn btn--ghost" onClick={() => setShowAudit(false)}>Close</button>
             </div>

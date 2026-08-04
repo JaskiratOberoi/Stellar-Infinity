@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { fmtDateTime } from '../lib/format';
 import { StatusBadge, type WorksheetRow } from './Reports';
 import { WorksheetEntry } from './WorksheetEntry';
+import { Pager } from '../components/Pager';
 
 /**
  * LIS sample statuses. Verified against tbl_med_mcc_patient_samples_status_master.
@@ -57,7 +58,15 @@ export function Worksheet() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
   const [total, setTotal] = useState(0);
-  const [pageCount, setPageCount] = useState(0);
+  // The instant the current result set describes. Pinned on the first request
+  // and echoed back while paging, so registrations arriving mid-walk cannot
+  // shuffle a sample from the page ahead onto a page already passed.
+  //
+  // A ref, not state: it is an input to the next request, and making it a
+  // dependency of the loader would have every page-one response trigger a
+  // second identical fetch.
+  const asOfRef = useRef<string | null>(null);
+  const [asOf, setAsOf] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openSid, setOpenSid] = useState<string | null>(null);
@@ -75,15 +84,19 @@ export function Worksheet() {
       if (statusId !== '') p.set('statusIds', String(statusId));
       else if (pendingOnly) p.set('statusIds', PENDING_STATUSES.join(','));
 
+      // Only while paging within one result set. Page 1 always takes a fresh
+      // snapshot, so the list is never stale without the operator asking for it.
+      if (asOfRef.current && page > 1) p.set('asOf', asOfRef.current);
+
       const r = await api.get<{
         rows: WorksheetRow[]; count: number; total: number;
-        page: number; pageSize: number; pageCount: number; scope: string;
+        page: number; pageSize: number; pageCount: number; scope: string; asOf: string;
       }>(`/api/reports/?${p}`);
 
       setRows(r.rows);
       setScope(r.scope);
       setTotal(r.total);
-      setPageCount(r.pageCount);
+      if (page === 1) { asOfRef.current = r.asOf; setAsOf(r.asOf); }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load the worklist.');
     } finally {
@@ -102,9 +115,6 @@ export function Worksheet() {
 
   // Nothing is hidden after the fact: what the server returned is what shows.
   const visible = rows;
-
-  const firstOnPage = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const lastOnPage = Math.min(page * pageSize, total);
 
   /**
    * Samples grouped by patient.
@@ -150,6 +160,10 @@ export function Worksheet() {
             {total.toLocaleString()} sample{total === 1 ? '' : 's'} match
             {total === 1 ? 'es' : ''} these filters
             {scope && ` · ${scope === 'all' ? 'all centres' : scope}`}
+            {/* Stated whenever the list is pinned. Beyond page 1 the operator is
+                walking a fixed set, and they should know it is a moment in time
+                rather than a live view. */}
+            {page > 1 && asOf && ` · as of ${fmtDateTime(asOf)}`}
           </p>
         </div>
 
@@ -167,6 +181,12 @@ export function Worksheet() {
                  onChange={(e) => { setFrom(e.target.value); setPage(1); }} title="From" />
           <input className="input" type="date" value={to} min={from}
                  onChange={(e) => { setTo(e.target.value); setPage(1); }} title="To" />
+          {/* Back to page 1 takes a fresh snapshot, which is the only way to
+              pick up samples registered since the walk began. */}
+          <button className="btn btn--ghost btn--sm"
+                  onClick={() => { asOfRef.current = null; setPage(1); void load(); }}>
+            Refresh
+          </button>
         </div>
       </div>
 
@@ -291,42 +311,8 @@ export function Worksheet() {
             </table>
           </div>
 
-          {/* Every control here is driven by the server's total. Nothing infers
-              "is there more?" from the size of the page it happens to hold —
-              that inference is wrong whenever the total divides evenly by the
-              page size, and it was what made a full list look finished. */}
-          <div className="pager">
-            <span className="pager__range muted">
-              {total === 0
-                ? 'No samples'
-                : <>Showing <b>{firstOnPage.toLocaleString()}–{lastOnPage.toLocaleString()}</b> of{' '}
-                   <b>{total.toLocaleString()}</b></>}
-            </span>
-
-            <div className="row" style={{ gap: '.3rem' }}>
-              <button className="btn btn--ghost btn--sm" disabled={page <= 1}
-                      onClick={() => setPage(1)} title="First page">«</button>
-              <button className="btn btn--ghost btn--sm" disabled={page <= 1}
-                      onClick={() => setPage((p) => p - 1)}>Previous</button>
-
-              <span className="muted" style={{ fontSize: '.78rem', padding: '0 .5rem' }}>
-                Page {page.toLocaleString()} of {Math.max(pageCount, 1).toLocaleString()}
-              </span>
-
-              <button className="btn btn--ghost btn--sm" disabled={page >= pageCount}
-                      onClick={() => setPage((p) => p + 1)}>Next</button>
-              <button className="btn btn--ghost btn--sm" disabled={page >= pageCount}
-                      onClick={() => setPage(pageCount)} title="Last page">»</button>
-            </div>
-
-            <label className="row pager__size muted">
-              Rows
-              <select className="input input--sm" value={pageSize}
-                      onChange={(e) => setPageSize(Number(e.target.value))}>
-                {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
-            </label>
-          </div>
+          <Pager page={page} pageSize={pageSize} total={total} noun="sample"
+                 sizes={PAGE_SIZES} onPage={setPage} onPageSize={setPageSize} />
         </>
       )}
 

@@ -3,6 +3,7 @@ import { adminApi, ApiError, type AdminUserRow } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { CreateUserModal } from './CreateUserModal';
 import { UserSettings } from './UserSettings';
+import { Pager } from '../components/Pager';
 
 export function AdminUsers() {
   const { user } = useAuth();
@@ -16,14 +17,16 @@ export function AdminUsers() {
   const [showCreate, setShowCreate] = useState(false);
   const [settingsFor, setSettingsFor] = useState<number | null>(null);
   const [roles, setRoles] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
 
-  const load = useCallback(async (q: string) => {
+  const load = useCallback(async (q: string, p: number, size: number) => {
     setLoading(true);
     setError(null);
     try {
-      const page = await adminApi.listUsers(q);
-      setRows(page.users);
-      setTotal(page.totalCount);
+      const result = await adminApi.listUsers(q, p, size);
+      setRows(result.users);
+      setTotal(result.totalCount);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load users.');
     } finally {
@@ -32,16 +35,19 @@ export function AdminUsers() {
   }, []);
 
   useEffect(() => {
-    void load('');
     adminApi.roles().then((r) => setRoles(r.map((x) => x.role))).catch(() => setRoles([]));
-  }, [load]);
+  }, []);
 
   // Debounced search — the SQL uses a leading wildcard and cannot use an index,
   // so we avoid firing one scan per keystroke.
   useEffect(() => {
-    const t = setTimeout(() => void load(search), 300);
+    const t = setTimeout(() => void load(search, page, pageSize), 300);
     return () => clearTimeout(t);
-  }, [search, load]);
+  }, [search, page, pageSize, load]);
+
+  // A narrower search has fewer pages; staying on page 6 of the old result
+  // would show an empty screen for a search that matched plenty.
+  useEffect(() => { setPage(1); }, [search, pageSize]);
 
   async function act(userId: number, fn: () => Promise<void>, successMessage: string) {
     setBusyId(userId);
@@ -50,7 +56,7 @@ export function AdminUsers() {
     try {
       await fn();
       setNotice(successMessage);
-      await load(search);
+      await load(search, page, pageSize);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'The change could not be saved.');
     } finally {
@@ -204,6 +210,10 @@ export function AdminUsers() {
               )}
             </tbody>
           </table>
+
+          <Pager page={page} pageSize={pageSize} total={total} noun="account"
+                 sizes={[25, 50, 100, 250, 500]}
+                 onPage={setPage} onPageSize={setPageSize} />
         </div>
       )}
 
@@ -212,7 +222,7 @@ export function AdminUsers() {
           userId={settingsFor}
           roles={roles}
           onClose={() => setSettingsFor(null)}
-          onChanged={() => void load(search)}
+          onChanged={() => void load(search, page, pageSize)}
         />
       )}
 
@@ -223,7 +233,7 @@ export function AdminUsers() {
           onCreated={(name) => {
             setShowCreate(false);
             setNotice(`Created ${name}. They can sign in to Infinity now; LIS access stays blocked until you grant it.`);
-            void load(search);
+            void load(search, page, pageSize);
           }}
         />
       )}

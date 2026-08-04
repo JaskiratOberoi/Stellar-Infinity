@@ -203,29 +203,35 @@ public sealed class AdminRepository(NobleConnectionFactory db)
                 head.SessionVersion, head.Lis, codes, own);
         }, ct);
 
-    public Task<IReadOnlyList<ClientCodeOption>> SearchClientCodesAsync(
-        int userId, string? search, int top, CancellationToken ct = default) =>
+    public Task<Paged<ClientCodeOption>> SearchClientCodesAsync(
+        int userId, string? search, int page, int pageSize, CancellationToken ct = default) =>
         db.QueryAsync("admin.clientSearch", async (conn, inner) =>
         {
+            var (p, size) = Paged<ClientCodeOption>.Clamp(page, pageSize, 50, maxSize: 500);
+
             await using var cmd = new SqlCommand("dbo.usp_inf_admin_client_search", conn)
             {
                 CommandType = CommandType.StoredProcedure,
             };
             cmd.Parameters.Add("@userId", SqlDbType.Int).Value = userId;
             cmd.Parameters.Add("@search", SqlDbType.NVarChar, 100).Value = (object?)search ?? DBNull.Value;
-            cmd.Parameters.Add("@top", SqlDbType.Int).Value = top;
+            cmd.Parameters.Add("@page", SqlDbType.Int).Value = p;
+            cmd.Parameters.Add("@page_size", SqlDbType.Int).Value = size;
 
             await using var r = await cmd.ExecuteReaderAsync(CommandBehavior.SingleResult, inner).ConfigureAwait(false);
             var list = new List<ClientCodeOption>();
+            var total = 0;
             while (await r.ReadAsync(inner).ConfigureAwait(false))
             {
+                if (list.Count == 0) total = r.GetOrdinalInt32("total_count") ?? 0;
+
                 list.Add(new ClientCodeOption(
                     r.GetOrdinalInt32("mcc_id") ?? 0,
                     r.GetOrdinalString("client_code") ?? "",
                     r.GetOrdinalString("client_name"),
                     r.GetOrdinalBool("already_mapped")));
             }
-            return (IReadOnlyList<ClientCodeOption>)list;
+            return new Paged<ClientCodeOption>(list, total, p, size);
         }, ct);
 
     /// <summary>

@@ -16,23 +16,29 @@ namespace Infinity.Api.Worksheet;
 /// </summary>
 public sealed class AutoAuthRepository(NobleConnectionFactory db, SqlRetry retry, ILogger<AutoAuthRepository> logger)
 {
-    public Task<IReadOnlyList<AutoAuthScopeRow>> ListAsync(
-        string? search, bool onlyEnabled, int top, CancellationToken ct = default) =>
+    public Task<Paged<AutoAuthScopeRow>> ListAsync(
+        string? search, bool onlyEnabled, int page, int pageSize, CancellationToken ct = default) =>
         retry.ExecuteAsync("autoauth.list", token =>
             db.QueryAsync("autoauth.list", async (conn, inner) =>
             {
+                var (p, size) = Paged<AutoAuthScopeRow>.Clamp(page, pageSize, 200);
+
                 await using var cmd = db.CreateWriteCommand(conn, "dbo.usp_inf_auto_auth_list");
                 cmd.Parameters.Add("@search", SqlDbType.NVarChar, 100).Value =
                     string.IsNullOrWhiteSpace(search) ? DBNull.Value : search.Trim();
                 cmd.Parameters.Add("@only_enabled", SqlDbType.Bit).Value = onlyEnabled;
-                cmd.Parameters.Add("@top", SqlDbType.Int).Value = Math.Clamp(top, 1, 1000);
+                cmd.Parameters.Add("@page", SqlDbType.Int).Value = p;
+                cmd.Parameters.Add("@page_size", SqlDbType.Int).Value = size;
 
                 await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SingleResult, inner)
                     .ConfigureAwait(false);
 
                 var list = new List<AutoAuthScopeRow>();
+                var total = 0;
                 while (await reader.ReadAsync(inner).ConfigureAwait(false))
                 {
+                    if (list.Count == 0) total = reader.NullableInt("total_count") ?? 0;
+
                     list.Add(new AutoAuthScopeRow(
                         ScopeType: reader.Str("scope_type") ?? "",
                         ScopeKey: reader.Str("scope_key") ?? "",
@@ -46,7 +52,7 @@ public sealed class AutoAuthRepository(NobleConnectionFactory db, SqlRetry retry
                         UpdatedByUsername: reader.Str("updated_by_username")));
                 }
 
-                return (IReadOnlyList<AutoAuthScopeRow>)list;
+                return new Paged<AutoAuthScopeRow>(list, total, p, size);
             }, token), ct);
 
     /// <summary>
@@ -127,19 +133,26 @@ public sealed class AutoAuthRepository(NobleConnectionFactory db, SqlRetry retry
             userId, actor.Ip, scopeType, scopeKey);
     }
 
-    public Task<IReadOnlyList<AutoAuthAuditRow>> GetAuditAsync(int top, CancellationToken ct = default) =>
+    public Task<Paged<AutoAuthAuditRow>> GetAuditAsync(
+        int page, int pageSize, CancellationToken ct = default) =>
         retry.ExecuteAsync("autoauth.audit", token =>
             db.QueryAsync("autoauth.audit", async (conn, inner) =>
             {
+                var (p, size) = Paged<AutoAuthAuditRow>.Clamp(page, pageSize, 100);
+
                 await using var cmd = db.CreateWriteCommand(conn, "dbo.usp_inf_auto_auth_audit_read");
-                cmd.Parameters.Add("@top", SqlDbType.Int).Value = Math.Clamp(top, 1, 500);
+                cmd.Parameters.Add("@page", SqlDbType.Int).Value = p;
+                cmd.Parameters.Add("@page_size", SqlDbType.Int).Value = size;
 
                 await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SingleResult, inner)
                     .ConfigureAwait(false);
 
                 var list = new List<AutoAuthAuditRow>();
+                var total = 0;
                 while (await reader.ReadAsync(inner).ConfigureAwait(false))
                 {
+                    if (list.Count == 0) total = reader.NullableInt("total_count") ?? 0;
+
                     list.Add(new AutoAuthAuditRow(
                         Id: reader.Long("id"),
                         Action: reader.Str("action") ?? "",
@@ -154,7 +167,7 @@ public sealed class AutoAuthRepository(NobleConnectionFactory db, SqlRetry retry
                         OccurredAt: reader.Offset("occurred_at") ?? default));
                 }
 
-                return (IReadOnlyList<AutoAuthAuditRow>)list;
+                return new Paged<AutoAuthAuditRow>(list, total, p, size);
             }, token), ct);
 }
 

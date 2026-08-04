@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Pager } from '../components/Pager';
 import { api, ApiError } from '../api/client';
 import { fmtDate } from '../lib/format';
 
@@ -304,6 +305,9 @@ function ClientsTab({ d, busy, run }: { d: AdminUserDetail; busy: boolean; run: 
   const [search, setSearch] = useState('');
   const [options, setOptions] = useState<ClientCodeOption[]>([]);
   const [searching, setSearching] = useState(false);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const pageSize = 50;
 
   const original = useMemo(() => new Set(d.clientCodes.map((c) => c.clientCode ?? '').filter(Boolean)), [d.clientCodes]);
   const chosen = useMemo(() => new Set(selected), [selected]);
@@ -313,13 +317,20 @@ function ClientsTab({ d, busy, run }: { d: AdminUserDetail; busy: boolean; run: 
     let live = true;
     setSearching(true);
     const id = setTimeout(() => {
-      api.get<ClientCodeOption[]>(`/api/admin/users/${d.userId}/client-codes/search?search=${encodeURIComponent(search)}&top=50`)
-        .then((r) => { if (live) setOptions(r); })
-        .catch(() => { if (live) setOptions([]); })
+      api.get<{ options: ClientCodeOption[]; total: number }>(
+        `/api/admin/users/${d.userId}/client-codes/search`
+        + `?search=${encodeURIComponent(search)}&page=${page}&pageSize=${pageSize}`)
+        .then((r) => { if (live) { setOptions(r.options); setTotal(r.total); } })
+        .catch(() => { if (live) { setOptions([]); setTotal(0); } })
         .finally(() => { if (live) setSearching(false); });
     }, 250);
     return () => { live = false; clearTimeout(id); };
-  }, [search, d.userId]);
+  }, [search, page, d.userId]);
+
+  // Every centre is reachable by paging, so a code that does not fit on the
+  // first screen is not lost — but a new search has to start at page 1 or the
+  // list comes back empty for a term that matches plenty.
+  useEffect(() => { setPage(1); }, [search]);
 
   const toggle = (code: string) =>
     setSelected((s) => s.includes(code) ? s.filter((x) => x !== code) : [...s, code]);
@@ -382,6 +393,11 @@ function ClientsTab({ d, busy, run }: { d: AdminUserDetail; busy: boolean; run: 
           </tbody>
         </table>
       </div>
+
+      {/* Selections live outside the page, so ticking a code on page 1 and
+          another on page 3 keeps both. */}
+      <Pager page={page} pageSize={pageSize} total={total} noun="centre"
+             onPage={setPage} />
 
       {removingForeign.length > 0 && (
         <div className="alert alert--error">

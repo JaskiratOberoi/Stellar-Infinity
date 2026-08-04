@@ -53,11 +53,17 @@ public sealed record WorksheetPage(IReadOnlyList<WorksheetRow> Rows, int Count);
 /// has to infer "is there more?" from a full page gets it wrong whenever the
 /// total is an exact multiple of the page size.
 /// </param>
+/// <param name="AsOf">
+/// The instant this page describes. Echoed back by the client on every later
+/// page so that paging walks one fixed set — see 76_usp_inf_worksheet_list.sql
+/// for what happens on a live LIS without it.
+/// </param>
 public sealed record WorksheetListPage(
     IReadOnlyList<WorksheetRow> Rows,
     int Total,
     int Page,
-    int PageSize)
+    int PageSize,
+    DateTimeOffset AsOf)
 {
     public int PageCount => PageSize > 0 ? (Total + PageSize - 1) / PageSize : 0;
 }
@@ -200,10 +206,16 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
         IReadOnlyList<int>? statusIds,
         int page,
         int pageSize,
+        DateTime? asOf,
         CancellationToken ct = default)
     {
         var size = Math.Clamp(pageSize, 1, 1000);
         var pageNo = Math.Max(page, 1);
+
+        // Resolved HERE rather than left to the procedure's default, so that a
+        // page with no rows still reports the snapshot it used. Reading it off a
+        // returned column works only when a column comes back.
+        var snapshot = asOf ?? NobleTime.NowForNoble();
 
         return await retry.ExecuteAsync("reports.worklist", token =>
             db.QueryAsync("reports.worklist", async (conn, inner) =>
@@ -237,6 +249,7 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
                         : (object)DBNull.Value;
                 cmd.Parameters.Add("@page", SqlDbType.Int).Value = pageNo;
                 cmd.Parameters.Add("@page_size", SqlDbType.Int).Value = size;
+                cmd.Parameters.Add("@as_of", SqlDbType.DateTime).Value = snapshot;
 
                 await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SingleResult, inner)
                     .ConfigureAwait(false);
@@ -275,7 +288,7 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
                         Results: []));
                 }
 
-                return new WorksheetListPage(rows, total, pageNo, size);
+                return new WorksheetListPage(rows, total, pageNo, size, NobleTime.ToIst(snapshot));
             }, token), ct).ConfigureAwait(false);
     }
 

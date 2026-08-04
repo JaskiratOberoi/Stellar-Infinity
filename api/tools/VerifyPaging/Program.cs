@@ -52,11 +52,15 @@ http.DefaultRequestHeaders.Authorization = new("Bearer", token);
 var to = DateTime.UtcNow.AddHours(5.5).ToString("yyyy-MM-dd");
 var from = DateTime.UtcNow.AddHours(5.5).AddDays(-30).ToString("yyyy-MM-dd");
 
-async Task<(int Total, int PageCount, string[] Sids, int[] Statuses)> Fetch(
-    int page, int size, string? statusIds)
+// Mirrors what the SPA does: page 1 takes a snapshot, later pages echo it. This
+// is a live LIS, so without the echo the set grows underfoot and rows slide
+// between pages — which is precisely what the checks below would catch.
+async Task<(int Total, int PageCount, string[] Sids, int[] Statuses, string AsOf)> Fetch(
+    int page, int size, string? statusIds, string? asOf = null)
 {
     var url = $"/api/reports/?from={from}&to={to}&page={page}&pageSize={size}"
-            + (statusIds is null ? "" : $"&statusIds={statusIds}");
+            + (statusIds is null ? "" : $"&statusIds={statusIds}")
+            + (asOf is null ? "" : $"&asOf={Uri.EscapeDataString(asOf)}");
     var resp = await http.GetAsync(url);
     resp.EnsureSuccessStatusCode();
 
@@ -71,7 +75,8 @@ async Task<(int Total, int PageCount, string[] Sids, int[] Statuses)> Fetch(
         rows.EnumerateArray()
             .Select(r => r.TryGetProperty("statusCode", out var s) && s.ValueKind == JsonValueKind.Number
                 ? s.GetInt32() : -1)
-            .ToArray());
+            .ToArray(),
+        root.GetProperty("asOf").GetString() ?? "");
 }
 
 // ---- 1. walk every page and account for every row --------------------------
@@ -79,7 +84,8 @@ Console.WriteLine($"[1] {from} to {to}, unfiltered — paging must be total");
 
 const int Size = 50;
 var first = await Fetch(1, Size, null);
-Console.WriteLine($"        total={first.Total} pageCount={first.PageCount}");
+var snap = first.AsOf;
+Console.WriteLine($"        total={first.Total} pageCount={first.PageCount} asOf={snap}");
 
 Check("pageCount agrees with total", first.PageCount == (first.Total + Size - 1) / Size,
     $"{first.PageCount} pages of {Size} for {first.Total} rows");
@@ -92,7 +98,7 @@ var totalsSeen = new HashSet<int>();
 var pagesToWalk = Math.Min(first.PageCount, 40);
 for (var p = 1; p <= pagesToWalk; p++)
 {
-    var r = await Fetch(p, Size, null);
+    var r = await Fetch(p, Size, null, snap);
     totalsSeen.Add(r.Total);
     seen.AddRange(r.Sids);
 
@@ -122,7 +128,7 @@ if (pagesToWalk == first.PageCount)
 // disagree, something is being dropped by the transport rather than filtered.
 Console.WriteLine("\n[2] page size changes the slicing, not the set");
 
-var big = await Fetch(1, 200, null);
+var big = await Fetch(1, 200, null, snap);
 Check("total is identical at pageSize 200", big.Total == first.Total,
     $"{big.Total} vs {first.Total}");
 
@@ -134,7 +140,7 @@ Check("the first rows are the same regardless of page size",
 // ---- 3. a filter narrows the SET, not the page -----------------------------
 Console.WriteLine("\n[3] the outstanding-only filter is applied in SQL");
 
-var pending = await Fetch(1, Size, "2,4,5,6");
+var pending = await Fetch(1, Size, "2,4,5,6", snap);
 Console.WriteLine($"        total={pending.Total} pageCount={pending.PageCount}");
 
 Check("filtered total is not greater than unfiltered", pending.Total <= first.Total,
@@ -148,7 +154,7 @@ Check("every returned row matches the filter",
 // were removed after paging. A full result set must now fill its pages.
 if (pending.PageCount > 1)
 {
-    var p2 = await Fetch(2, Size, "2,4,5,6");
+    var p2 = await Fetch(2, Size, "2,4,5,6", snap);
     Check("a filtered page is full when more pages follow",
         pending.PageCount <= 2 || p2.Sids.Length == Size,
         $"page 2 held {p2.Sids.Length} of {Size}");
@@ -159,10 +165,74 @@ if (pending.PageCount > 1)
 
 // ---- 4. asking past the end is empty, not an error -------------------------
 Console.WriteLine("\n[4] beyond the last page");
-var past = await Fetch(first.PageCount + 5, Size, null);
+var past = await Fetch(first.PageCount + 5, Size, null, snap);
 Check("returns no rows rather than failing", past.Sids.Length == 0, $"{past.Sids.Length} rows");
 Check("still reports the true total", past.Total == 0 || past.Total == first.Total,
     $"{past.Total}");
+
+// ---- 4b. the snapshot is what makes the walk repeatable -------------------
+// Without it this whole section is unstable on a live LIS. Asserted explicitly
+// so that removing the echo shows up as a failing check rather than as flaky
+// duplicate-row noise someone eventually reruns until it passes.
+Console.WriteLine("\n[4b] the snapshot pins the set");
+var pinnedA = await Fetch(2, Size, null, snap);
+var pinnedB = await Fetch(2, Size, null, snap);
+Check("the same page twice returns the same rows",
+    pinnedA.Sids.SequenceEqual(pinnedB.Sids),
+    $"{pinnedA.Sids.Length} rows, identical");
+Check("the pinned total does not drift", pinnedA.Total == first.Total,
+    $"{pinnedA.Total} vs {first.Total}");
+
+// ---- 5. every OTHER list endpoint reports a reachable total ----------------
+// A list that returns a total it will not let you reach is the same defect in a
+// friendlier costume: the screen says 312 and hands you 100. So each endpoint is
+// asked for one row, and then for the page that should hold the LAST row. If the
+// second request comes back empty while the total claims otherwise, the endpoint
+// is still capped somewhere behind the total.
+Console.WriteLine("\n[5] every list endpoint: the advertised total is reachable");
+
+async Task CheckList(string label, string url, string rowsProperty, string totalProperty)
+{
+    var sep = url.Contains('?') ? "&" : "?";
+
+    var probe = await http.GetAsync($"{url}{sep}page=1&pageSize=1");
+    if (!probe.IsSuccessStatusCode)
+    {
+        Check(label, false, $"HTTP {(int)probe.StatusCode} on the first page");
+        return;
+    }
+
+    using var doc = JsonDocument.Parse(await probe.Content.ReadAsStringAsync());
+    var total = doc.RootElement.GetProperty(totalProperty).GetInt32();
+    var got = doc.RootElement.GetProperty(rowsProperty).GetArrayLength();
+
+    if (total == 0)
+    {
+        Check(label, got == 0, $"total 0 with {got} rows");
+        return;
+    }
+
+    // The page holding the very last row, at a page size of 1.
+    var lastResp = await http.GetAsync($"{url}{sep}page={total}&pageSize=1");
+    if (!lastResp.IsSuccessStatusCode)
+    {
+        Check(label, false, $"HTTP {(int)lastResp.StatusCode} fetching the last row");
+        return;
+    }
+
+    using var lastDoc = JsonDocument.Parse(await lastResp.Content.ReadAsStringAsync());
+    var lastRows = lastDoc.RootElement.GetProperty(rowsProperty).GetArrayLength();
+
+    Check(label, lastRows == 1,
+        $"total {total}, row {total} {(lastRows == 1 ? "reachable" : "MISSING — still capped")}");
+}
+
+await CheckList("auto-auth catalogue", "/api/worksheet-settings/auto-auth/", "rows", "total");
+await CheckList("auto-auth change log", "/api/worksheet-settings/auto-auth/audit", "rows", "total");
+await CheckList("instrument inbox", "/api/instruments/inbox?status=applied", "messages", "totalCount");
+await CheckList("admin users", "/api/admin/users", "users", "totalCount");
+await CheckList("client-code search",
+    $"/api/admin/users/{Env("Verify__UserId") ?? "1"}/client-codes/search", "options", "total");
 
 Console.WriteLine();
 Console.WriteLine(failures == 0 ? "All checks passed." : $"{failures} check(s) FAILED.");

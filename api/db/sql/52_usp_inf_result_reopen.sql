@@ -116,13 +116,25 @@ GO
  * whole point. Scope is enforced by the endpoint before this is called.
  */
 CREATE OR ALTER PROCEDURE dbo.usp_inf_result_audit_read
-    @sid   NVARCHAR(50),
-    @top   INT = 200
+    @sid       NVARCHAR(50),
+    @page      INT = 1,
+    @page_size INT = 200
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    SELECT TOP (@top)
+    -- Paged rather than TOP-capped. An audit trail that silently stops at 200
+    -- entries is worse than no audit trail: it looks complete. total_count and
+    -- OFFSET together make every entry reachable, which is the only version of
+    -- "append-only and complete" that means anything.
+    DECLARE @pageSafe INT = CASE WHEN @page < 1 THEN 1 ELSE @page END;
+    DECLARE @size INT =
+        CASE WHEN @page_size < 1 THEN 200
+             WHEN @page_size > 1000 THEN 1000
+             ELSE @page_size END;
+    DECLARE @offset INT = (@pageSafe - 1) * @size;
+
+    SELECT
         a.id,
         a.result_id,
         r.testname,
@@ -135,10 +147,14 @@ BEGIN
         a.actor_username,
         a.actor_ip,
         a.source,
-        a.occurred_at
+        a.occurred_at,
+        COUNT(*) OVER() AS total_count
     FROM dbo.inf_result_audit a
     LEFT JOIN dbo.tbl_med_mcc_patient_test_result r ON r.id = a.result_id
     WHERE a.vailid = @sid
-    ORDER BY a.occurred_at DESC, a.id DESC;
+    -- a.id is unique, so this ordering is total and OFFSET paging cannot
+    -- duplicate or drop an entry across pages.
+    ORDER BY a.occurred_at DESC, a.id DESC
+    OFFSET @offset ROWS FETCH NEXT @size ROWS ONLY;
 END
 GO

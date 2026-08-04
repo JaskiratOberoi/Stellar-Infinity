@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Pager } from '../components/Pager';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { fmtDateTime } from '../lib/format';
@@ -45,31 +46,39 @@ export function Instruments() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(100);
+  const [total, setTotal] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const p = new URLSearchParams({ top: '150' });
+      const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
       // The default (no status) is the "needs attention" set the procedure
       // defines — pending, unmatched and rejected.
       if (status !== 'needs attention') p.set('status', status);
       if (instrumentId !== '') p.set('instrumentId', String(instrumentId));
 
-      const [list, page] = await Promise.all([
+      const [list, result] = await Promise.all([
         api.get<Instrument[]>('/api/instruments/'),
-        api.get<{ messages: InboxMessage[]; totalCount: number }>(`/api/instruments/inbox?${p}`),
+        api.get<{ messages: InboxMessage[]; totalCount: number; pageCount: number }>(
+          `/api/instruments/inbox?${p}`),
       ]);
       setInstruments(list);
-      setInbox(page.messages);
+      setInbox(result.messages);
+      setTotal(result.totalCount);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load the instrument inbox.');
     } finally {
       setLoading(false);
     }
-  }, [status, instrumentId]);
+  }, [status, instrumentId, page, pageSize]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // Changing the status filter changes how many pages exist.
+  useEffect(() => { setPage(1); }, [status, instrumentId, pageSize]);
 
   async function replay(id: number) {
     setBusyId(id); setError(null); setNotice(null);
@@ -205,6 +214,9 @@ export function Instruments() {
               )}
             </tbody>
           </table>
+
+          <Pager page={page} pageSize={pageSize} total={total} noun="message"
+                 sizes={[50, 100, 250, 500]} onPage={setPage} onPageSize={setPageSize} />
         </div>
       )}
 

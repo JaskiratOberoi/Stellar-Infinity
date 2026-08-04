@@ -201,7 +201,10 @@ public static class ApiEndpoints
         // one status and forced the client to filter the rest itself.
         string? statusIds = null,
         int page = 1,
-        int pageSize = 100)
+        int pageSize = 100,
+        // Echoed from a previous response to keep paging on one fixed set while
+        // the LIS keeps registering samples underneath it.
+        string? asOf = null)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
 
@@ -223,9 +226,15 @@ public static class ApiEndpoints
 
         var statuses = ParseStatusIds(statusIds, statusId);
 
+        // An unparseable snapshot falls back to "now" rather than failing: the
+        // worst case is a fresh page-one, never a blank screen.
+        DateTime? snapshot = DateTimeOffset.TryParse(asOf, out var parsed)
+            ? parsed.ToOffset(Domain.NobleTime.IstOffset).DateTime
+            : null;
+
         var result = await repo.ListPageAsync(
             scope.ClientCodes, fromDate, toDate, patient, sid, statuses,
-            page, pageSize, ct).ConfigureAwait(false);
+            page, pageSize, snapshot, ct).ConfigureAwait(false);
 
         return Results.Ok(new
         {
@@ -237,6 +246,7 @@ public static class ApiEndpoints
             page = result.Page,
             pageSize = result.PageSize,
             pageCount = result.PageCount,
+            asOf = result.AsOf,
             scope = scope.IsUnrestricted ? "all" : $"{scope.ClientCodes.Count} centres",
             from = fromDate,
             to = toDate,

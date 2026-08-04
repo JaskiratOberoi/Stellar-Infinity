@@ -120,22 +120,28 @@ public sealed class WorksheetRepository(NobleConnectionFactory db, SqlRetry retr
             }, token), ct).ConfigureAwait(false);
     }
 
-    /// <summary>The sample's full audit history, newest first.</summary>
-    public Task<IReadOnlyList<ResultAuditRow>> GetAuditAsync(
-        string sid, int top, CancellationToken ct = default) =>
+    /// <summary>The sample's audit history, newest first, paged in full.</summary>
+    public Task<Paged<ResultAuditRow>> GetAuditAsync(
+        string sid, int page, int pageSize, CancellationToken ct = default) =>
         retry.ExecuteAsync("worksheet.audit", token =>
             db.QueryAsync("worksheet.audit", async (conn, inner) =>
             {
+                var (p, size) = Paged<ResultAuditRow>.Clamp(page, pageSize, 200);
+
                 await using var cmd = db.CreateWriteCommand(conn, "dbo.usp_inf_result_audit_read");
                 cmd.Parameters.Add("@sid", SqlDbType.NVarChar, 50).Value = sid.Trim();
-                cmd.Parameters.Add("@top", SqlDbType.Int).Value = Math.Clamp(top, 1, 1000);
+                cmd.Parameters.Add("@page", SqlDbType.Int).Value = p;
+                cmd.Parameters.Add("@page_size", SqlDbType.Int).Value = size;
 
                 await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SingleResult, inner)
                     .ConfigureAwait(false);
 
                 var list = new List<ResultAuditRow>();
+                var total = 0;
                 while (await reader.ReadAsync(inner).ConfigureAwait(false))
                 {
+                    if (list.Count == 0) total = reader.NullableInt("total_count") ?? 0;
+
                     list.Add(new ResultAuditRow(
                         Id: reader.Long("id"),
                         ResultId: reader.NullableInt("result_id"),
@@ -152,7 +158,7 @@ public sealed class WorksheetRepository(NobleConnectionFactory db, SqlRetry retr
                         OccurredAt: reader.Offset("occurred_at") ?? default));
                 }
 
-                return (IReadOnlyList<ResultAuditRow>)list;
+                return new Paged<ResultAuditRow>(list, total, p, size);
             }, token), ct);
 
     /// <summary>

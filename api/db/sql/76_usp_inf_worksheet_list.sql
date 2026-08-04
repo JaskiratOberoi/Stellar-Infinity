@@ -33,6 +33,24 @@ GO
  * never rendered it, and FOR JSON PATH per row was the dominant cost — which is
  * what made large pages expensive and small pages tempting in the first place.
  * Opening a sample still reads the full results through the worksheet path.
+ *
+ * ── @as_of: WHY PAGING A LIVE TABLE NEEDS A SNAPSHOT ───────────────────────
+ * This is a production LIS with registrations arriving continuously. Measured
+ * while walking 40 pages of a 30-day window, the matching total rose from
+ * 183,767 to 183,774 mid-walk. Because the sort is newest-first, each new row
+ * lands at the TOP and pushes everything down by one — so a row on page 3 slides
+ * onto page 4 and is shown twice, while the row that was at the foot of page 4
+ * slides to page 5 and, if the operator was already past it, is never seen.
+ *
+ * That is the failure this whole change exists to remove, arriving by a
+ * different door: the operator believes they have worked the list, and a sample
+ * they never saw is sitting in it.
+ *
+ * So the caller pins @as_of on the first request and echoes it back on every
+ * later page. Every page then describes ONE set. The trade is that the snapshot
+ * ages, which is why as_of is returned for the UI to display and why refreshing
+ * clears it — a stale list the operator can see is stale beats a moving one
+ * they cannot.
  */
 CREATE OR ALTER PROCEDURE dbo.usp_inf_worksheet_list
     @client_codes    dbo.ClientCodeList READONLY,
@@ -44,7 +62,11 @@ CREATE OR ALTER PROCEDURE dbo.usp_inf_worksheet_list
     -- A set, not a scalar: this is the whole point of the procedure.
     @status_ids      VARCHAR(200)  = NULL,
     @page            INT           = 1,
-    @page_size       INT           = 100
+    @page_size       INT           = 100,
+    -- Upper bound on modifieddate, pinned by the caller so that paging walks a
+    -- fixed set. NULL means "now", which the procedure returns for the caller
+    -- to send back on subsequent pages.
+    @as_of           DATETIME      = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -55,6 +77,11 @@ BEGIN
 
     DECLARE @from DATETIME = CAST(@from_date AS DATETIME);
     DECLARE @to   DATETIME = DATEADD(SECOND, -1, DATEADD(DAY, 1, CAST(@to_date AS DATETIME)));
+
+    -- The snapshot. Never widens the requested window — it only ever pins the
+    -- upper edge earlier, so a caller cannot use it to read outside its dates.
+    DECLARE @snapshot DATETIME = ISNULL(@as_of, GETDATE());
+    IF @snapshot < @to SET @to = @snapshot;
 
     DECLARE @pageSafe INT = CASE WHEN @page < 1 THEN 1 ELSE @page END;
     -- Ceiling of 1000 rather than the legacy 5000: this is a per-request
@@ -152,7 +179,9 @@ BEGIN
         H.clinical_history,
         -- The count of the FILTERED set, before paging. This is what lets the
         -- client say "showing 51-100 of 3,412" instead of guessing.
-        COUNT(*) OVER() AS total_count
+        COUNT(*) OVER() AS total_count,
+        -- Echoed back by the client on every later page so the set stays fixed.
+        @snapshot AS as_of
     FROM H
     -- sid is unique per sample, so this ordering is total. Without the
     -- tiebreak, OFFSET paging over tied regd_at values silently duplicates and

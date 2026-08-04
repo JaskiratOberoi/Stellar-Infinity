@@ -61,7 +61,12 @@ public sealed record InboxMessage(
     /// <summary>Uploaded file name, for an imported row.</summary>
     string? SourceName);
 
-public sealed record InboxPage(IReadOnlyList<InboxMessage> Messages, int TotalCount);
+/// <param name="TotalCount">Messages matching the filters, not messages in this page.</param>
+public sealed record InboxPage(
+    IReadOnlyList<InboxMessage> Messages, int TotalCount, int Page, int PageSize)
+{
+    public int PageCount => PageSize > 0 ? (TotalCount + PageSize - 1) / PageSize : 0;
+}
 
 /// <summary>
 /// Outcome of registering or updating an instrument. A dedicated type rather

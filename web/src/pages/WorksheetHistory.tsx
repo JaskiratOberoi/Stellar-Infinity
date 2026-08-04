@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { worksheetApi, type ResultAuditRow, type ResultTrendResponse } from '../api/client';
 import { fmtDateTime } from '../lib/format';
 import { DeltaTrend } from '../components/DeltaTrend';
+import { Pager } from '../components/Pager';
 
 /**
  * History for one sample: what this patient's values have been doing over time,
@@ -20,6 +21,9 @@ export function WorksheetHistory({ sid, onClose }: { sid: string; onClose: () =>
   const [tab, setTab] = useState<'trend' | 'audit'>('trend');
 
   const [rows, setRows] = useState<ResultAuditRow[]>([]);
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const auditPageSize = 100;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,13 +33,14 @@ export function WorksheetHistory({ sid, onClose }: { sid: string; onClose: () =>
 
   useEffect(() => {
     let live = true;
+    setLoading(true);
     worksheetApi
-      .audit(sid)
-      .then((r) => { if (live) setRows(r.rows); })
+      .audit(sid, auditPage, auditPageSize)
+      .then((r) => { if (live) { setRows(r.rows); setAuditTotal(r.total); } })
       .catch((e) => { if (live) setError(e instanceof Error ? e.message : 'Could not load the history.'); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, [sid]);
+  }, [sid, auditPage]);
 
   // Fetched alongside the audit rather than on tab switch: the trend walks a
   // multi-million-row table, and starting it only when the operator clicks
@@ -86,7 +91,7 @@ export function WorksheetHistory({ sid, onClose }: { sid: string; onClose: () =>
             onClick={() => setTab('audit')}
           >
             Audit trail
-            {rows.length > 0 && <span className="tab__count">{rows.length}</span>}
+            {auditTotal > 0 && <span className="tab__count">{auditTotal}</span>}
           </button>
         </div>
 
@@ -162,6 +167,9 @@ export function WorksheetHistory({ sid, onClose }: { sid: string; onClose: () =>
             </table>
           </div>
         )}
+
+        <Pager page={auditPage} pageSize={auditPageSize} total={auditTotal}
+               noun="entry" nounPlural="entries" onPage={setAuditPage} />
         </>
         )}
 

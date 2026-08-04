@@ -336,6 +336,22 @@ export interface ResultTrendResponse {
   analytes: AnalyteTrend[];
 }
 
+/**
+ * The shape every list endpoint returns.
+ *
+ * `total` is the whole matching set; `count` is only what came back in this
+ * response. Screens must render `total` and drive their pager from it — asking
+ * "did I get a full page?" is not a reliable way to learn whether more exists.
+ */
+export interface PagedResponse<T> {
+  rows: T[];
+  count: number;
+  total: number;
+  page: number;
+  pageSize: number;
+  pageCount: number;
+}
+
 export const worksheetApi = {
   getSample: (sid: string) =>
     api.get<WorksheetSampleResponse>(`/api/worksheet/${encodeURIComponent(sid)}`),
@@ -358,9 +374,9 @@ export const worksheetApi = {
       { reason },
     ),
 
-  audit: (sid: string, top = 200) =>
-    api.get<{ rows: ResultAuditRow[]; count: number }>(
-      `/api/worksheet/${encodeURIComponent(sid)}/audit?top=${top}`,
+  audit: (sid: string, page = 1, pageSize = 200) =>
+    api.get<PagedResponse<ResultAuditRow>>(
+      `/api/worksheet/${encodeURIComponent(sid)}/audit?page=${page}&pageSize=${pageSize}`,
     ),
 
   trend: (sid: string, maxPoints = 12) =>
@@ -370,9 +386,10 @@ export const worksheetApi = {
 };
 
 export const autoAuthApi = {
-  list: (search: string, onlyEnabled = false, top = 200) =>
-    api.get<{ rows: AutoAuthScopeRow[]; count: number; featureEnabled: boolean }>(
-      `/api/worksheet-settings/auto-auth/?search=${encodeURIComponent(search)}&onlyEnabled=${onlyEnabled}&top=${top}`,
+  list: (search: string, onlyEnabled = false, page = 1, pageSize = 200) =>
+    api.get<PagedResponse<AutoAuthScopeRow> & { featureEnabled: boolean }>(
+      `/api/worksheet-settings/auto-auth/?search=${encodeURIComponent(search)}`
+      + `&onlyEnabled=${onlyEnabled}&page=${page}&pageSize=${pageSize}`,
     ),
 
   // The password travels in the body of a POST over TLS and is never stored by
@@ -390,9 +407,9 @@ export const autoAuthApi = {
     body,
   ),
 
-  audit: (top = 100) =>
-    api.get<{ rows: AutoAuthAuditRow[]; count: number }>(
-      `/api/worksheet-settings/auto-auth/audit?top=${top}`,
+  audit: (page = 1, pageSize = 100) =>
+    api.get<PagedResponse<AutoAuthAuditRow>>(
+      `/api/worksheet-settings/auto-auth/audit?page=${page}&pageSize=${pageSize}`,
     ),
 };
 

@@ -103,7 +103,8 @@ public static class WorksheetEndpoints
         ScopeRepository scopes,
         WorksheetRepository repo,
         CancellationToken ct,
-        int top = 200)
+        int page = 1,
+        int pageSize = 200)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
         if (!IsValidSid(sid)) return Results.BadRequest(new { error = "A SID of 1-50 characters is required." });
@@ -117,8 +118,16 @@ public static class WorksheetEndpoints
         var sample = await repo.GetSampleAsync(scope.ClientCodes, sid, ct).ConfigureAwait(false);
         if (sample is null) return Results.NotFound();
 
-        var rows = await repo.GetAuditAsync(sid, top, ct).ConfigureAwait(false);
-        return Results.Ok(new { rows, count = rows.Count });
+        var result = await repo.GetAuditAsync(sid, page, pageSize, ct).ConfigureAwait(false);
+        return Results.Ok(new
+        {
+            rows = result.Rows,
+            count = result.Rows.Count,
+            total = result.Total,
+            page = result.Page,
+            pageSize = result.PageSize,
+            pageCount = result.PageCount,
+        });
     }
 
     /// <summary>
@@ -255,17 +264,35 @@ public static class WorksheetEndpoints
         CancellationToken ct,
         string? search = null,
         bool onlyEnabled = false,
-        int top = 200)
+        int page = 1,
+        int pageSize = 200)
     {
-        var rows = await repo.ListAsync(search, onlyEnabled, top, ct).ConfigureAwait(false);
-        return Results.Ok(new { rows, count = rows.Count, featureEnabled = gate.FeatureEnabled });
+        var result = await repo.ListAsync(search, onlyEnabled, page, pageSize, ct).ConfigureAwait(false);
+        return Results.Ok(new
+        {
+            rows = result.Rows,
+            count = result.Rows.Count,
+            total = result.Total,
+            page = result.Page,
+            pageSize = result.PageSize,
+            pageCount = result.PageCount,
+            featureEnabled = gate.FeatureEnabled,
+        });
     }
 
     private static async Task<IResult> AutoAuthAudit(
-        AutoAuthRepository repo, CancellationToken ct, int top = 100)
+        AutoAuthRepository repo, CancellationToken ct, int page = 1, int pageSize = 100)
     {
-        var rows = await repo.GetAuditAsync(top, ct).ConfigureAwait(false);
-        return Results.Ok(new { rows, count = rows.Count });
+        var result = await repo.GetAuditAsync(page, pageSize, ct).ConfigureAwait(false);
+        return Results.Ok(new
+        {
+            rows = result.Rows,
+            count = result.Rows.Count,
+            total = result.Total,
+            page = result.Page,
+            pageSize = result.PageSize,
+            pageCount = result.PageCount,
+        });
     }
 
     /// <summary>
