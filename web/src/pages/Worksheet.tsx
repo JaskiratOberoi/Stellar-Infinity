@@ -18,6 +18,19 @@ const STATUSES: { id: number; label: string }[] = [
   { id: 3, label: 'Rejected' },
 ];
 
+/**
+ * The statuses "Outstanding only" means: registered, partially tested, tested,
+ * partially authorised. Sent to the SERVER as a filter — filtering these out in
+ * the browser after a page had already been fetched meant a page of 50 could
+ * display as 6 rows with a dead Next button, which read as "that is all there
+ * is" when it was not.
+ */
+const PENDING_STATUSES = [2, 4, 5, 6];
+
+/** Every row is reachable at any of these; the choice only trades requests
+ *  against response size. */
+const PAGE_SIZES = [50, 100, 250, 500, 1000];
+
 function daysAgo(n: number) {
   const d = new Date();
   d.setDate(d.getDate() - n);
@@ -42,6 +55,9 @@ export function Worksheet() {
   const [pendingOnly, setPendingOnly] = useState(true);
   const [groupByPid, setGroupByPid] = useState(true);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(100);
+  const [total, setTotal] = useState(0);
+  const [pageCount, setPageCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openSid, setOpenSid] = useState<string | null>(null);
@@ -50,31 +66,45 @@ export function Worksheet() {
     setLoading(true);
     setError(null);
     try {
-      const p = new URLSearchParams({ from, to, page: String(page), pageSize: '50' });
+      const p = new URLSearchParams({ from, to, page: String(page), pageSize: String(pageSize) });
       if (patient.trim()) p.set('patient', patient.trim());
       if (sidQuery.trim()) p.set('sid', sidQuery.trim());
-      if (statusId !== '') p.set('statusId', String(statusId));
-      const r = await api.get<{ rows: WorksheetRow[]; count: number; scope: string }>(`/api/reports/?${p}`);
+
+      // Every filter goes to the server so that paging and the total count
+      // describe the same set the operator is looking at.
+      if (statusId !== '') p.set('statusIds', String(statusId));
+      else if (pendingOnly) p.set('statusIds', PENDING_STATUSES.join(','));
+
+      const r = await api.get<{
+        rows: WorksheetRow[]; count: number; total: number;
+        page: number; pageSize: number; pageCount: number; scope: string;
+      }>(`/api/reports/?${p}`);
+
       setRows(r.rows);
       setScope(r.scope);
+      setTotal(r.total);
+      setPageCount(r.pageCount);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load the worklist.');
     } finally {
       setLoading(false);
     }
-  }, [from, to, patient, sidQuery, statusId, page]);
+  }, [from, to, patient, sidQuery, statusId, pendingOnly, page, pageSize]);
 
   useEffect(() => {
     const id = setTimeout(() => void load(), 300);
     return () => clearTimeout(id);
   }, [load]);
 
-  // Client-side because the list procedure takes a single status, not a set.
-  // Worth revisiting if it ever hides rows on a paged result — filtering after
-  // paging can leave a page looking emptier than it is.
-  const visible = pendingOnly && statusId === ''
-    ? rows.filter((r) => r.statusCode != null && [2, 4, 5, 6].includes(r.statusCode))
-    : rows;
+  // A filter that narrows the result set must reset the page, or page 4 of the
+  // old set silently shows nothing for the new one.
+  useEffect(() => { setPage(1); }, [pendingOnly, pageSize]);
+
+  // Nothing is hidden after the fact: what the server returned is what shows.
+  const visible = rows;
+
+  const firstOnPage = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const lastOnPage = Math.min(page * pageSize, total);
 
   /**
    * Samples grouped by patient.
@@ -115,7 +145,10 @@ export function Worksheet() {
         <div>
           <h1 className="page__title">Worksheet</h1>
           <p className="page__sub">
-            {visible.length} sample{visible.length === 1 ? '' : 's'}
+            {/* The total, not the page. What is on screen is stated separately
+                below, so a page is never mistaken for the whole result set. */}
+            {total.toLocaleString()} sample{total === 1 ? '' : 's'} match
+            {total === 1 ? 'es' : ''} these filters
             {scope && ` · ${scope === 'all' ? 'all centres' : scope}`}
           </p>
         </div>
@@ -258,14 +291,41 @@ export function Worksheet() {
             </table>
           </div>
 
-          <div className="row" style={{ justifyContent: 'center', marginTop: '1rem' }}>
-            <button className="btn btn--ghost btn--sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-              Previous
-            </button>
-            <span className="muted" style={{ fontSize: '.78rem' }}>Page {page}</span>
-            <button className="btn btn--ghost btn--sm" disabled={rows.length < 50} onClick={() => setPage((p) => p + 1)}>
-              Next
-            </button>
+          {/* Every control here is driven by the server's total. Nothing infers
+              "is there more?" from the size of the page it happens to hold —
+              that inference is wrong whenever the total divides evenly by the
+              page size, and it was what made a full list look finished. */}
+          <div className="pager">
+            <span className="pager__range muted">
+              {total === 0
+                ? 'No samples'
+                : <>Showing <b>{firstOnPage.toLocaleString()}–{lastOnPage.toLocaleString()}</b> of{' '}
+                   <b>{total.toLocaleString()}</b></>}
+            </span>
+
+            <div className="row" style={{ gap: '.3rem' }}>
+              <button className="btn btn--ghost btn--sm" disabled={page <= 1}
+                      onClick={() => setPage(1)} title="First page">«</button>
+              <button className="btn btn--ghost btn--sm" disabled={page <= 1}
+                      onClick={() => setPage((p) => p - 1)}>Previous</button>
+
+              <span className="muted" style={{ fontSize: '.78rem', padding: '0 .5rem' }}>
+                Page {page.toLocaleString()} of {Math.max(pageCount, 1).toLocaleString()}
+              </span>
+
+              <button className="btn btn--ghost btn--sm" disabled={page >= pageCount}
+                      onClick={() => setPage((p) => p + 1)}>Next</button>
+              <button className="btn btn--ghost btn--sm" disabled={page >= pageCount}
+                      onClick={() => setPage(pageCount)} title="Last page">»</button>
+            </div>
+
+            <label className="row pager__size muted">
+              Rows
+              <select className="input input--sm" value={pageSize}
+                      onChange={(e) => setPageSize(Number(e.target.value))}>
+                {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </label>
           </div>
         </>
       )}

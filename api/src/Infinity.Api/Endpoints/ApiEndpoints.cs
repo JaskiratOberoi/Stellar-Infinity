@@ -197,33 +197,71 @@ public static class ApiEndpoints
         string? patient = null,
         string? sid = null,
         int? statusId = null,
-        bool includeUnauthorized = true,
+        // CSV, e.g. "2,4,5,6". Supersedes statusId, which only ever expressed
+        // one status and forced the client to filter the rest itself.
+        string? statusIds = null,
         int page = 1,
-        int pageSize = 50)
+        int pageSize = 100)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
 
         var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
-        if (scope.IsDenied) return Results.Ok(new { rows = Array.Empty<object>(), count = 0, scope = "none" });
+        if (scope.IsDenied)
+        {
+            return Results.Ok(new
+            {
+                rows = Array.Empty<object>(),
+                count = 0, total = 0, page = 1, pageSize, pageCount = 0,
+                scope = "none",
+            });
+        }
 
         // Default to the last 7 days: the procedure requires a window, and an
         // unbounded one against a decade of samples is a table scan.
         var toDate = from is null && to is null ? StatsRepository.TodayIst() : to ?? StatsRepository.TodayIst();
         var fromDate = from ?? DateTime.Parse(toDate).AddDays(-7).ToString("yyyy-MM-dd");
 
-        var result = await repo.ListAsync(
-            scope.ClientCodes, fromDate, toDate, patient, sid, statusId,
-            includeUnauthorized, page, pageSize,
-            includeResults: false, ct).ConfigureAwait(false);
+        var statuses = ParseStatusIds(statusIds, statusId);
+
+        var result = await repo.ListPageAsync(
+            scope.ClientCodes, fromDate, toDate, patient, sid, statuses,
+            page, pageSize, ct).ConfigureAwait(false);
 
         return Results.Ok(new
         {
             rows = result.Rows,
-            count = result.Count,
+            // count is this page; total is the whole filtered set. Both are
+            // sent because conflating them is what made the list look truncated.
+            count = result.Rows.Count,
+            total = result.Total,
+            page = result.Page,
+            pageSize = result.PageSize,
+            pageCount = result.PageCount,
             scope = scope.IsUnrestricted ? "all" : $"{scope.ClientCodes.Count} centres",
             from = fromDate,
             to = toDate,
         });
+    }
+
+    /// <summary>
+    /// Status filter from either the CSV form or the legacy single value.
+    /// Unparseable entries are dropped rather than failing the request — a
+    /// malformed filter should narrow nothing, never blank the worklist.
+    /// </summary>
+    private static IReadOnlyList<int>? ParseStatusIds(string? csv, int? single)
+    {
+        if (!string.IsNullOrWhiteSpace(csv))
+        {
+            var parsed = csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                            .Select(s => int.TryParse(s, out var n) ? n : (int?)null)
+                            .Where(n => n is not null)
+                            .Select(n => n!.Value)
+                            .Distinct()
+                            .ToArray();
+            if (parsed.Length > 0) return parsed;
+        }
+
+        return single is int one ? [one] : null;
     }
 
     private static async Task<IResult> GetReport(

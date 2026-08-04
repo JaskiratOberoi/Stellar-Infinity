@@ -461,6 +461,37 @@ tbody tr:hover { background: var(--accent-softer); }
   font-variant-numeric: tabular-nums;
 }
 
+/* ---------- pager ----------
+   Three zones: what you are looking at, how to move, how much per page. The
+   range sits first because "1-100 of 3,412" is the answer to the question the
+   operator actually has — whether the screen is the whole list. */
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: .6rem;
+  margin-top: 1rem;
+  padding-top: .8rem;
+  border-top: 1px solid var(--line);
+}
+
+.pager__range { font-size: .78rem; }
+
+.pager__size {
+  gap: .4rem;
+  font-size: .74rem;
+  align-items: center;
+}
+
+/* .input--sm is width:100% for form fields; inside the pager it must hug. */
+.pager__size .input--sm { width: auto; }
+
+@media (max-width: 700px) {
+  .pager { justify-content: center; }
+}
+
 /* ---------- per-parameter delta trend ---------- */
 
 .trend-grid {

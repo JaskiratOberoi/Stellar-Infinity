@@ -45,6 +45,24 @@ public sealed record WorksheetRow(
 public sealed record WorksheetPage(IReadOnlyList<WorksheetRow> Rows, int Count);
 
 /// <summary>
+/// A page of the worklist together with the size of the whole filtered set.
+/// </summary>
+/// <param name="Total">
+/// Rows matching the filters, NOT rows in this page. Everything the client
+/// needs to show "51-100 of 3,412" and to offer a last-page jump. A client that
+/// has to infer "is there more?" from a full page gets it wrong whenever the
+/// total is an exact multiple of the page size.
+/// </param>
+public sealed record WorksheetListPage(
+    IReadOnlyList<WorksheetRow> Rows,
+    int Total,
+    int Page,
+    int PageSize)
+{
+    public int PageCount => PageSize > 0 ? (Total + PageSize - 1) / PageSize : 0;
+}
+
+/// <summary>
 /// The LIS worksheet — one row per sample, with its results.
 ///
 /// Infinity calls <c>dbo.usp_listec_worksheet_report_by_codes</c> DIRECTLY over
@@ -156,6 +174,108 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
                 }
 
                 return new WorksheetPage(rows, rows.Count);
+            }, token), ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// A page of the worklist, with every filter applied in SQL and the size of
+    /// the whole filtered set returned alongside.
+    ///
+    /// Calls Infinity's own <c>dbo.usp_inf_worksheet_list</c> rather than the
+    /// legacy procedure. See 76_usp_inf_worksheet_list.sql: the legacy one takes
+    /// a single status, returns no total, and orders by a non-unique key, all
+    /// three of which make a paged worklist under-report what exists.
+    /// </summary>
+    /// <param name="statusIds">
+    /// Statuses to include. Empty or null means every status. This is what lets
+    /// the "pending only" view be a real filter instead of the client hiding
+    /// rows it has already been given.
+    /// </param>
+    public async Task<WorksheetListPage> ListPageAsync(
+        IReadOnlyList<string> clientCodes,
+        string fromDate,
+        string toDate,
+        string? patientName,
+        string? sid,
+        IReadOnlyList<int>? statusIds,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var size = Math.Clamp(pageSize, 1, 1000);
+        var pageNo = Math.Max(page, 1);
+
+        return await retry.ExecuteAsync("reports.worklist", token =>
+            db.QueryAsync("reports.worklist", async (conn, inner) =>
+            {
+                await using var cmd = db.CreateWriteCommand(conn, "dbo.usp_inf_worksheet_list");
+                // Not a write — but the worklist scans a date range on a live
+                // server and legitimately outruns the short read timeout.
+
+                var tvp = new DataTable();
+                tvp.Columns.Add("code", typeof(string));
+                foreach (var c in clientCodes.Where(c => !string.IsNullOrWhiteSpace(c))
+                                             .Select(c => c.Trim().ToUpperInvariant())
+                                             .Distinct(StringComparer.Ordinal))
+                {
+                    tvp.Rows.Add(c);
+                }
+
+                var codesParam = cmd.Parameters.AddWithValue("@client_codes", tvp);
+                codesParam.SqlDbType = SqlDbType.Structured;
+                codesParam.TypeName = "dbo.ClientCodeList";
+
+                cmd.Parameters.Add("@from_date", SqlDbType.Date).Value = ParseDate(fromDate);
+                cmd.Parameters.Add("@to_date", SqlDbType.Date).Value = ParseDate(toDate);
+                cmd.Parameters.Add("@patient_name", SqlDbType.NVarChar, 200).Value =
+                    string.IsNullOrWhiteSpace(patientName) ? DBNull.Value : patientName.Trim();
+                cmd.Parameters.Add("@sid", SqlDbType.NVarChar, 50).Value =
+                    string.IsNullOrWhiteSpace(sid) ? DBNull.Value : sid.Trim();
+                cmd.Parameters.Add("@status_ids", SqlDbType.VarChar, 200).Value =
+                    statusIds is { Count: > 0 }
+                        ? string.Join(',', statusIds.Distinct())
+                        : (object)DBNull.Value;
+                cmd.Parameters.Add("@page", SqlDbType.Int).Value = pageNo;
+                cmd.Parameters.Add("@page_size", SqlDbType.Int).Value = size;
+
+                await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SingleResult, inner)
+                    .ConfigureAwait(false);
+
+                var rows = new List<WorksheetRow>();
+                var total = 0;
+
+                while (await reader.ReadAsync(inner).ConfigureAwait(false))
+                {
+                    // COUNT(*) OVER() repeats on every row; reading it once is
+                    // enough, and a page with no rows leaves it at zero, which
+                    // is the right answer for "nothing matched".
+                    if (rows.Count == 0) total = reader.NullableInt("total_count") ?? 0;
+
+                    rows.Add(new WorksheetRow(
+                        Sid: reader.Str("sid") ?? "",
+                        ClientCode: reader.Str("client_code"),
+                        BusinessUnit: reader.Str("business_unit"),
+                        Pid: reader.Int("pid"),
+                        PatientName: reader.Str("patient_name"),
+                        Sex: reader.Str("sex"),
+                        Age: reader.NullableInt("age"),
+                        AgeUnit: reader.Str("age_unit"),
+                        SampleDrawn: NobleTime.ToIst(reader.Date("sample_drawn")),
+                        RegisteredAt: NobleTime.ToIst(reader.Date("regd_at")),
+                        LastModifiedAt: NobleTime.ToIst(reader.Date("last_modified_at")),
+                        StatusCode: reader.NullableInt("status_code"),
+                        Status: reader.Str("status"),
+                        TestNames: reader.Str("test_names_csv"),
+                        OrderNumber: reader.Str("order_number"),
+                        BillNumber: reader.Str("bill_number"),
+                        ClinicalHistory: reader.Str("clinical_history"),
+                        // The list never renders results, and the procedure does
+                        // not fetch them: that per-row FOR JSON subquery was the
+                        // reason large pages were expensive.
+                        Results: []));
+                }
+
+                return new WorksheetListPage(rows, total, pageNo, size);
             }, token), ct).ConfigureAwait(false);
     }
 
