@@ -542,3 +542,84 @@ tbody tr:last-child.pid-group > td {
 }
 
 tbody tr.pid-group:hover > td { background: var(--accent-soft); }
+
+/* ---------- checkboxes ---------- */
+
+/* Styled with appearance:none on the REAL input rather than a hidden input
+   plus a decorative span. Keyboard behaviour, the indeterminate state, form
+   semantics and screen-reader announcement all stay native and free. */
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  border: 1.5px solid var(--line-strong, var(--ink-dim));
+  border-radius: 5px;
+  background: var(--field-bg);
+  cursor: pointer;
+  position: relative;
+  transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+
+input[type="checkbox"]:hover:not(:disabled) {
+  border-color: var(--teal);
+}
+
+input[type="checkbox"]:checked,
+input[type="checkbox"]:indeterminate {
+  background: linear-gradient(135deg, var(--accent-grad-from), var(--accent-grad-mid));
+  border-color: transparent;
+}
+
+/* The tick: two borders of a rotated box. Crisp at any zoom or DPI, unlike a
+   raster glyph, and it inherits the accent foreground so it stays legible in
+   both themes. */
+input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 1.5px;
+  width: 4px;
+  height: 9px;
+  border: solid var(--on-accent);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) scale(1);
+  transform-origin: center;
+  animation: check-pop .16s ease-out;
+}
+
+input[type="checkbox"]:indeterminate::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 7px;
+  width: 10px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--on-accent);
+}
+
+@keyframes check-pop {
+  from { transform: rotate(45deg) scale(.4); opacity: 0; }
+  to   { transform: rotate(45deg) scale(1); opacity: 1; }
+}
+
+input[type="checkbox"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+input[type="checkbox"]:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+  background: var(--track);
+}
+
+/* An authorisation box is a clinical sign-off, so it gets a larger hit target
+   than an ordinary filter checkbox. */
+.worksheet-grid input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+}

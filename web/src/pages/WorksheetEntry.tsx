@@ -181,8 +181,33 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
     [rows, drafts],
   );
 
-  const setDraft = (resultId: number, patch: Draft) =>
-    setDrafts((d) => ({ ...d, [resultId]: { ...d[resultId], ...patch } }));
+  /**
+   * Apply an edit, and DROP the draft entirely when it no longer differs from
+   * what is stored.
+   *
+   * Everything downstream keys off presence in this map — the changed-row tint,
+   * the "N rows changed" counter, whether Save is enabled, and which edits are
+   * sent. An earlier version always wrote an entry, so ticking the auth box and
+   * immediately unticking it left `{auth: false}`: identical to the stored row,
+   * but still counted as a change. The row stayed highlighted, Save stayed
+   * enabled, and the save would have posted a no-op edit that the server would
+   * have audited as a change that never happened.
+   */
+  const setDraft = (r: WorksheetResultRow, patch: Draft) =>
+    setDrafts((d) => {
+      const next = { ...d[r.resultId], ...patch };
+
+      const valueSame = next.value === undefined || next.value === (r.value ?? '');
+      const commentsSame = next.comments === undefined || next.comments === (r.comments ?? '');
+      const authSame = next.auth === undefined || next.auth === r.authorized;
+
+      if (valueSame && commentsSame && authSame) {
+        const { [r.resultId]: _dropped, ...rest } = d;
+        return rest;
+      }
+
+      return { ...d, [r.resultId]: next };
+    });
 
   const save = async () => {
     if (!header || touchedCount === 0) return;
@@ -428,7 +453,7 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                               disabled={readOnly}
                               value={value}
                               onKeyDown={onValueKeyDown}
-                              onChange={(e) => setDraft(r.resultId, { value: e.target.value })}
+                              onChange={(e) => setDraft(r, { value: e.target.value })}
                             >
                               <option value="">—</option>
                               {r.codedOptions.map((o) => <option key={o} value={o}>{o}</option>)}
@@ -441,7 +466,7 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                                 disabled={readOnly}
                                 value={value}
                                 onKeyDown={onValueKeyDown}
-                                onChange={(e) => setDraft(r.resultId, { value: e.target.value })}
+                                onChange={(e) => setDraft(r, { value: e.target.value })}
                                 aria-label={`Result for ${r.testName ?? r.testCode ?? 'test'}`}
                               />
                               {pos === 'high' && <span className="flag flag--high" title="Above reference range">H</span>}
@@ -469,7 +494,7 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                             disabled={readOnly}
                             value={commentsOf(r)}
                             placeholder="—"
-                            onChange={(e) => setDraft(r.resultId, { comments: e.target.value })}
+                            onChange={(e) => setDraft(r, { comments: e.target.value })}
                           />
                         </td>
 
@@ -488,7 +513,7 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                                 ? 'Authorise this result'
                                 : 'Your role cannot authorise results'
                             }
-                            onChange={(e) => setDraft(r.resultId, { auth: e.target.checked })}
+                            onChange={(e) => setDraft(r, { auth: e.target.checked })}
                           />
                           {willSign && !authOf(r) && (
                             <div className="muted" style={{ fontSize: '.6rem' }} title="Will be authorised automatically">
