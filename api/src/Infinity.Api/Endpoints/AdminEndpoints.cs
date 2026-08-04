@@ -93,7 +93,10 @@ public static class AdminEndpoints
             return MapFailure(new SpResult(false, result.ErrorCode, result.Message));
         }
 
-        scopes.Invalidate(userId);
+        // Cluster-wide now: with the in-process cache this only cleared the
+        // instance that served the admin request, so every other instance kept
+        // serving the old client-code scope until its own TTL expired.
+        await scopes.InvalidateAsync(userId, ct).ConfigureAwait(false);
 
         if (result.Changes.Count > 0)
         {

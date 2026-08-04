@@ -22,6 +22,10 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.SqlClient" Version="6.0.1" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
+    <!-- Required by Caching/InfinityCache.cs. The cache degrades to the
+         in-process path when Redis is not configured, so this reference is
+         needed to COMPILE even in a deployment that never connects to Redis. -->
+    <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
   </ItemGroup>
 
 </Project>

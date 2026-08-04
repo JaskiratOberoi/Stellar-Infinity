@@ -1,7 +1,6 @@
 using System.Data;
 using Infinity.Api.Data;
 using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Caching.Memory;
 
 namespace Infinity.Api.Auth;
 
@@ -34,7 +33,7 @@ public sealed record ReportScope(IReadOnlyList<string> ClientCodes, bool IsUnres
 public sealed class ScopeRepository(
     NobleConnectionFactory db,
     SqlRetry retry,
-    IMemoryCache cache)
+    Caching.InfinityCache cache)
 {
     /// <summary>Usertypes the legacy LIS does not centre-scope at all.</summary>
     private static readonly int[] UnrestrictedUsertypes = [1 /* Super Admin */, 5 /* Admin */];
@@ -51,6 +50,13 @@ public sealed class ScopeRepository(
     ];
 
     private static readonly TimeSpan Ttl = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// ASCII unit separator, used between cached CLIENT CODES. Not a comma:
+    /// MCCUnitCode is free text from the LIS, so a code containing a comma
+    /// would silently split into two and widen the user's scope.
+    /// </summary>
+    private const char CodeSeparator = '\u001F';
 
     /// <summary>
     /// Operational scope: what the user may ORDER and BILL under.
@@ -126,9 +132,15 @@ public sealed class ScopeRepository(
         if (ids.Count == 0) return ReportScope.Denied;
         if (ids.Count > Data.ScopeFilter.UnrestrictedThreshold) return ReportScope.Unrestricted;
 
-        var key = $"inf:reportcodes:{userId}";
-        if (cache.TryGetValue(key, out IReadOnlyList<string>? hit) && hit is not null)
-            return new ReportScope(hit, false, false);
+        var key = $"reportcodes:{userId}";
+        var cached = await cache.GetAsync(key, ct).ConfigureAwait(false);
+        if (cached is not null)
+        {
+            // An empty cached string means "no codes", which must stay Denied —
+            // an empty list reaching the worksheet procedure would mean ALL.
+            var hit = cached.Length == 0 ? [] : cached.Split('\u001F');
+            return hit.Length == 0 ? ReportScope.Denied : new ReportScope(hit, false, false);
+        }
 
         var codes = await retry.ExecuteAsync("scope.reportCodes", token =>
             db.QueryAsync("scope.reportCodes", async (conn, inner) =>
@@ -160,7 +172,9 @@ public sealed class ScopeRepository(
                 return (IReadOnlyList<string>)list;
             }, token), ct).ConfigureAwait(false);
 
-        cache.Set(key, codes, Ttl);
+        // Unit separator, not comma: a client code is free text from the LIS
+        // and could itself contain a comma, which would split one code into two.
+        await cache.SetAsync(key, string.Join('\u001F', codes), Ttl, ct).ConfigureAwait(false);
 
         // A user mapped only to centres that have no client code would resolve
         // to an empty list here — which the procedure would read as "all".
@@ -168,22 +182,42 @@ public sealed class ScopeRepository(
         return codes.Count == 0 ? ReportScope.Denied : new ReportScope(codes, false, false);
     }
 
-    public void Invalidate(int userId)
+    /// <summary>
+    /// Drop a user's cached scope everywhere.
+    ///
+    /// Now cluster-wide. With the in-process cache, granting or revoking client
+    /// codes only took effect on whichever instance handled the admin request —
+    /// every other instance kept serving the old scope until its own TTL
+    /// expired. For a control that decides which patients a user can see, that
+    /// is the wrong kind of eventual.
+    /// </summary>
+    public async Task InvalidateAsync(int userId, CancellationToken ct = default)
     {
-        cache.Remove($"inf:scope:{userId}");
-        cache.Remove($"inf:reportscope:{userId}");
-        cache.Remove($"inf:reportcodes:{userId}");
+        await cache.RemoveAsync($"scope:{userId}", ct).ConfigureAwait(false);
+        await cache.RemoveAsync($"reportscope:{userId}", ct).ConfigureAwait(false);
+        await cache.RemoveAsync($"reportcodes:{userId}", ct).ConfigureAwait(false);
     }
 
     private async Task<IReadOnlyList<int>> Cached(
         string key, Func<CancellationToken, Task<IReadOnlyList<int>>> load, CancellationToken ct)
     {
-        if (cache.TryGetValue(key, out IReadOnlyList<int>? hit) && hit is not null) return hit;
+        var cached = await cache.GetAsync(key, ct).ConfigureAwait(false);
+        if (cached is not null) return Decode(cached);
 
         var scope = await load(ct).ConfigureAwait(false);
-        cache.Set(key, scope, Ttl);
+        await cache.SetAsync(key, Encode(scope), Ttl, ct).ConfigureAwait(false);
         return scope;
     }
+
+    // Comma-separated ints rather than JSON: an admin's scope can be ~4,000
+    // centres and this is read on most requests, so the cheaper encoding is
+    // worth the plainness.
+    private static string Encode(IReadOnlyList<int> ids) => string.Join(',', ids);
+
+    private static IReadOnlyList<int> Decode(string s) =>
+        s.Length == 0
+            ? []
+            : s.Split(',').Select(int.Parse).ToArray();
 
     private Func<CancellationToken, Task<IReadOnlyList<int>>> Query(int userId, string sql) =>
         token => retry.ExecuteAsync("scope.resolve", inner =>

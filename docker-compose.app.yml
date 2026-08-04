@@ -10,12 +10,44 @@
 # should only ever be reachable through the SPA's nginx.
 
 services:
+  # Shared cache, rate-limit counters and session-version store.
+  #
+  # Not published: only the API needs it, and it holds session state. Persistence
+  # is deliberately off — every key here is a cache or a short-lived counter that
+  # rebuilds from Noble, so an empty Redis after a restart costs one slow request,
+  # not correctness. maxmemory-policy evicts the oldest keys rather than starting
+  # to refuse writes, which would degrade rate limiting to per-instance.
+  redis:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --save ""
+      --appendonly no
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    expose:
+      - "6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   api:
     build: ./api
     image: infinity-api
     env_file: ./api/.env
     environment:
       ASPNETCORE_URLS: http://0.0.0.0:8080
+      Cache__ConnectionString: "redis:6379"
+      # Flip to true when running more than one API container. Startup then
+      # fails if Redis is missing, instead of silently reverting to
+      # per-instance rate limits and stale token revocation.
+      Cache__RequireDistributed: "false"
+    depends_on:
+      redis:
+        condition: service_healthy
     expose:
       - "8080"
     restart: unless-stopped

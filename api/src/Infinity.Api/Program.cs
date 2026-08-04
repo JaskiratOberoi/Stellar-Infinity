@@ -76,6 +76,19 @@ builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>
     o.KnownNetworks.Clear();
     o.KnownProxies.Clear();
 });
+// ---- shared cache --------------------------------------------------------
+// Redis when configured, in-process when not. RequireDistributed turns the
+// multi-instance mistake into a startup failure rather than a silent one.
+builder.Services
+    .AddOptions<Infinity.Api.Caching.CacheOptions>()
+    .Bind(builder.Configuration.GetSection(Infinity.Api.Caching.CacheOptions.SectionName))
+    .Validate(o => o.Validate().Count == 0,
+        "Cache settings are invalid — see Cache__* environment variables.")
+    .ValidateOnStart();
+
+builder.Services.AddSingleton<Infinity.Api.Caching.InfinityCache>();
+builder.Services.AddSingleton<Infinity.Api.Caching.DistributedRateLimiter>();
+
 builder.Services.AddSingleton<AuthRepository>();
 builder.Services.AddSingleton<AdminRepository>();
 builder.Services.AddSingleton<JwtIssuer>();
@@ -111,6 +124,11 @@ var app = builder.Build();
 {
     var smartMeta = app.Services.GetRequiredService<Infinity.Api.Reports.SmartMeta>();
     app.Logger.LogInformation("smartmeta.loaded categories={Categories}", smartMeta.Categories.Count);
+
+    // Connect the cache at startup so its mode is stated once in the log,
+    // rather than being inferred later from whether limits behave oddly.
+    var cache = app.Services.GetRequiredService<Infinity.Api.Caching.InfinityCache>();
+    app.Logger.LogInformation("cache.mode distributed={Distributed}", cache.IsDistributed);
 }
 
 // Must run before anything that reads the client IP.

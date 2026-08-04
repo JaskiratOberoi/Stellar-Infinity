@@ -42,7 +42,7 @@ CREATE OR ALTER PROCEDURE dbo.usp_inf_instrument_ingest
     @sequence_no    NVARCHAR(50)   = NULL,
     @raw_payload    NVARCHAR(MAX)  = NULL,
     -- Import path. Shares this procedure so instrument and file results go
-    -- through ONE matcher and land in ONE inbox — see 74_alter_inbox_for_import.
+    -- through ONE matcher and land in ONE inbox — see 71a_alter_inbox_for_import.
     @source         VARCHAR(16)    = 'instrument',
     @imported_by    INT            = NULL,
     @batch_id       UNIQUEIDENTIFIER = NULL,

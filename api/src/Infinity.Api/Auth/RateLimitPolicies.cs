@@ -51,9 +51,19 @@ public static class RateLimitPolicies
                 var username = http.Request.Headers["X-Login-User"].ToString();
                 var key = string.IsNullOrWhiteSpace(username) ? ip : $"{username.ToLowerInvariant()}|{ip}";
 
+                /* A COARSE per-instance backstop, deliberately looser than the
+                   real limit of 8 enforced by DistributedRateLimiter in the
+                   login handler.
+
+                   They were both 8, which meant this one always fired first and
+                   shadowed the distributed check — so a blocked attempt never
+                   reached the code that writes the login_blocked audit row, and
+                   brute-force attempts went unrecorded. This layer now only
+                   engages when the distributed limiter is unavailable (Redis
+                   down) or when a single client is far outside normal use. */
                 return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
                 {
-                    PermitLimit = 8,
+                    PermitLimit = 40,
                     Window = TimeSpan.FromMinutes(15),
                     QueueLimit = 0,
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst,

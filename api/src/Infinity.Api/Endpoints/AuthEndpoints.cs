@@ -32,6 +32,7 @@ public static class AuthEndpoints
         AuthRepository authRepo,
         JwtIssuer jwt,
         Audit.AuditRepository audit,
+        Caching.DistributedRateLimiter limiter,
         ILoggerFactory loggerFactory,
         HttpContext http,
         CancellationToken ct)
@@ -44,6 +45,33 @@ public static class AuthEndpoints
         if (username.Length is 0 or > 50 || string.IsNullOrEmpty(request.Password) || request.Password.Length > 50)
         {
             return Unauthorized();
+        }
+
+        /* Cluster-wide brute-force limit, on top of the per-instance ASP.NET
+           one on this route. The in-process limiter alone multiplies by the
+           instance count, so eight attempts becomes eight PER container.
+           Partitioned by username+IP for the same reason as the in-process
+           policy: whole collection centres share one NAT address, so an
+           IP-only bucket lets one fat-fingered password lock out a branch. */
+        var ip = http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var verdict = await limiter.CheckAsync(
+            $"login:{username.ToLowerInvariant()}|{ip}", limit: 8, TimeSpan.FromMinutes(15), ct)
+            .ConfigureAwait(false);
+
+        if (!verdict.Allowed)
+        {
+            await audit.WriteAuthEventAsync(new Audit.AuthAuditEntry
+            {
+                Event = Audit.AuthEvent.LoginBlocked,
+                ActorUsername = username,
+                Succeeded = false,
+                Detail = $"Rate limited after {verdict.Count} attempts in 15 minutes.",
+            }, actor, ct).ConfigureAwait(false);
+
+            return Results.Problem(
+                title: "Too many attempts",
+                detail: "Too many sign-in attempts. Try again in a few minutes.",
+                statusCode: StatusCodes.Status429TooManyRequests);
         }
 
         var row = await authRepo.AuthenticateAsync(username, request.Password, ct).ConfigureAwait(false);

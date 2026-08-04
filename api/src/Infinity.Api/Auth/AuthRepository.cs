@@ -1,7 +1,6 @@
 using System.Data;
 using Infinity.Api.Data;
 using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Caching.Memory;
 
 namespace Infinity.Api.Auth;
 
@@ -11,7 +10,7 @@ namespace Infinity.Api.Auth;
 public sealed class AuthRepository(
     NobleConnectionFactory db,
     SqlRetry retry,
-    IMemoryCache cache,
+    Caching.InfinityCache cache,
     ILogger<AuthRepository> logger)
 {
     /// <summary>
@@ -68,11 +67,19 @@ public sealed class AuthRepository(
     /// token already claims, so a transient blip does not sign out every user at
     /// once. The trade is that revocation is best-effort during an outage, which
     /// is the right way round — an outage should not become a lockout.
+    ///
+    /// Shared through <see cref="Caching.InfinityCache"/> so a revocation bumped
+    /// on one API instance is seen by all of them. With the in-process cache
+    /// this only ever reached whichever instance served the next request, which
+    /// is the specific defect that made revocation unreliable at more than one
+    /// instance.
     /// </summary>
     public async Task<int> GetSessionVersionAsync(int userId, int fallback, CancellationToken ct = default)
     {
-        var key = $"inf:sv:{userId}";
-        if (cache.TryGetValue(key, out int cached)) return cached;
+        var key = $"sv:{userId}";
+
+        var cached = await cache.GetAsync(key, ct).ConfigureAwait(false);
+        if (cached is not null && int.TryParse(cached, out var hit)) return hit;
 
         try
         {
@@ -88,7 +95,7 @@ public sealed class AuthRepository(
                     return result is null or DBNull ? 0 : Convert.ToInt32(result);
                 }, token), ct).ConfigureAwait(false);
 
-            cache.Set(key, version, SessionVersionTtl);
+            await cache.SetAsync(key, version.ToString(), SessionVersionTtl, ct).ConfigureAwait(false);
             return version;
         }
         catch (Exception ex)
@@ -97,6 +104,10 @@ public sealed class AuthRepository(
             return fallback;
         }
     }
+
+    /// <summary>Drop a user's cached session version, so a bump is seen at once.</summary>
+    public Task InvalidateSessionVersionAsync(int userId, CancellationToken ct = default) =>
+        cache.RemoveAsync($"sv:{userId}", ct);
 }
 
 internal static class AuthReaderExtensions

@@ -1,5 +1,5 @@
 /*
- * 74_alter_inbox_for_import.sql
+ * 71a_alter_inbox_for_import.sql
  *
  * Lets the instrument inbox also hold rows from a file import.
  *

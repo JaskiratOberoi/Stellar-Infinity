@@ -2,7 +2,6 @@ using System.Data;
 using Infinity.Api.Data;
 using Infinity.Api.Worksheet;
 using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Caching.Memory;
 
 namespace Infinity.Api.Instruments;
 
@@ -23,7 +22,7 @@ public sealed record AuthenticatedInstrument(int Id, string Code, string Name);
 /// </summary>
 public sealed partial class InstrumentAuthenticator(
     NobleConnectionFactory db,
-    IMemoryCache cache,
+    Caching.InfinityCache cache,
     ILogger<InstrumentAuthenticator> logger)
 {
     /// <summary>
@@ -61,8 +60,10 @@ public sealed partial class InstrumentAuthenticator(
 
     private async Task<Registered?> LookupAsync(string code, CancellationToken ct)
     {
-        var cacheKey = $"inf:instrument:{code.ToUpperInvariant()}";
-        if (cache.TryGetValue(cacheKey, out Registered? hit)) return hit;
+        var cacheKey = $"instrument:{code.ToUpperInvariant()}";
+
+        var cached = await cache.GetAsync(cacheKey, ct).ConfigureAwait(false);
+        if (cached is not null) return Decode(cached);
 
         var reg = await db.QueryAsync("instrument.lookup", async (conn, inner) =>
         {
@@ -85,8 +86,27 @@ public sealed partial class InstrumentAuthenticator(
 
         // Negative results are cached too, so a misconfigured analyser hammering
         // the endpoint cannot turn into a query per message.
-        cache.Set(cacheKey, reg, LookupTtl);
+        await cache.SetAsync(cacheKey, Encode(reg), LookupTtl, ct).ConfigureAwait(false);
         return reg;
+    }
+
+    /* The stored HASH travels through the cache, never the key — a Redis dump
+       therefore yields nothing an attacker can present as a credential, which
+       is the same property the database has.
+       ASCII unit separator as the field delimiter: an instrument name is free
+       text and could contain any printable character, including a comma or
+       pipe, which would split one field into two. */
+    private const char Sep = '\u001F';
+
+    private static string Encode(Registered? r) =>
+        r is null ? "" : string.Join(Sep, r.Id, r.Code, r.Name, r.Hash ?? "", r.IsActive ? "1" : "0");
+
+    private static Registered? Decode(string s)
+    {
+        if (s.Length == 0) return null;
+        var p = s.Split(Sep);
+        return p.Length != 5 ? null
+            : new Registered(int.Parse(p[0]), p[1], p[2], p[3].Length == 0 ? null : p[3], p[4] == "1");
     }
 
     [LoggerMessage(EventId = 1200, Level = LogLevel.Warning,
