@@ -322,111 +322,87 @@ button, input, select { font: inherit; color: inherit; }
   text-align: center; margin-top: .2rem;
 }
 
-/* ---- sign-in entrance: the card MORPHS into the symbol, then zooms ----
+/* ---- sign-in entrance: implode to a spark, draw the symbol, flare open ----
 
-   One continuous object, not a crossfade. On success:
+   A completely different idea from the earlier card-morph. Three beats:
 
-     1. The form's contents breathe out (0–.28s).
-     2. The CARD ITSELF — same element, same glass, same hairline — compresses
-        into a 2:1 capsule, exactly the logo's bounding box, while the aurora
-        sky calms behind it (.1–.75s).
-     3. The symbol condenses INSIDE the capsule as the chrome dissolves around
-        it (.4–1.0s), leaving only the mark on a still sky.
-     4. Commit swaps to the shell, whose veil opens on that IDENTICAL frame and
-        dives through the left loop.
+     1. IMPLODE  (login, 0–520ms)
+        The form breathes out and the whole card collapses inward to a single
+        glowing particle at the exact centre of the screen.
 
-   The geometry that makes the swap invisible: the card is grid-centred in the
-   viewport and shrinks symmetrically, so its centre never moves; the morph
-   mark is absolutely centred in the card; the veil centres the same mark at
-   the same width. Centre = centre = centre, so three components hand off one
-   apparent object. --entrance-mark-w is the single size all of them share. */
+     2. DRAW     (shell veil, 0–900ms)
+        That particle travels the lemniscate and WRITES the Infinity symbol
+        behind it — one continuous stroke, head and line locked to one clock.
 
-:root { --entrance-mark-w: min(340px, 70vw); }
+     3. FLARE    (shell veil, 900–1500ms)
+        The closed loop pulses, and the light it throws off expands outward to
+        become the application.
 
-/* The sky stills as the card condenses — the calm is what makes the veil's
-   orb-less backdrop match seamlessly at the swap. */
-.login--leaving .login__sky { animation: sky-calm .6s ease-out both; }
-@keyframes sky-calm { to { opacity: 0; } }
+   Why this survives the component boundary cleanly: the handoff object is a
+   DOT. The card implodes to a point and the veil opens on a point — matching
+   a 12px circle at screen centre across an unmount is trivially exact, where
+   matching a whole symbol's size, position and stroke geometry was not. The
+   earlier version's seam was structural; this design doesn't have one. */
 
-/* 1. Contents breathe out. Everything except the morph mark. */
-.login--leaving .login__card > :not(.login__morphmark) {
-  animation: morph-hide .28s ease-in both;
-}
-@keyframes morph-hide {
-  to { opacity: 0; transform: translateY(-4px) scale(.985); }
+:root {
+  --spark: 13px;              /* the particle's diameter at rest */
+  --draw-w: min(360px, 74vw); /* the drawn symbol's width */
 }
 
-/* 2. The card compresses into the symbol's capsule.
+/* Beat 1 -------------------------------------------------------------- */
 
-   Height rides max-height (a box's real height cannot be animated from auto).
-   --card-h is MEASURED — Login.tsx writes the card's actual pixel height onto
-   the element the moment the morph begins. The first version hard-coded 720px
-   here, and since the real card is ~455px tall, the opening 35%+ of the
-   timeline shrank invisible slack — compounded by a slow-start easing, the
-   card sat frozen for nearly half the morph and then slammed shut. That
-   pause-then-jerk was the disjoint. With the true height as the 0% frame,
-   every millisecond of the timeline moves real pixels.
-   Chrome (glass, border, shadow) dissolves only in the LAST third, after the
-   shape already reads as the symbol's container. */
+/* Contents and the corner toggle breathe out together. */
+.login--leaving .login__card > *,
+.login--leaving .login__corner {
+  animation: si-hide .2s ease-in both;
+}
+@keyframes si-hide { to { opacity: 0; transform: translateY(-4px); } }
+
+/* The sky calms so the veil's still backdrop matches at the handoff. */
+.login--leaving .login__sky { animation: si-calm .45s ease-out both; }
+@keyframes si-calm { to { opacity: 0; } }
+
+/* The card collapses to a point. Pure transform — no layout, no max-height
+   trickery, and therefore no dependence on the card's measured height, which
+   is what made the previous attempt stall. The glass and hairline go with it. */
 .login--leaving .login__card {
-  overflow: hidden;
-  animation: card-to-capsule .95s cubic-bezier(.6, 0, .25, 1) both;
-  animation-delay: .08s;
-}
-@keyframes card-to-capsule {
-  0% {
-    width: min(400px, 92vw);
-    max-height: var(--card-h, 560px);
-    border-radius: 20px;
-  }
-  62% {
-    background: var(--surface-glass);
-    border-color: var(--line);
-    box-shadow: var(--shadow-card);
-  }
-  100% {
-    width: calc(var(--entrance-mark-w) + 44px);
-    max-height: calc(var(--entrance-mark-w) / 2 + 44px);
-    border-radius: 999px;
-    background: transparent;
-    border-color: transparent;
-    box-shadow: none;
-  }
-}
-
-/* The theme toggle used to sit untouched in the corner through the whole
-   morph and then blink out when the veil covered it — a small pop at exactly
-   the moment everything else was flowing. It breathes out with the form. */
-.login--leaving .login__corner { animation: morph-hide .28s ease-in both; }
-
-/* The gradient hairline dissolves with the chrome. */
-.login--leaving .login__card::before { animation: hairline-out .95s ease both .08s; }
-@keyframes hairline-out {
-  0%, 55% { opacity: .55; }
-  100%    { opacity: 0; }
-}
-
-/* 3. The symbol condenses inside the capsule. Present in the DOM from the
-   start (opacity 0) so its appearance is a continuation, not a mount. It
-   holds back until the card is midway into the squeeze, then grows into
-   place as the walls come in around it — the card visibly BECOMES the mark. */
-.login__morphmark {
-  position: absolute; inset: 0;
-  display: grid; place-items: center;
-  opacity: 0;
+  transform-origin: 50% 50%;
+  animation: si-implode .52s cubic-bezier(.55, 0, .35, 1) both;
   pointer-events: none;
 }
-.login__morphmark .mark svg { height: auto; width: var(--entrance-mark-w); }
-.login--leaving .login__morphmark {
-  animation: mark-condense .95s cubic-bezier(.22, .8, .3, 1) both .08s;
+@keyframes si-implode {
+  0%   { transform: scale(1);    opacity: 1; }
+  70%  { opacity: 1; }
+  100% { transform: scale(.04);  opacity: 0; }
 }
-@keyframes mark-condense {
-  0%, 30% { opacity: 0; transform: scale(.52); }
-  55%     { opacity: 1; }
-  100%    { opacity: 1; transform: scale(1); }
+.login--leaving .login__card::before { animation: si-hide .3s ease-in both; }
+
+/* The particle the card becomes. Fixed to the viewport centre — independent
+   of the collapsing card, so it is rock steady while the card rushes into it.
+   It brightens as the card disappears into the same point. */
+.login__spark, .sdraw__seed {
+  position: fixed;
+  top: 50%; left: 50%;
+  width: var(--spark); height: var(--spark);
+  margin: calc(var(--spark) / -2) 0 0 calc(var(--spark) / -2);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow:
+    0 0 10px 2px var(--cyan),
+    0 0 26px 6px var(--teal),
+    0 0 60px 16px rgba(13, 148, 136, .5);
+  pointer-events: none;
+  z-index: 3;
+}
+.login__spark { opacity: 0; }
+.login--leaving .login__spark { animation: si-spark .52s ease-out both; }
+@keyframes si-spark {
+  0%   { opacity: 0; transform: scale(.2); }
+  65%  { opacity: 1; transform: scale(1.25); }
+  100% { opacity: 1; transform: scale(1); }
 }
 
-/* ---- stage 2: the dive, in the shell ---- */
+/* Beat 2 + 3 ---------------------------------------------------------- */
 
 .enter-veil {
   position: fixed; inset: 0; z-index: 80;
@@ -436,44 +412,91 @@ button, input, select { font: inherit; color: inherit; }
     repeating-linear-gradient(90deg, var(--grid) 0 1px, transparent 1px 32px),
     linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
   pointer-events: none;
+  /* The veil's OWN animation is the fade — App dismisses on its animationend,
+     so the listener must be on this element. */
+  animation: si-veil 1.5s ease-in both;
 }
-.enter-veil__mark .mark svg { height: auto; width: var(--entrance-mark-w); }
-
-/* The veil's own animation is the FADE — its animationend is what dismisses
-   the overlay, so it must be on the element App listens to. The zoom rides on
-   the inner wrapper. */
-.enter-veil { animation: veil-fade 1.1s ease-in both; }
-@keyframes veil-fade {
-  0%, 50% { opacity: 1; }
+@keyframes si-veil {
+  0%, 72% { opacity: 1; }
   100%    { opacity: 0; }
 }
 
-/* transform-origin 31% 50% is the centre of the figure-8's LEFT loop in the
-   mark's 480x240 viewBox — scaling from there flies the camera through that
-   loop's opening rather than into the crossover point. Scale 17 carries the
-   loop's stroke past every viewport edge before the fade completes.
+.sdraw { position: relative; display: grid; place-items: center; }
+.sdraw__svg { width: var(--draw-w); height: auto; overflow: visible; }
 
-   The 0–10%% HOLD is the joint between the two stages: the morph ends with
-   the symbol decelerating into rest, and without a beat of genuine stillness
-   the zoom's acceleration begins on the very next frame — rest and launch
-   collide, which reads as a stutter. A tenth of a second of dwell lets the
-   symbol land, then dive. */
-.enter-veil__mark {
-  transform-origin: 31% 50%;
-  animation: loop-zoom 1.1s cubic-bezier(.55, 0, .8, .4) both;
-}
-@keyframes loop-zoom {
-  0%, 10% { transform: scale(1); }
-  100%    { transform: scale(17); }
+/* The seed: the incoming particle, rendered identically to .login__spark at
+   the same fixed centre so the swap is invisible. It hands over to the head
+   of the stroke and gets out of the way. */
+.sdraw__seed { animation: si-seed .34s ease-in both; }
+@keyframes si-seed {
+  0%, 55% { opacity: 1; transform: scale(1); }
+  100%    { opacity: 0; transform: scale(.6); }
 }
 
-/* The shell says hello underneath: a soft rise timed to become visible as the
-   veil thins. Harmless on any other mount — it only runs while `entering`. */
-.shell--hello { animation: shell-hello .7s ease-out .35s both; }
-@keyframes shell-hello {
-  from { opacity: .35; transform: translateY(6px); }
-  to   { opacity: 1; transform: none; }
+/* The line being written. dasharray 100/100 with offset 100 -> 0 reveals the
+   stroke from start to end; drawn length is (100 - offset). */
+.sdraw__trail {
+  stroke-width: 13;
+  stroke-linecap: round;
+  stroke-dasharray: 100 100;
+  animation: si-draw .78s cubic-bezier(.45, .05, .35, 1) .18s both;
 }
+@keyframes si-draw {
+  from { stroke-dashoffset: 100; }
+  to   { stroke-dashoffset: 0; }
+}
+
+/* The head. Its .1-length dash sits at position (100 - trailOffset) for every
+   frame, which is exactly the trail's leading edge — one clock, no drift. */
+.sdraw__head {
+  stroke-width: 20;
+  stroke-linecap: round;
+  stroke-dasharray: .1 99.9;
+  animation:
+    si-head .78s cubic-bezier(.45, .05, .35, 1) .18s both,
+    si-head-out .16s ease-out .96s both;
+}
+@keyframes si-head {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: -100; }
+}
+@keyframes si-head-out { to { opacity: 0; } }
+
+/* The completed symbol pulses once as the loop closes. */
+.sdraw__svg { animation: si-pulse .5s ease-out .92s both; }
+@keyframes si-pulse {
+  0%   { transform: scale(1);    filter: brightness(1); }
+  28%  { transform: scale(1.06); filter: brightness(1.7); }
+  100% { transform: scale(1);    filter: brightness(1); }
+}
+
+/* The flare: light thrown off at closure, expanding to fill the screen and
+   hand over to the app underneath. */
+.sdraw__flare {
+  position: fixed;
+  top: 50%; left: 50%;
+  width: 40vmax; height: 40vmax;
+  margin: -20vmax 0 0 -20vmax;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,.85) 0%, var(--orb-a-c) 35%, transparent 70%);
+  opacity: 0;
+  pointer-events: none;
+  animation: si-flare .75s cubic-bezier(.3, 0, .6, 1) .95s both;
+}
+@keyframes si-flare {
+  0%   { opacity: 0;   transform: scale(.05); }
+  25%  { opacity: .95; }
+  100% { opacity: 0;   transform: scale(4.2); }
+}
+
+/* The shell rises underneath as the flare washes over it. */
+.shell--hello { animation: si-shell .8s ease-out 1s both; }
+@keyframes si-shell {
+  from { opacity: .4; transform: scale(.985); }
+  to   { opacity: 1;  transform: none; }
+}
+
+
 
 /* Browser autofill paints fields an unthemeable yellow (visible in both modes
    as a mustard slab). The inset box-shadow trick repaints it with the theme's

@@ -261,22 +261,31 @@ public sealed class OrdersRepository(NobleConnectionFactory db, SqlRetry retry)
                         Lines: [], Samples: [], Receipts: []);
                 }
 
-                // ---- children, fanned out in parallel ----------------------
-                // These are independent of each other; running them in sequence
-                // costs up to three extra India-to-server round trips per view.
-                var linesTask = LoadLinesAsync(conn, billId, inner);
-                var receiptsTask = LoadReceiptsAsync(conn, billId, inner);
-                var samplesTask = patientId is int pid
-                    ? LoadSamplesAsync(conn, pid, inner)
-                    : Task.FromResult<IReadOnlyList<OrderSample>>([]);
-
-                await Task.WhenAll(linesTask, receiptsTask, samplesTask).ConfigureAwait(false);
+                // ---- children, one after another ---------------------------
+                // These three used to be started together and awaited with
+                // Task.WhenAll. That threw on every single request: three
+                // overlapping readers on ONE connection is exactly what MARS
+                // exists for, and NobleOptions turns MARS off deliberately
+                // ("MARS costs throughput and we never interleave readers on
+                // one connection"). The comment was right and this code was the
+                // one place contradicting it, so opening any order returned 500.
+                //
+                // Sequential is also the correct shape rather than merely the
+                // working one. MARS would not have made these concurrent — it
+                // interleaves them over a single session — and giving each its
+                // own connection would treble pool usage per order view against
+                // a pool of twenty shared with every other request.
+                var lines = await LoadLinesAsync(conn, billId, inner).ConfigureAwait(false);
+                var receipts = await LoadReceiptsAsync(conn, billId, inner).ConfigureAwait(false);
+                var samples = patientId is int pid
+                    ? await LoadSamplesAsync(conn, pid, inner).ConfigureAwait(false)
+                    : [];
 
                 return detail with
                 {
-                    Lines = await linesTask,
-                    Receipts = await receiptsTask,
-                    Samples = await samplesTask,
+                    Lines = lines,
+                    Receipts = receipts,
+                    Samples = samples,
                 };
             }, token), ct).ConfigureAwait(false);
     }

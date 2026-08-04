@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { Mark } from './components/Mark';
+import { SignInDraw } from './components/SignInDraw';
 import { NobleMark } from './components/NobleMark';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
@@ -15,20 +16,26 @@ import { ThemeToggle } from './theme/ThemeToggle';
 import { InfinityLoader } from './components/InfinityLoader';
 
 /**
- * Stage 2 of the sign-in entrance. The login screen ended with the Infinity
- * mark centred over an opaque backdrop; this renders the identical frame the
- * instant the shell mounts, then zooms through the mark's LEFT LOOP —
- * transform-origin sits at that loop's centre — while fading, so the app is
- * revealed as if the camera flew through the logo.
+ * Beats 2 and 3 of the sign-in entrance.
  *
- * The shell mounts and starts fetching UNDER the veil, so the ~0.9s of zoom is
- * loading time the user never sees.
+ * The login screen ended with the card collapsed into a single glowing
+ * particle at the centre of the viewport. This opens on that identical
+ * particle, then lets it travel the lemniscate and WRITE the Infinity symbol
+ * behind it. When the loop closes the mark pulses and the flare expands
+ * outward to become the app.
+ *
+ * The handoff object is a DOT, deliberately: matching a 13px circle at screen
+ * centre across an unmount is exact, where matching a whole symbol's geometry
+ * was fragile.
+ *
+ * The shell mounts and starts fetching UNDER the veil, so the ~1.5s of drawing
+ * is loading time the user never sees.
  */
 function EnterVeil({ done }: { done: () => void }) {
   // Belt and braces: if the animationend event never arrives (background tab
   // throttling), the veil must still get out of the way.
   useEffect(() => {
-    const t = window.setTimeout(done, 1600);
+    const t = window.setTimeout(done, 2200);
     return () => window.clearTimeout(t);
   }, [done]);
 
@@ -38,7 +45,11 @@ function EnterVeil({ done }: { done: () => void }) {
       aria-hidden="true"
       onAnimationEnd={(e) => { if (e.target === e.currentTarget) done(); }}
     >
-      <div className="enter-veil__mark"><Mark withText={false} /></div>
+      {/* The seed is the particle arriving from the login screen — same size,
+          same fixed centre, so the unmount swap is invisible. It hands over to
+          the head of the stroke, which then writes the symbol. */}
+      <span className="sdraw__seed" />
+      <SignInDraw />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { INFINITY_PATH, INFINITY_VIEWBOX } from './infinityPath';
 
 /**
  * The house loader: the Infinity figure-8 with a particle riding the full
@@ -35,17 +36,12 @@ export function InfinityLoader({
   // useId contains colons, which are invalid in url(#…) references.
   const gradId = `ig-${useId().replace(/[^a-zA-Z0-9-]/g, '')}`;
 
-  // The Mark's front strand followed by its back strand reversed: one
-  // continuous lemniscate from left-centre, over the left loop, through the
-  // crossover, around the right loop, and home.
-  const d =
-    'M60,120 C60,58 170,58 240,120 C310,182 420,182 420,120 ' +
-    'C420,58 310,58 240,120 C170,182 60,182 60,120 Z';
+  const d = INFINITY_PATH;
 
   return (
     <span className={`infload${mono ? ' infload--mono' : ''}`} role="status" aria-label={label} style={{ width: size }}>
       <svg
-        viewBox="40 58 400 124"
+        viewBox={INFINITY_VIEWBOX}
         width={size}
         height={Math.round(size * (124 / 400))}
         fill="none"

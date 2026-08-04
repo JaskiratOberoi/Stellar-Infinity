@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { Mark } from '../components/Mark';
 import { ThemeToggle } from '../theme/ThemeToggle';
@@ -21,9 +21,9 @@ function greeting(): { title: string; sub: string } {
   return { title: 'Burning the midnight oil?', sub: 'The night bench appreciates you.' };
 }
 
-/** Card-to-symbol morph duration (.08s delay + .95s animation). Commit hands
-    over to the shell's veil the moment the morph settles. */
-const MORPH_MS = 1030;
+/** Beat 1: how long the card takes to implode into the spark. Commit hands
+    the drawing of the symbol to the shell's veil at exactly that moment. */
+const IMPLODE_MS = 520;
 
 export function Login() {
   const { signInDeferred } = useAuth();
@@ -34,7 +34,6 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [leaving, setLeaving] = useState(false);
-  const cardRef = useRef<HTMLFormElement>(null);
 
   const greet = useMemo(greeting, []);
 
@@ -43,23 +42,17 @@ export function Login() {
     setError(null);
     setBusy(true);
     try {
-      // Stage 1 of the entrance: the credentials are verified NOW, but nothing
-      // is committed. The card morphs into the Infinity symbol in place; only
+      // Beat 1: credentials are verified NOW, but nothing is committed. The
+      // card implodes into a single glowing particle at screen centre; only
       // then does commit() set the user — which unmounts this screen and hands
-      // the dive-through-the-loop to <EnterVeil> in App.
+      // that particle to the shell's veil, where it draws the symbol.
       //
       // Reduced motion commits immediately: for someone who has asked for
-      // stillness, a second of frozen card would read as a hang, not a pause.
+      // stillness, half a second of frozen card reads as a hang, not a pause.
       const commit = await signInDeferred(username.trim(), password);
       const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      // The morph's 0% frame must be the card's REAL height. Animating from a
-      // hard-coded ceiling means the timeline's opening moments shrink
-      // invisible slack — a visible pause, then a rush.
-      if (cardRef.current) {
-        cardRef.current.style.setProperty('--card-h', `${cardRef.current.offsetHeight}px`);
-      }
       setLeaving(true);
-      window.setTimeout(commit, still ? 30 : MORPH_MS);
+      window.setTimeout(commit, still ? 30 : IMPLODE_MS);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign-in failed.');
       setBusy(false);
@@ -84,17 +77,12 @@ export function Login() {
           have to authenticate through a white flash to reach the toggle. */}
       <div className="login__corner"><ThemeToggle /></div>
 
-      <form className="login__card" onSubmit={onSubmit} ref={cardRef}>
-        {/* The symbol the card morphs INTO. In the DOM from the start
-            (opacity 0), absolutely centred in the card, so its condensing-in
-            during the morph is a continuation of the same object — not a new
-            element popping over a dying one. <EnterVeil> in App then renders
-            this same mark at the same size and centre when the screen swaps,
-            making the whole card → symbol → dive read as one motion. */}
-        <div className="login__morphmark" aria-hidden="true">
-          <Mark withText={false} />
-        </div>
+      {/* The particle the card implodes into. Fixed to the viewport centre so
+          it is rock steady while the card rushes inward onto it — and so the
+          shell's veil can open on an identical dot at the identical point. */}
+      {leaving && <span className="login__spark" aria-hidden="true" />}
 
+      <form className="login__card" onSubmit={onSubmit}>
         <Mark />
 
         <div>

@@ -316,6 +316,66 @@ var bogus = await TotalWith($"asOf={Uri.EscapeDataString(snap)}&clientCode=__NOS
 Check("an unknown client code matches nothing", bogus == 0,
     $"{bogus} rows (must be 0, NOT {baseline})");
 
+// ---- 7. order detail loads its children ------------------------------------
+// See OrderDetail.md. This guards a defect that compiles cleanly and throws on
+// every real request: three overlapping readers on a connection with MARS
+// disabled. Only a genuine round trip catches it.
+Console.WriteLine("\n[7] order detail");
+
+var ordersResp = await http.GetAsync("/api/orders/?page=1&pageSize=5");
+if (!ordersResp.IsSuccessStatusCode)
+{
+    Check("order list", false, $"HTTP {(int)ordersResp.StatusCode}");
+}
+else
+{
+    using var oDoc = JsonDocument.Parse(await ordersResp.Content.ReadAsStringAsync());
+    var orders = oDoc.RootElement.GetProperty("orders");
+
+    if (orders.GetArrayLength() == 0)
+    {
+        Console.WriteLine("        SKIPPED — no orders in scope to open");
+    }
+    else
+    {
+        var billId = orders[0].GetProperty("billId").GetInt32();
+        var detailResp = await http.GetAsync($"/api/orders/{billId}");
+        var body = await detailResp.Content.ReadAsStringAsync();
+
+        Check("opening an order returns 200", detailResp.IsSuccessStatusCode,
+            $"bill {billId} -> {(int)detailResp.StatusCode}");
+
+        if (detailResp.IsSuccessStatusCode)
+        {
+            using var dDoc = JsonDocument.Parse(body);
+            // The endpoint wraps the order alongside canSeeMoney, so the
+            // children hang off .order rather than the root.
+            var root = dDoc.RootElement.GetProperty("order");
+
+            // The three child collections are what the parallel fan-out was
+            // loading. Present and array-shaped is the property under test;
+            // any of them may legitimately be empty for a given bill.
+            foreach (var child in new[] { "lines", "receipts", "samples" })
+            {
+                Check($"detail.{child} loaded",
+                    root.TryGetProperty(child, out var c) && c.ValueKind == JsonValueKind.Array,
+                    root.TryGetProperty(child, out var c2) ? $"{c2.GetArrayLength()} row(s)" : "MISSING");
+            }
+
+            // A bill with no lines at all would make the check above pass
+            // vacuously — the fan-out could be returning three empty lists and
+            // look identical to it working.
+            Check("the order has line items",
+                root.GetProperty("lines").GetArrayLength() > 0,
+                $"{root.GetProperty("lines").GetArrayLength()} test line(s)");
+        }
+        else
+        {
+            Console.WriteLine($"        body: {body[..Math.Min(300, body.Length)]}");
+        }
+    }
+}
+
 Console.WriteLine();
 Console.WriteLine(failures == 0 ? "All checks passed." : $"{failures} check(s) FAILED.");
 return failures == 0 ? 0 : 1;
