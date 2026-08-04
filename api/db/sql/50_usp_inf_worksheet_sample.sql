@@ -208,13 +208,29 @@ BEGIN
     LEFT JOIN dbo.tbl_med_department_master d ON d.id = tm.DepartmentId
     WHERE r.vailid = @sid
       AND @sample_id IS NOT NULL
-    -- Head and Profile rows are display scaffolding and must sort above the
-    -- analytes they introduce, or the grid reads as a jumble.
-    ORDER BY
-        r.master_profile_id,
-        r.profile_id,
-        CASE r.testtype WHEN 'Head' THEN 0 WHEN 'Profile' THEN 1 WHEN 'Test' THEN 2 ELSE 3 END,
-        r.id;
+    /* RAW INSERTION ORDER, and nothing else.
+     *
+     * The LIS already stores these rows in the order it prints them, with each
+     * Head immediately followed by the analytes it introduces:
+     *
+     *     Profile  CBC WITH ESR
+     *     Head     Complete Blood Count
+     *     Param    Hemoglobin, RBC Count, ...
+     *     Head     Differential Counts %
+     *     Param    Neutrophils %, Lymphocytes %, ...
+     *
+     * A previous version sorted by testtype ahead of id, on the reasoning that
+     * Head rows are scaffolding and should sit above their analytes. That is
+     * true of ONE head and its own params, but sorting cannot express it:
+     * ranking every Head above every Param hoists ALL the section titles to the
+     * top of the profile and dumps every analyte underneath the last one. On a
+     * urine examination that rendered as four consecutive empty headings
+     * followed by an undifferentiated list of fields.
+     *
+     * Telo's sampleReport.ts reads this table the same way and says so — the
+     * insertion order IS the report structure, so any re-sort destroys it.
+     */
+    ORDER BY r.id;
 
     -- ---- 3. auto-authorisation rules in force for this sample -----------
     -- Returned so the screen can tell the technologist which analytes will be
