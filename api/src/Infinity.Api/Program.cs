@@ -44,6 +44,7 @@ builder.Services.AddSingleton<Infinity.Api.Worksheet.WorksheetRepository>();
 builder.Services.AddSingleton<Infinity.Api.Worksheet.ResultWriteRepository>();
 builder.Services.AddSingleton<Infinity.Api.Worksheet.AutoAuthRepository>();
 builder.Services.AddSingleton<Infinity.Api.Worksheet.AutoAuthGate>();
+builder.Services.AddSingleton<Infinity.Api.Worksheet.ResultHistoryRepository>();
 
 // ---- instruments ---------------------------------------------------------
 builder.Services.AddSingleton<Infinity.Api.Instruments.InstrumentRepository>();

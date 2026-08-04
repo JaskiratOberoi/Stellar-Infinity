@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { worksheetApi, type ResultAuditRow } from '../api/client';
+import { worksheetApi, type ResultAuditRow, type ResultTrendResponse } from '../api/client';
 import { fmtDateTime } from '../lib/format';
+import { DeltaTrend } from '../components/DeltaTrend';
 
 /**
- * The audit trail for one sample.
+ * History for one sample: what this patient's values have been doing over time,
+ * and who changed what.
  *
  * This screen is the whole point of the rebuild. The legacy LIS records that
  * "Results Entered" happened and nothing more — no analyte, no previous value,
@@ -15,9 +17,15 @@ import { fmtDateTime } from '../lib/format';
  * is never mistaken for one a pathologist signed.
  */
 export function WorksheetHistory({ sid, onClose }: { sid: string; onClose: () => void }) {
+  const [tab, setTab] = useState<'trend' | 'audit'>('trend');
+
   const [rows, setRows] = useState<ResultAuditRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [trend, setTrend] = useState<ResultTrendResponse | null>(null);
+  const [trendLoading, setTrendLoading] = useState(true);
+  const [trendError, setTrendError] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -26,6 +34,19 @@ export function WorksheetHistory({ sid, onClose }: { sid: string; onClose: () =>
       .then((r) => { if (live) setRows(r.rows); })
       .catch((e) => { if (live) setError(e instanceof Error ? e.message : 'Could not load the history.'); })
       .finally(() => { if (live) setLoading(false); });
+    return () => { live = false; };
+  }, [sid]);
+
+  // Fetched alongside the audit rather than on tab switch: the trend walks a
+  // multi-million-row table, and starting it only when the operator clicks
+  // makes the tab feel broken for the second or so it takes.
+  useEffect(() => {
+    let live = true;
+    worksheetApi
+      .trend(sid)
+      .then((r) => { if (live) setTrend(r); })
+      .catch((e) => { if (live) setTrendError(e instanceof Error ? e.message : 'Could not load the trend.'); })
+      .finally(() => { if (live) setTrendLoading(false); });
     return () => { live = false; };
   }, [sid]);
 
@@ -45,6 +66,41 @@ export function WorksheetHistory({ sid, onClose }: { sid: string; onClose: () =>
         aria-label={`History for ${sid}`}
       >
         <h2 className="modal__title">History · <span className="mono">{sid}</span></h2>
+
+        <div className="tabs" role="tablist">
+          <button
+            role="tab"
+            aria-selected={tab === 'trend'}
+            className={`tab${tab === 'trend' ? ' tab--on' : ''}`}
+            onClick={() => setTab('trend')}
+          >
+            Trend
+            {trend && trend.analytes.length > 0 && (
+              <span className="tab__count">{trend.analytes.length}</span>
+            )}
+          </button>
+          <button
+            role="tab"
+            aria-selected={tab === 'audit'}
+            className={`tab${tab === 'audit' ? ' tab--on' : ''}`}
+            onClick={() => setTab('audit')}
+          >
+            Audit trail
+            {rows.length > 0 && <span className="tab__count">{rows.length}</span>}
+          </button>
+        </div>
+
+        {tab === 'trend' ? (
+          <div style={{ maxHeight: '58vh', overflowY: 'auto' }}>
+            {trendError && <div className="alert alert--error">{trendError}</div>}
+            {trendLoading ? (
+              <div className="center" style={{ minHeight: 140 }}><div className="spinner" /></div>
+            ) : trend ? (
+              <DeltaTrend analytes={trend.analytes} match={trend.match} />
+            ) : null}
+          </div>
+        ) : (
+        <>
         <p className="muted" style={{ fontSize: '.78rem' }}>
           Append-only. Entries cannot be edited or deleted, including by an administrator.
         </p>
@@ -105,6 +161,8 @@ export function WorksheetHistory({ sid, onClose }: { sid: string; onClose: () =>
               </tbody>
             </table>
           </div>
+        )}
+        </>
         )}
 
         <div className="modal__actions">

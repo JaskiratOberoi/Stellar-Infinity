@@ -30,6 +30,10 @@ public static class WorksheetEndpoints
           .RequireCapability(Capabilities.PatientView)
           .WithName("GetWorksheetAudit");
 
+        ws.MapGet("/{sid}/trend", GetTrend)
+          .RequireCapability(Capabilities.PatientView)
+          .WithName("GetResultTrend");
+
         // result:enter is the floor. Amending and authorizing are checked
         // per-edit inside the procedure, against the flags passed below —
         // a save that only enters values must not require the higher rights.
@@ -115,6 +119,34 @@ public static class WorksheetEndpoints
 
         var rows = await repo.GetAuditAsync(sid, top, ct).ConfigureAwait(false);
         return Results.Ok(new { rows, count = rows.Count });
+    }
+
+    /// <summary>
+    /// Prior values per analyte for the same person, for the delta trend.
+    ///
+    /// Gated and scope-checked identically to the audit: the history rows are
+    /// not themselves scoped, so confirming the SID is in scope first is what
+    /// stops one centre reading another's patients.
+    /// </summary>
+    private static async Task<IResult> GetTrend(
+        string sid,
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
+        WorksheetRepository repo,
+        ResultHistoryRepository history,
+        CancellationToken ct,
+        int maxPoints = 12)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+        if (!IsValidSid(sid)) return Results.BadRequest(new { error = "A SID of 1-50 characters is required." });
+
+        var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
+        if (scope.IsDenied) return Results.NotFound();
+
+        var sample = await repo.GetSampleAsync(scope.ClientCodes, sid, ct).ConfigureAwait(false);
+        if (sample is null) return Results.NotFound();
+
+        return Results.Ok(await history.GetAsync(sid, maxPoints, ct).ConfigureAwait(false));
     }
 
     private static async Task<IResult> SaveResults(

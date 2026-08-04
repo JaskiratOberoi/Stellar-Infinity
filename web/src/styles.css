@@ -1,5 +1,5 @@
-/* =========================================================
-   Infinity command centre — theme tokens
+﻿/* =========================================================
+   Infinity command centre â€” theme tokens
 
    Every colour in this file resolves through a variable, and the
    light/dark blocks below define the SAME variable names. Flipping
@@ -28,7 +28,7 @@
   --track: rgba(15, 34, 51, 0.08);
   --knob: #ffffff;
 
-  /* accents — these are the BRAND/decorative colours (logo, focus rings,
+  /* accents â€” these are the BRAND/decorative colours (logo, focus rings,
      badge text). They are tuned to look right, not to carry text on top. */
   --cyan: #06b6d4;
   --teal: #0d9488;
@@ -38,14 +38,14 @@
 
   /* Filled-button gradient + its foreground, kept SEPARATE from the brand
      accents above. The brand cyan is far too light to carry white text
-     (≈2.4:1), so the button uses deeper stops. Measured white-on-stop here:
-     #0e7490 4.6, #0f766e 4.9, #1d4ed8 6.3 — all clear of the 4.5 AA floor. */
+     (â‰ˆ2.4:1), so the button uses deeper stops. Measured white-on-stop here:
+     #0e7490 4.6, #0f766e 4.9, #1d4ed8 6.3 â€” all clear of the 4.5 AA floor. */
   --accent-grad-from: #0e7490;
   --accent-grad-mid: #0f766e;
   --accent-grad-to: #1d4ed8;
   --on-accent: #ffffff;
 
-  /* accent washes — used for hovers, chips and badge fills */
+  /* accent washes â€” used for hovers, chips and badge fills */
   --accent-soft: rgba(13, 148, 136, 0.09);
   --accent-softer: rgba(13, 148, 136, 0.035);
   --accent-ring: rgba(13, 148, 136, 0.14);
@@ -88,7 +88,7 @@
   --track: rgba(230, 238, 247, 0.13);
   --knob: #dbe7f2;
 
-  /* Accents brighten in dark so they keep contrast against a dark ground —
+  /* Accents brighten in dark so they keep contrast against a dark ground â€”
      the same deliberate asymmetry Telo applies in reverse. */
   --cyan: #22d3ee;
   --teal: #2dd4bf;
@@ -98,8 +98,8 @@
 
   /* Dark mode inverts the button relationship: the gradient stays bright (it
      has to read against a dark page) and the LABEL goes dark. White on these
-     stops measures 1.81–2.54:1, which is unreadable; near-black gives
-     7.5–10.6. Telo makes the same trade with its dark --secondary-foreground. */
+     stops measures 1.81â€“2.54:1, which is unreadable; near-black gives
+     7.5â€“10.6. Telo makes the same trade with its dark --secondary-foreground. */
   --accent-grad-from: #22d3ee;
   --accent-grad-mid: #2dd4bf;
   --accent-grad-to: #60a5fa;
@@ -326,7 +326,7 @@ tbody tr:hover { background: var(--accent-softer); }
 }
 .toggle--on { background: linear-gradient(92deg, var(--accent-grad-from), var(--accent-grad-mid)); border-color: transparent; }
 /* Knob uses the accent foreground so it stays visible against the filled
-   track in BOTH themes — a white knob on dark mode's bright teal is 1.86:1,
+   track in BOTH themes â€” a white knob on dark mode's bright teal is 1.86:1,
    below even the 3.0 floor for UI components. */
 .toggle--on::after { transform: translateX(18px); background: var(--on-accent); }
 .toggle:disabled { opacity: .4; cursor: not-allowed; }
@@ -381,7 +381,7 @@ tbody tr:hover { background: var(--accent-softer); }
 
 /* ---------- worksheet ---------- */
 
-/* The result grid is dense and horizontal — a 520px modal cannot hold it. */
+/* The result grid is dense and horizontal â€” a 520px modal cannot hold it. */
 .modal--wide { width: min(1180px, 100%); }
 
 /* Compact controls so a twenty-analyte panel fits on one screen without
@@ -390,7 +390,7 @@ tbody tr:hover { background: var(--accent-softer); }
 
 /* An out-of-range value is outlined as well as flagged. Colour alone would be
    the only signal for a red/green colour-blind operator, and this is a clinical
-   flag — the letter H or L next to it carries the same meaning independently. */
+   flag â€” the letter H or L next to it carries the same meaning independently. */
 .input--flag { border-color: var(--danger-line); background: var(--danger-soft); }
 
 .flag {
@@ -452,6 +452,102 @@ tbody tr:hover { background: var(--accent-softer); }
 .tab--on { color: var(--teal); border-bottom-color: var(--teal); }
 .tab:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); border-radius: 6px 6px 0 0; }
 
+.tab__count {
+  margin-left: .45em;
+  padding: .05em .45em;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  font-size: .68rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- per-parameter delta trend ---------- */
+
+.trend-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: .7rem;
+  padding: .7rem 0 .2rem;
+}
+
+.trend-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: .6rem .7rem .5rem;
+}
+
+.trend-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .5rem;
+}
+
+.trend-card__name {
+  font-size: .8rem;
+  font-weight: 600;
+  /* Analyte names run long; the card must not widen to fit one of them. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trend-card__foot {
+  font-size: .74rem;
+  margin-top: .1rem;
+}
+
+.trend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .25em;
+  padding: .15em .5em;
+  border-radius: 999px;
+  border: 1px solid var(--accent-ring);
+  background: var(--accent-soft);
+  color: var(--teal);
+  font-size: .7rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Movement is shown, not judged: a rise is not styled as bad. Only "no
+   change" is muted, because it is the one reading with nothing to look at. */
+.trend-chip--flat {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--ink-dim);
+}
+
+.trend-chip__arrow { font-size: .62rem; }
+
+.trend-spark { margin: .35rem 0 .1rem; }
+.trend-spark svg { display: block; overflow: visible; }
+
+.trend-spark__line {
+  fill: none;
+  stroke: var(--teal);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.trend-spark__dot {
+  fill: var(--surface);
+  stroke: var(--teal);
+  stroke-width: 1.4;
+}
+
+.trend-spark__dot--current {
+  fill: var(--teal);
+}
+
+.trend-spark__caption {
+  font-size: .68rem;
+  min-height: 1.1em;   /* reserve the row so hovering does not reflow the card */
+}
+
 /* ---------- removable chip (granted client codes) ---------- */
 
 .chip {
@@ -501,7 +597,7 @@ tbody tr:hover { background: var(--accent-softer); }
   border-radius: 4px;
 }
 
-/* position: fixed, not absolute — the grid is a scroll container and would
+/* position: fixed, not absolute â€” the grid is a scroll container and would
    otherwise clip this for every row below the fold. */
 .range-cell__full {
   position: fixed;

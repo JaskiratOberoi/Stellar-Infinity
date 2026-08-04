@@ -301,6 +301,41 @@ export interface AutoAuthAuditRow {
   occurredAt: string;
 }
 
+export interface TrendPoint {
+  value: string | null;
+  sid: string | null;
+  drawnAt: string | null;
+  isCurrent: boolean;
+}
+
+export interface AnalyteTrend {
+  /** "testid:paramid" — the only field that identifies one analyte. `testCode`
+   *  names the panel and repeats across every parameter within it. */
+  testKey: string;
+  testCode: string | null;
+  testName: string | null;
+  unit: string | null;
+  points: TrendPoint[];
+}
+
+/**
+ * How the prior visits were identified.
+ *
+ * `matchedOn` is rendered, not hidden: a trend built from a cross-visit guess
+ * is only safe to act on if the person reading it can see how the guess was
+ * made. `hasMobile: false` means no cross-visit lookup was even possible.
+ */
+export interface TrendMatch {
+  matchedOn: 'visit' | 'name+mobile+gender' | 'none';
+  priorVisits: number;
+  hasMobile: boolean;
+}
+
+export interface ResultTrendResponse {
+  match: TrendMatch;
+  analytes: AnalyteTrend[];
+}
+
 export const worksheetApi = {
   getSample: (sid: string) =>
     api.get<WorksheetSampleResponse>(`/api/worksheet/${encodeURIComponent(sid)}`),
@@ -326,6 +361,11 @@ export const worksheetApi = {
   audit: (sid: string, top = 200) =>
     api.get<{ rows: ResultAuditRow[]; count: number }>(
       `/api/worksheet/${encodeURIComponent(sid)}/audit?top=${top}`,
+    ),
+
+  trend: (sid: string, maxPoints = 12) =>
+    api.get<ResultTrendResponse>(
+      `/api/worksheet/${encodeURIComponent(sid)}/trend?maxPoints=${maxPoints}`,
     ),
 };
 
