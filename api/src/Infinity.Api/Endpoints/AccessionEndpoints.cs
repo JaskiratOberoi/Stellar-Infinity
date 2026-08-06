@@ -112,8 +112,12 @@ public static class AccessionEndpoints
 
         // Operational scope, as for order creation: writing to a client's
         // samples is an operational act, not a reporting one.
+        //
+        // Membership, NOT `Count > 0 &&` — GetScopeAsync returns an explicit
+        // list, so an empty one means no clients rather than all of them. The
+        // earlier form let a user with no scope barcode anyone's samples.
         var scope = await scopes.GetScopeAsync(userId, ct).ConfigureAwait(false);
-        if (scope.Count > 0 && !scope.Contains(body.Mcc)) return Results.NotFound();
+        if (!scope.Contains(body.Mcc)) return Results.NotFound();
 
         var result = await repo.AddSidsAsync(userId, body.PatientId, body.Mcc, body.Sids, ct)
             .ConfigureAwait(false);

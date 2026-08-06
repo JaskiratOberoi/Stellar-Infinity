@@ -105,9 +105,10 @@ public static class ClientAccountEndpoints
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
 
-        // Operational scope for a write, matching order creation.
+        // Operational scope for a write, matching order creation. Membership,
+        // not `Count > 0 &&`: an empty list means no clients, not all of them.
         var scope = await scopes.GetScopeAsync(userId, ct).ConfigureAwait(false);
-        if (scope.Count > 0 && !scope.Contains(mcc)) return Results.NotFound();
+        if (!scope.Contains(mcc)) return Results.NotFound();
 
         if (body.Amount <= 0)
             return Results.BadRequest(new { error = "A payment must be greater than zero." });
@@ -120,10 +121,14 @@ public static class ClientAccountEndpoints
             : Results.BadRequest(new { error = r.Message, code = r.ErrorCode });
     }
 
+    /// <summary>
+    /// An empty operational scope means NO clients. See the note in
+    /// OrderEntryEndpoints for why the obvious-looking alternative is wrong.
+    /// </summary>
     private static async Task<bool> InScopeAsync(
         ScopeRepository scopes, int userId, int mcc, CancellationToken ct)
     {
         var scope = await scopes.GetScopeAsync(userId, ct).ConfigureAwait(false);
-        return scope.Count == 0 || scope.Contains(mcc);
+        return scope.Contains(mcc);
     }
 }

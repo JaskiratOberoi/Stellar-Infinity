@@ -235,13 +235,21 @@ public static class OrderEntryEndpoints
     }
 
     /// <summary>
-    /// An empty operational scope means unrestricted, matching the convention
-    /// the orders list already uses.
+    /// An empty operational scope means NO clients, not all of them.
+    ///
+    /// GetScopeAsync returns an explicit list of mcc ids — an unrestricted user
+    /// gets every id expanded into it, not an empty list — which is why
+    /// OrdersRepository returns nothing when the list is empty. An earlier
+    /// version of this method read `scope.Count == 0 || scope.Contains(mcc)`,
+    /// conflating it with the REPORT scope contract, where emptiness does mean
+    /// unrestricted because that type carries a separate IsUnrestricted flag.
+    /// The effect was that a user with no operational scope could book an order
+    /// for any client in the database.
     /// </summary>
     private static async Task<bool> InScopeAsync(
         ScopeRepository scopes, int userId, int mcc, CancellationToken ct)
     {
         var scope = await scopes.GetScopeAsync(userId, ct).ConfigureAwait(false);
-        return scope.Count == 0 || scope.Contains(mcc);
+        return scope.Contains(mcc);
     }
 }

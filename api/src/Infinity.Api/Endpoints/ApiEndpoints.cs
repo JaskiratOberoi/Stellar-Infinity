@@ -302,13 +302,11 @@ public static class ApiEndpoints
 
         if (mcc is int requested)
         {
+            // Membership, not `Count > 0 &&`. GetScopeAsync returns an explicit
+            // list of ids, so an empty one means no clients rather than all of
+            // them — see the note in OrderEntryEndpoints.
             var scope = await scopes.GetScopeAsync(userId, ct).ConfigureAwait(false);
-            // An empty scope means unrestricted here, matching the convention
-            // the orders list already uses.
-            if (scope.Count > 0 && !scope.Contains(requested))
-            {
-                return Results.NotFound();
-            }
+            if (!scope.Contains(requested)) return Results.NotFound();
         }
 
         var result = await repo.SearchAsync(mcc, search, kind, page, pageSize, ct).ConfigureAwait(false);
