@@ -142,7 +142,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [signInDeferred]);
 
   const can = useCallback(
-    (capability: string) => user?.capabilities.includes(capability) ?? false,
+    // Both links optional-chained. `user` without `capabilities` should not be
+    // reachable, but `can` is called during the first render of nearly every
+    // screen and there is no error boundary above them — so a payload missing
+    // the array does not fail one permission check, it white-screens the whole
+    // application. Denying is the safe reading of "no capabilities".
+    (capability: string) => user?.capabilities?.includes(capability) ?? false,
     [user],
   );
 

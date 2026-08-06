@@ -32,6 +32,7 @@ builder.Services.AddSingleton<NobleConnectionFactory>();
 builder.Services.AddSingleton<SqlRetry>();
 builder.Services.AddSingleton<SampleHeaderRepository>();
 builder.Services.AddSingleton<StatsRepository>();
+builder.Services.AddSingleton<MonthStatsRepository>();
 builder.Services.AddSingleton<OrdersRepository>();
 builder.Services.AddSingleton<ReportsRepository>();
 builder.Services.AddSingleton<CatalogRepository>();

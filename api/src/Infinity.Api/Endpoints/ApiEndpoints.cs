@@ -24,6 +24,14 @@ public static class ApiEndpoints
            .RequireCapability(Capabilities.AnalyticsView)
            .WithName("GetDashboardStats");
 
+        // Separate from the day stats on purpose: it aggregates a month of
+        // bills and their test lines on a database the live LIS is also
+        // serving, so the day KPIs must never wait behind it.
+        app.MapGet("/api/dashboard/month", GetMonthStats)
+           .RequireAuthorization()
+           .RequireCapability(Capabilities.AnalyticsView)
+           .WithName("GetDashboardMonthStats");
+
         app.MapGet("/api/me/scope", GetMyScope)
            .RequireAuthorization()
            .WithName("GetMyScope");
@@ -107,6 +115,30 @@ public static class ApiEndpoints
         var result = await stats.GetAsync(scope, date, ct).ConfigureAwait(false);
 
         return Results.Ok(new { stats = result, centres = scope.Count });
+    }
+
+    /// <summary>
+    /// Month-to-date totals and the three leaderboards, in the caller's scope.
+    /// </summary>
+    /// <param name="date">
+    /// The selected day, <c>yyyy-MM-dd</c>. The month reported is the one
+    /// containing it, so the two halves of the dashboard can never describe
+    /// different periods. Defaults to today; a future date falls back to the
+    /// current month rather than returning a period the caller cannot explain.
+    /// </param>
+    private static async Task<IResult> GetMonthStats(
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
+        MonthStatsRepository months,
+        CancellationToken ct,
+        string? date = null)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+
+        var scope = await scopes.GetScopeAsync(userId, ct).ConfigureAwait(false);
+        var result = await months.GetAsync(scope, date, ct).ConfigureAwait(false);
+
+        return Results.Ok(new { month = result });
     }
 
     /// <summary>How many centres the caller can see — lets the UI say so plainly.</summary>
