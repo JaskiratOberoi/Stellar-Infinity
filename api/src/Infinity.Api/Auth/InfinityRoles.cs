@@ -45,7 +45,7 @@ public static class InfinityRoles
                 Capabilities.ResultAmend, Capabilities.ResultReopen, Capabilities.SampleReject,
                 Capabilities.AutoAuthManage,
                 Capabilities.ReportView, Capabilities.ReportRelease,
-                Capabilities.BillingView, Capabilities.PaymentCapture,
+                Capabilities.BillingView, Capabilities.PaymentCapture, Capabilities.RateManage,
                 Capabilities.AnalyticsView),
 
             // Everything Super Admin has except user management — the one
@@ -57,7 +57,7 @@ public static class InfinityRoles
                 Capabilities.ResultAmend, Capabilities.ResultReopen, Capabilities.SampleReject,
                 Capabilities.AutoAuthManage,
                 Capabilities.ReportView, Capabilities.ReportRelease,
-                Capabilities.BillingView, Capabilities.PaymentCapture,
+                Capabilities.BillingView, Capabilities.PaymentCapture, Capabilities.RateManage,
                 Capabilities.AnalyticsView),
 
             // Amends and rejects, but NOT reopen — reversing a completed
@@ -215,5 +215,16 @@ public static class Capabilities
     public const string ReportRelease = "report:release";
     public const string BillingView = "billing:view";
     public const string PaymentCapture = "payment:capture";
+
+    /// <summary>
+    /// Create rate lists and set the prices in them.
+    ///
+    /// Its own capability rather than folded into billing:view or user:manage.
+    /// Reading what a client owes and changing what every client on a rate list
+    /// is charged are different authorities: the first is a day-to-day
+    /// commercial view, the second re-prices work for potentially hundreds of
+    /// centres at once and belongs with whoever negotiates contracts.
+    /// </summary>
+    public const string RateManage = "rate:manage";
     public const string AnalyticsView = "analytics:view";
 }

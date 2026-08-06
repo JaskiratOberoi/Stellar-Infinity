@@ -11,6 +11,7 @@ import { NewOrder } from './pages/NewOrder';
 import { Accessioning } from './pages/Accessioning';
 import { Catalogue } from './pages/Catalogue';
 import { ClientAccounts } from './pages/ClientAccounts';
+import { RateLists } from './pages/RateLists';
 import { Reports } from './pages/Reports';
 import { Worksheet } from './pages/Worksheet';
 import { AutoAuthSettings } from './pages/AutoAuthSettings';
@@ -79,6 +80,7 @@ const NAV: NavItem[] = [
   { to: '/accessioning', label: 'Accessioning', icon: 'orders', cap: 'order:view' },
   { to: '/catalogue', label: 'Catalogue', icon: 'orders', cap: 'order:view' },
   { to: '/accounts', label: 'Accounts', icon: 'orders', cap: 'billing:view' },
+  { to: '/rate-lists', label: 'Rates', icon: 'orders', cap: 'billing:view' },
   { to: '/worksheet', label: 'Worksheet', icon: 'worksheet', cap: 'result:enter' },
   { to: '/reports', label: 'Reporting', icon: 'reporting', cap: 'report:view' },
   { to: '/instruments', label: 'Instruments', icon: 'instruments', cap: 'result:enter' },
@@ -140,6 +142,9 @@ export function App() {
         <Route path="/accessioning" element={can('order:view') ? <Accessioning /> : <Navigate to="/" replace />} />
         <Route path="/catalogue" element={can('order:view') ? <Catalogue /> : <Navigate to="/" replace />} />
         <Route path="/accounts" element={can('billing:view') ? <ClientAccounts /> : <Navigate to="/" replace />} />
+        {/* billing:view to look; rate:manage is checked inside for every edit,
+            and independently by the API on each write. */}
+        <Route path="/rate-lists" element={can('billing:view') ? <RateLists /> : <Navigate to="/" replace />} />
         <Route path="/worksheet" element={can('result:enter') ? <Worksheet /> : <Navigate to="/" replace />} />
         <Route path="/reports" element={can('report:view') ? <Reports /> : <Navigate to="/" replace />} />
         <Route path="/instruments" element={can('result:enter') ? <Instruments /> : <Navigate to="/" replace />} />

@@ -748,3 +748,40 @@ export const billingApi = {
   discount: (billId: number, discount: number) =>
     api.put<{ ok: boolean; balance: number | null }>(`/api/orders/${billId}/discount`, { discount }),
 };
+
+/* ---- rate lists ---- */
+
+export interface RateList {
+  id: number;
+  name: string | null;
+  isActive: boolean;
+  /** How many centres this list prices. Editing a rate re-prices all of them. */
+  clientCount: number;
+  pricedTests: number;
+}
+
+export interface RateListItem {
+  id: number;
+  code: string | null;
+  name: string | null;
+  departmentName: string | null;
+  mrp: number | null;
+  /** Null means no price here — the client falls through to MRP. */
+  rate: number | null;
+}
+
+export const rateListApi = {
+  list: (search = '') =>
+    api.get<{ rows: RateList[] }>(`/api/rate-lists/?search=${encodeURIComponent(search)}`),
+  items: (id: number, search: string, filter: string, page = 1, pageSize = 100) => {
+    const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (search.trim()) p.set('search', search.trim());
+    if (filter) p.set('filter', filter);
+    return api.get<PagedResponse<RateListItem>>(`/api/rate-lists/${id}/items?${p}`);
+  },
+  create: (name: string) =>
+    api.post<{ ok: boolean; rateTypeId: number | null; seededCount: number; message: string | null }>(
+      '/api/rate-lists/', { name }),
+  setRate: (id: number, testId: number, price: number) =>
+    api.put<{ ok: boolean }>(`/api/rate-lists/${id}/rates/${testId}`, { price }),
+};
