@@ -1193,6 +1193,48 @@ tbody tr:hover { background: var(--accent-softer); }
 .dark .status--blue    { --status-ink: #93c5fd; }
 .dark .status--magenta { --status-ink: #e879f9; }
 
+/* ---------- client picker ----------
+   A filtering combobox rather than a <select>. An admin's scope is every
+   centre the lab has — 3,594 of them — and a native select with that many
+   options is unusable and renders a 197 KB accessibility tree. */
+
+.client-picker { position: relative; min-width: 260px; }
+.client-picker > .input { width: 100%; }
+
+.client-picker__list {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0; right: 0;
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 0;
+  padding: .25rem;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-card);
+}
+
+.client-picker__opt {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: .4rem .55rem;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+  font-size: .82rem;
+}
+
+.client-picker__opt:hover,
+.client-picker__opt:focus-visible { background: var(--accent-soft); outline: none; }
+.client-picker__opt--on { background: var(--accent-soft); color: var(--teal); }
+
+.client-picker__more { padding: .45rem .55rem; font-size: .74rem; }
+
 /* ---------- order entry steps ----------
    All three steps stay on screen, dimmed until reachable. Revealing them one
    at a time left the New Order page as a single card above an empty screen,
