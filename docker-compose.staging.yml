@@ -1,0 +1,88 @@
+# Stellar Infinity — staging.
+#
+#   docker compose -f docker-compose.staging.yml up -d --build
+#
+# Reached at https://infinity-staging.genomicslab.in through the host
+# cloudflared tunnel (ingress -> http://localhost:3122).
+#
+# ⚠️  THIS RUNS AGAINST THE PRODUCTION LIS DATABASE.
+#
+#     It shares api/.env with the live stack, so Noble__Database is `Noble` —
+#     the real one. This is a deliberate choice, not an oversight, but it means
+#     staging is NOT a sandbox: authorising a result here signs out a real
+#     patient's result, a receipt taken here is a real receipt, and a Jarvis
+#     rule toggled here changes production auto-authorisation. Treat every
+#     destructive action as production, because it is.
+#
+#     To make it a real sandbox later, point Noble__Database at a restored copy
+#     via an env_file of its own — that is the only line that has to change.
+#
+# A separate project name, so `docker compose` treats this as its own stack and
+# `up`/`down` here can never touch the live containers.
+name: infinity-staging
+
+services:
+  # ----------------------------------------------------------------- redis --
+  # Staging gets its OWN Redis rather than sharing the live one. Session
+  # versions and rate-limit counters are keyed by user, not by environment, so
+  # a shared cache would let a sign-out in staging revoke a live session and
+  # let staging traffic consume production's rate-limit budget.
+  redis:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --save ""
+      --appendonly no
+      --maxmemory 128mb
+      --maxmemory-policy allkeys-lru
+    expose:
+      - "6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ------------------------------------------------------------------- api --
+  api:
+    build: ./api
+    image: infinity-staging-api
+    env_file: ./api/.env
+    environment:
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      Cache__ConnectionString: "redis:6379"
+      Cache__RequireDistributed: "false"
+      # Points at THIS stack's renderer, not the live one — compose resolves the
+      # name inside this project's network.
+      Render__BaseUrl: "http://render:8090"
+    depends_on:
+      redis:
+        condition: service_healthy
+    expose:
+      - "8080"
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------- render --
+  render:
+    build: ./render
+    image: infinity-staging-render
+    environment:
+      RENDER_BASE_URL: http://web
+      RENDER_CONCURRENCY: "2"
+    expose:
+      - "8090"
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------- web --
+  # 3122, and bound to 127.0.0.1 like every other port in this deployment: the
+  # only way in from outside is the tunnel, so the port itself is never exposed
+  # to the LAN.
+  web:
+    build: ./web
+    image: infinity-staging-web
+    ports:
+      - "127.0.0.1:3122:80"
+    depends_on:
+      - api
+    restart: unless-stopped
