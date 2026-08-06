@@ -1397,6 +1397,12 @@ tbody tr:hover { background: var(--accent-softer); }
   padding: 0 .25rem;
 }
 
+/* ---------- row actions ---------- */
+
+/* Wraps rather than overflowing: three buttons do not fit a narrow last column,
+   and on a phone the row is a card where they stack anyway. */
+.rowacts { display: flex; gap: .3rem; justify-content: flex-end; flex-wrap: wrap; }
+
 /* ---------- segmented filter ---------- */
 
 .seg { display: inline-flex; border: 1px solid var(--line-soft); border-radius: 7px; overflow: hidden; }

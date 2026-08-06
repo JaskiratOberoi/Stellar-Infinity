@@ -12,9 +12,36 @@ export interface NavItem {
   icon: IconName;
   /** Exact match, for the index route that would otherwise match everything. */
   end?: boolean;
+  /**
+   * Query string this entry owns, WITHOUT the leading '?'.
+   *
+   * Set it on every entry sharing a pathname, including the plain one (as an
+   * empty string). NavLink decides active state from the pathname alone and
+   * ignores the query, so two entries on the same path would both light up —
+   * which reads as the nav being broken rather than as a filter being on.
+   *
+   * Leave undefined on a path only one entry uses; that keeps NavLink's own
+   * matching, so a screen free to put its filters in the URL does not go dark
+   * in the nav the moment somebody filters it.
+   */
+  search?: string;
   /** Hidden without it. Cosmetic only — the API enforces every capability
    *  independently on its own routes. */
   cap?: string;
+}
+
+/**
+ * Whether an entry is the one currently open, query included.
+ *
+ * Shared by the bar and the sheet so the two cannot disagree about which entry
+ * is lit.
+ */
+export function navItemActive(item: NavItem, pathname: string, search: string): boolean {
+  const path = item.to.split('?')[0];
+  const pathOk = item.end ? pathname === path : pathname === path || pathname.startsWith(`${path}/`);
+  if (!pathOk) return false;
+  if (item.search === undefined) return true;
+  return search.replace(/^\?/, '') === item.search;
 }
 
 /**
@@ -158,12 +185,15 @@ function useCompact() {
 }
 
 export function NavMenu({
-  items, name, role, onSignOut,
+  items, name, role, onSignOut, loc,
 }: {
   items: NavItem[];
   name: string;
   role: string;
   onSignOut: () => void;
+  /** Passed in rather than read here, so the bar and the sheet judge the
+   *  active entry from exactly the same location object. */
+  loc: { pathname: string; search: string };
 }) {
   const [open, setOpen] = useState(false);
   const compact = useCompact();
@@ -249,7 +279,10 @@ export function NavMenu({
 
           <nav className="navsheet__grid">
             {items.map((i) => (
-              <NavLink key={i.to} to={i.to} end={i.end} onClick={close}>
+              <NavLink key={i.to} to={i.to} end={i.end} onClick={close}
+                       className={({ isActive }) =>
+                         (i.search === undefined ? isActive : navItemActive(i, loc.pathname, loc.search))
+                           ? 'active' : undefined}>
                 <NavIcon name={i.icon} />
                 <span>{i.label}</span>
               </NavLink>

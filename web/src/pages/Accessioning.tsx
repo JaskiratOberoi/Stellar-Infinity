@@ -3,9 +3,41 @@ import {
   accessionApi, orderTubesApi,
   type OrderChannel, type OrderTube, type PendingAccession, type PendingRegistration,
 } from '../api/client';
+import { useSearchParams } from 'react-router-dom';
 import { fmtDateTime, inr, plainText } from '../lib/format';
 import { Pager } from '../components/Pager';
 import { InfinityLoader } from '../components/InfinityLoader';
+import { useAuth } from '../auth/AuthContext';
+
+/**
+ * The two printable documents for one order, straight off the worklist.
+ *
+ * Telo calls them Bill and Lab receipt and puts them on every row, because the
+ * counter needs both at the moment the tubes are barcoded — the bill goes to
+ * whoever is paying, the lab copy goes into the box with the sample. Making
+ * someone open the order first to reach a print button adds a click to a step
+ * that happens hundreds of times a day.
+ *
+ * New tab, not a navigation: the operator is mid-queue and should come back to
+ * the same scroll position with the same filter.
+ */
+function DocButtons({ billId }: { billId: number }) {
+  const open = (copy?: 'lab') =>
+    window.open(`/print/invoice/${billId}${copy ? `?copy=${copy}` : ''}`, '_blank', 'noopener');
+
+  return (
+    <>
+      <button className="btn btn--ghost btn--sm" onClick={() => open()}
+              title="The costing bill — tests and money, no sample IDs.">
+        Bill
+      </button>
+      <button className="btn btn--ghost btn--sm" onClick={() => open('lab')}
+              title="The lab copy — same bill with the sample IDs listed.">
+        Lab receipt
+      </button>
+    </>
+  );
+}
 
 /** Which platform booked the order. Both queues span the two while Telo runs. */
 function OriginBadge({ origin }: { origin: string }) {
@@ -27,6 +59,12 @@ function OriginBadge({ origin }: { origin: string }) {
  * reporting them, so each row says which system booked it.
  */
 export function Accessioning() {
+  // The invoice routes are gated on billing:view server-side. Hiding the
+  // buttons from a technologist who would only get a 403 is the same call the
+  // order detail modal makes.
+  const { can } = useAuth();
+  const canSeeMoney = can('billing:view');
+
   const [tab, setTab] = useState<'pending' | 'unregistered'>('pending');
 
   const [pending, setPending] = useState<PendingAccession[]>([]);
@@ -46,15 +84,26 @@ export function Accessioning() {
   const [busy, setBusy] = useState(false);
 
   /*
-   * Which channel's orders to show, or null for both.
+   * Which channel's orders to show, or null for both — held in the URL.
    *
-   * A filter rather than two screens. Telo splits these into separate pages
-   * because its two channels have different roles attached; here the same
-   * operator accessions both queues off the same bench, and the tubes arrive in
-   * one box regardless of how the order was priced. Defaulting to null keeps
-   * that: you see everything waiting unless you ask a narrower question.
+   * Telo reaches the same place with two separate routes, /orders/new and
+   * /orders/b2b, each a nav entry. Putting the channel in the query string
+   * gives that: /accessioning?kind=b2b is a real page you can link to, land on,
+   * bookmark and come back to with the browser's back button, and the nav can
+   * point straight at it — without a second copy of a screen that is otherwise
+   * identical. One bench works both queues out of one box of tubes; the
+   * difference is only how the order was priced.
+   *
+   * No parameter means both, which is what someone opening the queue cold
+   * wants: everything that is waiting.
    */
-  const [kind, setKind] = useState<OrderChannel | null>(null);
+  const [params, setParams] = useSearchParams();
+  const kindParam = params.get('kind');
+  const kind: OrderChannel | null = kindParam === 'b2b' ? 'b2b' : kindParam === 'b2c' ? 'b2c' : null;
+
+  const setKind = useCallback((k: OrderChannel | null) => {
+    setParams(k ? { kind: k } : {}, { replace: true });
+  }, [setParams]);
 
   const pageSize = 100;
 
@@ -192,11 +241,18 @@ export function Accessioning() {
                     <td className="mono cell--meta" data-label="Value" style={{ textAlign: 'right' }}>
                       {inr(r.total)}
                     </td>
+                    {/* Attach, then the two documents — the order Telo puts
+                        them in, and the order the counter works in: barcode the
+                        tubes, hand the patient a bill, send the lab copy with
+                        the sample. */}
                     <td style={{ textAlign: 'right' }}>
-                      <button className="btn btn--primary btn--sm" style={{ whiteSpace: 'nowrap' }}
-                              onClick={() => setBarcodeFor(r)}>
-                        Attach barcode
-                      </button>
+                      <div className="rowacts">
+                        <button className="btn btn--primary btn--sm" style={{ whiteSpace: 'nowrap' }}
+                                onClick={() => setBarcodeFor(r)}>
+                          Attach barcode
+                        </button>
+                        {canSeeMoney && <DocButtons billId={r.billId} />}
+                      </div>
                     </td>
                   </tr>
                 ))}

@@ -21,7 +21,7 @@ import { InvoiceConfigPage } from './pages/InvoiceConfig';
 import { ThemeToggle } from './theme/ThemeToggle';
 import { InfinityLoader } from './components/InfinityLoader';
 import { IdleWarning } from './components/IdleWarning';
-import { NavMenu, type NavItem } from './components/NavMenu';
+import { NavMenu, navItemActive, type NavItem } from './components/NavMenu';
 import { PrintReport } from './pages/PrintReport';
 import { PrintSmartReport } from './pages/PrintSmartReport';
 import { EnvBanner } from './components/EnvBanner';
@@ -82,7 +82,16 @@ const NAV: NavItem[] = [
   // Order entry, in the sequence the work happens: book it, barcode it, then
   // it appears on the worksheet.
   { to: '/orders/new', label: 'New order', icon: 'orders', cap: 'order:create' },
-  { to: '/accessioning', label: 'Accessioning', icon: 'orders', cap: 'order:view' },
+  // These two share a pathname, so both declare the query they own — otherwise
+  // NavLink lights them together. See NavItem.search.
+  { to: '/accessioning', label: 'Accessioning', icon: 'orders', cap: 'order:view', search: '' },
+  // The B2B half of the same worklist, as its own entry — Telo carries it in
+  // the nav as "Patient Orders" and operators reach for it by name. It is the
+  // accessioning queue with ?kind=b2b, not a second screen.
+  {
+    to: '/accessioning?kind=b2b', label: 'Patient orders', icon: 'orders',
+    cap: 'order:b2b', search: 'kind=b2b',
+  },
   { to: '/catalogue', label: 'Catalogue', icon: 'orders', cap: 'order:view' },
   { to: '/accounts', label: 'Accounts', icon: 'orders', cap: 'billing:view' },
   { to: '/rate-lists', label: 'Rates', icon: 'orders', cap: 'billing:view' },
@@ -101,7 +110,8 @@ const NAV: NavItem[] = [
 
 export function App() {
   const { user, loading, signOut, can, entering, finishEntering } = useAuth();
-  const isPrint = useLocation().pathname.startsWith('/print/');
+  const loc = useLocation();
+  const isPrint = loc.pathname.startsWith('/print/');
 
   if (loading) {
     return <div className="center"><InfinityLoader /><span className="muted">Restoring session…</span></div>;
@@ -139,7 +149,16 @@ export function App() {
 
         <nav className="topbar__nav">
           {navItems.map((i) => (
-            <NavLink key={i.to} to={i.to} end={i.end}>{i.label}</NavLink>
+            <NavLink
+              key={i.to} to={i.to} end={i.end}
+              // Entries that own a query decide their own active state; the
+              // rest keep NavLink's, which ignores the query — see NavItem.
+              className={({ isActive }) =>
+                (i.search === undefined ? isActive : navItemActive(i, loc.pathname, loc.search))
+                  ? 'active' : undefined}
+            >
+              {i.label}
+            </NavLink>
           ))}
         </nav>
 
@@ -157,6 +176,7 @@ export function App() {
           name={user.displayName ?? user.username}
           role={user.role}
           onSignOut={signOut}
+          loc={loc}
         />
       </header>
 
