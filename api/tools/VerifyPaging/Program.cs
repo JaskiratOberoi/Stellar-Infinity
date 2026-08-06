@@ -607,6 +607,136 @@ Check("cannot set a client outside scope",
     foreign.StatusCode is System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.OK,
     $"{(int)foreign.StatusCode}");
 
+// ---- 10. THE WRITE PATH (opt-in) -------------------------------------------
+// Placing an order is a real write: a real patient row, a real bill, and a
+// number consumed from a per-client monthly sequence that cannot be handed
+// back. So this block is OFF unless Verify__PlaceTestOrder=1 is set, and it
+// refuses to run against anything but the ABC test client (mcc 1).
+//
+// It exists because the write path cannot be proven any other way. The
+// procedure takes 33 parameters across four table-valued types; a mis-shaped
+// TVP or a swapped parameter compiles fine, passes every read-side check, and
+// fails only when something is actually written.
+// ABC01 (177), not ABC (1). ABC itself is IsActive = 0 and the procedure
+// rightly refuses it — "Unknown or inactive collection centre" — and activating
+// a deactivated client to make a test pass would be editing production data to
+// suit the test. ABC01 is its active sibling on the same rate list with zero
+// bills in its history, so it is both usable and the quieter of the two.
+const int AbcTestClient = 177;
+
+if (Env("Verify__PlaceTestOrder") == "1")
+{
+    Console.WriteLine("\n[10] order placement — REAL WRITE against the ABC test client");
+
+    var mcc = int.Parse(Env("Verify__TestMcc") ?? AbcTestClient.ToString());
+    if (mcc != AbcTestClient)
+    {
+        Check("refuses to write to a non-test client", false,
+            $"mcc {mcc} is not the ABC test client ({AbcTestClient})");
+    }
+    else
+    {
+        // The cheapest single test with a real price, to keep the bill trivial.
+        var pickDoc = await Json(await http.GetAsync($"/api/orders/catalog?mcc={mcc}&kind=test&pageSize=50"));
+        var candidate = pickDoc.RootElement.GetProperty("rows").EnumerateArray()
+            .FirstOrDefault(r => r.GetProperty("rate").ValueKind == JsonValueKind.Number
+                              && r.GetProperty("rate").GetDecimal() > 0);
+
+        if (candidate.ValueKind != JsonValueKind.Object)
+        {
+            Check("found a priced test to order", false, "no priced test in the first 50");
+        }
+        else
+        {
+            var order = new
+            {
+                mcc,
+                items = new[]
+                {
+                    new
+                    {
+                        kind = candidate.GetProperty("kind").GetString(),
+                        id = candidate.GetProperty("id").GetInt32(),
+                        code = candidate.GetProperty("code").GetString(),
+                        name = candidate.GetProperty("name").GetString(),
+                    },
+                },
+                // No barcodes: the B2B path books the order and accessions
+                // later, which is also the path phase 3 will complete.
+                sampleSids = Array.Empty<object>(),
+                patientId = 0,
+                // Unmistakable in any report or worklist someone stumbles on.
+                name = "INFINITY WRITE TEST DO NOT REPORT",
+                initial = "Mr",
+                age = 30,
+                ageType = 1,
+                gender = 1,
+                // No mobile on purpose: a mobile would consume one of the four
+                // slots in the shared allowance for a number that is not real.
+                mobile = (string?)null,
+                discountAmount = 0,
+                // No payment, so no receipt and no ledger posting to unwind.
+                receiptAmount = 0,
+                billAtMrp = false,
+            };
+
+            var placeResp = await http.PostAsync("/api/orders/",
+                new StringContent(JsonSerializer.Serialize(order),
+                    System.Text.Encoding.UTF8, "application/json"));
+
+            var placeBody = await placeResp.Content.ReadAsStringAsync();
+            Check("order placed", placeResp.IsSuccessStatusCode,
+                $"{(int)placeResp.StatusCode} {(placeResp.IsSuccessStatusCode ? "" : placeBody)}");
+
+            if (placeResp.IsSuccessStatusCode)
+            {
+                using var res = JsonDocument.Parse(placeBody);
+                var root = res.RootElement;
+
+                var billId = root.GetProperty("billId").GetInt32();
+                var billNumber = root.GetProperty("billNumber").GetInt32();
+                var patientId = root.GetProperty("patientId").GetInt32();
+                var total = root.GetProperty("total").GetInt32();
+
+                Check("a bill id came back", billId > 0, $"billId {billId}");
+                Check("a bill number was allocated", billNumber > 0, $"billNumber {billNumber}");
+                Check("a patient was created", patientId > 0, $"patientId {patientId}");
+                Check("the bill has a value", total > 0, $"total {total}");
+
+                Console.WriteLine();
+                Console.WriteLine($"        >>> VOID THIS: bill {billNumber} (id {billId}), patient {patientId} <<<");
+                Console.WriteLine();
+
+                // The order must be readable back through the normal path.
+                var readBack = await http.GetAsync($"/api/orders/{billId}");
+                Check("the new order opens", readBack.IsSuccessStatusCode, $"{(int)readBack.StatusCode}");
+
+                if (readBack.IsSuccessStatusCode)
+                {
+                    using var rb = await Json(readBack);
+                    var o = rb.RootElement.GetProperty("order");
+                    Check("it has its line item",
+                        o.GetProperty("lines").GetArrayLength() == 1,
+                        $"{o.GetProperty("lines").GetArrayLength()} line(s)");
+                    Check("it reads back at the same value",
+                        o.GetProperty("amount").GetDecimal() == total,
+                        $"{o.GetProperty("amount").GetDecimal()} vs {total}");
+                }
+
+                // THE POINT OF THE WHOLE @origin EXERCISE. If this says telo:
+                // then Infinity's orders are indistinguishable from Telo's and
+                // the parameter never took effect.
+                Console.WriteLine("        (verify the inf: origin marker separately in SQL — "
+                    + "addedby on patient " + patientId + ")");
+            }
+        }
+    }
+}
+else
+{
+    Console.WriteLine("\n[10] order placement — SKIPPED (set Verify__PlaceTestOrder=1 to run; writes a real bill)");
+}
+
 Console.WriteLine();
 Console.WriteLine(failures == 0 ? "All checks passed." : $"{failures} check(s) FAILED.");
 return failures == 0 ? 0 : 1;
