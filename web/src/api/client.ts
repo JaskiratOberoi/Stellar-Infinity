@@ -1,14 +1,29 @@
 /**
  * Thin fetch wrapper for the Infinity API.
  *
- * Token storage: sessionStorage, so the token dies with the tab and is not
- * shared across windows. This is still readable by any script on the page, so
- * it is only as safe as the app is free of XSS. The stronger option is an
- * httpOnly cookie, which needs the API to set it and a CSRF strategy — worth
- * doing before this handles patient data in production.
+ * AUTH IS A COOKIE, NOT A TOKEN THIS CODE CAN SEE. The JWT lives in an
+ * httpOnly cookie set by the API; script cannot read it, so an XSS defect can
+ * no longer steal a credential and replay it elsewhere. Nothing here stores or
+ * forwards a token — the browser attaches the cookie, which is why every
+ * request sets credentials: 'include'.
+ *
+ * The price of cookies is CSRF: they ride along on cross-site requests too. So
+ * every unsafe method echoes the readable CSRF cookie in a header, which a
+ * cross-origin page cannot do (it can cause our cookies to be SENT, but the
+ * same-origin policy stops it READING them). The API compares the two.
  */
 
-const TOKEN_KEY = 'infinity.token';
+/** Readable-by-design; the httpOnly session cookie is the one that matters. */
+const CSRF_COOKIE = 'inf_csrf';
+const PRESENCE_COOKIE = 'inf_present';
+const CSRF_HEADER = 'X-CSRF-Token';
+
+function readCookie(name: string): string | null {
+  const hit = document.cookie
+    .split('; ')
+    .find((c) => c.startsWith(name + '='));
+  return hit ? decodeURIComponent(hit.slice(name.length + 1)) : null;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -20,10 +35,25 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Whether a session probably exists.
+ *
+ * The session cookie is httpOnly and therefore invisible here, so this reads a
+ * separate non-secret marker the API sets alongside it. It carries NO
+ * authority: forging it buys nothing but a failed /me call. Its only job is to
+ * let the app show "restoring session" instead of flashing the login screen,
+ * and to let the tab guard reason about whether there is anything to end.
+ *
+ * clear() cannot delete an httpOnly cookie from script — only the server can.
+ * It drops the marker so the UI stops claiming a session, and the caller is
+ * expected to hit /api/auth/logout to actually end it.
+ */
 export const tokenStore = {
-  get: () => sessionStorage.getItem(TOKEN_KEY),
-  set: (token: string) => sessionStorage.setItem(TOKEN_KEY, token),
-  clear: () => sessionStorage.removeItem(TOKEN_KEY),
+  get: () => readCookie(PRESENCE_COOKIE),
+  set: (_token: string) => { /* the API sets the cookies; nothing to store */ },
+  clear: () => {
+    document.cookie = `${PRESENCE_COOKIE}=; Path=/; Max-Age=0; SameSite=Strict`;
+  },
 };
 
 /** Called when the API rejects our token, so the shell can bounce to /login. */
@@ -39,16 +69,43 @@ export const setUnauthorizedHandler = (fn: () => void) => {
  */
 const TIMEOUT_MS = 20_000;
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = tokenStore.get();
-  const headers = new Headers(init.headers);
+interface RequestOptions extends RequestInit {
+  /**
+   * This request IS the credential check, not a call made with a session.
+   *
+   * A 401 means opposite things in the two cases. On an ordinary call it means
+   * the session died — clear the token and bounce to the login screen. On the
+   * login request itself there is no session to lose; 401 simply means the
+   * username or password was wrong, and the server's own message should be
+   * shown. Conflating them is why a mistyped password reported "Your session
+   * has ended. Please sign in again." to someone who had never signed in.
+   */
+  isCredentialCheck?: boolean;
+}
+
+async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
+  const { isCredentialCheck = false, ...fetchInit } = init;
+  const headers = new Headers(fetchInit.headers);
   headers.set('Accept', 'application/json');
-  if (init.body) headers.set('Content-Type', 'application/json');
-  if (token) headers.set('Authorization', `Bearer ${token}`);
+  if (fetchInit.body) headers.set('Content-Type', 'application/json');
+
+  // Unsafe methods must prove they came from our own page — see the CSRF note
+  // at the top. Safe methods change nothing and are exempt server-side.
+  const method = (fetchInit.method ?? 'GET').toUpperCase();
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    const csrf = readCookie(CSRF_COOKIE);
+    if (csrf) headers.set(CSRF_HEADER, csrf);
+  }
 
   let res: Response;
   try {
-    res = await fetch(path, { ...init, headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    res = await fetch(path, {
+      ...fetchInit,
+      headers,
+      // The session cookie only travels if this is set.
+      credentials: 'include',
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
   } catch (err) {
     // Network-level failure: server down, DNS, CORS, or our own timeout.
     // Distinguish it from an HTTP error so the message is actionable rather
@@ -62,12 +119,26 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     );
   }
 
-  if (res.status === 401) {
+  // Session expiry — but NOT when this request is the credential check itself.
+  // See isCredentialCheck.
+  if (res.status === 401 && !isCredentialCheck) {
     // Either never signed in, or the session was revoked server-side (role
     // change, password reset, deactivation). Both mean: sign in again.
     tokenStore.clear();
     onUnauthorized?.();
     throw new ApiError(401, 'Your session has ended. Please sign in again.');
+  }
+
+  // The rate limiter replies with an empty body, so the generic handler below
+  // would render a bare "Request failed (429)". Someone locked out needs to
+  // know it is a lockout and roughly how long it lasts.
+  if (res.status === 429) {
+    throw new ApiError(
+      429,
+      isCredentialCheck
+        ? 'Too many sign-in attempts. Please wait about 15 minutes and try again.'
+        : 'Too many requests. Please wait a moment and try again.',
+    );
   }
 
   if (!res.ok) {
@@ -108,7 +179,7 @@ export interface AuthenticatedUser {
 }
 
 export interface LoginResponse {
-  accessToken: string;
+  /** No accessToken: the API delivers it as an httpOnly cookie instead. */
   expiresAt: string;
   user: AuthenticatedUser;
 }
@@ -137,10 +208,20 @@ export interface AdminUserPage {
 
 export const authApi = {
   login: (username: string, password: string) =>
-    // X-Login-User lets the API rate-limit per username+IP rather than per IP
-    // alone — whole collection centres share one NAT address.
-    api.post<LoginResponse>('/api/auth/login', { username, password }, { 'X-Login-User': username }),
+    // isCredentialCheck: a 401 here means "wrong username or password", not a
+    // dead session — so the server's own message is shown and no token is
+    // cleared. X-Login-User lets the API rate-limit per username+IP rather
+    // than per IP alone, since whole collection centres share one NAT address.
+    request<LoginResponse>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+      headers: { 'X-Login-User': username },
+      isCredentialCheck: true,
+    }),
   me: () => api.get<AuthenticatedUser>('/api/auth/me'),
+  // Drops server-side state the token cannot clear by itself — today the
+  // Jarvis unlock grant, so signing back in re-locks it.
+  logout: () => api.post<{ ok: boolean }>('/api/auth/logout'),
 };
 
 /* ---- worksheet ---- */
@@ -274,11 +355,21 @@ export interface ResultAuditRow {
   occurredAt: string;
 }
 
+export interface BusinessUnit {
+  id: number;
+  code: string | null;
+  name: string | null;
+}
+
 export interface AutoAuthScopeRow {
   scopeType: string;
   scopeKey: string;
   label: string | null;
+  /** Context only — the department is a property of the test, not a scope. */
   departmentName: string | null;
+  /** Which lab the rule governs. null is the blanket "all units" rule. */
+  businessUnitId: number | null;
+  businessUnitName: string | null;
   enabled: boolean;
   requireInRange: boolean;
   allowOutOfRange: boolean;
@@ -293,6 +384,8 @@ export interface AutoAuthAuditRow {
   scopeType: string | null;
   scopeKey: string | null;
   scopeLabel: string | null;
+  businessUnitId: number | null;
+  businessUnitName: string | null;
   oldEnabled: boolean | null;
   newEnabled: boolean | null;
   detail: string | null;
@@ -386,11 +479,25 @@ export const worksheetApi = {
 };
 
 export const autoAuthApi = {
-  list: (search: string, onlyEnabled = false, page = 1, pageSize = 200) =>
+  list: (search: string, onlyEnabled = false, businessUnitId: number | null = null, page = 1, pageSize = 200) =>
     api.get<PagedResponse<AutoAuthScopeRow> & { featureEnabled: boolean }>(
       `/api/worksheet-settings/auto-auth/?search=${encodeURIComponent(search)}`
-      + `&onlyEnabled=${onlyEnabled}&page=${page}&pageSize=${pageSize}`,
+      + `&onlyEnabled=${onlyEnabled}&page=${page}&pageSize=${pageSize}`
+      // Omitted entirely when null — the API reads a missing parameter as the
+      // blanket "all units" rule, which is not the same as filtering.
+      + (businessUnitId == null ? '' : `&businessUnitId=${businessUnitId}`),
     ),
+
+  businessUnits: () =>
+    api.get<{ units: BusinessUnit[] }>('/api/worksheet-settings/auto-auth/business-units'),
+
+  /** Verify the unlock password without changing anything. Gates the screen. */
+  unlock: (password: string) =>
+    api.post<{ unlocked: boolean }>('/api/worksheet-settings/auto-auth/unlock', { password }),
+
+  /** Is this session already through the gate? Survives a page refresh. */
+  unlockStatus: () =>
+    api.get<{ unlocked: boolean; featureEnabled: boolean }>('/api/worksheet-settings/auto-auth/unlock'),
 
   // The password travels in the body of a POST over TLS and is never stored by
   // the browser beyond the lifetime of the page — see AutoAuthSettings.
@@ -398,6 +505,7 @@ export const autoAuthApi = {
     scopeType: string;
     scopeKey: string;
     scopeLabel?: string | null;
+    businessUnitId: number | null;
     enabled: boolean;
     requireInRange: boolean;
     allowOutOfRange: boolean;
@@ -436,4 +544,207 @@ export const adminApi = {
   setRole: (userId: number, role: string) => api.put<void>(`/api/admin/users/${userId}/role`, { role }),
   resetPassword: (userId: number, password: string) =>
     api.put<void>(`/api/admin/users/${userId}/password`, { password }),
+};
+
+/* ---- ordering: catalogue, cart, order entry, accessioning ---- */
+
+export interface CatalogItem {
+  /** test | profile | master */
+  kind: string;
+  id: number;
+  code: string | null;
+  name: string | null;
+  departmentName: string | null;
+  mrp: number | null;
+  /** What THIS client pays. Null means no price on record — not free. */
+  rate: number | null;
+  /** special | ratelist | mrp | none — why the rate is what it is. */
+  rateSource: string;
+}
+
+export interface CartItem { kind: string; id: number; code: string | null; name: string | null }
+export interface Cart { mcc: number | null; items: CartItem[] }
+
+export interface SampleGroup {
+  sampleTypeId: number;
+  sampleTypeName: string | null;
+  codes: string | null;
+  names: string | null;
+  requiresSplit: boolean;
+  itemCount: number;
+}
+
+export interface OrderPreview {
+  lines: {
+    kind: string; id: number; code: string | null; name: string | null;
+    mrp: number | null; rate: number | null; rateSource: string;
+  }[];
+  groups: SampleGroup[];
+  total: number;
+  /**
+   * Computed over a SUBSET. Most of the catalogue has no MRP on record, so
+   * comparing every line against zero would read as a loss on almost every
+   * order. `linesWithoutMrp` is how many were left out.
+   */
+  margin: {
+    amount: number; mrpTotal: number; rateTotal: number;
+    comparableLines: number; linesWithoutMrp: number;
+  };
+  unpriced: number;
+}
+
+export interface PlacedOrder {
+  ok: boolean;
+  errorCode: string | null;
+  message: string | null;
+  patientId: number | null;
+  billId: number | null;
+  billNumber: number | null;
+  total: number;
+  sampleCount: number;
+  samples: { sampleId: number; vailid: string | null; sampleTypeId: number; sampleTypeName: string | null }[];
+}
+
+export const catalogApi = {
+  search: (mcc: number | null, search: string, kind: string, page = 1, pageSize = 100) => {
+    const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (mcc != null) p.set('mcc', String(mcc));
+    if (search.trim()) p.set('search', search.trim());
+    if (kind) p.set('kind', kind);
+    return api.get<PagedResponse<CatalogItem>>(`/api/orders/catalog?${p}`);
+  },
+};
+
+export const cartApi = {
+  get: () => api.get<Cart>('/api/orders/cart/'),
+  setClient: (mcc: number) => api.post<Cart>('/api/orders/cart/client', { mcc }),
+  add: (item: CartItem) => api.post<Cart>('/api/orders/cart/items', item),
+  remove: (kind: string, id: number) =>
+    request<Cart>(`/api/orders/cart/items/${kind}/${id}`, { method: 'DELETE' }),
+  clear: () => request<Cart>('/api/orders/cart/', { method: 'DELETE' }),
+  preview: () => api.post<OrderPreview>('/api/orders/preview'),
+  place: (body: unknown) => api.post<PlacedOrder>('/api/orders/', body),
+};
+
+export interface PendingAccession {
+  billId: number;
+  billNumber: number | null;
+  billDate: string | null;
+  patientId: number;
+  patientName: string | null;
+  mccCode: number | null;
+  clientCode: string | null;
+  total: number;
+  balance: number;
+  /** infinity | telo — which platform booked it. */
+  origin: string;
+  requiredGroups: number;
+  haveGroups: number;
+}
+
+export interface PendingRegistration {
+  sampleId: number;
+  vailid: string | null;
+  patientId: number;
+  patientName: string | null;
+  mccCode: number | null;
+  clientCode: string | null;
+  sampleStatus: number;
+  sampleTypeName: string | null;
+  testNames: string | null;
+  addedAt: string | null;
+  origin: string;
+}
+
+export const accessionApi = {
+  pending: (page = 1, pageSize = 100) =>
+    api.get<PagedResponse<PendingAccession>>(`/api/accessioning/pending?page=${page}&pageSize=${pageSize}`),
+  unregistered: (page = 1, pageSize = 100) =>
+    api.get<PagedResponse<PendingRegistration>>(
+      `/api/accessioning/unregistered?page=${page}&pageSize=${pageSize}`),
+  addSids: (patientId: number, mcc: number, sids: { sampleTypeId: number; vailid: string }[]) =>
+    api.post<{ ok: boolean; samples: unknown[] }>('/api/accessioning/sids', { patientId, mcc, sids }),
+  register: (vailids: string[]) =>
+    api.post<{ ok: boolean; registered: number; skipped: number }>(
+      '/api/accessioning/register', { vailids }),
+};
+
+export interface OrderTube {
+  sampleTypeId: number;
+  sampleTypeName: string | null;
+  testNames: string | null;
+  /** Already barcoded — do not offer a second label for this tube. */
+  existingVailid: string | null;
+}
+
+/** The tubes ONE existing order needs. Not the cart preview, which answers a
+ *  different question about the current user's own basket. */
+export const orderTubesApi = {
+  forPatient: (patientId: number) =>
+    api.get<{ tubes: OrderTube[] }>(`/api/accessioning/tubes/${patientId}`),
+};
+
+/* ---- client accounts, ledger, billing ---- */
+
+export interface ClientAccount {
+  mccId: number;
+  clientCode: string | null;
+  clientName: string | null;
+  isActive: boolean;
+  /** Raw account value. NEGATIVE means the client owes the lab. */
+  balance: number;
+  /** The same number the way a person reads it: positive when money is due. */
+  owed: number;
+  totalDeposited: number;
+  lastUpdatedAt: string | null;
+}
+
+export interface LedgerEntry {
+  id: number;
+  occurredAt: string | null;
+  amount: number;
+  /** debit (an order consumed credit) | credit (a payment came in) */
+  direction: string;
+  note: string | null;
+  reference: string | null;
+  addedBy: string | null;
+  /** infinity | telo | lis */
+  origin: string;
+  postedAt: string | null;
+}
+
+/** Deposit types the LIS recognises, from tbl_med_mcc_account_detail.deposittype. */
+export const PAYMENT_MODES = [
+  { id: 3, label: 'Cash' },
+  { id: 1, label: 'Cheque' },
+  { id: 2, label: 'NEFT / transfer' },
+  { id: 4, label: 'UPI' },
+] as const;
+
+export const accountsApi = {
+  list: (search: string, onlyOwing: boolean, page = 1, pageSize = 100) => {
+    const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (search.trim()) p.set('search', search.trim());
+    if (onlyOwing) p.set('onlyOwing', 'true');
+    return api.get<PagedResponse<ClientAccount> & { pageOwed: number }>(`/api/accounts/?${p}`);
+  },
+  ledger: (mcc: number, page = 1, pageSize = 100) =>
+    api.get<PagedResponse<LedgerEntry>>(`/api/accounts/${mcc}/ledger?page=${page}&pageSize=${pageSize}`),
+  pay: (mcc: number, body: { amount: number; mode: number; chequeNo?: string | null; reason?: string | null }) =>
+    api.post<{ ok: boolean; newBalance: number | null; message: string | null }>(
+      `/api/accounts/${mcc}/payments`, body),
+};
+
+export const billingApi = {
+  receipt: (billId: number, body: { amount: number; payMode?: string; reference?: string | null }) =>
+    api.post<{ ok: boolean; alreadyRecorded: boolean; balance: number | null; txnId: string | null }>(
+      `/api/orders/${billId}/receipts`, body),
+  voidReceipt: (billId: number, receiptId: number, reason: string | null) =>
+    api.post<{ ok: boolean; alreadyVoided: boolean; balance: number | null }>(
+      `/api/orders/${billId}/receipts/${receiptId}/void`, { reason }),
+  editReceipt: (billId: number, receiptId: number, newAmount: number, reason: string | null) =>
+    api.put<{ ok: boolean; unchanged: boolean; oldAmount: number | null; balance: number | null }>(
+      `/api/orders/${billId}/receipts/${receiptId}`, { newAmount, reason }),
+  discount: (billId: number, discount: number) =>
+    api.put<{ ok: boolean; balance: number | null }>(`/api/orders/${billId}/discount`, { discount }),
 };
