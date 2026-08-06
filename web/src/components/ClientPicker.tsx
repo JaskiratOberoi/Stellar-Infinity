@@ -73,12 +73,30 @@ export function ClientPicker({
       style={{ minWidth: 220 }}
       aria-label="Client"
     >
-      {allowNone && <option value="">{noneLabel}</option>}
+      {/* There must ALWAYS be an option matching value=''.
+          Without one, a select whose value is '' shows its FIRST option while
+          the state stays null — so the order form displayed "ABC01" as if a
+          client were chosen, kept cart.mcc at null, and rendered nothing below
+          it. It read as a broken page.
+
+          The fix is a placeholder rather than auto-selecting the first client:
+          silently picking one would price the whole basket at a client's rates
+          nobody chose, which is precisely what the cart is built to prevent. */}
+      {allowNone
+        ? <option value="">{noneLabel}</option>
+        : <option value="" disabled>Choose a client…</option>}
+
       {options.map((c) => (
         <option key={c.id} value={c.id}>
           {c.code}{c.name && c.name !== c.code ? ` — ${c.name}` : ''}
         </option>
       ))}
+
+      {options.length === 0 && (
+        <option value="" disabled>
+          {activeOnly ? 'No active clients in your scope' : 'No clients in your scope'}
+        </option>
+      )}
     </select>
   );
 }

@@ -604,26 +604,287 @@ button, input, select { font: inherit; color: inherit; }
   opacity: .78;
 }
 
-/* Below the nav's wrap point the bar is already tight, and the lab's identity
-   is the more expendable of the two — Infinity's mark tells the user which
-   application they are in. */
-@media (max-width: 720px) {
-  .noble-mark { display: none; }
-}
-
 .topbar__nav { display: flex; gap: .3rem; margin-left: auto; }
 
 .topbar__nav a {
   padding: .45rem .9rem; border-radius: 999px;
   text-decoration: none; color: var(--ink-dim);
   font-size: .78rem; letter-spacing: .1em; text-transform: uppercase;
-  transition: background .15s, color .15s;
+  transition: background .15s, color .15s, padding .15s;
+  /* A pill that breaks onto two lines is the failure, not the fix. Everything
+     in this bar is an indivisible atom; the bar sheds whole atoms instead —
+     see the shed ladder below. */
+  white-space: nowrap;
 }
 .topbar__nav a:hover { color: var(--ink); background: var(--accent-soft); }
 .topbar__nav a.active { color: var(--teal); background: var(--accent-soft); }
 
-.topbar__user { display: flex; align-items: center; gap: .8rem; font-size: .78rem; color: var(--ink-dim); }
+.topbar__user {
+  display: flex; align-items: center; gap: .8rem;
+  font-size: .78rem; color: var(--ink-dim);
+  /* The one elastic thing in the bar. Everything else is fixed, so when the
+     width runs short this is what gives — see the span below. */
+  min-width: 0;
+}
 .topbar__user b { color: var(--ink); font-weight: 500; }
+.topbar .btn, .mark__text { white-space: nowrap; }
+
+/* The marks and the nav are indivisible: a shrunk logo and a clipped link are
+   both worse than a trimmed name. */
+.mark, .topbar__nav { flex: none; }
+
+/* A display name is user data — it can be "Jas" or "Dr. Priyanka
+   Chattopadhyay" — so the budget below cannot be tuned around any one of them.
+   Instead this is the element that absorbs the slack: it trims with an ellipsis
+   rather than pushing the nav off the bar, and the full value stays on the
+   title of .topbar__user. */
+.topbar__user > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The menu control. Declared here, ABOVE the shed ladder, because the rung that
+   reveals it is a plain class selector too — declared after, this `none` would
+   win on source order and the button would never appear. */
+.nav-toggle {
+  display: none;
+  place-items: center;
+  width: 44px; height: 44px;
+  flex: none;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.nav-toggle:hover { background: var(--accent-soft); border-color: var(--accent-ring); }
+.nav-toggle:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
+.nav-toggle svg { width: 22px; height: 22px; }
+
+/* ---------- the top bar's shed ladder ----------
+
+   Measured, not guessed. A super_admin — the only role that sees all seven
+   links — needs 1324px to sit on one line:
+
+     Infinity mark 176 + Noble mark 90 + nav 703 + user 238
+     + three 24px gaps + 45px of padding
+
+   The single reflow rule used to be at 640px, which left a ~680px band where
+   the bar was over-constrained and nothing was allowed to give. With nowrap
+   above, that band would now overflow the viewport instead of wrapping, so the
+   two have to arrive together.
+
+   Each rung fires ABOVE what the rung before it needs, so no width is ever left
+   in a state that does not fit. Measured, with the widest realistic name:
+
+     > 1400  everything                               needs 1395
+     ≤1400  tighten the gap and the pill padding      needs 1338
+     ≤1345  drop the Noble mark                       needs 1234
+     ≤1240  drop the name and role                    needs 1058
+     ≤1080  nav takes its own full-width row
+
+   The margins between a rung and the next one's need are thin (5–20px) because
+   the bar is genuinely full. That is safe only because the name ellipsises
+   rather than overflowing — it is the give in the system, and the numbers above
+   are the point at which it would START to trim, not the point at which
+   anything breaks.
+
+   Tuned for the worst case, so a role with fewer links sheds a little earlier
+   than it strictly must. The alternative is measuring fit in JavaScript, which
+   is a lot of machinery for a header. */
+
+@media (max-width: 1400px) {
+  .topbar { gap: .8rem; padding-left: 1.1rem; padding-right: 1.1rem; }
+  .topbar__nav a { padding: .45rem .7rem; letter-spacing: .08em; }
+}
+
+/* The lab's identity is the more expendable of the two: Infinity's own mark is
+   what tells someone which application they are in. */
+@media (max-width: 1345px) {
+  .noble-mark { display: none; }
+}
+
+/* The name goes before any navigation does. Someone knows who they are signed
+   in as; they cannot know where a link went. It stays reachable on hover
+   through the title on .topbar__user. */
+@media (max-width: 1240px) {
+  .topbar__user > span { display: none; }
+}
+
+/* Out of things to shed. The nav collapses to one control and reopens as a
+   full screen — see NavMenu.tsx for why a scrolling row was not good enough.
+   The bar itself stays a single row at every width from here down. */
+@media (max-width: 1080px) {
+  .topbar__nav { display: none; }
+  .nav-toggle { display: grid; }
+  /* Sign out moves into the sheet, where there is room to give it a proper
+     target instead of a 29px pill wedged against the edge. */
+  .topbar__user > .btn { display: none; }
+  /* The nav carried the auto margin that pushed everything right; with it gone
+     the user block takes it over. */
+  .topbar__user { margin-left: auto; }
+}
+
+/* ---------- the menu sheet ---------- */
+
+/* The sheet takes the page's own ground rather than floating a panel over it:
+   it is not a dialog hovering above the worklist, it is where you are now. */
+.navsheet {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  padding:
+    calc(1rem + env(safe-area-inset-top))
+    calc(1rem + env(safe-area-inset-right))
+    calc(1rem + env(safe-area-inset-bottom))
+    calc(1rem + env(safe-area-inset-left));
+  background:
+    repeating-linear-gradient(0deg,  var(--grid) 0 1px, transparent 1px 32px),
+    repeating-linear-gradient(90deg, var(--grid) 0 1px, transparent 1px 32px),
+    linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+  /* One authored moment: the screen arrives from just below and settles. */
+  animation: navsheet-in .3s cubic-bezier(.16, 1, .3, 1) both;
+}
+.navsheet:focus { outline: none; }
+
+@keyframes navsheet-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.navsheet__head {
+  display: flex; align-items: center; gap: 1rem;
+  padding-bottom: 1rem; margin-bottom: 1.1rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.navsheet__who { display: flex; flex-direction: column; min-width: 0; gap: .1rem; }
+.navsheet__who b { font-size: 1.05rem; font-weight: 500; }
+.navsheet__who > span {
+  font-size: .68rem; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.navsheet__close { margin-left: auto; }
+
+/* Two columns, not a list: seven entries in one column runs past the fold on a
+   short phone, and the whole point of the sheet is seeing all of them at once. */
+.navsheet__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .6rem;
+  /* Optically centred in what is left between the head and the sign-out, so a
+     four-entry nav does not sit in the top corner of an empty screen. `safe`
+     falls back to start when the tiles genuinely do not fit, which is the one
+     case where centring would push the first row off the top. */
+  align-content: safe center;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.navsheet__grid a {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1.1rem;
+  min-height: 104px;
+  padding: .9rem .95rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-glass);
+  color: var(--ink);
+  text-decoration: none;
+  font-size: .76rem; letter-spacing: .12em; text-transform: uppercase;
+  transition: background .18s, border-color .18s, color .18s, box-shadow .18s, transform .18s;
+}
+
+/* An odd count leaves a hole in the last row. The straggler takes the width
+   instead — seven entries then read as a finished block rather than a grid
+   someone stopped filling in. */
+.navsheet__grid a:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+  min-height: 76px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: .8rem;
+}
+
+.navsheet__grid svg {
+  width: 22px; height: 22px;
+  flex: none;
+  color: var(--ink-dim);
+  transition: color .18s;
+}
+
+.navsheet__grid a.active {
+  color: var(--teal);
+  border-color: var(--accent-ring);
+  background: var(--accent-soft);
+  box-shadow: var(--shadow-primary);
+}
+.navsheet__grid a.active svg { color: var(--teal); }
+
+/* Touch has no hover to give, so the press is the feedback. */
+.navsheet__grid a:active { transform: scale(.985); background: var(--accent-soft); }
+
+@media (hover: hover) {
+  .navsheet__grid a:hover { border-color: var(--accent-ring); background: var(--accent-soft); }
+  .navsheet__grid a:hover svg { color: var(--teal); }
+}
+
+.navsheet__grid a:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
+
+/* The tiles arrive just behind the sheet, a beat apart, so the screen resolves
+   as one gesture rather than appearing all at once. Part of the sheet's own
+   entrance, not a second effect — and the global reduced-motion rule at the
+   foot of this file freezes the whole thing. */
+.navsheet__grid a { animation: navtile-in .34s cubic-bezier(.16, 1, .3, 1) both; }
+.navsheet__grid a:nth-child(1) { animation-delay: .04s; }
+.navsheet__grid a:nth-child(2) { animation-delay: .07s; }
+.navsheet__grid a:nth-child(3) { animation-delay: .10s; }
+.navsheet__grid a:nth-child(4) { animation-delay: .13s; }
+.navsheet__grid a:nth-child(5) { animation-delay: .16s; }
+.navsheet__grid a:nth-child(6) { animation-delay: .19s; }
+.navsheet__grid a:nth-child(7) { animation-delay: .22s; }
+.navsheet__grid a:nth-child(n+8) { animation-delay: .25s; }
+
+@keyframes navtile-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.navsheet__foot { display: flex; margin-top: 1rem; }
+.navsheet__foot .btn { flex: 1; min-height: 50px; }
+
+/* A phone in landscape leaves the grid about 230px. Shrink the tiles and close
+   the gaps rather than letting the fullest nav scroll: seven entries in two
+   columns is four rows, and at these numbers they land inside it. The grid is
+   still the scroller if a role ever gains an eighth. */
+@media (max-height: 460px) {
+  .navsheet__grid { gap: .45rem; }
+  .navsheet__grid a {
+    /* No room for the stacked form; the icon comes alongside the word. */
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: .7rem;
+    /* Height here is set by the padding, not the minimum — the icon and the
+       label already exceed 48px on their own. */
+    padding: .55rem .8rem;
+    min-height: 44px;
+  }
+  .navsheet__grid a:last-child:nth-child(odd) { min-height: 44px; }
+  .navsheet__grid svg { width: 19px; height: 19px; }
+  .navsheet__head { padding-bottom: .6rem; margin-bottom: .7rem; }
+  .navsheet__foot .btn { min-height: 44px; }
+}
 
 .page { flex: 1; padding: 1.8rem; max-width: 1400px; width: 100%; margin: 0 auto; }
 .page__head { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.2rem; flex-wrap: wrap; }
@@ -825,9 +1086,16 @@ tbody tr:hover { background: var(--accent-softer); }
 .worksheet-grid__touched > td { background: var(--accent-soft); }
 
 @media (max-width: 640px) {
-  .topbar { flex-wrap: wrap; gap: .7rem; }
-  .topbar__nav { order: 3; width: 100%; margin-left: 0; overflow-x: auto; }
+  /* The wrap and the nav's own row are already on from 1050px; this is just the
+     last tightening. */
+  .topbar { gap: .7rem; padding-left: .9rem; padding-right: .9rem; }
   .page { padding: 1rem; }
+
+  /* 1.5rem of backdrop on each side takes 48px off a 360px phone, and the
+     modals are where the densest lists live. Give the content the width back
+     and let the sheet reach closer to the edges. */
+  .modal-backdrop { padding: .6rem; }
+  .modal { padding: 1.1rem; border-radius: 14px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -924,6 +1192,45 @@ tbody tr:hover { background: var(--accent-softer); }
 .dark .status--sky     { --status-ink: #7dd3fc; }
 .dark .status--blue    { --status-ink: #93c5fd; }
 .dark .status--magenta { --status-ink: #e879f9; }
+
+/* ---------- order entry steps ----------
+   All three steps stay on screen, dimmed until reachable. Revealing them one
+   at a time left the New Order page as a single card above an empty screen,
+   which reads as broken rather than as "do this first". */
+
+.order-step__head {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  flex-wrap: wrap;
+  margin-bottom: .7rem;
+}
+
+.order-step__title { font-size: .95rem; font-weight: 500; }
+
+.order-step__num {
+  display: grid;
+  place-items: center;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  color: var(--ink-dim);
+  font-size: .72rem;
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+.order-step__num--on {
+  border-color: transparent;
+  background: linear-gradient(92deg, var(--accent-grad-from), var(--accent-grad-mid));
+  color: var(--on-accent);
+}
+
+/* Not display:none — an unreachable step still tells the operator what is
+   coming, and a form whose remaining steps are invisible cannot be judged for
+   length before starting it. */
+.order-step--off { opacity: .55; }
+.order-step--off .order-step__head { margin-bottom: 0; }
 
 /* ---------- advanced filter panel ----------
    The LIS puts all eleven worksheet filters on screen permanently. A
@@ -1180,12 +1487,17 @@ tbody tr.band-1:hover > td { background: var(--accent-ring); }
 /* Styled with appearance:none on the REAL input rather than a hidden input
    plus a decorative span. Keyboard behaviour, the indeterminate state, form
    semantics and screen-reader announcement all stay native and free. */
+/* The box drives its own tick. Every glyph offset below is a fraction of
+   --box, so raising the size for a thumb is one declaration and the tick
+   cannot drift out of register with the box it sits in. The fractions are the
+   original 18px numbers divided through, so nothing moves at the default. */
 input[type="checkbox"] {
+  --box: 18px;
   appearance: none;
   -webkit-appearance: none;
   flex: none;
-  width: 18px;
-  height: 18px;
+  width: var(--box);
+  height: var(--box);
   margin: 0;
   border: 1.5px solid var(--line-strong, var(--ink-dim));
   border-radius: 5px;
@@ -1211,10 +1523,10 @@ input[type="checkbox"]:indeterminate {
 input[type="checkbox"]:checked::after {
   content: "";
   position: absolute;
-  left: 5px;
-  top: 1.5px;
-  width: 4px;
-  height: 9px;
+  left: calc(var(--box) * .278);
+  top: calc(var(--box) * .083);
+  width: calc(var(--box) * .222);
+  height: calc(var(--box) * .5);
   border: solid var(--on-accent);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg) scale(1);
@@ -1225,9 +1537,9 @@ input[type="checkbox"]:checked::after {
 input[type="checkbox"]:indeterminate::after {
   content: "";
   position: absolute;
-  left: 3px;
-  top: 7px;
-  width: 10px;
+  left: calc(var(--box) * .167);
+  top: calc(var(--box) * .389);
+  width: calc(var(--box) * .556);
   height: 2px;
   border-radius: 1px;
   background: var(--on-accent);
@@ -1252,6 +1564,475 @@ input[type="checkbox"]:disabled {
 /* An authorisation box is a clinical sign-off, so it gets a larger hit target
    than an ordinary filter checkbox. */
 .worksheet-grid input[type="checkbox"] {
-  width: 20px;
-  height: 20px;
+  --box: 20px;
+}
+
+/* ---------- touch targets ----------
+
+   Keyed to the POINTER, not the viewport. A laptop with a touchscreen has
+   exactly the problem a phone has, and a mouse driving a narrow window does
+   not — so a width breakpoint would miss the first and punish the second.
+
+   The card layout already sizes the controls inside a card. These are the ones
+   around it: the filter bar and the pager sit on every list screen, and they
+   are the first thing a thumb reaches for. */
+@media (pointer: coarse) {
+  .btn--sm { min-height: 40px; padding: .5rem 1rem; }
+  .input--sm { min-height: 40px; }
+  input[type="checkbox"] { --box: 24px; }
+  .worksheet-grid input[type="checkbox"] { --box: 26px; }
+}
+
+/* =========================================================
+   Rows as cards on a small screen
+
+   A worklist row is eight columns wide. Below about 880px it cannot be one
+   line, and the only two honest answers are a sideways scroll or a card. A
+   rider standing at a collection centre with a phone should not have to drag a
+   table left and right to find out whether a sample is authorised — so
+   `.table-wrap--cards` re-lays the SAME markup as one card per row.
+
+   The same markup, deliberately. No parallel mobile component and no duplicated
+   JSX, because the moment there are two of them a column added to the table
+   goes missing from the phone. What each cell BECOMES is declared on the cell
+   itself with one of the `cell--*` classes below, since a card is a composition
+   — headline, badge, body, action — and not eight label/value lines in a stack.
+
+   `data-label` carries the column heading down onto the cell: the <thead> is
+   off-screen in card mode, and "LKO0042" on its own says nothing.
+   ========================================================= */
+
+/* ---------- the cell vocabulary at full width ----------
+   These classes ride the markup at every size. On a wide screen only the two
+   that describe genuine column behaviour do anything at all. */
+
+/* The row's actions: right-aligned, never broken across lines. The card layout
+   turns this one into the card's foot. */
+td.cell--action { text-align: right; white-space: nowrap; }
+td.cell--action > .btn + .btn { margin-left: .4rem; }
+
+/* Long free text — a test list, a failure reason, an audit detail. Capped so
+   that one verbose row cannot set the width of every column beside it. */
+td.cell--body { max-width: 260px; }
+
+/* A checkbox column, centred under its narrow heading. */
+td.cell--check { text-align: center; }
+
+/* A reading — the number the row exists to carry. Nudged up from the table's
+   .84rem even on a wide screen, and given tabular figures so a column of them
+   lines up on the decimal instead of drifting with the glyph widths. */
+td.cell--value {
+  font-size: .95rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.01em;
+}
+/* The out-of-range marker rides the reading without growing with it. The two
+   em values are picked so it lands at about 12px either way — an annotation on
+   the number at both sizes, never a digit of it. */
+td.cell--value [aria-label] { font-size: .8em; vertical-align: .12em; }
+
+/* One line, then ellipsis, with the full string on the title attribute. Paired
+   with .cell--body: the cap above stops the column growing, this stops the row
+   growing. Card mode trades the one line for four — see below. */
+.cell__clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The "show all" control that opens a clamped list. Hidden by default: a wide
+   screen clips to one line and puts the whole string on the title attribute,
+   where a button would be noise. Card mode below turns it on. */
+.clamp__more { display: none; }
+
+@media (max-width: 880px) {
+
+  /* The wrapper stops being a framed, side-scrolling slab. The cards are the
+     objects now and the page is their ground. */
+  .table-wrap--cards {
+    overflow-x: visible;
+    border: none;
+    border-radius: 0;
+    background: none;
+  }
+
+  .table-wrap--cards > table,
+  .table-wrap--cards tbody,
+  .table-wrap--cards tbody tr,
+  .table-wrap--cards tbody td { display: block; }
+
+  /* border-collapse would resolve the cards' borders against each other and
+     drop every second edge. */
+  .table-wrap--cards > table { border-collapse: separate; border-spacing: 0; }
+
+  /* Removed rather than hidden: every heading is repeated on its own cell
+     through data-label, so no information leaves with it. */
+  .table-wrap--cards > table > thead { display: none; }
+
+  /* ---- the card ---- */
+
+  .table-wrap--cards tbody tr {
+    display: grid;
+    /* Column 1 carries the headline, column 2 the badge that belongs beside
+       it. minmax(0, …) so a long identifier wraps instead of shoving the badge
+       off the card. */
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: .25rem .8rem;
+    margin-bottom: .6rem;
+    padding: .8rem .9rem .85rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface-glass);
+  }
+
+  /* Cells are full-width blocks in DOM order by default; the classes below
+     lift the few that belong somewhere else. The element in the selector beats
+     the .pid-group rules further up the file, which are written for a table. */
+  .table-wrap--cards tbody tr > td {
+    grid-column: 1 / -1;
+    order: 6;
+    padding: 0;
+    border: none;
+    min-width: 0;
+  }
+
+  .table-wrap--cards tbody tr:last-child { margin-bottom: 0; }
+
+  /* Hover is a pointer's affordance, and the card's own background already
+     beat the table's hover tint. Give a mouse something back; a phone gets its
+     feedback from the sheet that opens. */
+  @media (hover: hover) {
+    .table-wrap--cards tbody tr:hover { border-color: var(--accent-ring); }
+  }
+
+  /* ---- headline row ---- */
+
+  /* The one fact that identifies the row: a SID, a bill number, a username, an
+     analyte. It carries no label, because it is what the card IS. */
+  .table-wrap--cards td.cell--lead {
+    grid-column: 1;
+    order: 1;
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  /* A subtitle inside the headline (a full name under a username) is still a
+     subtitle. */
+  .table-wrap--cards td.cell--lead .muted { font-weight: 400; }
+
+  /* The badge, switch or amount that belongs on the headline rather than in a
+     list below it — the thing being scanned for. */
+  .table-wrap--cards td.cell--tag {
+    grid-column: 2;
+    order: 2;
+    justify-self: end;
+    text-align: right;
+  }
+
+  /* The card's subject in words, directly under the identifier. */
+  .table-wrap--cards td.cell--head { order: 3; font-size: .92rem; }
+
+  /* On a card the reading has to outrank the analyte name beside it. It was
+     rendering at the table's .84rem — SMALLER than the 1rem name — which is
+     backwards: someone opening a report on a phone is looking for the number,
+     and often holding the phone out for the patient to read too. */
+  .table-wrap--cards td.cell--value {
+    font-size: 1.4rem;
+    font-weight: 500;
+    line-height: 1.15;
+  }
+  /* The out-of-range marker is an annotation on the reading, not a digit of
+     it, so it does not scale with the number. */
+  .table-wrap--cards td.cell--value [aria-label] {
+    font-size: .55em;
+    vertical-align: .32em;
+  }
+
+  /* ---- labelled cells ---- */
+
+  .table-wrap--cards td[data-label]::before {
+    content: attr(data-label);
+    /* Smaller than the column heading it replaces, but not by much: this is
+       read at arm's length on a phone, often outdoors. */
+    font-size: .66rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--ink-dim);
+    white-space: nowrap;
+  }
+
+  /* One small fact per line: label hard left, value hard right. */
+  .table-wrap--cards td.cell--meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: .1rem .8rem;
+    min-height: 1.6rem;
+  }
+  /* auto on the LABEL, not space-between on the container: a cell is often
+     several nodes (a number and a badge, a timestamp and a username) and this
+     keeps them gathered on the right however many there are. */
+  .table-wrap--cards td.cell--meta::before { margin-right: auto; }
+
+  /* A checkbox is a control, not a value.
+
+     cell--meta's label-left/value-right split is right for a fact you read —
+     "UNIT … 10^6/µL" — but wrong for a box you press: it lands a whole card
+     away from the word naming it, so the two stop reading as one thing and the
+     tap target sits at the opposite end from its label. This variant keeps
+     them together, box first, which is the order every other checkbox in the
+     app already uses (see the "Outstanding only" filter) and which lines the
+     boxes into a column down a stack of analyte cards. */
+  .table-wrap--cards td.cell--check {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .15rem .55rem;
+    min-height: 44px;
+    text-align: left;
+  }
+  .table-wrap--cards td.cell--check > input { order: 1; }
+  .table-wrap--cards td.cell--check::before { order: 2; margin-right: 0; }
+  /* The "auto" hint, when Jarvis will sign this one without being asked. */
+  .table-wrap--cards td.cell--check > div { order: 3; }
+
+  /* Label above, value below, wrapping freely. */
+  .table-wrap--cards td.cell--body {
+    order: 4;
+    max-width: none;
+    margin-top: .2rem;
+  }
+  .table-wrap--cards td.cell--body[data-label]::before {
+    display: block;
+    margin-bottom: .1rem;
+  }
+
+  /* A truncated test list is the reason someone opens a sample just to find
+     out what is on it, so the card prints it — but a twenty-test antenatal
+     profile is a dozen lines, and fifty of those is a worklist you scroll
+     rather than read. Four lines, then a way in. See TestList.tsx, which
+     renders the control only when there is something behind it. */
+  .table-wrap--cards .cell__clip {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    overflow: hidden;
+    white-space: normal;
+    text-overflow: clip;
+  }
+
+  .table-wrap--cards .cell__clip--open {
+    display: block;
+    -webkit-line-clamp: none;
+    line-clamp: none;
+    overflow: visible;
+  }
+
+  /* Quiet by design: it sits under a list the eye has just finished reading,
+     and it competes with the card's own action if it is given a border. */
+  .table-wrap--cards .clamp__more {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    margin-top: .1rem;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--teal);
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .06em;
+    cursor: pointer;
+  }
+  .table-wrap--cards .clamp__more:focus-visible {
+    outline: none;
+    border-radius: 6px;
+    box-shadow: 0 0 0 3px var(--accent-ring);
+  }
+
+  /* Same release for the reference range, but its white-space stays `pre-line`
+     — the LIS stores real newlines between the paediatric, pregnancy and
+     newborn bands, and running them into one paragraph is worse than the
+     two-line clamp it replaces. */
+  .table-wrap--cards .range-cell__clamp {
+    display: block;
+    overflow: visible;
+    -webkit-line-clamp: none;
+    line-clamp: none;
+    cursor: auto;
+  }
+
+  /* ---- the foot ---- */
+
+  /* A full-width, thumb-sized control: the phone's answer to the small
+     right-aligned button a mouse can hit precisely. */
+  .table-wrap--cards td.cell--action {
+    order: 9;
+    display: flex;
+    gap: .5rem;
+    margin-top: .55rem;
+    padding-top: .6rem;
+    border-top: 1px solid var(--line-soft);
+    text-align: left;
+    white-space: normal;
+  }
+  .table-wrap--cards td.cell--action > .btn {
+    flex: 1;
+    min-height: 44px;
+    margin-left: 0;
+    font-size: .78rem;
+  }
+  /* Rows whose action is conditional render an empty cell. It must not draw a
+     rule and a gap for a button that is not there. */
+  .table-wrap--cards td.cell--action:empty { display: none; }
+
+  /* ---- controls inside a card ---- */
+
+  /* A control in a cell becomes a real form control: full width, and tall
+     enough to hit without aiming. */
+  .table-wrap--cards td .input,
+  .table-wrap--cards td select {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  /* The 40x22 track is a mouse target. These are the proportions of the
+     platform switch every phone user already knows. */
+  .table-wrap--cards td .toggle { width: 52px; height: 30px; }
+  .table-wrap--cards td .toggle::after { width: 24px; height: 24px; }
+  .table-wrap--cards td .toggle--on::after { transform: translateX(22px); }
+
+  /* ---- state rows ---- */
+
+  /* Row-level tints were painted on the cells, because on a table a <td>
+     background covers the <tr>'s. A card has one surface, so they move to it —
+     otherwise the tint shows as detached blocks with gaps between them. */
+  .table-wrap--cards tbody tr.band-0 > td,
+  .table-wrap--cards tbody tr.band-1 > td,
+  .table-wrap--cards tbody tr.band-0:hover > td,
+  .table-wrap--cards tbody tr.band-1:hover > td,
+  .table-wrap--cards tbody tr.worksheet-grid__touched > td { background: none; }
+
+  .table-wrap--cards tbody tr.worksheet-grid__touched {
+    background: var(--accent-soft);
+    border-color: var(--accent-ring);
+  }
+
+  /* A section heading in the entry grid is not a record and must not become a
+     card. Its fill goes too: on a table the tint is what separates the heading
+     from the rows around it, but between two cards a zero-padding tinted strip
+     just reads as a rendering fault. The teal uppercase carries it alone. */
+  .table-wrap--cards tbody tr.worksheet-grid__heading {
+    display: block;
+    margin-bottom: 0;
+    /* Horizontal padding matched to the cards' content edge below it, so the
+       heading and the analytes it introduces sit on one left margin. */
+    padding: 1rem .95rem .3rem;
+    border: none;
+    border-radius: 0;
+    background: none;
+  }
+  .table-wrap--cards tbody tr.worksheet-grid__heading > td { background: none; }
+
+  /* ---- a patient's samples, on a phone ----
+
+     On a wide screen a patient's rows share one band so that three tubes read
+     as one person. A card already has an edge, so the same fact is carried by
+     making the group a single OBJECT: the cards butt together with one hairline
+     between them, only the outer corners round, and the whole stack is tinted.
+     A lone card is untinted, which makes "this patient has more than one
+     sample" visible before a word is read. */
+
+  .table-wrap--cards tbody tr.pid-group {
+    background: var(--accent-softer);
+    margin-bottom: 0;
+    border-radius: 0;
+    border-top-width: 0;
+  }
+  .table-wrap--cards tbody tr.pid-group--first {
+    border-top-width: 1px;
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+  .table-wrap--cards tbody tr.pid-group--last {
+    border-radius: 0 0 var(--radius) var(--radius);
+    margin-bottom: .6rem;
+  }
+}
+
+/* ---------- Jarvis gate ----------
+   The auto-authorisation screen is locked behind its own password, so nothing
+   about which tests release results unread is fetched or rendered until it is
+   passed. Styled like the login card on purpose: the same visual language says
+   "this is an authentication boundary", not a settings panel with a field on it. */
+
+.jarvis-gate { display: grid; place-items: center; min-height: 68vh; padding: 1.5rem; }
+
+.jarvis-gate__card {
+  width: min(440px, 100%);
+  background: var(--surface-glass);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 2.2rem 2rem;
+  box-shadow: var(--shadow-card);
+  display: flex; flex-direction: column; gap: 1rem;
+  position: relative;
+  animation: login-rise .5s cubic-bezier(.22, .8, .3, 1) both;
+}
+
+/* The loader doubles as the lock's emblem — it is already the house symbol and
+   it is already in motion, which reads as "waiting for you" rather than
+   "broken". */
+.jarvis-gate__mark { display: grid; place-items: center; margin-bottom: .2rem; }
+
+.jarvis-gate__title {
+  font-size: 1.5rem; font-weight: 300; letter-spacing: .12em; text-align: center;
+  background: linear-gradient(92deg, var(--cyan), var(--teal) 45%, var(--blue));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.jarvis-gate__sub {
+  font-size: .82rem; color: var(--ink-dim); line-height: 1.65; text-align: center;
+}
+.jarvis-gate__foot {
+  font-size: .72rem; color: var(--ink-dim); line-height: 1.6; text-align: center;
+}
+
+/* ---------- idle warning ---------- */
+
+.idle-warn {
+  position: fixed; inset: 0; z-index: 200;
+  display: grid; place-items: center;
+  background: var(--backdrop);
+  backdrop-filter: blur(3px);
+}
+.idle-warn__card {
+  width: min(400px, 92vw);
+  background: var(--surface);
+  border: 1px solid var(--warn-line);
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: var(--shadow-modal);
+  display: flex; flex-direction: column; gap: .8rem;
+  animation: login-rise .3s cubic-bezier(.22, .8, .3, 1) both;
+}
+.idle-warn__title { font-size: 1.15rem; font-weight: 400; color: var(--warn); }
+.idle-warn__body { font-size: .85rem; color: var(--ink-dim); line-height: 1.65; }
+
+/* ---------- report section headings ----------
+   Head and Profile rows are the printed report's section titles, stored inline
+   among the analytes they introduce. They carry no reading, so they are shown
+   as a spanning heading rather than a data row with em-dashes in every column. */
+.report-section > td {
+  font-size: .68rem; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase;
+  color: var(--teal);
+  background: var(--accent-softer);
+  padding-top: .55rem; padding-bottom: .55rem;
+}
+.report-section:hover > td { background: var(--accent-softer); }
+
+/* On the card layout the table collapses to stacked blocks; a section title
+   there is a full-width band, not a labelled field. */
+@media (max-width: 640px) {
+  .table-wrap--cards .report-section > td { display: block; width: 100%; }
+  .table-wrap--cards .report-section > td::before { content: none; }
 }

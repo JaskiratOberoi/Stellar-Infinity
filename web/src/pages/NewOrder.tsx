@@ -162,23 +162,27 @@ export function NewOrder() {
 
       {error && <div className="alert alert--error" style={{ marginBottom: '.9rem' }}>{error}</div>}
 
+      {/* All three steps are ALWAYS rendered, dimmed until reachable.
+          Revealing them one at a time left the page as a single card above an
+          empty screen, which read as broken rather than as "do this first". */}
+
       {/* ---- 1. client ---- */}
-      <div className="card" style={{ marginBottom: '.9rem' }}>
+      <div className="card order-step" style={{ marginBottom: '.9rem' }}>
+        <div className="order-step__head">
+          <span className="order-step__num order-step__num--on">1</span>
+          <h2 className="order-step__title">Client</h2>
+          <span className="muted" style={{ fontSize: '.76rem' }}>
+            Every price depends on this, so it comes first.
+          </span>
+        </div>
+
         <div className="field" style={{ marginBottom: 0 }}>
-          <label>Client</label>
-          <div className="row">
-            <ClientPicker
-              value={cart.mcc}
-              activeOnly
-              allowNone={false}
-              onChange={(mcc) => { if (mcc != null) void act(() => cartApi.setClient(mcc)); }}
-            />
-            {cart.mcc == null && (
-              <span className="muted" style={{ fontSize: '.76rem' }}>
-                Every price depends on this, so it comes first.
-              </span>
-            )}
-          </div>
+          <ClientPicker
+            value={cart.mcc}
+            activeOnly
+            allowNone={false}
+            onChange={(mcc) => { if (mcc != null) void act(() => cartApi.setClient(mcc)); }}
+          />
           {cart.items.length > 0 && (
             <span className="muted" style={{ fontSize: '.72rem' }}>
               Changing client empties the basket — the rates are different.
@@ -187,10 +191,41 @@ export function NewOrder() {
         </div>
       </div>
 
-      {cart.mcc != null && (
+      {cart.mcc == null ? (
+        <>
+          <div className="card order-step order-step--off" style={{ marginBottom: '.9rem' }}>
+            <div className="order-step__head">
+              <span className="order-step__num">2</span>
+              <h2 className="order-step__title">Tests</h2>
+              <span className="muted" style={{ fontSize: '.76rem' }}>
+                Search the catalogue once a client is chosen — prices are theirs, not list price.
+              </span>
+            </div>
+          </div>
+          <div className="card order-step order-step--off">
+            <div className="order-step__head">
+              <span className="order-step__num">3</span>
+              <h2 className="order-step__title">Patient</h2>
+              <span className="muted" style={{ fontSize: '.76rem' }}>
+                Entered last, so nobody types out a person before seeing the cost.
+              </span>
+            </div>
+          </div>
+        </>
+      ) : (
         <>
           {/* ---- 2. tests ---- */}
-          <div className="card" style={{ marginBottom: '.9rem' }}>
+          <div className="card order-step" style={{ marginBottom: '.9rem' }}>
+            <div className="order-step__head">
+              <span className="order-step__num order-step__num--on">2</span>
+              <h2 className="order-step__title">Tests</h2>
+              {cart.items.length > 0 && (
+                <span className="muted" style={{ fontSize: '.76rem' }}>
+                  {cart.items.length} in the basket
+                </span>
+              )}
+            </div>
+
             <div className="field">
               <label htmlFor="test-search">Add tests</label>
               <input id="test-search" className="input" placeholder="Search by name or code…"
@@ -233,6 +268,13 @@ export function NewOrder() {
                   </tbody>
                 </table>
               </div>
+            )}
+
+            {!search.trim() && cart.items.length === 0 && (
+              <p className="muted" style={{ fontSize: '.78rem', marginTop: '.2rem' }}>
+                Start typing to search this client's catalogue. Anything without a price for them
+                cannot be added.
+              </p>
             )}
           </div>
 
@@ -317,10 +359,23 @@ export function NewOrder() {
             </div>
           )}
 
-          {/* ---- 4. patient ---- */}
-          {cart.items.length > 0 && (
-            <div className="card">
-              <h2 style={{ fontSize: '.9rem', marginBottom: '.7rem' }}>Patient</h2>
+          {/* ---- 3. patient ---- */}
+          {cart.items.length === 0 ? (
+            <div className="card order-step order-step--off">
+              <div className="order-step__head">
+                <span className="order-step__num">3</span>
+                <h2 className="order-step__title">Patient</h2>
+                <span className="muted" style={{ fontSize: '.76rem' }}>
+                  Add at least one test first.
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="card order-step">
+              <div className="order-step__head">
+                <span className="order-step__num order-step__num--on">3</span>
+                <h2 className="order-step__title">Patient</h2>
+              </div>
 
               <div className="grid2">
                 <div className="field">
