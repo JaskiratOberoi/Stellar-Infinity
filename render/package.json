@@ -1,0 +1,14 @@
+{
+  "name": "infinity-render",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Renders the SPA's print routes to PDF, composites the Noble letterhead and staples LIS graph attachments.",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "pdf-lib": "^1.17.1",
+    "puppeteer": "^23.11.1"
+  }
+}

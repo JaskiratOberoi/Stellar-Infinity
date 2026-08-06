@@ -68,11 +68,53 @@ services:
       # fails if Redis is missing, instead of silently reverting to
       # per-instance rate limits and stale token revocation.
       Cache__RequireDistributed: "false"
+
+      # ---- session cookie ----
+      # The JWT is delivered as an httpOnly cookie, so script cannot read it
+      # and an XSS defect cannot exfiltrate a session.
+      #
+      # Secure is FALSE here, and that is a deliberate, temporary concession to
+      # how this stack is served: nginx listens on plain HTTP at
+      # 127.0.0.1:3121, and browsers silently DISCARD a Secure cookie on an
+      # insecure origin — which would not degrade the login, it would break it
+      # outright. The API logs a warning at every startup while this is off.
+      #
+      # SET THIS TO "true" the moment TLS terminates in front of the SPA.
+      # Until then the session cookie is only as private as the loopback
+      # interface it never leaves.
+      AuthCookie__Secure: "false"
+      # No cross-site flow needs to arrive already authenticated here — no
+      # OAuth callback, no third-party embed — so the strictest setting costs
+      # nothing and blocks the classic CSRF shapes outright.
+      AuthCookie__SameSite: "Strict"
     depends_on:
       redis:
         condition: service_healthy
     expose:
       - "8080"
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------- render --
+  # Turns the SPA's own print routes into PDFs (headless Chromium), composites
+  # the Noble letterhead and staples LIS graph attachments.
+  #
+  # Its own service rather than code inside the API: the API is .NET and cannot
+  # drive a browser, and bundling Chromium into that image would put a 300MB
+  # browser and its patch cadence into the process that holds the Noble
+  # credentials. Deliberately NOT published — it renders whatever URL it is
+  # given with whatever cookie it is handed, so it must stay reachable only
+  # from the API. It talks back to `web` for the print route, which is why it
+  # does not depend on it: nginx is up long before a PDF is ever requested, and
+  # a hard dependency would just couple two restarts together.
+  render:
+    build: ./render
+    image: infinity-render
+    environment:
+      RENDER_BASE_URL: http://web
+      # Pages open at once inside one merged batch.
+      RENDER_CONCURRENCY: "3"
+    expose:
+      - "8090"
     restart: unless-stopped
 
   # ------------------------------------------------------------------- web --

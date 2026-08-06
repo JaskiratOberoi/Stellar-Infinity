@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { Mark } from './components/Mark';
 import { SignInDraw } from './components/SignInDraw';
@@ -17,10 +17,14 @@ import { Worksheet } from './pages/Worksheet';
 import { AutoAuthSettings } from './pages/AutoAuthSettings';
 import { Instruments } from './pages/Instruments';
 import { AdminUsers } from './pages/AdminUsers';
+import { InvoiceConfigPage } from './pages/InvoiceConfig';
 import { ThemeToggle } from './theme/ThemeToggle';
 import { InfinityLoader } from './components/InfinityLoader';
 import { IdleWarning } from './components/IdleWarning';
 import { NavMenu, type NavItem } from './components/NavMenu';
+import { PrintReport } from './pages/PrintReport';
+import { PrintSmartReport } from './pages/PrintSmartReport';
+import { PrintInvoice } from './pages/PrintInvoice';
 
 /**
  * Beats 2 and 3 of the sign-in entrance.
@@ -89,16 +93,37 @@ const NAV: NavItem[] = [
   // "Jarvis · auto-authorisation".
   { to: '/settings/auto-auth', label: 'Jarvis', icon: 'jarvis', cap: 'autoauth:manage' },
   { to: '/admin/users', label: 'Users', icon: 'users', cap: 'user:manage' },
+  // Same capability as Users, and next to it: this edits a document clients
+  // receive, and Telo gates its own copy of this screen the same way.
+  { to: '/admin/invoice', label: 'Invoice branding', icon: 'orders', cap: 'user:manage' },
 ];
 
 export function App() {
   const { user, loading, signOut, can, entering, finishEntering } = useAuth();
+  const isPrint = useLocation().pathname.startsWith('/print/');
 
   if (loading) {
     return <div className="center"><InfinityLoader /><span className="muted">Restoring session…</span></div>;
   }
 
   if (!user) return <Login />;
+
+  // The print routes are what headless Chromium photographs for the PDF, so
+  // they render alone — no top bar, no shell. A PDF is the report, not a
+  // screenshot of the application around it. Placed before the shell rather
+  // than inside it so there is no chrome to hide afterwards.
+  if (isPrint) {
+    return (
+      <Routes>
+        <Route path="/print/report/:sid" element={<PrintReport />} />
+        <Route path="/print/report/:sid/smart" element={<PrintSmartReport />} />
+        {/* The invoice is printed by the operator rather than photographed by
+            the render service, but it belongs here for the same reason: no
+            application chrome around a document someone hands to a client. */}
+        <Route path="/print/invoice/:billId" element={<PrintInvoice />} />
+      </Routes>
+    );
+  }
 
   const navItems = NAV.filter((i) => !i.cap || can(i.cap));
 
@@ -155,6 +180,10 @@ export function App() {
         <Route
           path="/admin/users"
           element={can('user:manage') ? <AdminUsers /> : <Navigate to="/" replace />}
+        />
+        <Route
+          path="/admin/invoice"
+          element={can('user:manage') ? <InvoiceConfigPage /> : <Navigate to="/" replace />}
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api } from '../api/client';
-import { fmtDateTime } from '../lib/format';
+import { api, csrfHeader } from '../api/client';
+import { downloadFile, fmtDateTime } from '../lib/format';
 import { ReportViewer } from './ReportViewer';
 import { SmartReportModal } from './SmartReport';
 import { InfinityLoader } from '../components/InfinityLoader';
+import { TestList } from '../components/TestList';
 
 export interface WorksheetRow {
   sid: string;
@@ -25,6 +26,26 @@ export interface WorksheetRow {
   clinicalHistory: string | null;
 }
 
+/**
+ * The statuses a REPORT exists for: authorised, partially printed, printed.
+ *
+ * Reporting and the worksheet call the same procedure, and that procedure
+ * treats a missing status filter as "every status" (see
+ * 76_usp_inf_worksheet_list.sql — `@statusCount = 0 OR ...`, with only
+ * sample_status > 1 excluded). This page was sending no filter at all, so it
+ * listed registered and partially-tested samples as though they were reports.
+ *
+ * 7/8/9 is not a new invention here: it is the set the rest of the system
+ * already treats as signed out — result save refuses it (51), reopen requires
+ * it (52), instrument ingest will not touch it (72), and the deploy check calls
+ * exactly this set "reportable" (93).
+ *
+ * 6 (partially authorised) is deliberately NOT in it. Some of its tests are
+ * still unsigned, so there is no finished report to look at yet; it belongs on
+ * the worksheet, where it is already listed as outstanding work.
+ */
+const REPORTABLE_STATUSES = [7, 8, 9];
+
 function daysAgo(n: number) {
   const d = new Date();
   d.setDate(d.getDate() - n);
@@ -44,6 +65,37 @@ export function Reports() {
   const [openSid, setOpenSid] = useState<string | null>(null);
   const [smartSid, setSmartSid] = useState<string | null>(null);
 
+  // The merge basket. Keyed by SID and deliberately NOT cleared when the page
+  // changes: picking three reports on page 1 and two on page 3 has to give five.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [withGraphs, setWithGraphs] = useState(true);
+  const [merging, setMerging] = useState(false);
+  const [mergeError, setMergeError] = useState<string | null>(null);
+
+  const toggle = (sid: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(sid)) next.add(sid);
+      return next;
+    });
+
+  const downloadMerged = async () => {
+    setMerging(true);
+    setMergeError(null);
+    try {
+      await downloadFile('/api/reports/pdf/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...csrfHeader() },
+        body: JSON.stringify({ sids: [...selected], withGraph: withGraphs }),
+        fallbackName: 'Reports.pdf',
+      });
+    } catch (e) {
+      setMergeError(e instanceof Error ? e.message : 'The merged download failed.');
+    } finally {
+      setMerging(false);
+    }
+  };
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -51,6 +103,11 @@ export function Reports() {
       const p = new URLSearchParams({ from, to, page: String(page), pageSize: '50' });
       if (patient.trim()) p.set('patient', patient.trim());
       if (sidQuery.trim()) p.set('sid', sidQuery.trim());
+      // Sent to the SERVER, not applied to the response: filtering after the
+      // fact would make a page of 50 arrive as 6 rows with a dead Next button,
+      // which reads as "that is all there is" when it is not. The worksheet
+      // learned this the same way — see PENDING_STATUSES there.
+      p.set('statusIds', REPORTABLE_STATUSES.join(','));
       const r = await api.get<{ rows: WorksheetRow[]; count: number; scope: string }>(`/api/reports/?${p}`);
       setRows(r.rows);
       setScope(r.scope);
@@ -102,10 +159,50 @@ export function Reports() {
         <div className="center"><InfinityLoader /><span className="muted">Loading worksheet…</span></div>
       ) : (
         <>
-          <div className="table-wrap">
+          {/* The batch bar. Present only once something is picked: an empty
+              toolbar sitting above every list is a permanent reminder of a
+              feature nobody is using yet. */}
+          {selected.size > 0 && (
+            <div className="batchbar">
+              <span className="batchbar__count">
+                <b>{selected.size}</b> selected
+              </span>
+
+              <label className="row" style={{ gap: '.45rem', fontSize: '.78rem', cursor: 'pointer' }}
+                     title="Each report's LIS graph pages follow its own report inside the merged PDF, exactly as the printed report staples them.">
+                <input type="checkbox" checked={withGraphs} disabled={merging}
+                       onChange={(e) => setWithGraphs(e.target.checked)} />
+                Include graphs
+              </label>
+
+              <button className="btn btn--ghost btn--sm" disabled={merging}
+                      onClick={() => setSelected(new Set())}>
+                Clear
+              </button>
+              <button className="btn btn--primary btn--sm" disabled={merging}
+                      onClick={() => void downloadMerged()}>
+                {merging ? 'Preparing…' : `Download ${selected.size} as one PDF`}
+              </button>
+            </div>
+          )}
+
+          {mergeError && <div className="alert alert--error" style={{ marginBottom: '.8rem' }}>{mergeError}</div>}
+
+          <div className="table-wrap table-wrap--cards">
             <table>
               <thead>
                 <tr>
+                  <th className="cell--pick">
+                    <input
+                      type="checkbox"
+                      aria-label="Select every report on this page"
+                      checked={rows.length > 0 && selected.size === rows.length}
+                      // Some-but-not-all is its own state; a plain unticked box
+                      // would claim nothing is selected.
+                      ref={(el) => { if (el) el.indeterminate = selected.size > 0 && selected.size < rows.length; }}
+                      onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((r) => r.sid)) : new Set())}
+                    />
+                  </th>
                   <th>SID</th>
                   <th>Patient</th>
                   <th>Client</th>
@@ -118,27 +215,38 @@ export function Reports() {
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.sid} style={{ cursor: 'pointer' }} onClick={() => setOpenSid(r.sid)}>
-                    <td className="mono"><b>{r.sid}</b></td>
-                    <td>
+                    {/* Picking a report is not opening it, so the click stops
+                        here rather than bubbling to the row. */}
+                    <td className="cell--pick" data-label="Select" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        aria-label={`Select report ${r.sid}`}
+                        checked={selected.has(r.sid)}
+                        onChange={() => toggle(r.sid)}
+                      />
+                    </td>
+                    <td className="mono cell--lead"><b>{r.sid}</b></td>
+                    <td className="cell--head">
                       {r.patientName ?? <span className="muted">—</span>}
                       <div className="muted" style={{ fontSize: '.72rem' }}>
                         {[r.sex, r.age != null ? `${r.age}${r.ageUnit?.[0] ?? ''}` : null].filter(Boolean).join(' · ')}
                       </div>
                     </td>
-                    <td className="muted">{r.clientCode ?? '—'}</td>
-                    <td style={{ maxWidth: 260 }}>
-                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                           title={r.testNames ?? ''}>
-                        {r.testNames ?? '—'}
-                      </div>
+                    <td className="muted cell--meta" data-label="Client">{r.clientCode ?? '—'}</td>
+                    <td className="cell--body" data-label="Tests">
+                      <TestList names={r.testNames} />
                     </td>
-                    <td><StatusBadge status={r.status} statusCode={r.statusCode} /></td>
-                    <td className="muted" style={{ fontSize: '.78rem' }}>{fmtDateTime(r.registeredAt)}</td>
-                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <td className="cell--tag"><StatusBadge status={r.status} statusCode={r.statusCode} /></td>
+                    <td className="muted cell--meta" data-label="Registered" style={{ fontSize: '.78rem' }}>
+                      {fmtDateTime(r.registeredAt)}
+                    </td>
+                    {/* The gap between the two buttons is cell--action's job now,
+                        so that on a card they can split the foot evenly. */}
+                    <td className="cell--action">
                       <button className="btn btn--ghost btn--sm" onClick={(e) => { e.stopPropagation(); setOpenSid(r.sid); }}>
                         View
                       </button>
-                      <button className="btn btn--primary btn--sm" style={{ marginLeft: '.4rem' }}
+                      <button className="btn btn--primary btn--sm"
                               onClick={(e) => { e.stopPropagation(); setSmartSid(r.sid); }}>
                         Smart
                       </button>

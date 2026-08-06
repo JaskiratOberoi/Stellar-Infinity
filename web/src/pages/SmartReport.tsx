@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
-import { fmtDateTime } from '../lib/format';
+import { downloadFile, fmtDateTime } from '../lib/format';
 import { InfinityLoader } from '../components/InfinityLoader';
 
-interface Gauge {
+export interface Gauge {
   kind: 'both' | 'max' | 'min';
   low: number | null;
   high: number | null;
@@ -12,7 +12,7 @@ interface Gauge {
   zone: 'normal' | 'low' | 'high';
 }
 
-interface SmartAnalyte {
+export interface SmartAnalyte {
   testCode: string | null;
   lisName: string;
   friendlyName: string | null;
@@ -28,7 +28,7 @@ interface SmartAnalyte {
   comments: string | null;
 }
 
-interface SmartSection {
+export interface SmartSection {
   categoryId: string;
   title: string;
   tagline: string;
@@ -37,7 +37,7 @@ interface SmartSection {
   abnormalCount: number;
 }
 
-interface SmartReportData {
+export interface SmartReportData {
   sid: string;
   patientName: string | null;
   sex: string | null;
@@ -54,6 +54,21 @@ interface SmartReportData {
 }
 
 export function SmartReportModal({ sid, onClose }: { sid: string; onClose: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  const download = async () => {
+    setBusy(true);
+    setDownloadError(null);
+    try {
+      await downloadFile(`/api/reports/${encodeURIComponent(sid)}/smart/pdf`);
+    } catch (e) {
+      setDownloadError(e instanceof Error ? e.message : 'The download failed.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const [data, setData] = useState<SmartReportData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -152,8 +167,16 @@ export function SmartReportModal({ sid, onClose }: { sid: string; onClose: () =>
               This summary is for information only and is not a diagnosis. Please discuss these results with your doctor.
             </p>
 
+            {downloadError && (
+              <div className="alert alert--error" style={{ fontSize: '.8rem' }}>{downloadError}</div>
+            )}
+
             <div className="modal__actions">
               <button className="btn btn--ghost" onClick={onClose}>Close</button>
+              <button className="btn btn--primary" disabled={busy}
+                      onClick={() => void download()}>
+                {busy ? 'Preparing…' : 'Download summary'}
+              </button>
             </div>
           </>
         ) : null}

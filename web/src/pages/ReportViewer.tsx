@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
-import { fmtDateTime } from '../lib/format';
+import { downloadFile, fmtDateTime, plainText } from '../lib/format';
 import type { WorksheetRow } from './Reports';
 import { StatusBadge } from './Reports';
 import { InfinityLoader } from '../components/InfinityLoader';
 
-interface TestResult {
+export interface TestResult {
   resultId: number;
   testCode: string | null;
   testName: string | null;
@@ -19,12 +19,15 @@ interface TestResult {
   departmentName: string | null;
 }
 
-type FullRow = WorksheetRow & { results: TestResult[] };
+export type FullRow = WorksheetRow & { results: TestResult[] };
 
 export function ReportViewer({ sid, onClose }: { sid: string; onClose: () => void }) {
   const [row, setRow] = useState<FullRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [graphCount, setGraphCount] = useState(0);
+  const [busy, setBusy] = useState<'pdf' | 'graph' | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -41,6 +44,31 @@ export function ReportViewer({ sid, onClose }: { sid: string; onClose: () => voi
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  // Is there a graph to offer? Metadata only — this must not drag a multi-megabyte
+  // attachment across just to decide whether to draw a button.
+  useEffect(() => {
+    let live = true;
+    api.get<{ count: number }>(`/api/reports/${encodeURIComponent(sid)}/graph?meta=true`)
+      .then((g) => { if (live) setGraphCount(g.count); })
+      .catch(() => { /* No graph, or locked. Either way: no button. */ });
+    return () => { live = false; };
+  }, [sid]);
+
+  const download = async (what: 'pdf' | 'graph') => {
+    setBusy(what);
+    setDownloadError(null);
+    try {
+      const base = `/api/reports/${encodeURIComponent(sid)}`;
+      // withGraph on the PDF: the LIS staples the graph to the printed report,
+      // so Infinity's PDF has to be the same document.
+      await downloadFile(what === 'pdf' ? `${base}/pdf?withGraph=true` : `${base}/graph`);
+    } catch (e) {
+      setDownloadError(e instanceof Error ? e.message : 'The download failed.');
+    } finally {
+      setBusy(null);
+    }
+  };
 
   // Group by department, preserving the order the LIS returned them in — that
   // order is the printed report's order and operators read it that way.
@@ -112,7 +140,7 @@ export function ReportViewer({ sid, onClose }: { sid: string; onClose: () => voi
                   }}>
                     {dept}
                   </h3>
-                  <div className="table-wrap">
+                  <div className="table-wrap table-wrap--cards">
                     <table>
                       <thead>
                         <tr>
@@ -123,29 +151,52 @@ export function ReportViewer({ sid, onClose }: { sid: string; onClose: () => voi
                         </tr>
                       </thead>
                       <tbody>
-                        {results.map((t) => (
+                        {results.map((t) => {
+                          /* Head and Profile rows carry no reading — they are
+                             the printed report's section headings, and the LIS
+                             stores them inline among the analytes they
+                             introduce. Rendered as data rows they became a
+                             stack of empty lines with em-dashes in every
+                             column, which is what they looked like before. */
+                          if (t.testType === 'Head' || t.testType === 'Profile') {
+                            return (
+                              <tr key={t.resultId} className="report-section">
+                                <td colSpan={4}>{plainText(t.testName) || t.testCode}</td>
+                              </tr>
+                            );
+                          }
+                          return (
                           <tr key={t.resultId}>
-                            <td>
-                              {t.testName ?? t.testCode ?? '—'}
+                            {/* On a card the analyte is the headline and the
+                                reading is the badge beside it — which is the
+                                shape a patient is shown the result in anyway. */}
+                            <td className="cell--lead">
+                              {plainText(t.testName) || t.testCode || '—'}
                               {!t.authorized && (
                                 <span className="muted" style={{ fontSize: '.68rem' }}> · unauthorised</span>
                               )}
                               {t.comments && (
-                                <div className="muted" style={{ fontSize: '.72rem', marginTop: '.15rem' }}>{t.comments}</div>
+                                <div className="muted" style={{ fontSize: '.72rem', marginTop: '.15rem' }}>{plainText(t.comments)}</div>
                               )}
                             </td>
-                            <td className="mono" style={{
+                            {/* cell--value, not just cell--tag: this is the
+                                reading, and on a card it was rendering smaller
+                                than the analyte name above it. */}
+                            <td className="mono cell--tag cell--value" style={{
                               textAlign: 'right',
-                              fontWeight: t.abnormal ? 600 : 400,
+                              fontWeight: t.abnormal ? 600 : undefined,
                               color: t.abnormal ? 'var(--danger)' : undefined,
                             }}>
                               {t.value ?? '—'}
                               {t.abnormal && <span aria-label="out of range" title="Out of range"> ▲</span>}
                             </td>
-                            <td className="muted">{t.unit ?? '—'}</td>
-                            <td className="muted" style={{ fontSize: '.78rem' }}>{t.normalRange ?? '—'}</td>
+                            <td className="muted cell--meta" data-label="Unit">{t.unit ?? '—'}</td>
+                            <td className="muted cell--body" data-label="Reference" style={{ fontSize: '.78rem', whiteSpace: 'pre-line' }}>
+                              {plainText(t.normalRange) || '—'}
+                            </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -158,8 +209,26 @@ export function ReportViewer({ sid, onClose }: { sid: string; onClose: () => voi
               {fmtDateTime(row.lastModifiedAt)}
             </p>
 
+            {downloadError && (
+              <div className="alert alert--error" style={{ fontSize: '.8rem' }}>{downloadError}</div>
+            )}
+
             <div className="modal__actions">
               <button className="btn btn--ghost" onClick={onClose}>Close</button>
+
+              {/* Only offered when there is actually a graph behind it — the
+                  meta probe answers that without moving the bytes. */}
+              {graphCount > 0 && (
+                <button className="btn btn--ghost" disabled={busy !== null}
+                        onClick={() => void download('graph')}>
+                  {busy === 'graph' ? 'Fetching…' : `Graph${graphCount > 1 ? ` (${graphCount})` : ''}`}
+                </button>
+              )}
+
+              <button className="btn btn--primary" disabled={busy !== null}
+                      onClick={() => void download('pdf')}>
+                {busy === 'pdf' ? 'Preparing…' : 'Download PDF'}
+              </button>
             </div>
           </>
         ) : null}

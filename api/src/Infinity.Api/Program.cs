@@ -41,9 +41,23 @@ builder.Services.AddSingleton<Infinity.Api.Orders.AccessionRepository>();
 builder.Services.AddSingleton<Infinity.Api.Orders.ClientAccountRepository>();
 builder.Services.AddSingleton<Infinity.Api.Orders.BillingRepository>();
 builder.Services.AddSingleton<Infinity.Api.Orders.RateListRepository>();
+builder.Services.AddSingleton<Infinity.Api.Orders.InvoiceRepository>();
 // Singletons: the knowledge base is parsed once at startup, not per request.
 builder.Services.AddSingleton<Infinity.Api.Reports.SmartMeta>();
 builder.Services.AddSingleton<Infinity.Api.Reports.SmartReportService>();
+builder.Services.AddSingleton<Infinity.Api.Reports.GraphRepository>();
+builder.Services.AddSingleton<Infinity.Api.Reports.ReportLockRepository>();
+
+// The render sidecar. A typed client rather than a bare HttpClient so the base
+// address and the generous timeout live in one place: a merged batch of fifty
+// reports legitimately runs for minutes, and the default 100s would cut it off
+// mid-document.
+builder.Services.AddHttpClient<Infinity.Api.Reports.RenderClient>(c =>
+{
+    c.BaseAddress = new Uri(builder.Configuration["Render:BaseUrl"] ?? "http://render:8090");
+    c.Timeout = TimeSpan.FromMinutes(10);
+});
+
 builder.Services.AddSingleton<ScopeRepository>();
 builder.Services.AddSingleton<Infinity.Api.Audit.AuditRepository>();
 
@@ -205,5 +219,7 @@ app.MapAccessionEndpoints();
 app.MapClientAccountEndpoints();
 app.MapBillingEndpoints();
 app.MapRateListEndpoints();
+app.MapInvoiceEndpoints();
+app.MapReportPdfEndpoints();
 
 app.Run();
