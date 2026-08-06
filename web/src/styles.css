@@ -1397,6 +1397,57 @@ tbody tr:hover { background: var(--accent-softer); }
   padding: 0 .25rem;
 }
 
+/* ---------- the 7-day chart ---------- */
+
+/* The card is stretched to match its taller grid neighbour. Without this the
+   chart keeps its natural height and the rest of the card is dead space —
+   which is what it looked like before. */
+.card--chart { display: flex; flex-direction: column; }
+
+.chart__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: .3rem;
+}
+.chart__value { font-size: 1.25rem; font-weight: 300; letter-spacing: .01em; }
+.chart__when { margin-left: .5rem; font-size: .74rem; color: var(--ink-dim); }
+
+/* flex:1 with min-height:0 is what actually gives the plot the leftover space:
+   without the min-height an SVG child refuses to shrink and the flex item
+   overflows the card instead of fitting inside it. */
+.chart__plot { position: relative; flex: 1 1 auto; min-height: 120px; }
+.chart__plot svg { display: block; }
+
+.chart__grid  { stroke: var(--line-soft); stroke-width: 1; stroke-dasharray: 3 3; }
+.chart__axis  { stroke: var(--line-soft); stroke-width: 1; }
+.chart__cursor { stroke: var(--teal); stroke-width: 1; stroke-dasharray: 2 3; opacity: .5; }
+.chart__tick  { font-size: 9.5px; fill: var(--ink-dim); }
+
+/* The hit targets are transparent rects; the focus ring is the only thing that
+   shows a keyboard user where they are, so it must not be removed. */
+.chart__plot rect:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
+
+.chart__axis-x {
+  display: flex;
+  justify-content: space-between;
+  margin-top: .3rem;
+  font-size: .68rem;
+  color: var(--ink-dim);
+}
+/* First and last labels sit under points at the plot's edges, so they hang off
+   unless they align inward rather than centring on the point. */
+.chart__axis-x > span { flex: 1 1 0; text-align: center; white-space: nowrap; }
+.chart__axis-x > span:first-child { text-align: left; }
+.chart__axis-x > span:last-child { text-align: right; }
+.chart__axis-x > span.is-on { color: var(--teal); font-weight: 600; }
+
+/* The card is stretched by its neighbour, so an empty state left at the top
+   reads as a chart that failed to load. Centred, it reads as an answer. */
+.chart__empty { flex: 1 1 auto; display: grid; place-items: center; text-align: center; }
+
 /* ---------- leaderboards ---------- */
 
 .board { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }

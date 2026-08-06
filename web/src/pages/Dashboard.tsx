@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { InfinityLoader } from '../components/InfinityLoader';
@@ -47,7 +47,6 @@ interface DayStats {
 const inr = (n: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n);
 
-/** Today on the IST calendar — the lab's day, not the browser's. */
 /**
  * "2026-08-06" -> "6 Aug". Parsed as parts, not handed to `new Date(iso)`:
  * that reads a bare date as UTC and shifts it a day back for anyone west of
@@ -58,10 +57,26 @@ function fmtDay(iso: string) {
   return new Date(y, m - 1, d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
 
+/** "2026-08-06" -> "Thu 6". The x-axis needs the weekday to be readable. */
+function fmtAxis(iso: string) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  return `${dt.toLocaleDateString('en-IN', { weekday: 'short' })} ${d}`;
+}
+
+/**
+ * Today on the IST calendar — the lab's day, not the browser's.
+ *
+ * getTime() is an absolute epoch, so the only shift needed is UTC -> IST.
+ * The previous version also added getTimezoneOffset(), which double-counts:
+ * on a machine already in IST the two cancelled to zero and toISOString then
+ * rendered UTC — five and a half hours behind. Between midnight and 05:30 the
+ * dashboard opened on YESTERDAY, while the month panel (computed server-side,
+ * correctly) covered today. That is the mismatch of a screen disagreeing with
+ * itself for the first six hours of every shift.
+ */
 function todayIst() {
-  const now = new Date();
-  const ist = new Date(now.getTime() + (330 + now.getTimezoneOffset()) * 60_000);
-  return ist.toISOString().slice(0, 10);
+  return new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
 }
 
 export function Dashboard() {
@@ -179,9 +194,12 @@ export function Dashboard() {
           )}
 
           <div className="grid2">
-            <div className="card">
-              <SectionTitle>7-day revenue</SectionTitle>
-              <Sparkline points={stats.trend} />
+            {/* "Order billing", not "revenue": this is the same
+                tbl_billing_patient_detail figure as the tile above, and the
+                two must not disagree about what they are called. */}
+            <div className="card card--chart">
+              <SectionTitle>Order billing · 7 days</SectionTitle>
+              <RevenueChart points={stats.trend} selected={date} />
             </div>
 
             <div className="card">
@@ -375,37 +393,200 @@ function Board({ title, rows, loading, error, render, meta, label, empty }: {
   );
 }
 
-/** Inline SVG sparkline — no chart library, no bundle cost. */
-function Sparkline({ points }: { points: TrendPoint[] }) {
-  if (points.length === 0) return <p className="muted" style={{ fontSize: '.82rem' }}>No data.</p>;
+/**
+ * A round number at or above the peak, for the top gridline.
+ *
+ * Scaling the axis to the exact maximum puts the highest point hard against
+ * the top edge and gives the reader a number nobody can hold in their head
+ * (₹91,347). Rounding up to 1, 2 or 5 × a power of ten leaves headroom and
+ * gives an axis label worth printing.
+ */
+function niceCeil(v: number) {
+  if (v <= 0) return 1;
+  const mag = 10 ** Math.floor(Math.log10(v));
+  const n = v / mag;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
+}
 
-  const w = 320, h = 72, pad = 4;
-  const max = Math.max(...points.map((p) => p.revenue), 1);
-  const step = points.length > 1 ? (w - pad * 2) / (points.length - 1) : 0;
-  const xy = points.map((p, i) => [pad + i * step, h - pad - (p.revenue / max) * (h - pad * 2)] as const);
-  const line = xy.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-  const area = `${line} L${xy[xy.length - 1][0].toFixed(1)},${h - pad} L${xy[0][0].toFixed(1)},${h - pad} Z`;
+/** Compact for an axis: ₹91k, ₹1.2L. Full precision belongs in the readout. */
+function shortInr(n: number) {
+  if (n >= 1e7) return `₹${(n / 1e7).toFixed(n % 1e7 === 0 ? 0 : 1)}Cr`;
+  if (n >= 1e5) return `₹${(n / 1e5).toFixed(n % 1e5 === 0 ? 0 : 1)}L`;
+  if (n >= 1e3) return `₹${Math.round(n / 1e3)}k`;
+  return `₹${n}`;
+}
+
+/**
+ * Seven days of order billing.
+ *
+ * Sized by measurement rather than by a fixed viewBox. The old chart was a
+ * 320×72 box scaled to the card's WIDTH with height:auto, so in a card stretched
+ * tall by its neighbour it drew a short line across the top and left the rest
+ * of the card empty — which is exactly what it looked like. Measuring means it
+ * fills whatever space the grid gives it, and the stroke stays 2px instead of
+ * being scaled along with everything else.
+ *
+ * Readable without hovering: a zero baseline, a labelled gridline at the top of
+ * the scale, and every day named on the x-axis. The previous version showed two
+ * dates in MM-DD — ambiguous anywhere that writes dates day-first — and put the
+ * values in native <title> tooltips, which means a value is only available to
+ * somebody who knows to hover and then waits a second for it.
+ */
+function RevenueChart({ points, selected }: { points: TrendPoint[]; selected: string }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  const [active, setActive] = useState<number | null>(null);
+
+  /*
+   * Measured synchronously first, THEN observed.
+   *
+   * ResizeObserver alone was not enough: the chart draws nothing at all until
+   * the first callback arrives, so anything that delays or drops it leaves a
+   * blank card rather than a small one. That is not hypothetical — a
+   * background or non-compositing tab can withhold the callback indefinitely,
+   * and it happened on the first run of this component.
+   *
+   * useLayoutEffect so the measurement lands before paint and there is no
+   * frame where the card is visibly empty.
+   */
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+
+    const measure = () => {
+      const { width, height } = el.getBoundingClientRect();
+      setSize((prev) => {
+        const w = Math.round(width), h = Math.round(height);
+        // Same size means no state change: RO fires on every layout pass and
+        // an unconditional setState here is a re-render loop.
+        return prev.w === w && prev.h === h ? prev : { w, h };
+      });
+    };
+
+    measure();
+
+    // Both, deliberately. The observer catches the container changing without
+    // the window doing so — a sibling card growing, the nav collapsing — and
+    // the window listener is the fallback for when observer callbacks are not
+    // being delivered, which is a state a background tab can sit in for as
+    // long as it likes.
+    window.addEventListener('resize', measure);
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    ro?.observe(el);
+
+    return () => {
+      window.removeEventListener('resize', measure);
+      ro?.disconnect();
+    };
+  }, []);
+
+  const peak = points.length ? Math.max(...points.map((p) => p.revenue)) : 0;
+  const total = points.reduce((s, p) => s + p.revenue, 0);
+
+  // A week with nothing in it says so. Drawing a flat line along the floor
+  // under a gridline labelled "₹1" is technically consistent and tells the
+  // reader nothing — worse, it looks like a chart that failed to load.
+  if (points.length === 0 || peak <= 0) {
+    return (
+      <div className="chart__empty">
+        <p className="muted" style={{ fontSize: '.82rem' }}>
+          {points.length === 0
+            ? 'No data for these seven days.'
+            : 'Nothing billed through Telo or Infinity in these seven days.'}
+        </p>
+      </div>
+    );
+  }
+
+  const top = niceCeil(peak);
+
+  // The readout defaults to the selected day, so the chart says something
+  // useful before anybody touches it.
+  const selectedIdx = points.findIndex((p) => p.date === selected);
+  const shown = active ?? (selectedIdx >= 0 ? selectedIdx : points.length - 1);
+
+  const { w, h } = size;
+  const padL = 44, padR = 10, padT = 10, padB = 4;
+  const plotW = Math.max(0, w - padL - padR);
+  const plotH = Math.max(0, h - padT - padB);
+  const step = points.length > 1 ? plotW / (points.length - 1) : 0;
+
+  const x = (i: number) => padL + (points.length > 1 ? i * step : plotW / 2);
+  const y = (v: number) => padT + plotH - (top > 0 ? v / top : 0) * plotH;
+
+  const xy = points.map((p, i) => [x(i), y(p.revenue)] as const);
+  const line = xy.map(([px, py], i) => `${i ? 'L' : 'M'}${px.toFixed(1)},${py.toFixed(1)}`).join(' ');
+  const base = padT + plotH;
+  const area = xy.length
+    ? `${line} L${xy[xy.length - 1][0].toFixed(1)},${base} L${xy[0][0].toFixed(1)},${base} Z`
+    : '';
 
   return (
     <>
-      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 'auto', overflow: 'visible' }} role="img" aria-label="Revenue over the last 7 days">
-        <defs>
-          <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--teal)" stopOpacity="0.28" />
-            <stop offset="100%" stopColor="var(--teal)" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <path d={area} fill="url(#sparkFill)" />
-        <path d={line} fill="none" stroke="var(--teal)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        {xy.map(([x, y], i) => (
-          <circle key={i} cx={x} cy={y} r="2.5" fill="var(--surface)" stroke="var(--teal)" strokeWidth="1.5">
-            <title>{`${points[i].date}: ${inr(points[i].revenue)}`}</title>
-          </circle>
+      <div className="chart__head">
+        <div>
+          <span className="chart__value">{inr(points[shown].revenue)}</span>
+          <span className="chart__when">{fmtAxis(points[shown].date)}</span>
+        </div>
+        <span className="muted" style={{ fontSize: '.72rem' }}>{inr(total)} over 7 days</span>
+      </div>
+
+      <div className="chart__plot" ref={box}>
+        {w > 0 && h > 0 && (
+          <svg width={w} height={h} role="img"
+               aria-label={`Order billing per day, ${fmtAxis(points[0].date)} to ${fmtAxis(points[points.length - 1].date)}`}>
+            <defs>
+              <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--teal)" stopOpacity="0.28" />
+                <stop offset="100%" stopColor="var(--teal)" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+
+            {/* Scale: a labelled top and a zero baseline, so the height of the
+                line means something without hovering anything. */}
+            <line x1={padL} x2={w - padR} y1={padT} y2={padT} className="chart__grid" />
+            <line x1={padL} x2={w - padR} y1={base} y2={base} className="chart__axis" />
+            <text x={padL - 8} y={padT + 4} className="chart__tick" textAnchor="end">{shortInr(top)}</text>
+            <text x={padL - 8} y={base + 4} className="chart__tick" textAnchor="end">₹0</text>
+
+            <path d={area} fill="url(#sparkFill)" />
+            <path d={line} fill="none" stroke="var(--teal)" strokeWidth="2"
+                  strokeLinecap="round" strokeLinejoin="round" />
+
+            {/* One full-height hit target per day. Hovering a 2.5px circle is a
+                game; hovering a column is not. */}
+            {points.map((p, i) => {
+              const half = points.length > 1 ? step / 2 : plotW / 2;
+              return (
+                <g key={p.date}>
+                  {i === shown && (
+                    <line x1={xy[i][0]} x2={xy[i][0]} y1={padT} y2={base} className="chart__cursor" />
+                  )}
+                  <circle cx={xy[i][0]} cy={xy[i][1]} r={i === shown ? 4 : 2.5}
+                          fill="var(--surface)" stroke="var(--teal)" strokeWidth={i === shown ? 2 : 1.5} />
+                  <rect
+                    x={Math.max(padL, xy[i][0] - half)} y={padT}
+                    width={Math.min(step || plotW, plotW)} height={plotH}
+                    fill="transparent"
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`${fmtAxis(p.date)}: ${inr(p.revenue)}`}
+                    onMouseEnter={() => setActive(i)}
+                    onFocus={() => setActive(i)}
+                    onMouseLeave={() => setActive(null)}
+                    onBlur={() => setActive(null)}
+                  />
+                </g>
+              );
+            })}
+          </svg>
+        )}
+      </div>
+
+      <div className="chart__axis-x" style={{ paddingLeft: padL, paddingRight: padR }}>
+        {points.map((p, i) => (
+          <span key={p.date} className={i === shown ? 'is-on' : undefined}>{fmtAxis(p.date)}</span>
         ))}
-      </svg>
-      <div className="row" style={{ justifyContent: 'space-between', marginTop: '.4rem' }}>
-        <span className="muted" style={{ fontSize: '.7rem' }}>{points[0].date.slice(5)}</span>
-        <span className="muted" style={{ fontSize: '.7rem' }}>{points[points.length - 1].date.slice(5)}</span>
       </div>
     </>
   );
