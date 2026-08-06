@@ -50,14 +50,19 @@ public static class AccessionEndpoints
         AccessionRepository repo,
         CancellationToken ct,
         int page = 1,
-        int pageSize = 100)
+        int pageSize = 100,
+        // 'b2c', 'b2b', or absent for both. A filter on a queue, not a gate:
+        // anyone who may see the queue may see either half of it. The channel
+        // capabilities govern RAISING an order, not looking at one.
+        string? kind = null)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
 
         var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
         if (scope.IsDenied) return Empty(pageSize);
 
-        var result = await repo.PendingAccessionsAsync(scope.ClientCodes, page, pageSize, ct).ConfigureAwait(false);
+        var result = await repo.PendingAccessionsAsync(scope.ClientCodes, page, pageSize, kind, ct)
+            .ConfigureAwait(false);
         return Page(result.Rows, result.Total, result.Page, result.PageSize, result.PageCount);
     }
 

@@ -51,7 +51,24 @@ public sealed record CreateOrderRequest(
     int? PayMode,
     int ReceiptAmount,
     string? PaymentRef,
-    bool BillAtMrp);
+    /// <summary>
+    /// Charge the basket at catalogue MRP instead of the client's rate.
+    /// </summary>
+    /// <remarks>
+    /// NOT taken from the request body even though it travels on this record.
+    /// The endpoint overwrites it from <see cref="Channel"/> after checking the
+    /// matching capability, because this single bit decides whether a basket is
+    /// billed at a client's negotiated rate or at full MRP — and a caller that
+    /// could set it directly would be choosing the price without holding the
+    /// capability that authorises the channel.
+    /// </remarks>
+    bool BillAtMrp,
+    /// <summary>
+    /// <c>b2c</c> (walk-in, priced at the client's rate) or <c>b2b</c> (client
+    /// order, billed at MRP). Absent means b2c, so callers written before the
+    /// split behave exactly as they did.
+    /// </summary>
+    string? Channel = null);
 
 public sealed record CreateOrderResult(
     bool Ok,

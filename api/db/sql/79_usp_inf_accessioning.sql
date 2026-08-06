@@ -42,7 +42,19 @@ GO
 CREATE OR ALTER PROCEDURE dbo.usp_inf_pending_accessions
     @client_codes dbo.ClientCodeList READONLY,
     @page         INT = 1,
-    @page_size    INT = 100
+    @page_size    INT = 100,
+    /*
+     * 'b2c', 'b2b', or NULL for both.
+     *
+     * B2B orders are the ones tagged in dbo.telo_order_kind — Telo's sidecar,
+     * written by usp_telo_create_order itself when @billAtMrp = 1. Absence of a
+     * row means B2C, which is why the b2c branch is NOT EXISTS rather than a
+     * kind = 'b2c' match: no order has ever been tagged 'b2c' and testing for
+     * one would return an empty queue.
+     *
+     * Defaults to NULL so every existing caller keeps seeing the whole queue.
+     */
+    @kind         VARCHAR(8) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -56,6 +68,7 @@ BEGIN
     DECLARE @offset INT = (@pageSafe - 1) * @size;
 
     DECLARE @codeCount INT = (SELECT COUNT(*) FROM @client_codes);
+    DECLARE @kindSafe VARCHAR(8) = NULLIF(LOWER(LTRIM(RTRIM(@kind))), '');
 
     ;WITH ours AS (
         SELECT b.id AS billId, b.bill_number AS billNumber, b.bill_date AS billDate,
@@ -72,6 +85,13 @@ BEGIN
           AND TRY_CONVERT(INT, b.medid) IS NOT NULL
           AND (@codeCount = 0
                OR EXISTS (SELECT 1 FROM @client_codes c WHERE c.code = u.MCCUnitCode))
+          AND (@kindSafe IS NULL
+               OR (@kindSafe = 'b2b'
+                   AND EXISTS (SELECT 1 FROM dbo.telo_order_kind k
+                               WHERE k.bill_id = b.id AND k.kind = 'b2b'))
+               OR (@kindSafe = 'b2c'
+                   AND NOT EXISTS (SELECT 1 FROM dbo.telo_order_kind k
+                                   WHERE k.bill_id = b.id AND k.kind = 'b2b')))
     )
     SELECT o.billId, o.billNumber, o.billDate, o.patientId, o.patientName,
            o.mccCode, o.clientCode, o.total, o.balance, o.origin,

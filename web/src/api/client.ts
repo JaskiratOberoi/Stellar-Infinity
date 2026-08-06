@@ -588,23 +588,44 @@ export interface SampleGroup {
   itemCount: number;
 }
 
+/**
+ * Which prices an order is raised at.
+ *
+ * `b2c` — a walk-in. The basket is priced at the client's own rate: special
+ * rate, else rate list, else MRP.
+ * `b2b` — a client's order. The bill is raised at catalogue MRP, which is what
+ * the patient pays the collection centre; the centre's own cost is the
+ * rate-list price and the difference is its margin.
+ */
+export type OrderChannel = 'b2c' | 'b2b';
+
 export interface OrderPreview {
+  channel: OrderChannel;
   lines: {
     kind: string; id: number; code: string | null; name: string | null;
+    /** What this line is billed at — MRP in B2B, the client's rate in B2C. */
     mrp: number | null; rate: number | null; rateSource: string;
+    /** B2B only: what the centre owes the lab. Null in B2C, where it is `rate`. */
+    clientCost: number | null;
+    /** B2B only: mrp − clientCost. Negative means the centre loses on this line. */
+    margin: number | null;
   }[];
   groups: SampleGroup[];
   total: number;
   /**
-   * Computed over a SUBSET. Most of the catalogue has no MRP on record, so
-   * comparing every line against zero would read as a loss on almost every
-   * order. `linesWithoutMrp` is how many were left out.
+   * Over the lines that carry an MRP; `linesWithoutMrp` is how many were left
+   * out. In B2C this is what the lab gives up against list price; in B2B it is
+   * what the centre keeps.
    */
   margin: {
     amount: number; mrpTotal: number; rateTotal: number;
     comparableLines: number; linesWithoutMrp: number;
   };
   unpriced: number;
+  /** B2B: lines with no MRP, which would go onto the bill at zero. */
+  billedAtZero: number;
+  /** B2B: lines where MRP is below the client's rate — the centre loses money. */
+  belowCost: number;
 }
 
 export interface PlacedOrder {
@@ -636,7 +657,10 @@ export const cartApi = {
   remove: (kind: string, id: number) =>
     request<Cart>(`/api/orders/cart/items/${kind}/${id}`, { method: 'DELETE' }),
   clear: () => request<Cart>('/api/orders/cart/', { method: 'DELETE' }),
-  preview: () => api.post<OrderPreview>('/api/orders/preview'),
+  // The channel travels on both: a preview quoted in one channel and an order
+  // placed in the other would agree a total the bill then contradicts.
+  preview: (channel: OrderChannel = 'b2c') =>
+    api.post<OrderPreview>(`/api/orders/preview?channel=${channel}`),
   place: (body: unknown) => api.post<PlacedOrder>('/api/orders/', body),
 };
 
@@ -671,8 +695,12 @@ export interface PendingRegistration {
 }
 
 export const accessionApi = {
-  pending: (page = 1, pageSize = 100) =>
-    api.get<PagedResponse<PendingAccession>>(`/api/accessioning/pending?page=${page}&pageSize=${pageSize}`),
+  // `kind` filters the queue by channel; omit for both.
+  pending: (page = 1, pageSize = 100, kind?: OrderChannel) => {
+    const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (kind) p.set('kind', kind);
+    return api.get<PagedResponse<PendingAccession>>(`/api/accessioning/pending?${p}`);
+  },
   unregistered: (page = 1, pageSize = 100) =>
     api.get<PagedResponse<PendingRegistration>>(
       `/api/accessioning/unregistered?page=${page}&pageSize=${pageSize}`),

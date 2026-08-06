@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   cartApi, catalogApi,
-  type Cart, type CatalogItem, type OrderPreview, type PlacedOrder,
+  type Cart, type CatalogItem, type OrderChannel, type OrderPreview, type PlacedOrder,
 } from '../api/client';
 import { inr, plainText } from '../lib/format';
 import { InfinityLoader } from '../components/InfinityLoader';
 import { ClientPicker } from '../components/ClientPicker';
+import { useAuth } from '../auth/AuthContext';
 import { RateSourceBadge } from './Catalogue';
 
 interface PatientForm {
@@ -31,12 +32,48 @@ const EMPTY_PATIENT: PatientForm = {
  * every price depends on the client, and the operator should see what the order
  * costs before typing out a person's details.
  *
- * Barcodes are NOT collected here. A B2B order is booked first and accessioned
+ * Barcodes are NOT collected here. An order is booked first and accessioned
  * when the tubes physically arrive, which may be hours later and is somebody
  * else's job; see the Accessioning screen. That is also why the confirmation
  * says the order is not yet on the worksheet.
+ *
+ * ── THE CHANNEL IS THE FIRST DECISION, NOT A SETTING ───────────────────────
+ * B2C bills the basket at the client's own rate. B2B bills it at catalogue
+ * MRP, because the patient pays the collection centre MRP and the centre owes
+ * the lab its rate-list price separately. Same basket, two different bills, so
+ * the choice sits at the top of the form and the preview is re-quoted whenever
+ * it changes.
+ *
+ * Until now this screen always sent billAtMrp:false — every order Infinity has
+ * ever raised was priced B2C — while these comments described it as the B2B
+ * path. It was neither labelled nor gated.
  */
 export function NewOrder() {
+  const { can } = useAuth();
+  const mayB2b = can('order:b2b');
+  const mayB2c = can('order:b2c') || can('order:create');
+
+  /*
+   * Always starts B2C, then corrects.
+   *
+   * Deriving the initial value from capabilities looked right and was wrong:
+   * `can()` answers false until /me resolves, so on any slow restore the
+   * initial value was computed as though the operator had no B2C rights and
+   * the page opened in B2B — the channel that overrides the client's rates
+   * with MRP. useState keeps a first value for ever, so it never corrected
+   * itself. Caught in the harness, where the page came up on B2B for a
+   * super-admin holding both.
+   *
+   * So the safe channel is the literal default and the effect below is the
+   * only thing that moves it.
+   */
+  const [channel, setChannel] = useState<OrderChannel>('b2c');
+
+  // An account confined to B2B lands there once we actually know that.
+  useEffect(() => {
+    if (!mayB2c && mayB2b) setChannel('b2b');
+  }, [mayB2c, mayB2b]);
+
   const [cart, setCart] = useState<Cart>({ mcc: null, items: [] });
   const [preview, setPreview] = useState<OrderPreview | null>(null);
   const [patient, setPatient] = useState<PatientForm>(EMPTY_PATIENT);
@@ -54,16 +91,18 @@ export function NewOrder() {
     void cartApi.get().then(setCart).catch(() => { /* empty cart is the safe default */ });
   }, []);
 
-  const refreshPreview = useCallback(async (c: Cart) => {
+  const refreshPreview = useCallback(async (c: Cart, ch: OrderChannel) => {
     if (c.mcc == null || c.items.length === 0) { setPreview(null); return; }
     try {
-      setPreview(await cartApi.preview());
+      setPreview(await cartApi.preview(ch));
     } catch {
       setPreview(null);
     }
   }, []);
 
-  useEffect(() => { void refreshPreview(cart); }, [cart, refreshPreview]);
+  // Re-quotes on a channel change as well as a cart change — the same basket
+  // is a different total in the other channel.
+  useEffect(() => { void refreshPreview(cart, channel); }, [cart, channel, refreshPreview]);
 
   // ---- test search ----
   useEffect(() => {
@@ -87,6 +126,11 @@ export function NewOrder() {
 
   const inCart = (i: CatalogItem) => cart.items.some((c) => c.kind === i.kind && c.id === i.id);
 
+  // Read off the PREVIEW, not the local state: the preview is what the server
+  // actually quoted, and if the two ever disagree the table must describe the
+  // numbers it is showing rather than the ones that were asked for.
+  const b2b = (preview?.channel ?? channel) === 'b2b';
+
   async function place() {
     if (cart.mcc == null) return;
     setBusy(true);
@@ -95,7 +139,8 @@ export function NewOrder() {
       const result = await cartApi.place({
         mcc: cart.mcc,
         items: cart.items,
-        // None: this is the B2B path. Barcodes are attached at accessioning.
+        // None in either channel. Barcodes are attached at accessioning, when
+        // the tubes actually arrive.
         sampleSids: [],
         patientId: 0,
         name: patient.name.trim(),
@@ -108,6 +153,10 @@ export function NewOrder() {
         clinicalHistory: patient.clinicalHistory.trim() || null,
         discountAmount: 0,
         receiptAmount: 0,
+        // The API derives billAtMrp from the channel after checking the
+        // capability, and ignores anything sent here — so the channel is the
+        // only thing worth sending.
+        channel,
         billAtMrp: false,
       });
       setPlaced(result);
@@ -161,6 +210,28 @@ export function NewOrder() {
       </div>
 
       {error && <div className="alert alert--error" style={{ marginBottom: '.9rem' }}>{error}</div>}
+
+      {/* ---- channel ----
+          Above step 1 rather than inside it, because it governs every price on
+          the page — including the client's own rates, which it can override
+          entirely. Hidden when the account only has one channel: a choice with
+          one option is furniture. */}
+      {mayB2b && mayB2c && (
+        <div className="card channel" style={{ marginBottom: '.9rem' }}>
+          <div className="channel__opts" role="radiogroup" aria-label="Order channel">
+            <ChannelOption
+              on={channel === 'b2c'} onPick={() => setChannel('b2c')}
+              title="Walk-in · B2C"
+              sub="Billed at this client's own rate"
+            />
+            <ChannelOption
+              on={channel === 'b2b'} onPick={() => setChannel('b2b')}
+              title="Client order · B2B"
+              sub="Billed at MRP — the centre keeps the margin"
+            />
+          </div>
+        </div>
+      )}
 
       {/* All three steps are ALWAYS rendered, dimmed until reachable.
           Revealing them one at a time left the page as a single card above an
@@ -286,8 +357,12 @@ export function NewOrder() {
                   <thead>
                     <tr>
                       <th>Test</th>
-                      <th style={{ textAlign: 'right' }}>MRP</th>
-                      <th style={{ textAlign: 'right' }}>Rate</th>
+                      {/* In B2B the charge IS the MRP, so a separate MRP column
+                          would print the same number twice. The useful second
+                          number there is what the centre pays. */}
+                      <th style={{ textAlign: 'right' }}>{b2b ? 'Client pays' : 'MRP'}</th>
+                      <th style={{ textAlign: 'right' }}>{b2b ? 'Patient pays' : 'Rate'}</th>
+                      {b2b && <th style={{ textAlign: 'right' }}>Margin</th>}
                       <th>Source</th>
                       <th />
                     </tr>
@@ -296,12 +371,29 @@ export function NewOrder() {
                     {preview.lines.map((l) => (
                       <tr key={`${l.kind}:${l.id}`}>
                         <td className="cell--lead">{plainText(l.name) || l.code}</td>
-                        <td className="mono muted cell--meta" data-label="MRP" style={{ textAlign: 'right' }}>
-                          {l.mrp != null && l.mrp > 0 ? inr(l.mrp) : '—'}
+                        <td className="mono muted cell--meta"
+                            data-label={b2b ? 'Client pays' : 'MRP'} style={{ textAlign: 'right' }}>
+                          {b2b
+                            ? (l.clientCost != null ? inr(l.clientCost) : '—')
+                            : (l.mrp != null && l.mrp > 0 ? inr(l.mrp) : '—')}
                         </td>
                         <td className="mono cell--tag" style={{ textAlign: 'right', fontWeight: 600 }}>
-                          {l.rate != null ? inr(l.rate) : <span className="muted">no price</span>}
+                          {l.rate != null && l.rate > 0
+                            ? inr(l.rate)
+                            : <span className="muted">{b2b ? 'no MRP — bills at ₹0' : 'no price'}</span>}
                         </td>
+                        {b2b && (
+                          <td className="mono cell--meta" data-label="Margin" style={{
+                            textAlign: 'right',
+                            // A negative margin is the centre selling below what
+                            // it owes the lab. It gets the danger colour because
+                            // nothing else on the row says so.
+                            color: l.margin != null && l.margin < 0 ? 'var(--danger)' : undefined,
+                            fontWeight: l.margin != null && l.margin < 0 ? 600 : undefined,
+                          }}>
+                            {l.margin != null ? inr(l.margin) : '—'}
+                          </td>
+                        )}
                         <td className="cell--tag"><RateSourceBadge source={l.rateSource} /></td>
                         <td style={{ textAlign: 'right' }}>
                           <button className="btn btn--ghost btn--sm"
@@ -317,16 +409,18 @@ export function NewOrder() {
 
               <div className="row" style={{ marginTop: '.8rem', flexWrap: 'wrap', gap: '1.2rem' }}>
                 <span style={{ fontSize: '1.05rem' }}>
-                  Total <b>{inr(preview.total)}</b>
+                  {b2b ? 'Patient pays' : 'Total'} <b>{inr(preview.total)}</b>
                 </span>
 
-                {/* Stated with its basis. Most of the catalogue has no MRP, so a
-                    bare margin figure would be meaningless — and someone would
-                    eventually price a contract off it. */}
+                {/* Stated with its basis — a bare margin figure is something
+                    somebody eventually prices a contract off. */}
                 {preview.margin.comparableLines > 0 && (
                   <span className="muted" style={{ fontSize: '.8rem' }}>
-                    {preview.margin.amount >= 0 ? 'Discount vs MRP' : 'Above MRP'}{' '}
-                    <b>{inr(Math.abs(preview.margin.amount))}</b>
+                    {b2b
+                      ? <>Centre keeps <b>{inr(preview.margin.amount)}</b> · owes the lab{' '}
+                          <b>{inr(preview.margin.rateTotal)}</b></>
+                      : <>{preview.margin.amount >= 0 ? 'Discount vs MRP' : 'Above MRP'}{' '}
+                          <b>{inr(Math.abs(preview.margin.amount))}</b></>}
                     {' '}on {preview.margin.comparableLines} of {preview.lines.length} line
                     {preview.lines.length === 1 ? '' : 's'}
                     {preview.margin.linesWithoutMrp > 0
@@ -339,6 +433,26 @@ export function NewOrder() {
                   Empty basket
                 </button>
               </div>
+
+              {/* ── B2B HAZARDS ────────────────────────────────────────────
+                  Both are properties of the rate lists rather than mistakes,
+                  so neither blocks the order — but both change what the lab
+                  gets paid, and neither is visible in the total. */}
+              {b2b && preview.billedAtZero > 0 && (
+                <div className="alert alert--error" style={{ marginTop: '.7rem' }}>
+                  <b>{preview.billedAtZero}</b> line{preview.billedAtZero === 1 ? '' : 's'} ha
+                  {preview.billedAtZero === 1 ? 's' : 've'} no MRP on record. A B2B bill charges MRP,
+                  so {preview.billedAtZero === 1 ? 'it' : 'they'} will go onto the bill at ₹0.
+                </div>
+              )}
+              {b2b && preview.belowCost > 0 && (
+                <div className="alert alert--info" style={{ marginTop: '.7rem' }}>
+                  <b>{preview.belowCost}</b> line{preview.belowCost === 1 ? '' : 's'} price
+                  {preview.belowCost === 1 ? 's' : ''} below what this client owes the lab — the
+                  centre is out of pocket on {preview.belowCost === 1 ? 'it' : 'them'}. Check the
+                  margin column.
+                </div>
+              )}
 
               {/* The tubes this order will need. Shown while booking so a
                   collection centre knows how many barcodes to put out. */}
@@ -450,5 +564,33 @@ export function NewOrder() {
 
       {busy && <div className="center" style={{ marginTop: '1rem' }}><InfinityLoader /></div>}
     </div>
+  );
+}
+
+/**
+ * One side of the channel choice.
+ *
+ * A radio rather than a toggle or a dropdown: both options carry a consequence
+ * worth reading, and the difference between them is what the patient is
+ * charged. A two-state switch would put one of those consequences behind an
+ * interaction.
+ */
+function ChannelOption({ on, onPick, title, sub }: {
+  on: boolean;
+  onPick: () => void;
+  title: string;
+  sub: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={on}
+      className={`channel__opt${on ? ' is-on' : ''}`}
+      onClick={onPick}
+    >
+      <span className="channel__title">{title}</span>
+      <span className="channel__sub">{sub}</span>
+    </button>
   );
 }

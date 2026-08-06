@@ -79,8 +79,13 @@ public sealed class AccessionRepository(NobleConnectionFactory db, SqlRetry retr
 {
     private const string Origin = "inf:";
 
+    /// <param name="kind">
+    /// <c>b2c</c>, <c>b2b</c>, or null for both. See the procedure's own note:
+    /// B2C is the ABSENCE of a tag, not a tag of its own.
+    /// </param>
     public Task<Paged<PendingAccession>> PendingAccessionsAsync(
-        IReadOnlyList<string> clientCodes, int page, int pageSize, CancellationToken ct = default) =>
+        IReadOnlyList<string> clientCodes, int page, int pageSize,
+        string? kind = null, CancellationToken ct = default) =>
         retry.ExecuteAsync("accession.pending", token =>
             db.QueryAsync("accession.pending", async (conn, inner) =>
             {
@@ -90,6 +95,8 @@ public sealed class AccessionRepository(NobleConnectionFactory db, SqlRetry retr
                 AddCodesTvp(cmd, clientCodes);
                 cmd.Parameters.Add("@page", SqlDbType.Int).Value = p;
                 cmd.Parameters.Add("@page_size", SqlDbType.Int).Value = size;
+                cmd.Parameters.Add("@kind", SqlDbType.VarChar, 8).Value =
+                    string.IsNullOrWhiteSpace(kind) ? DBNull.Value : kind.Trim().ToLowerInvariant();
 
                 await using var r = await cmd.ExecuteReaderAsync(CommandBehavior.SingleResult, inner)
                     .ConfigureAwait(false);

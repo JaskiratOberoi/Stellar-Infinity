@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   accessionApi, orderTubesApi,
-  type OrderTube, type PendingAccession, type PendingRegistration,
+  type OrderChannel, type OrderTube, type PendingAccession, type PendingRegistration,
 } from '../api/client';
 import { fmtDateTime, inr, plainText } from '../lib/format';
 import { Pager } from '../components/Pager';
@@ -45,6 +45,17 @@ export function Accessioning() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
 
+  /*
+   * Which channel's orders to show, or null for both.
+   *
+   * A filter rather than two screens. Telo splits these into separate pages
+   * because its two channels have different roles attached; here the same
+   * operator accessions both queues off the same bench, and the tubes arrive in
+   * one box regardless of how the order was priced. Defaulting to null keeps
+   * that: you see everything waiting unless you ask a narrower question.
+   */
+  const [kind, setKind] = useState<OrderChannel | null>(null);
+
   const pageSize = 100;
 
   const load = useCallback(async () => {
@@ -52,7 +63,7 @@ export function Accessioning() {
     setError(null);
     try {
       const [p, u] = await Promise.all([
-        accessionApi.pending(pendingPage, pageSize),
+        accessionApi.pending(pendingPage, pageSize, kind ?? undefined),
         accessionApi.unregistered(unregPage, pageSize),
       ]);
       setPending(p.rows); setPendingTotal(p.total);
@@ -62,7 +73,7 @@ export function Accessioning() {
     } finally {
       setLoading(false);
     }
-  }, [pendingPage, unregPage]);
+  }, [pendingPage, unregPage, kind]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -127,9 +138,27 @@ export function Accessioning() {
         <div className="center"><InfinityLoader /><span className="muted">Loading queues…</span></div>
       ) : tab === 'pending' ? (
         <>
-          <p className="muted" style={{ fontSize: '.78rem', margin: '.6rem 0' }}>
-            Orders with no barcode attached. Nothing has been collected into a tube the lab can identify.
-          </p>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline',
+                                        gap: '1rem', flexWrap: 'wrap', margin: '.6rem 0' }}>
+            <p className="muted" style={{ fontSize: '.78rem', margin: 0 }}>
+              Orders with no barcode attached. Nothing has been collected into a tube the lab can identify.
+            </p>
+
+            {/* Resets to page 1: filtering while on page 3 of the unfiltered
+                queue lands on a page the narrower result may not have. */}
+            <div className="seg" role="group" aria-label="Filter by channel">
+              {([[null, 'All'], ['b2c', 'Walk-in'], ['b2b', 'Client']] as const).map(([k, label]) => (
+                <button
+                  key={label}
+                  className={`seg__btn${kind === k ? ' is-on' : ''}`}
+                  aria-pressed={kind === k}
+                  onClick={() => { setKind(k as OrderChannel | null); setPendingPage(1); }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="table-wrap table-wrap--cards">
             <table>

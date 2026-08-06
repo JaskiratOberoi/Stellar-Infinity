@@ -115,15 +115,25 @@ public static class OrderEntryEndpoints
     /// and then billing the current one is the kind of discrepancy a client
     /// notices on their invoice.
     /// </summary>
+    /// <param name="channel">
+    /// <c>b2c</c> or <c>b2b</c>. The preview must be quoted in the channel the
+    /// order will actually be placed in, or the operator agrees a total the
+    /// bill then contradicts.
+    /// </param>
     private static async Task<IResult> PreviewOrder(
         System.Security.Claims.ClaimsPrincipal principal,
         ScopeRepository scopes,
         CartStore carts,
         CatalogRepository catalog,
         OrderWriteRepository orders,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? channel = null)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
+
+        var (chan, chanError) = ResolveChannel(principal, channel);
+        if (chanError is not null) return chanError;
+        var b2b = chan == B2b;
 
         var cart = await carts.GetAsync(userId, ct).ConfigureAwait(false);
         if (cart.Mcc is not int mcc)
@@ -144,17 +154,40 @@ public static class OrderEntryEndpoints
         var lines = cart.Items.Select(i =>
         {
             byKey.TryGetValue((i.Kind, i.Id), out var p);
+            var mrp = p?.Mrp;
+            var clientRate = p?.Rate;
+
+            // WHAT THIS LINE IS BILLED AT — the one number that differs by
+            // channel, and it mirrors the procedure exactly: with
+            // @billAtMrp = 1 the special-rate and rate-list tiers are nulled
+            // out and resolution falls straight through to MRP. Quoting the
+            // rate here and billing MRP there is how a preview stops matching
+            // the bill it produced.
+            var charge = b2b ? mrp : clientRate;
+
             return new
             {
                 kind = i.Kind,
                 id = i.Id,
                 code = p?.Code ?? i.Code,
                 name = p?.Name ?? i.Name,
-                mrp = p?.Mrp,
-                rate = p?.Rate,
+                mrp,
+                rate = charge,
+                // What the centre owes the lab for this line. Only meaningful
+                // in B2B, where the patient's money and the lab's are
+                // different numbers; null in B2C, where they are the same one.
+                clientCost = b2b ? clientRate : null,
+                // The centre's margin on this line, and null rather than zero
+                // when either side is unknown — a missing price is not a
+                // margin of nothing.
+                margin = b2b && mrp is not null && clientRate is not null ? mrp - clientRate : null,
                 // 'none' means the catalogue has no price for this client at
                 // all. Surfaced per line so the operator sees WHICH item is
                 // unpriced rather than only that the total looks wrong.
+                //
+                // In B2B the line bills at MRP regardless of which client tier
+                // matched, so the source describes where the CLIENT'S COST came
+                // from, not where the charge did.
                 rateSource = p?.RateSource ?? "none",
             };
         }).ToArray();
@@ -163,39 +196,127 @@ public static class OrderEntryEndpoints
 
         // MARGIN IS COMPUTED OVER A SUBSET, DELIBERATELY.
         //
-        // MRP is not populated for most of this catalogue — measured on rate
-        // list 139 (Medicare), 1,248 of 1,457 priced tests carry MRP = 0. A
-        // margin of (sum of MRP) minus (sum of rate) across every line
-        // therefore reads as a large LOSS on almost every order, because the
-        // zeros are missing data rather than a price of nothing.
+        // A line with no MRP has nothing to compare against, and folding it in
+        // as a zero would read as a total loss on that line rather than as the
+        // missing datum it is. So margin sums only over lines that carry an
+        // MRP, and the number excluded travels with it — a margin figure whose
+        // basis is invisible is worse than no margin figure, because someone
+        // eventually prices a contract off it.
         //
-        // So margin is summed only over lines that actually have an MRP to
-        // compare against, and the count of lines excluded is returned with it.
-        // A margin figure whose basis is invisible is worse than no margin
-        // figure: someone would eventually price a contract off it.
+        // A previous note here claimed MRP was missing for most of the
+        // catalogue: "1,248 of 1,457 priced tests carry MRP = 0". That is not
+        // true and the subsetting is not load-bearing. Measured directly:
+        // 1,446 of 1,457 active tests carry an MRP, profiles and master
+        // profiles are 100% covered, and of 1,000 rows returned by
+        // usp_inf_catalog_search for a live client exactly 4 lacked one. The
+        // old figure was almost certainly an id-vs-code join — the rate-list
+        // tables name their key columns TestCode/profilecode but store the
+        // numeric id, and joining them by code silently matches nothing.
+        //
+        // This matters more now than it did: in B2B the line is BILLED at MRP,
+        // so a genuinely missing MRP is not a cosmetic gap in a margin figure,
+        // it is a line that bills at nothing. Counted below as billedAtZero.
         var comparable = lines.Where(l => l.mrp is > 0m).ToArray();
         var comparableMrp = comparable.Sum(l => l.mrp ?? 0m);
-        var comparableRate = comparable.Sum(l => l.rate ?? 0m);
+        var comparableRate = comparable.Sum(l => l.clientCost ?? l.rate ?? 0m);
 
         return Results.Ok(new
         {
+            channel = chan,
             lines,
             groups,
             total,
             margin = new
             {
-                // What the lab gives up against list price, over the lines
-                // where "list price" means anything.
+                // In B2C: what the lab gives up against list price.
+                // In B2B: what the CENTRE keeps — it collects MRP from the
+                // patient and owes the lab its rate. Same subtraction, opposite
+                // pocket, which is why the channel travels in the response.
                 amount = comparableMrp - comparableRate,
                 mrpTotal = comparableMrp,
                 rateTotal = comparableRate,
                 comparableLines = comparable.Length,
-                // Lines with no MRP on record. Not an error — most of the
-                // catalogue is like this — but the margin above ignores them.
+                // Lines with no MRP on record; the margin above ignores them.
                 linesWithoutMrp = lines.Length - comparable.Length,
             },
             unpriced = lines.Count(l => l.rateSource == "none"),
+            // B2B only, and the number that must not be ignored: these lines
+            // would go onto the bill at zero, because MRP is what B2B charges
+            // and they have none.
+            billedAtZero = b2b ? lines.Count(l => l.mrp is null or 0m) : 0,
+            // ── B2B LINES THAT LOSE THE CENTRE MONEY ──────────────────────
+            // MRP is not reliably above the client's rate. Measured on ABC01's
+            // catalogue: of 1,000 items, 755 price MRP exactly AT the client
+            // rate and 91 price it BELOW — on those the patient pays less than
+            // the centre owes the lab, and the centre is out of pocket on a
+            // sale it just made.
+            //
+            // That is a real commercial fact about the rate lists, not a bug to
+            // correct here, so the order is allowed. But it is surfaced as its
+            // own count rather than buried in a net margin, where 91 losses
+            // hide inside 150 gains and the total still looks positive.
+            belowCost = b2b ? lines.Count(l => l.margin is < 0m) : 0,
         });
+    }
+
+    // ---- channels ------------------------------------------------------------
+
+    private const string B2c = "b2c";
+    private const string B2b = "b2b";
+
+    /// <summary>
+    /// Resolve the requested channel and check the caller may use it.
+    /// </summary>
+    /// <remarks>
+    /// ── THE TWO SIDES ARE GATED DIFFERENTLY, ON PURPOSE ────────────────────
+    /// B2B is checked strictly against <c>order:b2b</c>. It is new, nobody
+    /// holds it yet, and it is the side that changes what a basket costs — a
+    /// B2B order bills the patient at full MRP rather than at the client's
+    /// negotiated rate.
+    ///
+    /// B2C accepts <c>order:b2c</c> OR plain <c>order:create</c>. Capabilities
+    /// are baked into the JWT at sign-in and tokens last eight hours, so a
+    /// strict check would break order placement for every operator already
+    /// signed in until their token rotated — mid-shift, on a lab that runs
+    /// around the clock. The fallback grants nothing new: every order:create
+    /// holder could already place exactly these orders at exactly these prices.
+    ///
+    /// Remove the fallback once tokens have rotated. Until then the Client
+    /// role's confinement to B2B is expressed in the role table but not yet
+    /// enforced, which is the honest cost of not forcing a mass re-login.
+    /// </remarks>
+    private static (string Channel, IResult? Error) ResolveChannel(
+        System.Security.Claims.ClaimsPrincipal principal, string? requested)
+    {
+        var channel = string.IsNullOrWhiteSpace(requested) ? B2c : requested.Trim().ToLowerInvariant();
+
+        if (channel is not (B2c or B2b))
+        {
+            return (B2c, Results.BadRequest(new
+            {
+                error = "channel must be \"b2c\" or \"b2b\".",
+            }));
+        }
+
+        if (channel == B2b && !principal.HasCapability(Capabilities.OrderB2b))
+        {
+            return (B2c, Results.Problem(
+                title: "Forbidden",
+                detail: "Raising a client (B2B) order requires the 'order:b2b' capability.",
+                statusCode: StatusCodes.Status403Forbidden));
+        }
+
+        if (channel == B2c
+            && !principal.HasCapability(Capabilities.OrderB2c)
+            && !principal.HasCapability(Capabilities.OrderCreate))
+        {
+            return (B2c, Results.Problem(
+                title: "Forbidden",
+                detail: "Raising a walk-in (B2C) order requires the 'order:b2c' capability.",
+                statusCode: StatusCodes.Status403Forbidden));
+        }
+
+        return (channel, null);
     }
 
     // ---- placement ---------------------------------------------------------
@@ -218,7 +339,17 @@ public static class OrderEntryEndpoints
         if (body.Items.Count == 0)
             return Results.BadRequest(new { error = "An order needs at least one test." });
 
-        var result = await orders.CreateAsync(userId, body, ct).ConfigureAwait(false);
+        var (channel, channelError) = ResolveChannel(principal, body.Channel);
+        if (channelError is not null) return channelError;
+
+        // The request's own BillAtMrp is DISCARDED and rederived here. It is the
+        // bit that decides whether this basket is billed at the client's rate or
+        // at MRP, and honouring a posted value would let any order:create holder
+        // pick the price without holding the channel capability that authorises
+        // it.
+        var placed = body with { BillAtMrp = channel == B2b, Channel = channel };
+
+        var result = await orders.CreateAsync(userId, placed, ct).ConfigureAwait(false);
 
         if (!result.Ok)
         {

@@ -37,9 +37,19 @@ public static class InfinityRoles
     public static readonly IReadOnlyDictionary<string, IReadOnlySet<string>> RoleCapabilities =
         new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal)
         {
+            // ── ON THE CHANNEL CAPABILITIES ────────────────────────────────
+            // Telo carries two extra ROLES for this (b2c_billing, b2b_billing)
+            // because it needed to confine particular accounts to one channel.
+            // Infinity does not copy those roles: a role here is already just a
+            // set of capabilities, so confinement is expressed by which channel
+            // caps a role holds. Adding two near-duplicate roles would also mean
+            // touching the admin picker and usp_inf_admin_set_role's validation,
+            // and Telo's own comments record it shipping a mismatch between
+            // those exact two places once already.
             [SuperAdmin] = Caps(
                 Capabilities.UserManage,
                 Capabilities.OrderCreate, Capabilities.OrderView, Capabilities.OrderAccession,
+                Capabilities.OrderB2c, Capabilities.OrderB2b,
                 Capabilities.PatientCreate, Capabilities.PatientView,
                 Capabilities.ResultEnter, Capabilities.ResultAuthorize,
                 Capabilities.ResultAmend, Capabilities.ResultReopen, Capabilities.SampleReject,
@@ -52,6 +62,7 @@ public static class InfinityRoles
             // capability that can escalate privilege.
             [Admin] = Caps(
                 Capabilities.OrderCreate, Capabilities.OrderView, Capabilities.OrderAccession,
+                Capabilities.OrderB2c, Capabilities.OrderB2b,
                 Capabilities.PatientCreate, Capabilities.PatientView,
                 Capabilities.ResultEnter, Capabilities.ResultAuthorize,
                 Capabilities.ResultAmend, Capabilities.ResultReopen, Capabilities.SampleReject,
@@ -64,6 +75,7 @@ public static class InfinityRoles
             // sign-off stays with Admin and above.
             [LabManager] = Caps(
                 Capabilities.OrderCreate, Capabilities.OrderView, Capabilities.OrderAccession,
+                Capabilities.OrderB2c, Capabilities.OrderB2b,
                 Capabilities.PatientCreate, Capabilities.PatientView,
                 Capabilities.ResultEnter, Capabilities.ResultAuthorize,
                 Capabilities.ResultAmend, Capabilities.SampleReject,
@@ -93,8 +105,16 @@ public static class InfinityRoles
             // A client centre signing in with its own LIS credentials. Scope
             // (which client codes they may see) is enforced separately and is
             // what actually stops cross-client visibility.
+            //
+            // B2B only, which is the whole point of the role: a centre sends
+            // the lab work at its negotiated rate and bills its own patient at
+            // MRP. Granting B2C as well would let a client centre raise orders
+            // priced at its own rate list AND keep the patient's money, which is
+            // not a transaction the lab has agreed to. Telo maps LIS client
+            // accounts to b2b_billing for the same reason.
             [Client] = Caps(
                 Capabilities.OrderCreate, Capabilities.OrderView,
+                Capabilities.OrderB2b,
                 Capabilities.PatientCreate, Capabilities.PatientView,
                 Capabilities.ReportView,
                 Capabilities.BillingView),
@@ -179,6 +199,31 @@ public static class Capabilities
     public const string OrderCreate = "order:create";
     public const string OrderView = "order:view";
     public const string OrderAccession = "order:accession";
+
+    /// <summary>
+    /// The walk-in channel: the order is priced at the client's own rate —
+    /// special rate, else rate list, else MRP.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="OrderCreate"/> because the two channels decide
+    /// DIFFERENT AMOUNTS for the same basket, and an account should be able to
+    /// hold one without the other. Telo draws the same line and confines some
+    /// accounts to a single channel — an internal counter that never raises a
+    /// B2B order, a client centre that only ever does.
+    /// </remarks>
+    public const string OrderB2c = "order:b2c";
+
+    /// <summary>
+    /// The client channel: the bill is raised at catalogue MRP, which is what
+    /// the patient pays the collection centre. The centre's own cost is the
+    /// rate-list price and the difference is its margin.
+    /// </summary>
+    /// <remarks>
+    /// Holding this is the difference between billing a basket at a client's
+    /// negotiated rate and billing it at full MRP, so it is a capability in its
+    /// own right rather than a UI toggle.
+    /// </remarks>
+    public const string OrderB2b = "order:b2b";
     public const string PatientCreate = "patient:create";
     public const string PatientView = "patient:view";
     public const string ResultEnter = "result:enter";

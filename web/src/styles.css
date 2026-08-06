@@ -1397,6 +1397,57 @@ tbody tr:hover { background: var(--accent-softer); }
   padding: 0 .25rem;
 }
 
+/* ---------- segmented filter ---------- */
+
+.seg { display: inline-flex; border: 1px solid var(--line-soft); border-radius: 7px; overflow: hidden; }
+.seg__btn {
+  padding: .28rem .7rem;
+  font: inherit;
+  font-size: .76rem;
+  background: transparent;
+  color: var(--ink-dim);
+  border: none;
+  border-right: 1px solid var(--line-soft);
+  cursor: pointer;
+}
+.seg__btn:last-child { border-right: none; }
+.seg__btn:hover { color: inherit; }
+.seg__btn.is-on { background: var(--accent-softer); color: var(--teal); font-weight: 600; }
+.seg__btn:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
+
+/* ---------- order channel (B2C / B2B) ---------- */
+
+.channel__opts { display: flex; gap: .6rem; flex-wrap: wrap; }
+
+/* Each option is a full card rather than a label beside a dot: the subtitle is
+   the part that matters (what the patient is charged) and it needs room. */
+.channel__opt {
+  flex: 1 1 220px;
+  display: flex;
+  flex-direction: column;
+  gap: .15rem;
+  text-align: left;
+  padding: .6rem .8rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  transition: border-color .15s, background .15s;
+}
+.channel__opt:hover { border-color: var(--accent-ring); }
+.channel__opt.is-on {
+  border-color: var(--teal);
+  background: var(--accent-softer);
+}
+/* Selection must not rest on colour alone. */
+.channel__opt.is-on .channel__title::before { content: '✓ '; }
+.channel__opt:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+.channel__title { font-size: .86rem; font-weight: 600; }
+.channel__sub { font-size: .74rem; color: var(--ink-dim); }
+
 /* ---------- the 7-day chart ---------- */
 
 /* The card is stretched to match its taller grid neighbour. Without this the
