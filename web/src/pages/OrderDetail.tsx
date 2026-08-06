@@ -273,6 +273,27 @@ export function OrderDetailModal({ billId, onClose }: { billId: number; onClose:
             )}
 
             <div className="modal__actions">
+              {/* Invoices open in their own tab rather than replacing the
+                  modal: the operator is usually mid-task on this bill, and a
+                  document that navigates away from the order loses the
+                  payments panel they were about to use. */}
+              {canSeeMoney && (
+                <>
+                  <button
+                    className="btn btn--ghost"
+                    onClick={() => window.open(`/print/invoice/${order.billId}`, '_blank', 'noopener')}
+                  >
+                    Invoice
+                  </button>
+                  <button
+                    className="btn btn--ghost"
+                    onClick={() => window.open(`/print/invoice/${order.billId}?copy=lab`, '_blank', 'noopener')}
+                    title="Same invoice with the sample IDs listed — for the collection envelope and the lab's file."
+                  >
+                    Lab copy
+                  </button>
+                </>
+              )}
               <button className="btn btn--ghost" onClick={onClose}>Close</button>
             </div>
 

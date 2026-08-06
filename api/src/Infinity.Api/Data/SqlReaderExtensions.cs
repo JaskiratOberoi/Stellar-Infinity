@@ -48,6 +48,26 @@ internal static class SqlReaderExtensions
         return r.IsDBNull(i) ? null : Convert.ToDecimal(r.GetValue(i));
     }
 
+    public static bool Bool(this SqlDataReader r, string column)
+    {
+        var i = r.GetOrdinal(column);
+        return !r.IsDBNull(i) && Convert.ToBoolean(r.GetValue(i));
+    }
+
+    /// <summary>
+    /// A flag whose NULL means "not decided" rather than "off".
+    ///
+    /// The invoice toggles are the case: an unconfigured client must fall back
+    /// to a per-client default, and folding NULL to false would quietly drop
+    /// the billed-not-performed disclaimer from every invoice nobody has
+    /// configured — which is most of them.
+    /// </summary>
+    public static bool? NullableBool(this SqlDataReader r, string column)
+    {
+        var i = r.GetOrdinal(column);
+        return r.IsDBNull(i) ? null : Convert.ToBoolean(r.GetValue(i));
+    }
+
     public static string? Str(this SqlDataReader r, string column)
     {
         var i = r.GetOrdinal(column);
