@@ -24,6 +24,7 @@ import { IdleWarning } from './components/IdleWarning';
 import { NavMenu, type NavItem } from './components/NavMenu';
 import { PrintReport } from './pages/PrintReport';
 import { PrintSmartReport } from './pages/PrintSmartReport';
+import { EnvBanner } from './components/EnvBanner';
 import { PrintInvoice } from './pages/PrintInvoice';
 
 /**
@@ -106,7 +107,7 @@ export function App() {
     return <div className="center"><InfinityLoader /><span className="muted">Restoring session…</span></div>;
   }
 
-  if (!user) return <Login />;
+  if (!user) return <><EnvBanner /><Login /></>;
 
   // The print routes are what headless Chromium photographs for the PDF, so
   // they render alone — no top bar, no shell. A PDF is the report, not a
@@ -129,6 +130,7 @@ export function App() {
 
   return (
     <div className={`shell${entering ? ' shell--hello' : ''}`}>
+      <EnvBanner />
       {entering && <EnterVeil done={finishEntering} />}
       <IdleWarning />
       <header className="topbar">

@@ -79,7 +79,13 @@ services:
   # only way in from outside is the tunnel, so the port itself is never exposed
   # to the LAN.
   web:
-    build: ./web
+    build:
+      context: ./web
+      # Turns on the environment strip across the whole SPA. Baked into the
+      # bundle, so it is present however the app is reached — the public URL or
+      # localhost:3122 — and cannot be lost by hitting it a different way.
+      args:
+        VITE_ENVIRONMENT: staging
     image: infinity-staging-web
     ports:
       - "127.0.0.1:3122:80"

@@ -1,4 +1,8 @@
 node_modules
 dist
+# Every local env file, not just .env. VITE_* variables are read at BUILD
+# time and baked into the bundle, so a developer's .env.local reaching the
+# build context would silently ship a production image flagged as staging.
 .env
+.env.*
 *.log

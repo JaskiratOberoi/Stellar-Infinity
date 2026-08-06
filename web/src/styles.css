@@ -55,6 +55,10 @@
   --accent-ring: rgba(13, 148, 136, 0.14);
   --danger-soft: rgba(220, 38, 38, 0.06);
   --danger-line: rgba(220, 38, 38, 0.28);
+  /* Foreground for a SOLID --warn fill, kept separate from the warn ink used
+     on tinted backgrounds — same split as --on-accent. White on #b45309
+     measures 5.02:1; the dark-mode pair below is 11.1:1. */
+  --on-warn: #ffffff;
   --warn-soft: rgba(180, 83, 9, 0.07);
   --warn-line: rgba(180, 83, 9, 0.3);
   --blue-soft: rgba(37, 99, 235, 0.06);
@@ -117,6 +121,7 @@
   --accent-ring: rgba(45, 212, 191, 0.2);
   --danger-soft: rgba(248, 113, 113, 0.1);
   --danger-line: rgba(248, 113, 113, 0.32);
+  --on-warn: #1a1205;
   --warn-soft: rgba(251, 191, 36, 0.1);
   --warn-line: rgba(251, 191, 36, 0.32);
   --blue-soft: rgba(96, 165, 250, 0.1);
@@ -1065,6 +1070,77 @@ button, input, select { font: inherit; color: inherit; }
 .smartprint__note { font-size: 8.5pt; font-style: italic; color: #6b7a88; margin-top: .35rem; }
 
 .smartprint__foot { margin-top: 1.6rem; padding-top: .6rem; border-top: .5pt solid #dbe3e8; font-size: 8pt; color: #6b7a88; }
+
+/* =========================================================
+   The environment strip
+
+   Only ever present on a non-production build (see EnvBanner.tsx). Everything
+   below keys off `body:has(.envbar)`, so a production bundle carries these
+   rules but none of them ever engage — no class to remember to add, and no way
+   for the offsets to drift out of step with whether the strip is there.
+
+   Fixed rather than sticky, and above every other layer including the menu
+   sheet and modals. An environment warning that a dialog can cover is an
+   environment warning you will not see at the moment you most need it.
+   ========================================================= */
+
+:root { --envbar-h: 0px; }
+body:has(.envbar) { --envbar-h: 30px; }
+
+.envbar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 70;              /* above .navsheet (60) and .modal-backdrop (50) */
+  height: var(--envbar-h);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  padding: 0 .8rem;
+  background: var(--warn);
+  color: var(--on-warn);
+  font-size: .72rem;
+  letter-spacing: .04em;
+  /* One line, always. A strip that wraps changes height and every offset below
+     is then wrong. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.envbar svg { width: 15px; height: 15px; flex: none; }
+.envbar b { font-weight: 700; letter-spacing: .14em; }
+.envbar__sep { margin: 0 .4rem; opacity: .6; }
+
+/* The strip is out of flow, so everything that starts at the top of the
+   viewport has to be told about it. box-sizing is border-box globally, so the
+   padding comes out of min-height rather than adding a scrollbar. */
+body:has(.envbar) .shell,
+body:has(.envbar) .login { padding-top: var(--envbar-h); }
+
+/* The top bar sticks BELOW the strip rather than under it. */
+body:has(.envbar) .topbar { top: var(--envbar-h); }
+
+/* Both of these are fixed to the viewport and portalled outside .shell, so
+   neither inherits the padding above. */
+body:has(.envbar) .navsheet {
+  padding-top: calc(1rem + var(--envbar-h) + env(safe-area-inset-top));
+}
+body:has(.envbar) .modal-backdrop { padding-top: calc(1.5rem + var(--envbar-h)); }
+
+/* On a phone the sentence does not fit; the environment name is the part that
+   has to survive, so the explanation goes rather than the label. */
+@media (max-width: 620px) {
+  .envbar__long { display: none; }
+}
+
+/* Never in the PDF. The print routes render outside the shell so the strip is
+   not there anyway — this is belt and braces for a browser print of any page. */
+@media print {
+  .envbar { display: none; }
+  body:has(.envbar) .shell,
+  body:has(.envbar) .login { padding-top: 0; }
+}
 
 /* ---------- the menu sheet ---------- */
 
