@@ -31,6 +31,10 @@ public static class AccessionEndpoints
          .RequireCapability(Capabilities.OrderView)
          .WithName("PendingRegistrations");
 
+        g.MapGet("/tubes/{patientId:int}", OrderTubes)
+         .RequireCapability(Capabilities.OrderView)
+         .WithName("OrderTubes");
+
         g.MapPost("/sids", AddSids)
          .RequireCapability(Capabilities.OrderAccession)
          .WithName("AddSampleIds");
@@ -72,6 +76,17 @@ public static class AccessionEndpoints
 
         var result = await repo.PendingRegistrationsAsync(scope.ClientCodes, page, pageSize, ct).ConfigureAwait(false);
         return Page(result.Rows, result.Total, result.Page, result.PageSize, result.PageCount);
+    }
+
+    /// <summary>The tubes one order needs, for the barcode form.</summary>
+    private static async Task<IResult> OrderTubes(
+        int patientId,
+        System.Security.Claims.ClaimsPrincipal principal,
+        AccessionRepository repo,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is null) return Results.Unauthorized();
+        return Results.Ok(new { tubes = await repo.OrderTubesAsync(patientId, ct).ConfigureAwait(false) });
     }
 
     public sealed record AddSidsRequest(int PatientId, int Mcc, IReadOnlyList<SampleSid> Sids);

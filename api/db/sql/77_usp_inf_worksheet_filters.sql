@@ -45,7 +45,15 @@ BEGIN
     ORDER BY b.BusinessUnitCode;
 
     -- ---- 3. client codes, within scope -------------------------------------
-    SELECT u.MCCUnitCode AS code, u.MCCUnitName AS name
+    -- The numeric id comes back too: the worklist filters by CODE, but pricing
+    -- and order entry key on the id, and one picker serves all three.
+    --
+    -- is_active is returned rather than filtered on. A deactivated client still
+    -- has historical samples worth filtering a worklist by; what it cannot do
+    -- is take a NEW order (usp_telo_create_order refuses it). Order entry hides
+    -- them, the worklist does not.
+    SELECT u.id, u.MCCUnitCode AS code, u.MCCUnitName AS name,
+           is_active = CAST(CASE WHEN ISNULL(u.IsActive, 0) = 1 THEN 1 ELSE 0 END AS BIT)
     FROM dbo.tbl_med_mcc_unit_master u
     WHERE u.MCCUnitCode IS NOT NULL AND LTRIM(RTRIM(u.MCCUnitCode)) <> ''
       AND (@codeCount = 0 OR EXISTS (SELECT 1 FROM @client_codes c WHERE c.code = u.MCCUnitCode))

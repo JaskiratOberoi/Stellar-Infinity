@@ -76,7 +76,12 @@ public sealed record WorksheetFilters(
 
 /// <summary>Option lists for the worklist's dropdowns.</summary>
 public sealed record LookupItem(int Id, string? Name);
-public sealed record ClientCodeItem(string Code, string? Name);
+/// <param name="IsActive">
+/// A deactivated client can still be filtered on (it has history) but cannot
+/// take a new order — the create procedure refuses it. Order entry hides them;
+/// the worklist does not.
+/// </param>
+public sealed record ClientCodeItem(int Id, string Code, string? Name, bool IsActive);
 public sealed record WorksheetFilterOptions(
     IReadOnlyList<LookupItem> Departments,
     IReadOnlyList<LookupItem> BusinessUnits,
@@ -410,7 +415,12 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
                 if (await r.NextResultAsync(inner).ConfigureAwait(false))
                 {
                     while (await r.ReadAsync(inner).ConfigureAwait(false))
-                        codes.Add(new ClientCodeItem(r.Str("code") ?? "", r.Str("name")));
+                        codes.Add(new ClientCodeItem(
+                            r.Int("id"), r.Str("code") ?? "", r.Str("name"),
+                            // Convert.ToInt32 handles the BIT; a dedicated Bit()
+                            // helper lives in the Worksheet namespace and
+                            // importing it here would invert the dependency.
+                            (r.NullableInt("is_active") ?? 0) == 1));
                 }
 
                 return new WorksheetFilterOptions(departments, units, codes);
@@ -468,6 +478,26 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
                     Comments: GetString(el, "comments"),
                     DepartmentName: GetString(el, "department_name")));
             }
+
+            // Restore DOCUMENT order.
+            //
+            // usp_listec_worksheet_report_by_codes sorts by testtype first
+            // (Head, then Profile, then Test, then everything else), which
+            // hoists every section heading to the top of the array and leaves
+            // the analytes in one undifferentiated run below them — so a CBC
+            // rendered as "Complete Blood Count / Automated 5 Part Analyzer /
+            // Differential Counts %" stacked at the top, followed by forty
+            // unlabelled values.
+            //
+            // result_id ascending IS the report's true order: the LIS creates
+            // these rows in reading order (WorksheetClass.GetTestsBySampleId
+            // writes each heading immediately before the analytes it
+            // introduces), so the identity column preserves it exactly.
+            //
+            // Sorted here rather than by changing the procedure because that
+            // procedure is shared with Telo, and a presentation fix should not
+            // be a migration against an object another system reads.
+            list.Sort((a, b) => a.ResultId.CompareTo(b.ResultId));
 
             return list;
         }

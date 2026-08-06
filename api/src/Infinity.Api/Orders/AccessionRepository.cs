@@ -41,6 +41,12 @@ public sealed record PendingRegistration(
     DateTimeOffset? AddedAt,
     string Origin);
 
+/// <param name="ExistingVailid">
+/// Already barcoded, so the form must not offer a second label for this tube.
+/// </param>
+public sealed record OrderTube(
+    int SampleTypeId, string? SampleTypeName, string? TestNames, string? ExistingVailid);
+
 public sealed record AddSidsResult(
     bool Ok, string? ErrorCode, string? Message, IReadOnlyList<IssuedSample> Samples);
 
@@ -148,6 +154,35 @@ public sealed class AccessionRepository(NobleConnectionFactory db, SqlRetry retr
                 }
 
                 return new Paged<PendingRegistration>(rows, total, p, size);
+            }, token), ct);
+
+    /// <summary>
+    /// The tubes one existing order needs, and which already have a barcode.
+    ///
+    /// NOT the cart preview: that answers "what would this basket need" for the
+    /// current user, which is a different question and would have shown the
+    /// operator whatever happened to be in their own basket.
+    /// </summary>
+    public Task<IReadOnlyList<OrderTube>> OrderTubesAsync(int patientId, CancellationToken ct = default) =>
+        retry.ExecuteAsync("accession.tubes", token =>
+            db.QueryAsync("accession.tubes", async (conn, inner) =>
+            {
+                await using var cmd = db.CreateWriteCommand(conn, "dbo.usp_inf_order_tubes");
+                cmd.Parameters.Add("@patient_id", SqlDbType.Int).Value = patientId;
+
+                await using var r = await cmd.ExecuteReaderAsync(CommandBehavior.SingleResult, inner)
+                    .ConfigureAwait(false);
+
+                var tubes = new List<OrderTube>();
+                while (await r.ReadAsync(inner).ConfigureAwait(false))
+                {
+                    tubes.Add(new OrderTube(
+                        r.NullableInt("sampleTypeId") ?? -1,
+                        r.Str("sampleTypeName"),
+                        r.Str("testNames"),
+                        r.Str("existingVailid")));
+                }
+                return (IReadOnlyList<OrderTube>)tubes;
             }, token), ct);
 
     /// <summary>

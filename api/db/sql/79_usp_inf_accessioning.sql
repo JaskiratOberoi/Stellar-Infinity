@@ -136,6 +136,81 @@ BEGIN
 END
 GO
 
+-- ------------------------------------------------ tubes ONE order still needs --
+/*
+ * The tube breakdown for an existing order, for the barcode form.
+ *
+ * Distinct from the cart preview, which answers "what would this BASKET need"
+ * for the current user. Here the order already exists and its tests are rows in
+ * tbl_med_mcc_patient_tests, so the question is what THIS patient needs and
+ * which tubes already have a barcode. Using the cart preview would have shown
+ * the operator whatever happened to be in their own basket.
+ */
+CREATE OR ALTER PROCEDURE dbo.usp_inf_order_tubes
+    @patient_id INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+
+    ;WITH required AS (
+        SELECT DISTINCT sampleTypeId = ISNULL(tm.SampleId, -1)
+        FROM dbo.tbl_med_mcc_patient_tests pt
+        JOIN dbo.tbl_med_test_master tm ON tm.id = pt.test_id AND tm.IsActive = 1
+        WHERE pt.patient_id = @patient_id
+          AND pt.test_type NOT IN ('p', 'Profile', 'Master')
+
+        UNION
+
+        SELECT DISTINCT ISNULL(tm.SampleId, -1)
+        FROM dbo.tbl_med_mcc_patient_tests pt
+        JOIN dbo.tbl_med_test_profile_param pp ON pp.profileid = pt.test_id
+        JOIN dbo.tbl_med_test_master tm ON tm.id = pp.testid AND tm.IsActive = 1
+        WHERE pt.patient_id = @patient_id
+          AND pt.test_type IN ('p', 'Profile')
+
+        UNION
+
+        SELECT DISTINCT ISNULL(tm.SampleId, -1)
+        FROM dbo.tbl_med_mcc_patient_tests pt
+        JOIN dbo.tbl_med_test_master_test_param mtp ON mtp.master_profileid = pt.test_id
+        JOIN dbo.tbl_med_test_master tm ON tm.id = mtp.testid AND tm.IsActive = 1
+        WHERE pt.patient_id = @patient_id
+          AND pt.test_type = 'Master'
+
+        UNION
+
+        SELECT DISTINCT ISNULL(tm.SampleId, -1)
+        FROM dbo.tbl_med_mcc_patient_tests pt
+        JOIN dbo.tbl_med_test_master_profile_param mpp ON mpp.master_profileid = pt.test_id
+        JOIN dbo.tbl_med_test_profile_param pp ON pp.profileid = mpp.profileid
+        JOIN dbo.tbl_med_test_master tm ON tm.id = pp.testid AND tm.IsActive = 1
+        WHERE pt.patient_id = @patient_id
+          AND pt.test_type = 'Master'
+    )
+    SELECT
+        r.sampleTypeId,
+        sampleTypeName = ISNULL(sm.Sampletype, 'Unspecified'),
+        -- What the tube is for, so the operator can tell two barcodes apart.
+        testNames = STUFF((
+            SELECT ', ' + LTRIM(RTRIM(t2.Testname))
+            FROM dbo.tbl_med_mcc_patient_tests pt2
+            JOIN dbo.tbl_med_test_master t2 ON t2.id = pt2.test_id
+            WHERE pt2.patient_id = @patient_id
+              AND ISNULL(t2.SampleId, -1) = r.sampleTypeId
+            FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, ''),
+        -- Already barcoded? The form must not offer a second label for a tube
+        -- that has one; the procedure would reject it anyway.
+        existingVailid = (
+            SELECT TOP 1 s.vailid
+            FROM dbo.tbl_med_mcc_patient_samples s
+            WHERE s.patient_id = @patient_id AND ISNULL(s.sampleid, -1) = r.sampleTypeId)
+    FROM required r
+    LEFT JOIN dbo.tbl_med_sample_master sm ON sm.id = r.sampleTypeId
+    ORDER BY sampleTypeName;
+END
+GO
+
 -- ------------------------------------------------------- awaiting accessioning --
 CREATE OR ALTER PROCEDURE dbo.usp_inf_pending_registrations
     @client_codes dbo.ClientCodeList READONLY,
