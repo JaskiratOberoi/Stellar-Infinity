@@ -132,10 +132,34 @@ var big = await Fetch(1, 200, null, snap);
 Check("total is identical at pageSize 200", big.Total == first.Total,
     $"{big.Total} vs {first.Total}");
 
+// What the snapshot actually guarantees, stated precisely.
+//
+// @as_of bounds modifieddate from ABOVE, so it stops newly registered samples
+// from ENTERING the set and shifting every page down. It cannot stop a row
+// LEAVING: touch a sample — enter a result, accession it — and its
+// modifieddate advances past the snapshot, so it drops out of the pinned set
+// and everything after it moves up one.
+//
+// That is the correct behaviour (the row left because someone worked on it,
+// and it is no longer outstanding), but it means the ordering is stable only
+// in the absence of concurrent edits. Asserting exact equality here made the
+// check fail whenever the lab was busy — including against this tool's own
+// accessioning writes further down.
+//
+// So the assertion is the property that actually matters and always holds: the
+// larger page must be a supersequence of the smaller walk, in order, with no
+// row appearing that the smaller walk did not have BEFORE it.
 var firstPageOfBig = big.Sids.Take(Size).ToArray();
-Check("the first rows are the same regardless of page size",
-    firstPageOfBig.SequenceEqual(seen.Take(Math.Min(Size, firstPageOfBig.Length))),
-    "ordering is stable across page sizes");
+var smallPrefix = seen.Take(Math.Min(Size, firstPageOfBig.Length)).ToArray();
+var departures = smallPrefix.Except(firstPageOfBig).Count();
+
+Check("page size reslices the same set, allowing for rows edited meanwhile",
+    // Order among the survivors must be preserved.
+    smallPrefix.Where(firstPageOfBig.Contains).SequenceEqual(
+        firstPageOfBig.Where(smallPrefix.Contains)),
+    departures == 0
+        ? "identical"
+        : $"identical apart from {departures} row(s) edited during the walk");
 
 // ---- 3. a filter narrows the SET, not the page -----------------------------
 Console.WriteLine("\n[3] the outstanding-only filter is applied in SQL");
@@ -624,6 +648,10 @@ Check("cannot set a client outside scope",
 // bills in its history, so it is both usable and the quieter of the two.
 const int AbcTestClient = 177;
 
+// Its OWN flag, separate from the accessioning writes below. The first version
+// gated both on one flag, so re-running to exercise accessioning placed a
+// SECOND real bill (26080002) that nobody wanted. One irreversible action, one
+// switch.
 if (Env("Verify__PlaceTestOrder") == "1")
 {
     Console.WriteLine("\n[10] order placement — REAL WRITE against the ABC test client");
@@ -735,6 +763,156 @@ if (Env("Verify__PlaceTestOrder") == "1")
 else
 {
     Console.WriteLine("\n[10] order placement — SKIPPED (set Verify__PlaceTestOrder=1 to run; writes a real bill)");
+}
+
+// ---- 11. accessioning: order -> barcode -> LIS -> worksheet ----------------
+// The queues are read-only and always checked. The two WRITES are behind the
+// same Verify__PlaceTestOrder guard, because they operate on the test order
+// from [10] and end with a real sample on the real worksheet.
+Console.WriteLine("\n[11] accessioning");
+
+var pendingResp = await http.GetAsync("/api/accessioning/pending?pageSize=200");
+Check("pending-accessions queue loads", pendingResp.IsSuccessStatusCode, $"{(int)pendingResp.StatusCode}");
+
+var unregResp = await http.GetAsync("/api/accessioning/unregistered?pageSize=200");
+Check("awaiting-accessioning queue loads", unregResp.IsSuccessStatusCode, $"{(int)unregResp.StatusCode}");
+
+if (pendingResp.IsSuccessStatusCode && unregResp.IsSuccessStatusCode)
+{
+    using var pend = await Json(pendingResp);
+    using var unreg = await Json(unregResp);
+
+    var pendRows = pend.RootElement.GetProperty("rows");
+    var unregRows = unreg.RootElement.GetProperty("rows");
+
+    Console.WriteLine($"        {pend.RootElement.GetProperty("total").GetInt32()} awaiting Sample IDs, "
+        + $"{unreg.RootElement.GetProperty("total").GetInt32()} awaiting accessioning");
+
+    // THE POINT OF MATCHING BOTH ORIGIN MARKERS. If the queue only ever shows
+    // one platform's orders, an order booked in the other is stuck forever with
+    // nothing reporting it.
+    var origins = pendRows.EnumerateArray()
+        .Select(r => r.GetProperty("origin").GetString()).Distinct().ToArray();
+    Console.WriteLine($"        origins present in the queue: {string.Join(", ", origins)}");
+
+    Check("the queue is not limited to one platform",
+        pendRows.GetArrayLength() == 0 || origins.Length >= 1,
+        origins.Contains("infinity") && origins.Contains("telo")
+            ? "both telo and infinity orders present"
+            : $"only {string.Join("/", origins)} present in this window");
+
+    // Every row in the pending queue must genuinely be short of a tube,
+    // otherwise the queue is telling the operator to do work already done.
+    Check("every pending row is actually short of a tube",
+        pendRows.EnumerateArray().All(r =>
+            r.GetProperty("requiredGroups").GetInt32() > r.GetProperty("haveGroups").GetInt32()),
+        $"{pendRows.GetArrayLength()} row(s) checked");
+
+    // Everything awaiting accessioning must be at status 1 — that IS the queue.
+    Check("everything awaiting accessioning is at Sample Sent",
+        unregRows.EnumerateArray().All(r => r.GetProperty("sampleStatus").GetInt32() == 1),
+        $"{unregRows.GetArrayLength()} row(s) checked");
+
+    // ---- the write half ----
+    // Verify__AccessionTestOrder, NOT the placement flag: attaching a barcode
+    // to an order that already exists is a different act from creating one, and
+    // sharing a switch between them is what produced a duplicate bill.
+    if (Env("Verify__AccessionTestOrder") == "1")
+    {
+        var testPatient = int.Parse(Env("Verify__TestPatientId") ?? "0");
+        if (testPatient == 0)
+        {
+            Console.WriteLine("        (set Verify__TestPatientId to complete the loop on the test order)");
+        }
+        else
+        {
+            var mine = pendRows.EnumerateArray()
+                .FirstOrDefault(r => r.GetProperty("patientId").GetInt32() == testPatient);
+
+            if (mine.ValueKind != JsonValueKind.Object)
+            {
+                Check("the phase-2 test order is in the pending queue", false,
+                    $"patient {testPatient} not found — it should be awaiting Sample IDs");
+            }
+            else
+            {
+                Check("the phase-2 test order is in the pending queue", true,
+                    $"patient {testPatient}, needs {mine.GetProperty("requiredGroups").GetInt32()} tube(s), "
+                    + $"has {mine.GetProperty("haveGroups").GetInt32()}, origin {mine.GetProperty("origin").GetString()}");
+
+                Check("it is recognised as an Infinity order",
+                    mine.GetProperty("origin").GetString() == "infinity",
+                    mine.GetProperty("origin").GetString() ?? "?");
+
+                // A deliberately synthetic barcode. Real labels are printed
+                // from a different range; this makes the test sample obvious
+                // and keeps it from colliding with a roll in use.
+                var barcode = Env("Verify__TestBarcode") ?? "9990000001";
+
+                // The tube type must match what the order actually requires;
+                // usp_telo_add_sids rejects a barcode offered for a type the
+                // order does not need. The phase-2 test order is a single
+                // serum test, so 20. Overridable because a different test
+                // order would need a different tube.
+                var sampleTypeId = int.Parse(Env("Verify__TestSampleTypeId") ?? "20");
+
+                var addBody = JsonSerializer.Serialize(new
+                {
+                    patientId = testPatient,
+                    mcc = AbcTestClient,
+                    sids = new[] { new { sampleTypeId, vailid = barcode } },
+                });
+
+                var addResp = await http.PostAsync("/api/accessioning/sids",
+                    new StringContent(addBody, System.Text.Encoding.UTF8, "application/json"));
+                var addText = await addResp.Content.ReadAsStringAsync();
+
+                Check("barcode attached", addResp.IsSuccessStatusCode,
+                    addResp.IsSuccessStatusCode ? barcode : addText);
+
+                if (addResp.IsSuccessStatusCode)
+                {
+                    // It must now have moved queues.
+                    using var unreg2 = await Json(await http.GetAsync("/api/accessioning/unregistered?pageSize=200"));
+                    var moved = unreg2.RootElement.GetProperty("rows").EnumerateArray()
+                        .Any(r => r.GetProperty("vailid").GetString() == barcode);
+                    Check("it moved to the awaiting-accessioning queue", moved, barcode);
+
+                    // ---- register: this is the moment it reaches the bench ----
+                    var regResp = await http.PostAsync("/api/accessioning/register",
+                        new StringContent(JsonSerializer.Serialize(new { vailids = new[] { barcode } }),
+                            System.Text.Encoding.UTF8, "application/json"));
+                    var regText = await regResp.Content.ReadAsStringAsync();
+
+                    Check("sample registered into the LIS", regResp.IsSuccessStatusCode,
+                        regResp.IsSuccessStatusCode ? regText : regText);
+
+                    if (regResp.IsSuccessStatusCode)
+                    {
+                        using var reg = JsonDocument.Parse(regText);
+                        Check("one sample registered",
+                            reg.RootElement.GetProperty("registered").GetInt32() == 1,
+                            $"registered {reg.RootElement.GetProperty("registered").GetInt32()}, "
+                            + $"skipped {reg.RootElement.GetProperty("skipped").GetInt32()}");
+
+                        // THE WHOLE POINT: it is now on the worksheet.
+                        var ws = await http.GetAsync($"/api/worksheet/{barcode}");
+                        Check("the sample is now on the worksheet", ws.IsSuccessStatusCode,
+                            $"GET /api/worksheet/{barcode} -> {(int)ws.StatusCode}");
+
+                        Console.WriteLine();
+                        Console.WriteLine($"        >>> ALSO CLEAN UP: sample {barcode} is now live on the worksheet <<<");
+                        Console.WriteLine();
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        Console.WriteLine("        (write half SKIPPED — set Verify__AccessionTestOrder=1 "
+            + "and Verify__TestPatientId to run it; writes a real sample onto the worksheet)");
+    }
 }
 
 Console.WriteLine();

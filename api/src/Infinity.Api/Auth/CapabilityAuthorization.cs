@@ -55,8 +55,22 @@ public static class CapabilityExtensions
     public static string? Role(this ClaimsPrincipal user) =>
         user.FindFirstValue(ClaimTypes.Role);
 
+    /// <summary>The token's session version, used to key server-side grants.</summary>
+    public static int SessionVersion(this ClaimsPrincipal user) =>
+        int.TryParse(user.FindFirstValue(JwtIssuer.SessionVersionClaim), out var v) ? v : 0;
+
     public static int? UserId(this ClaimsPrincipal user) =>
         int.TryParse(user.FindFirstValue(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub), out var id)
             ? id
             : null;
+
+    /// <summary>
+    /// The LIS username, from the token's unique_name claim.
+    ///
+    /// Needed where a shared LIS procedure records WHO acted rather than which
+    /// platform did — accessioning stamps modifiedby with this, and the LIS's
+    /// own screens display it.
+    /// </summary>
+    public static string? Username(this ClaimsPrincipal user) =>
+        user.FindFirstValue(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.UniqueName);
 }
