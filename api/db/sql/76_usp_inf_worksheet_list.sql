@@ -250,6 +250,33 @@ BEGIN
     -- tiebreak, OFFSET paging over tied regd_at values silently duplicates and
     -- drops rows between pages.
     ORDER BY H.regd_at DESC, H.sid DESC
-    OFFSET @offset ROWS FETCH NEXT @size ROWS ONLY;
+    OFFSET @offset ROWS FETCH NEXT @size ROWS ONLY
+    /* ----------------------------------------------------------------------
+     * A plan per call, deliberately.
+     *
+     * This procedure has twelve optional filters, and the shapes it is asked
+     * for differ by orders of magnitude: "today, pending" is a few hundred
+     * rows; "ninety days, authorised" is half a million; a patient-name search
+     * is a handful. One cached plan has to serve all of them, and whichever
+     * shape compiled it wins — every other caller then runs someone else's
+     * plan. That is what the API's db.slow log was recording as
+     * op=reports.worklist swinging between 570ms and 18.7 SECONDS for the same
+     * screen: not load, but whose plan happened to be cached.
+     *
+     * Measured, with the cache primed by a narrow name search and then asked
+     * for the ordinary worksheet page:
+     *
+     *     worksheet default (2 days, 100 rows)   486ms -> 26ms
+     *     page size 1000                         832ms -> 82ms
+     *     patient-name search                    519ms -> 75ms
+     *     reporting default (7 days)             609ms -> 371ms
+     *
+     * The trade is real and worth stating: a 90-day window measured slightly
+     * SLOWER (2088ms -> 2800ms). Recompiling cannot help a query whose work is
+     * genuinely reading half a million rows, and the compilation is then pure
+     * cost. That case is rare — the screens default to 1 and 7 days — and a
+     * predictable two seconds is a better trade than an unpredictable eighteen.
+     * ---------------------------------------------------------------------- */
+    OPTION (RECOMPILE);
 END
 GO

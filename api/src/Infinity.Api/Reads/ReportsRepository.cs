@@ -432,26 +432,79 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
     /// the user's client codes — the procedure filters on them, so an
     /// out-of-scope SID simply returns no rows.
     /// </summary>
+    /// <summary>
+    /// One report, by exact SID.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This used to call <see cref="ListAsync"/> — the paged SEARCH — over a
+    /// window of <c>2015-01-01</c> to tomorrow, because that procedure demands a
+    /// date range and a SID lookup should not depend on the operator guessing
+    /// when the sample was drawn. Opening one report therefore swept a decade of
+    /// samples, and the search procedure matches a SID with
+    /// <c>vailid LIKE '%…%'</c>, which cannot seek. Measured at a flat 13–14
+    /// seconds per open in the API's own db.slow log.
+    /// </para>
+    /// <para>
+    /// The LIKE is right where it lives: it powers the worksheet's SID search,
+    /// where typing "9388" must find 09388225 — and that procedure is shared
+    /// with Telo, so it is not Infinity's to narrow. The mistake was using a
+    /// search to do a lookup. <c>usp_inf_report_by_sid</c> is the lookup: an
+    /// equality predicate on a unique key, no date window, same projection.
+    /// </para>
+    /// </remarks>
     public async Task<WorksheetRow?> GetBySidAsync(
         IReadOnlyList<string> clientCodes, string sid, CancellationToken ct = default)
     {
-        // The procedure requires a date window. A SID lookup should not depend
-        // on the operator guessing when the sample was drawn, so search wide.
-        var page = await ListAsync(
-            clientCodes,
-            fromDate: "2015-01-01",
-            toDate: DateTimeOffset.UtcNow.ToOffset(NobleTime.IstOffset).AddDays(1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-            patientName: null,
-            sid: sid,
-            statusId: null,
-            includeUnauthorized: true,
-            page: 1,
-            pageSize: 5,
-            includeResults: true,
-            ct).ConfigureAwait(false);
+        var target = (sid ?? string.Empty).Trim();
+        if (target.Length == 0) return null;
 
-        return page.Rows.FirstOrDefault(r => string.Equals(r.Sid, sid.Trim(), StringComparison.OrdinalIgnoreCase))
-               ?? page.Rows.FirstOrDefault();
+        return await retry.ExecuteAsync("reports.bySid", token =>
+            db.QueryAsync("reports.bySid", async (conn, inner) =>
+            {
+                await using var cmd = db.CreateWriteCommand(conn, "dbo.usp_inf_report_by_sid");
+
+                var tvp = new DataTable();
+                tvp.Columns.Add("code", typeof(string));
+                foreach (var c in clientCodes.Where(c => !string.IsNullOrWhiteSpace(c))
+                                             .Select(c => c.Trim().ToUpperInvariant())
+                                             .Distinct(StringComparer.Ordinal))
+                {
+                    tvp.Rows.Add(c);
+                }
+
+                var codesParam = cmd.Parameters.AddWithValue("@client_codes", tvp);
+                codesParam.SqlDbType = SqlDbType.Structured;
+                codesParam.TypeName = "dbo.ClientCodeList";
+
+                cmd.Parameters.Add("@sid", SqlDbType.NVarChar, 100).Value = target;
+                cmd.Parameters.Add("@include_unauthorized", SqlDbType.Bit).Value = true;
+
+                await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SingleResult, inner)
+                    .ConfigureAwait(false);
+
+                if (!await reader.ReadAsync(inner).ConfigureAwait(false)) return null;
+
+                return new WorksheetRow(
+                    Sid: reader.Str("sid") ?? "",
+                    ClientCode: reader.Str("client_code"),
+                    BusinessUnit: reader.Str("business_unit"),
+                    Pid: reader.Int("pid"),
+                    PatientName: reader.Str("patient_name"),
+                    Sex: reader.Str("sex"),
+                    Age: reader.NullableInt("age"),
+                    AgeUnit: reader.Str("age_unit"),
+                    SampleDrawn: NobleTime.ToIst(reader.Date("sample_drawn")),
+                    RegisteredAt: NobleTime.ToIst(reader.Date("regd_at")),
+                    LastModifiedAt: NobleTime.ToIst(reader.Date("last_modified_at")),
+                    StatusCode: reader.NullableInt("status_code"),
+                    Status: reader.Str("status"),
+                    TestNames: reader.Str("test_names_csv"),
+                    OrderNumber: reader.Str("order_number"),
+                    BillNumber: reader.Str("bill_number"),
+                    ClinicalHistory: reader.Str("clinical_history"),
+                    Results: ParseResults(reader.Str("results_json")));
+            }, token), ct).ConfigureAwait(false);
     }
 
     private static IReadOnlyList<TestResult> ParseResults(string? json)
