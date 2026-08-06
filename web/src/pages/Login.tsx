@@ -26,7 +26,7 @@ function greeting(): { title: string; sub: string } {
 const IMPLODE_MS = 520;
 
 export function Login() {
-  const { signInDeferred } = useAuth();
+  const { signInDeferred, signedOutReason } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -91,6 +91,9 @@ export function Login() {
         </div>
 
         {error && <div className="alert alert--error login__error">{error}</div>}
+        {/* Why the last session ended. Without this, an idle sign-out looks
+            identical to the app randomly logging you out. */}
+        {!error && signedOutReason && <div className="alert alert--info">{signedOutReason}</div>}
 
         <div className="field">
           <label htmlFor="username">Username</label>

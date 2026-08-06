@@ -25,6 +25,20 @@ function readCookie(name: string): string | null {
   return hit ? decodeURIComponent(hit.slice(name.length + 1)) : null;
 }
 
+/**
+ * The CSRF header for an unsafe request made OUTSIDE this client.
+ *
+ * The bulk PDF download is a POST that has to read its response as a blob, so
+ * it goes through fetch directly rather than through api.post — but it is still
+ * an unsafe method and still needs the echo, or the API rejects it. Exported
+ * rather than reimplemented at the call site so there is one definition of what
+ * the header is called and where its value comes from.
+ */
+export function csrfHeader(): Record<string, string> {
+  const token = readCookie(CSRF_COOKIE);
+  return token ? { [CSRF_HEADER]: token } : {};
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,

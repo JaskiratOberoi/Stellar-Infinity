@@ -17,6 +17,48 @@ public static class AuthEndpoints
         auth.MapGet("/me", Me)
             .RequireAuthorization()
             .WithName("Me");
+
+        auth.MapPost("/logout", Logout)
+            .RequireAuthorization()
+            .WithName("Logout");
+    }
+
+    /// <summary>
+    /// Sign out.
+    ///
+    /// The JWT is stateless, so this cannot invalidate the token itself — the
+    /// browser discarding it is what ends the session. What this DOES do is
+    /// drop server-side state the session had earned, which the browser cannot
+    /// clear on its own: today that is the Jarvis unlock grant, so signing out
+    /// and back in re-locks auto-authorisation rather than silently resuming it.
+    ///
+    /// Best-effort by design. A logout that fails must still let the client
+    /// discard its token, so this never returns an error the UI would act on.
+    /// </summary>
+    private static async Task<IResult> Logout(
+        ClaimsPrincipal principal,
+        Infinity.Api.Worksheet.AutoAuthGate jarvis,
+        Microsoft.Extensions.Options.IOptions<AuthCookieOptions> cookieOptions,
+        HttpContext http,
+        ILoggerFactory loggerFactory,
+        CancellationToken ct)
+    {
+        // Clear FIRST, so a failure in the revoke below still ends the session.
+        AuthCookies.Clear(http.Response, cookieOptions.Value);
+
+        if (principal.UserId() is int uid)
+        {
+            try
+            {
+                await jarvis.RevokeAsync(uid, principal.SessionVersion(), ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                loggerFactory.CreateLogger("Logout").LogWarning(ex, "logout.revoke.failed userId={UserId}", uid);
+            }
+        }
+
+        return Results.Ok(new { ok = true });
     }
 
     /// <summary>
@@ -31,6 +73,7 @@ public static class AuthEndpoints
         LoginRequest request,
         AuthRepository authRepo,
         JwtIssuer jwt,
+        Microsoft.Extensions.Options.IOptions<AuthCookieOptions> cookieOptions,
         Audit.AuditRepository audit,
         Caching.DistributedRateLimiter limiter,
         ILoggerFactory loggerFactory,
@@ -106,7 +149,14 @@ public static class AuthEndpoints
             Detail = $"role={user.Role} managedBy={user.ManagedBy}",
         }, actor with { UserId = row.UserId, Username = row.Username }, ct).ConfigureAwait(false);
 
-        return Results.Ok(new LoginResponse(token, expiresAt, user));
+        // The token goes into an httpOnly cookie, NOT the response body. It is
+        // deliberately no longer readable by script — that is the whole point
+        // of the move, and returning it here too would hand the XSS surface
+        // straight back.
+        var csrf = AuthCookies.NewCsrfToken();
+        AuthCookies.Issue(http.Response, cookieOptions.Value, token, csrf, expiresAt);
+
+        return Results.Ok(new LoginResponse(expiresAt, user));
     }
 
     /// <summary>The current token's identity, for the SPA to render nav and gates.</summary>

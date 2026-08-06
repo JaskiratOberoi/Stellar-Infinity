@@ -36,9 +36,12 @@ public sealed record AuthRow(
     int SessionVersion);
 
 /// <summary>What the caller gets back after a successful login.</summary>
-public sealed record LoginResponse(
-    string AccessToken,
-    DateTimeOffset ExpiresAt,
+/// <summary>
+/// No access token: it is delivered as an httpOnly cookie the browser cannot
+/// read. Only the expiry and the user are returned, so the SPA can show who is
+/// signed in and when the session lapses.
+/// </summary>
+public sealed record LoginResponse(    DateTimeOffset ExpiresAt,
     AuthenticatedUser User);
 
 public sealed record AuthenticatedUser(
