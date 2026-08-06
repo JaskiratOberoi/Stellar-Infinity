@@ -64,8 +64,27 @@ BEGIN
         onBehalfMode  = c.on_behalf_mode,
         showDisclaimer = c.show_disclaimer,
         showSignatory  = c.show_signatory,
-        preparedBy    = c.prepared_by,
-        hasConfig   = CAST(CASE WHEN c.mcc_id IS NULL THEN 0 ELSE 1 END AS BIT)
+        preparedBy    = NULLIF(LTRIM(RTRIM(c.prepared_by)), ''),
+        hasConfig   = CAST(CASE WHEN c.mcc_id IS NULL THEN 0 ELSE 1 END AS BIT),
+
+        -- ── THE SAME FIELDS, UNRESOLVED ────────────────────────────────────
+        -- Everything above is what the INVOICE prints: config value, else the
+        -- LIS's. The editor cannot bind to those. Showing a resolved address
+        -- in a text box presents the LIS's own value as though somebody had
+        -- typed it, and the next Save writes it into the config row — pinning
+        -- a copy that then stops tracking the LIS, silently, for every field
+        -- the operator never touched.
+        --
+        -- So the raw stored values travel too, and the form binds to these
+        -- while showing the resolved ones as placeholders.
+        cfgLabName    = NULLIF(LTRIM(RTRIM(c.lab_name)), ''),
+        cfgAddress    = NULLIF(LTRIM(RTRIM(c.address)), ''),
+        cfgCity       = NULLIF(LTRIM(RTRIM(c.city)), ''),
+        cfgState      = NULLIF(LTRIM(RTRIM(c.state)), ''),
+        cfgPincode    = NULLIF(LTRIM(RTRIM(c.pincode)), ''),
+        cfgPhone      = NULLIF(LTRIM(RTRIM(c.phone)), ''),
+        cfgEmail      = NULLIF(LTRIM(RTRIM(c.email)), ''),
+        cfgPreparedBy = NULLIF(LTRIM(RTRIM(c.prepared_by)), '')
     FROM dbo.tbl_med_mcc_unit_master u
     LEFT JOIN dbo.telo_mcc_invoice_config c ON c.mcc_id = u.id
     WHERE u.id = @mcc;

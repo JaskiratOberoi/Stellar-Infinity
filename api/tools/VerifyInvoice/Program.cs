@@ -152,6 +152,96 @@ if (args.Length > 0 && int.TryParse(args[0], out var probe))
           $"disclaimer={c.Flags.ShowDisclaimer} signatory={c.Flags.ShowSignatory} hasConfig={c.HasConfig}");
 }
 
+// ---- [6] the editor's write path -------------------------------------------
+//
+// WRITES to telo_mcc_invoice_config, which Telo prints from. Runs only with
+// --write and only against a centre that has NO config row, so the cleanup at
+// the end restores the database to exactly the state it was in: no row.
+//
+// What is actually being tested is the promise the procedure makes — that it
+// touches ten columns and leaves the logo and layout block alone. That is not
+// visible in a passing save; it is only visible by planting a logo first and
+// checking it survived.
+if (args.Contains("--write", StringComparer.OrdinalIgnoreCase))
+{
+    Console.WriteLine();
+    Console.WriteLine("[6] save round-trip (WRITES, then cleans up)");
+
+    var subject = await FirstUnconfiguredMccAsync();
+    if (subject is null)
+    {
+        Console.WriteLine("  SKIP  every centre already has a config row; refusing to edit real data");
+    }
+    else
+    {
+        var mcc = subject.Value;
+        Console.WriteLine($"        subject: mcc {mcc} (no config row)");
+        try
+        {
+            // A logo the save must not disturb.
+            await PlantLogoAsync(mcc);
+
+            var saved = await repo.SaveAsync(mcc, new InvoiceRepository.InvoiceConfigEdit(
+                LabName: "  VERIFY LAB  ", Address: "1 Test Road", City: "Testville",
+                State: "Teststate", Pincode: "110001", Phone: "+910000000000",
+                Email: "verify@example.invalid", PreparedBy: "Verifier",
+                OnBehalf: "qugen", ShowDisclaimer: false, ShowSignatory: true));
+
+            Check("save returned the re-read row", saved is not null, saved is null ? "null" : "yes");
+            if (saved is not null)
+            {
+                Check("hasConfig flipped to true", saved.HasConfig, saved.HasConfig.ToString());
+                Check("lab name was trimmed", saved.LabName == "VERIFY LAB", $"\"{saved.LabName}\"");
+                Check("explicit onBehalf stored", saved.Stored.OnBehalf == "qugen", saved.Stored.OnBehalf ?? "null");
+                Check("explicit false is stored, not lost", saved.Stored.ShowDisclaimer == false,
+                    saved.Stored.ShowDisclaimer?.ToString() ?? "null");
+                Check("explicit true is stored", saved.Stored.ShowSignatory == true,
+                    saved.Stored.ShowSignatory?.ToString() ?? "null");
+                Check("resolution honours the stored values", !saved.Flags.ShowDisclaimer && saved.Flags.ShowSignatory,
+                    $"disclaimer={saved.Flags.ShowDisclaimer} signatory={saved.Flags.ShowSignatory}");
+            }
+
+            Check("the logo survived the save", await HasLogoAsync(mcc),
+                await HasLogoAsync(mcc) ? "still there" : "WIPED — the UPDATE is touching columns it must not");
+
+            // Back to auto. This is the path that matters most: it must write
+            // NULL, not false, or the client stops following the default.
+            var reset = await repo.SaveAsync(mcc, new InvoiceRepository.InvoiceConfigEdit(
+                null, null, null, null, null, null, null, null, null, null, null));
+
+            Check("auto round-trips back to NULL", reset?.Stored.ShowDisclaimer is null,
+                reset?.Stored.ShowDisclaimer?.ToString() ?? "null");
+            Check("blank text round-trips to NULL", reset?.LabName is null, reset?.LabName ?? "null");
+            Check("cleared row resolves to the defaults again",
+                reset is not null && reset.Flags.ShowDisclaimer && !reset.Flags.ShowSignatory
+                    && reset.Flags.OnBehalf == "client",
+                reset is null ? "null" : $"{reset.Flags.OnBehalf}/{reset.Flags.ShowDisclaimer}/{reset.Flags.ShowSignatory}");
+
+            // A value the procedure must refuse rather than coerce.
+            var rejected = false;
+            try
+            {
+                await repo.SaveAsync(mcc, new InvoiceRepository.InvoiceConfigEdit(
+                    null, null, null, null, null, null, null, null, "nonsense", null, null));
+            }
+            catch (Microsoft.Data.SqlClient.SqlException) { rejected = true; }
+            Check("an unrecognised onBehalf is refused", rejected,
+                rejected ? "raised" : "ACCEPTED — a typo would silently pick an entity");
+        }
+        finally
+        {
+            await DeleteConfigAsync(mcc);
+            Check("cleanup removed the row", !await HasConfigRowAsync(mcc),
+                await HasConfigRowAsync(mcc) ? "STILL PRESENT — remove it by hand" : "gone");
+        }
+    }
+}
+else
+{
+    Console.WriteLine();
+    Console.WriteLine("  (pass --write to also exercise the save path; it writes and cleans up)");
+}
+
 Console.WriteLine();
 Console.WriteLine(failures == 0 ? "All checks passed." : $"{failures} check(s) FAILED.");
 return failures == 0 ? 0 : 1;
@@ -186,6 +276,75 @@ async Task<List<(int Mcc, string? Mode, bool? Disclaimer, bool? Signatory)>> Con
                 r.IsDBNull(2) ? null : r.GetBoolean(2),
                 r.IsDBNull(3) ? null : r.GetBoolean(3)));
         return rows;
+    }, default);
+
+/// <summary>
+/// A centre with no config row, so the write test can clean up completely by
+/// deleting the row it created. Deliberately avoids editing anyone's real
+/// branding — a restored-from-backup value is not the same as untouched.
+/// </summary>
+async Task<int?> FirstUnconfiguredMccAsync() =>
+    await factory.QueryAsync("verify.unconfigured", async (conn, ct) =>
+    {
+        await using var cmd = NobleConnectionFactory.CreateCommand(conn, """
+            SELECT TOP 1 u.id
+            FROM dbo.tbl_med_mcc_unit_master u
+            LEFT JOIN dbo.telo_mcc_invoice_config c ON c.mcc_id = u.id
+            WHERE c.mcc_id IS NULL
+            ORDER BY u.id DESC
+            """);
+        var v = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
+        return v is null or DBNull ? (int?)null : Convert.ToInt32(v);
+    }, default);
+
+/// <summary>
+/// Put a logo on the row so the save can be checked for leaving it alone.
+/// Creates the row if the save has not yet run.
+/// </summary>
+async Task PlantLogoAsync(int mcc) =>
+    await factory.QueryAsync("verify.plantlogo", async (conn, ct) =>
+    {
+        await using var cmd = NobleConnectionFactory.CreateCommand(conn, """
+            IF EXISTS (SELECT 1 FROM dbo.telo_mcc_invoice_config WHERE mcc_id = @m)
+                UPDATE dbo.telo_mcc_invoice_config
+                SET top_right_logo_bytes = 0x89504E47, top_right_logo_mime = N'image/png'
+                WHERE mcc_id = @m;
+            ELSE
+                INSERT INTO dbo.telo_mcc_invoice_config
+                    (mcc_id, top_right_logo_bytes, top_right_logo_mime, created_at, updated_at)
+                VALUES (@m, 0x89504E47, N'image/png', SYSUTCDATETIME(), SYSUTCDATETIME());
+            """);
+        cmd.Parameters.AddWithValue("@m", mcc);
+        await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        return true;
+    }, default);
+
+async Task<bool> HasLogoAsync(int mcc) =>
+    await factory.QueryAsync("verify.haslogo", async (conn, ct) =>
+    {
+        await using var cmd = NobleConnectionFactory.CreateCommand(conn,
+            "SELECT COUNT(*) FROM dbo.telo_mcc_invoice_config WHERE mcc_id = @m AND top_right_logo_bytes IS NOT NULL");
+        cmd.Parameters.AddWithValue("@m", mcc);
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false)) == 1;
+    }, default);
+
+async Task<bool> HasConfigRowAsync(int mcc) =>
+    await factory.QueryAsync("verify.hasrow", async (conn, ct) =>
+    {
+        await using var cmd = NobleConnectionFactory.CreateCommand(conn,
+            "SELECT COUNT(*) FROM dbo.telo_mcc_invoice_config WHERE mcc_id = @m");
+        cmd.Parameters.AddWithValue("@m", mcc);
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false)) == 1;
+    }, default);
+
+async Task DeleteConfigAsync(int mcc) =>
+    await factory.QueryAsync("verify.cleanup", async (conn, ct) =>
+    {
+        await using var cmd = NobleConnectionFactory.CreateCommand(conn,
+            "DELETE FROM dbo.telo_mcc_invoice_config WHERE mcc_id = @m");
+        cmd.Parameters.AddWithValue("@m", mcc);
+        await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        return true;
     }, default);
 
 static string? Env(string key) =>
