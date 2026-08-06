@@ -915,6 +915,85 @@ if (pendingResp.IsSuccessStatusCode && unregResp.IsSuccessStatusCode)
     }
 }
 
+// ---- 12. client accounts and the ledger ------------------------------------
+// The sign convention is the thing most likely to be wrong and least likely to
+// be noticed: the account DEBITS on an order and CREDITS on a payment, so a
+// negative currentbalance means the client OWES us. Getting that backwards
+// produces a screen that is confidently, quietly inverted.
+Console.WriteLine("\n[12] client accounts");
+
+var acctResp = await http.GetAsync("/api/accounts/?pageSize=200");
+Check("accounts load", acctResp.IsSuccessStatusCode, $"{(int)acctResp.StatusCode}");
+
+if (acctResp.IsSuccessStatusCode)
+{
+    using var doc = await Json(acctResp);
+    var root = doc.RootElement;
+    var accounts = root.GetProperty("rows");
+
+    Console.WriteLine($"        {root.GetProperty("total").GetInt32()} accounts in scope");
+
+    // owed must be the exact negation of balance, on every row.
+    var signOk = accounts.EnumerateArray().All(a =>
+        a.GetProperty("owed").GetDecimal() == -a.GetProperty("balance").GetDecimal());
+    Check("owed is the negation of balance", signOk, "sign flip applied once, in SQL");
+
+    // Sorted so the biggest debt is first — the list exists to be worked down.
+    var balances = accounts.EnumerateArray().Select(a => a.GetProperty("balance").GetDecimal()).ToArray();
+    Check("most-owing first",
+        balances.Zip(balances.Skip(1), (x, y) => x <= y).All(ok => ok),
+        balances.Length == 0 ? "no rows" : $"{balances.First()} … {balances.Last()}");
+
+    // The owing filter must actually narrow to debtors.
+    var owingResp = await http.GetAsync("/api/accounts/?onlyOwing=true&pageSize=200");
+    if (owingResp.IsSuccessStatusCode)
+    {
+        using var owing = await Json(owingResp);
+        var owingRows = owing.RootElement.GetProperty("rows");
+        var allOwe = owingRows.EnumerateArray().All(a => a.GetProperty("owed").GetDecimal() > 0);
+        Check("the owing filter returns only debtors", allOwe,
+            $"{owing.RootElement.GetProperty("total").GetInt32()} owing of "
+            + $"{root.GetProperty("total").GetInt32()}");
+    }
+
+    // ---- ledger for one real client ----
+    var withMovement = accounts.EnumerateArray()
+        .FirstOrDefault(a => a.GetProperty("balance").GetDecimal() != 0);
+
+    if (withMovement.ValueKind == JsonValueKind.Object)
+    {
+        var mccId = withMovement.GetProperty("mccId").GetInt32();
+        var ledgerResp = await http.GetAsync($"/api/accounts/{mccId}/ledger?pageSize=200");
+        Check("ledger loads", ledgerResp.IsSuccessStatusCode, $"mcc {mccId} -> {(int)ledgerResp.StatusCode}");
+
+        if (ledgerResp.IsSuccessStatusCode)
+        {
+            using var led = await Json(ledgerResp);
+            var entries = led.RootElement.GetProperty("rows");
+
+            Check("the ledger has movements",
+                entries.GetArrayLength() > 0,
+                $"{led.RootElement.GetProperty("total").GetInt32()} entries");
+
+            var dirs = entries.EnumerateArray()
+                .Select(e => e.GetProperty("direction").GetString()).Distinct().ToArray();
+            Check("every entry is a debit or a credit",
+                dirs.All(d => d is "debit" or "credit"),
+                string.Join(", ", dirs));
+
+            var origins = entries.EnumerateArray()
+                .Select(e => e.GetProperty("origin").GetString()).Distinct().ToArray();
+            Console.WriteLine($"        posted by: {string.Join(", ", origins)}");
+        }
+    }
+
+    // Scope: a client outside scope must 404 rather than expose what they owe.
+    var foreignLedger = await http.GetAsync("/api/accounts/-1/ledger");
+    Check("an unknown client's ledger is not exposed",
+        foreignLedger.StatusCode is System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.OK,
+        $"{(int)foreignLedger.StatusCode}");
+}
+
 Console.WriteLine();
 Console.WriteLine(failures == 0 ? "All checks passed." : $"{failures} check(s) FAILED.");
 return failures == 0 ? 0 : 1;

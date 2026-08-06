@@ -4,6 +4,7 @@ using Infinity.Api.Data;
 using Infinity.Api.Endpoints;
 using Infinity.Api.Reads;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Options;
 
 // CreateSlimBuilder: minimal-API-tuned host with the IIS/EventLog/EventSource
 // plumbing left out. Same request throughput, leaner startup and image.
@@ -37,6 +38,7 @@ builder.Services.AddSingleton<CatalogRepository>();
 builder.Services.AddSingleton<Infinity.Api.Orders.CartStore>();
 builder.Services.AddSingleton<Infinity.Api.Orders.OrderWriteRepository>();
 builder.Services.AddSingleton<Infinity.Api.Orders.AccessionRepository>();
+builder.Services.AddSingleton<Infinity.Api.Orders.ClientAccountRepository>();
 // Singletons: the knowledge base is parsed once at startup, not per request.
 builder.Services.AddSingleton<Infinity.Api.Reports.SmartMeta>();
 builder.Services.AddSingleton<Infinity.Api.Reports.SmartReportService>();
@@ -114,8 +116,37 @@ builder.Services
     {
         options.TokenValidationParameters = issuer.ValidationParameters;
         options.MapInboundClaims = false;   // keep 'sub'/'cap' as written, unmapped
-        options.Events = SessionVersionValidator.Create();
+
+        var events = SessionVersionValidator.Create();
+
+        // Take the token from the httpOnly cookie when no Authorization header
+        // is present. The header still works — instrument drivers, scripts and
+        // curl are unaffected — but the SPA no longer holds a token it could
+        // leak through XSS.
+        var cookieName = builder.Configuration[$"{AuthCookieOptions.SectionName}:TokenCookieName"] ?? "inf_session";
+        var inner = events.OnMessageReceived;
+        events.OnMessageReceived = async ctx =>
+        {
+            if (string.IsNullOrEmpty(ctx.Token)
+                && string.IsNullOrEmpty(ctx.Request.Headers.Authorization.ToString())
+                && ctx.Request.Cookies.TryGetValue(cookieName, out var fromCookie)
+                && !string.IsNullOrEmpty(fromCookie))
+            {
+                ctx.Token = fromCookie;
+            }
+
+            if (inner is not null) await inner(ctx);
+        };
+
+        options.Events = events;
     });
+
+// Session cookie settings. Secure defaults to true; the compose stack serves
+// plain HTTP on a loopback port, where a Secure cookie is silently dropped, so
+// it is overridable — with a loud warning at startup when it is off.
+builder.Services
+    .AddOptions<AuthCookieOptions>()
+    .Bind(builder.Configuration.GetSection(AuthCookieOptions.SectionName));
 
 builder.Services.AddAuthorization();
 builder.Services.AddInfinityRateLimiting();
@@ -134,6 +165,19 @@ var app = builder.Build();
     // rather than being inferred later from whether limits behave oddly.
     var cache = app.Services.GetRequiredService<Infinity.Api.Caching.InfinityCache>();
     app.Logger.LogInformation("cache.mode distributed={Distributed}", cache.IsDistributed);
+
+    // An insecure session cookie is a deployment mistake that is invisible in
+    // normal use, so it is stated at every startup rather than left to be
+    // discovered.
+    var cookies = app.Services.GetRequiredService<IOptions<AuthCookieOptions>>().Value;
+    if (!cookies.Secure)
+    {
+        app.Logger.LogWarning(
+            "authcookie.insecure — the session cookie is being issued WITHOUT the Secure attribute. "
+          + "This is only acceptable behind plain HTTP on a trusted loopback. Set AuthCookie__Secure=true "
+          + "as soon as TLS terminates in front of this API.");
+    }
+    app.Logger.LogInformation("authcookie.mode secure={Secure} sameSite={SameSite}", cookies.Secure, cookies.SameSite);
 }
 
 // Must run before anything that reads the client IP.
@@ -141,6 +185,11 @@ app.UseForwardedHeaders();
 
 app.UseExceptionHandler();
 app.UseRateLimiter();
+
+// Before authentication: a forged cross-site write must be refused on the way
+// in, not after its identity has been established.
+app.UseInfinityCsrfProtection();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -151,5 +200,6 @@ app.MapWorksheetEndpoints();
 app.MapInstrumentEndpoints();
 app.MapOrderEntryEndpoints();
 app.MapAccessionEndpoints();
+app.MapClientAccountEndpoints();
 
 app.Run();
