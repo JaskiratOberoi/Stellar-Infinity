@@ -34,6 +34,8 @@ builder.Services.AddSingleton<StatsRepository>();
 builder.Services.AddSingleton<OrdersRepository>();
 builder.Services.AddSingleton<ReportsRepository>();
 builder.Services.AddSingleton<CatalogRepository>();
+builder.Services.AddSingleton<Infinity.Api.Orders.CartStore>();
+builder.Services.AddSingleton<Infinity.Api.Orders.OrderWriteRepository>();
 // Singletons: the knowledge base is parsed once at startup, not per request.
 builder.Services.AddSingleton<Infinity.Api.Reports.SmartMeta>();
 builder.Services.AddSingleton<Infinity.Api.Reports.SmartReportService>();
@@ -146,5 +148,6 @@ app.MapAuthEndpoints();
 app.MapAdminEndpoints();
 app.MapWorksheetEndpoints();
 app.MapInstrumentEndpoints();
+app.MapOrderEntryEndpoints();
 
 app.Run();

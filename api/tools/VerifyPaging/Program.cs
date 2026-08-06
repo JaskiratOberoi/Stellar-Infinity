@@ -469,6 +469,144 @@ Check("an unknown mcc does not leak rates",
     outOfScope.StatusCode is System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.OK,
     $"{(int)outOfScope.StatusCode}");
 
+// ---- 9. order entry: cart and preview --------------------------------------
+// Deliberately stops short of placing an order. That is a real write against
+// production billing — a real patient row, a real bill, and a number consumed
+// from a per-client monthly sequence that cannot be handed back. Everything up
+// to the point of commitment is exercised here; the placement itself needs a
+// designated test client, not a live one.
+Console.WriteLine("\n[9] order entry (cart + preview; placement NOT exercised)");
+
+async Task<JsonDocument> Json(HttpResponseMessage r) =>
+    JsonDocument.Parse(await r.Content.ReadAsStringAsync());
+
+// Clear first so a previous run cannot make this one look like it worked.
+await http.DeleteAsync("/api/orders/cart/");
+
+var emptyCart = await http.GetAsync("/api/orders/cart/");
+Check("cart starts empty", emptyCart.IsSuccessStatusCode, $"{(int)emptyCart.StatusCode}");
+
+// Adding before choosing a client must be refused: every price depends on it.
+var earlyAdd = await http.PostAsync("/api/orders/cart/items",
+    new StringContent("""{"kind":"test","id":1,"code":"X","name":"X"}""",
+        System.Text.Encoding.UTF8, "application/json"));
+Check("adding before a client is chosen is refused",
+    earlyAdd.StatusCode == System.Net.HttpStatusCode.BadRequest,
+    $"{(int)earlyAdd.StatusCode}");
+
+// Pick a client that actually has negotiated rates, so the margin is non-zero
+// and the preview has something real to compute.
+var setClient = await http.PostAsync("/api/orders/cart/client",
+    new StringContent("""{"mcc":5797}""", System.Text.Encoding.UTF8, "application/json"));
+Check("client can be set", setClient.IsSuccessStatusCode, $"{(int)setClient.StatusCode}");
+
+// Two real catalogue items for that client.
+var pick = await Json(await http.GetAsync("/api/orders/catalog?mcc=5797&kind=test&pageSize=2"));
+var picked = pick.RootElement.GetProperty("rows").EnumerateArray().ToArray();
+
+if (picked.Length < 2)
+{
+    Check("catalogue had items to add", false, $"{picked.Length}");
+}
+else
+{
+    foreach (var item in picked)
+    {
+        var payload = JsonSerializer.Serialize(new
+        {
+            kind = item.GetProperty("kind").GetString(),
+            id = item.GetProperty("id").GetInt32(),
+            code = item.GetProperty("code").GetString(),
+            name = item.GetProperty("name").GetString(),
+        });
+        await http.PostAsync("/api/orders/cart/items",
+            new StringContent(payload, System.Text.Encoding.UTF8, "application/json"));
+    }
+
+    using var cartDoc = await Json(await http.GetAsync("/api/orders/cart/"));
+    Check("both items are in the cart",
+        cartDoc.RootElement.GetProperty("items").GetArrayLength() == 2,
+        $"{cartDoc.RootElement.GetProperty("items").GetArrayLength()} item(s)");
+
+    // Adding the same item again must not create a second line — a lab test
+    // cannot be run twice on one sample and billed twice.
+    var dupPayload = JsonSerializer.Serialize(new
+    {
+        kind = picked[0].GetProperty("kind").GetString(),
+        id = picked[0].GetProperty("id").GetInt32(),
+        code = picked[0].GetProperty("code").GetString(),
+        name = picked[0].GetProperty("name").GetString(),
+    });
+    await http.PostAsync("/api/orders/cart/items",
+        new StringContent(dupPayload, System.Text.Encoding.UTF8, "application/json"));
+    using var dupDoc = await Json(await http.GetAsync("/api/orders/cart/"));
+    Check("re-adding an item does not duplicate it",
+        dupDoc.RootElement.GetProperty("items").GetArrayLength() == 2,
+        $"{dupDoc.RootElement.GetProperty("items").GetArrayLength()} item(s)");
+
+    // ---- preview ----
+    var previewResp = await http.PostAsync("/api/orders/preview", null);
+    Check("preview succeeds", previewResp.IsSuccessStatusCode, $"{(int)previewResp.StatusCode}");
+
+    if (previewResp.IsSuccessStatusCode)
+    {
+        using var pv = await Json(previewResp);
+        var root = pv.RootElement;
+
+        Check("preview prices every line",
+            root.GetProperty("lines").GetArrayLength() == 2,
+            $"{root.GetProperty("lines").GetArrayLength()} line(s)");
+
+        Check("preview reports the tubes the order needs",
+            root.GetProperty("groups").GetArrayLength() > 0,
+            $"{root.GetProperty("groups").GetArrayLength()} sample group(s)");
+
+        var total = root.GetProperty("total").GetDecimal();
+        var m = root.GetProperty("margin");
+        var mrpTotal = m.GetProperty("mrpTotal").GetDecimal();
+        var rateTotal = m.GetProperty("rateTotal").GetDecimal();
+        var amount = m.GetProperty("amount").GetDecimal();
+        var comparable = m.GetProperty("comparableLines").GetInt32();
+        var withoutMrp = m.GetProperty("linesWithoutMrp").GetInt32();
+
+        Check("margin arithmetic is self-consistent", amount == mrpTotal - rateTotal,
+            $"{mrpTotal} - {rateTotal} = {amount}");
+
+        // MRP is unpopulated across most of this catalogue (measured: 1,248 of
+        // 1,457 priced tests on rate list 139 have MRP = 0), so margin is only
+        // summed over lines that have one. The basis has to be reported or the
+        // number is not interpretable.
+        Check("margin states how many lines it covers",
+            comparable + withoutMrp == root.GetProperty("lines").GetArrayLength(),
+            $"{comparable} comparable + {withoutMrp} without MRP");
+
+        Check("lines with no MRP are excluded from margin, not counted as zero",
+            comparable == 0 || mrpTotal > 0,
+            comparable == 0 ? "no comparable lines" : $"mrpTotal {mrpTotal} over {comparable} line(s)");
+
+        Console.WriteLine($"        total {total}, margin {amount} over {comparable} line(s), "
+            + $"{withoutMrp} without MRP, {root.GetProperty("unpriced").GetInt32()} unpriced");
+    }
+
+    // Switching client must empty the cart rather than silently reprice one
+    // client's basket at another's rates.
+    await http.PostAsync("/api/orders/cart/client",
+        new StringContent("""{"mcc":1}""", System.Text.Encoding.UTF8, "application/json"));
+    using var switched = await Json(await http.GetAsync("/api/orders/cart/"));
+    Check("changing client empties the cart",
+        switched.RootElement.GetProperty("items").GetArrayLength() == 0,
+        $"{switched.RootElement.GetProperty("items").GetArrayLength()} item(s) left");
+}
+
+await http.DeleteAsync("/api/orders/cart/");
+
+// Scope: booking for a client outside the caller's scope must be refused.
+var foreign = await http.PostAsync("/api/orders/cart/client",
+    new StringContent("""{"mcc":-1}""", System.Text.Encoding.UTF8, "application/json"));
+Check("cannot set a client outside scope",
+    foreign.StatusCode is System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.OK,
+    $"{(int)foreign.StatusCode}");
+
 Console.WriteLine();
 Console.WriteLine(failures == 0 ? "All checks passed." : $"{failures} check(s) FAILED.");
 return failures == 0 ? 0 : 1;
