@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { worksheetApi, type ResultAuditRow, type ResultTrendResponse } from '../api/client';
-import { fmtDateTime } from '../lib/format';
+import { fmtDateTime, plainText } from '../lib/format';
 import { DeltaTrend } from '../components/DeltaTrend';
 import { Pager } from '../components/Pager';
 import { InfinityLoader } from '../components/InfinityLoader';
@@ -116,7 +116,7 @@ export function WorksheetHistory({ sid, onClose }: { sid: string; onClose: () =>
         {loading ? (
           <div className="center" style={{ minHeight: 140 }}><InfinityLoader /></div>
         ) : (
-          <div className="table-wrap" style={{ maxHeight: '58vh', overflowY: 'auto' }}>
+          <div className="table-wrap table-wrap--cards" style={{ maxHeight: '58vh', overflowY: 'auto' }}>
             <table>
               <thead>
                 <tr>
@@ -131,20 +131,23 @@ export function WorksheetHistory({ sid, onClose }: { sid: string; onClose: () =>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id}>
-                    <td className="muted" style={{ fontSize: '.74rem', whiteSpace: 'nowrap' }}>
+                    <td className="muted cell--meta" data-label="When" style={{ fontSize: '.74rem', whiteSpace: 'nowrap' }}>
                       {fmtDateTime(r.occurredAt)}
                     </td>
-                    <td style={{ fontSize: '.78rem' }}>
+                    <td className="cell--meta" data-label="Who" style={{ fontSize: '.78rem' }}>
                       {r.actorUsername ?? '—'}
                       {r.actorIp && (
                         <div className="muted mono" style={{ fontSize: '.66rem' }}>{r.actorIp}</div>
                       )}
                     </td>
-                    <td><ActionBadge action={r.action} source={r.source} /></td>
-                    <td style={{ fontSize: '.78rem' }}>
-                      {r.testName ?? r.testCode ?? <span className="muted">sample</span>}
+                    <td className="cell--tag"><ActionBadge action={r.action} source={r.source} /></td>
+                    {/* Which test was touched is what identifies an entry; the
+                        old → new value is the entry's substance, so it gets the
+                        card's body rather than a squeezed right-hand column. */}
+                    <td className="cell--lead" style={{ fontSize: '.78rem' }}>
+                      {plainText(r.testName) || r.testCode || <span className="muted">sample</span>}
                     </td>
-                    <td className="mono" style={{ fontSize: '.74rem' }}>
+                    <td className="mono cell--body" data-label="Change" style={{ fontSize: '.74rem' }}>
                       <span className="muted" style={{ textDecoration: 'line-through' }}>
                         {display(r.oldValue, r.field)}
                       </span>
@@ -152,7 +155,7 @@ export function WorksheetHistory({ sid, onClose }: { sid: string; onClose: () =>
                       <b>{display(r.newValue, r.field)}</b>
                       <div className="muted" style={{ fontSize: '.66rem' }}>{r.field}</div>
                     </td>
-                    <td className="muted" style={{ fontSize: '.74rem' }}>{r.reason ?? '—'}</td>
+                    <td className="muted cell--body" data-label="Reason" style={{ fontSize: '.74rem' }}>{r.reason ?? '—'}</td>
                   </tr>
                 ))}
 

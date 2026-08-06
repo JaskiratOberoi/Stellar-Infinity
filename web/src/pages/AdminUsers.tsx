@@ -101,7 +101,7 @@ export function AdminUsers() {
       {loading ? (
         <div className="center"><InfinityLoader /><span className="muted">Loading users…</span></div>
       ) : (
-        <div className="table-wrap">
+        <div className="table-wrap table-wrap--cards">
           <table>
             <thead>
               <tr>
@@ -122,7 +122,7 @@ export function AdminUsers() {
 
                 return (
                   <tr key={r.userId}>
-                    <td>
+                    <td className="cell--lead">
                       <div><b>{r.username}</b>{isSelf && <span className="muted"> · you</span>}</div>
                       <div className="muted" style={{ fontSize: '.76rem' }}>
                         {[r.firstName, r.lastName].filter(Boolean).join(' ') || '—'}
@@ -130,11 +130,14 @@ export function AdminUsers() {
                       </div>
                     </td>
 
-                    <td className="muted">{r.usertypeName ?? '—'}</td>
+                    <td className="muted cell--meta" data-label="LIS type">{r.usertypeName ?? '—'}</td>
 
-                    <td><span className={`badge badge--${r.managedBy}`}>{r.managedBy}</span></td>
+                    <td className="cell--tag"><span className={`badge badge--${r.managedBy}`}>{r.managedBy}</span></td>
 
-                    <td>
+                    {/* A dropdown is a control, not a value: it gets its label
+                        above it and the full width of the card, like a field in
+                        a form, rather than being squeezed to the right. */}
+                    <td className="cell--body" data-label="Infinity role">
                       <select
                         value={r.effectiveRole}
                         disabled={busy || isSelf}
@@ -153,7 +156,7 @@ export function AdminUsers() {
                       )}
                     </td>
 
-                    <td>
+                    <td className="cell--meta" data-label="Infinity login">
                       {isInfinity ? (
                         <button
                           className={`toggle ${r.infinityActive ? 'toggle--on' : ''}`}
@@ -169,7 +172,7 @@ export function AdminUsers() {
                       )}
                     </td>
 
-                    <td>
+                    <td className="cell--meta" data-label="LIS access">
                       {isInfinity ? (
                         <div className="row">
                           <button
@@ -192,7 +195,7 @@ export function AdminUsers() {
                       )}
                     </td>
 
-                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <td className="cell--action">
                       {/* Settings is available for EVERY account, including
                           native LIS ones — client-code access and role are
                           Infinity's to manage even when sign-in is not. */}

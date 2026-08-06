@@ -102,7 +102,7 @@ export function Orders() {
         <div className="center"><InfinityLoader /><span className="muted">Loading orders…</span></div>
       ) : (
         <>
-          <div className="table-wrap">
+          <div className="table-wrap table-wrap--cards">
             <table>
               <thead>
                 <tr>
@@ -118,17 +118,22 @@ export function Orders() {
               <tbody>
                 {rows.map((o) => (
                   <tr key={o.billId} style={{ cursor: 'pointer' }} onClick={() => setOpenId(o.billId)}>
-                    <td className="mono"><b>{o.billNumber ?? o.billId}</b></td>
-                    <td className="muted">{fmtDate(o.billDate)}</td>
-                    <td>{o.patientName ?? <span className="muted">—</span>}</td>
-                    <td className="muted">{o.clientCode ?? o.mccCode ?? '—'}</td>
-                    {canSeeMoney && <td className="mono" style={{ textAlign: 'right' }}>{inr(o.amount)}</td>}
+                    <td className="mono cell--lead"><b>{o.billNumber ?? o.billId}</b></td>
+                    <td className="muted cell--meta" data-label="Date">{fmtDate(o.billDate)}</td>
+                    <td className="cell--head">{o.patientName ?? <span className="muted">—</span>}</td>
+                    <td className="muted cell--meta" data-label="Client">{o.clientCode ?? o.mccCode ?? '—'}</td>
+                    {/* The billed total rides beside the bill number: inr()
+                        prints the rupee sign, so it needs no label to be read
+                        as money on a card. The balance keeps its label,
+                        because an unlabelled second figure would not be. */}
+                    {canSeeMoney && <td className="mono cell--tag">{inr(o.amount)}</td>}
                     {canSeeMoney && (
-                      <td className="mono" style={{ textAlign: 'right', color: o.balance > 0 ? 'var(--danger)' : undefined }}>
+                      <td className="mono cell--meta" data-label="Balance"
+                          style={{ textAlign: 'right', color: o.balance > 0 ? 'var(--danger)' : undefined }}>
                         {inr(o.balance)}
                       </td>
                     )}
-                    <td style={{ textAlign: 'right' }}>
+                    <td className="cell--action">
                       <button className="btn btn--ghost btn--sm" onClick={(e) => { e.stopPropagation(); setOpenId(o.billId); }}>
                         Open
                       </button>

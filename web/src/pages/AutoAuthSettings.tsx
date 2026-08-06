@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Pager } from '../components/Pager';
-import { autoAuthApi, type AutoAuthAuditRow, type AutoAuthScopeRow } from '../api/client';
-import { fmtDateTime } from '../lib/format';
+import { autoAuthApi, type AutoAuthAuditRow, type AutoAuthScopeRow, type BusinessUnit } from '../api/client';
+import { fmtDateTime, plainText } from '../lib/format';
 import { InfinityLoader } from '../components/InfinityLoader';
 
 /**
@@ -33,9 +33,25 @@ export function AutoAuthSettings() {
   const [showAudit, setShowAudit] = useState(false);
 
   // Held in memory for the session so an admin enabling six tests types it once.
-  // Never persisted.
+  // Never persisted — closing the tab discards it.
   const [password, setPassword] = useState('');
   const [unlocked, setUnlocked] = useState(false);
+
+  // The gate. Nothing about which tests release results unread is fetched or
+  // rendered until the password has been verified, so reaching the URL is not
+  // enough to see the configuration.
+  const [gatePassword, setGatePassword] = useState('');
+  const [gateBusy, setGateBusy] = useState(false);
+  const [gateError, setGateError] = useState<string | null>(null);
+  // Until the server has answered, show neither the gate nor the rules —
+  // flashing the password prompt at someone who is already unlocked is as
+  // wrong as flashing the rules at someone who is not.
+  const [gateChecked, setGateChecked] = useState(false);
+
+  // Which lab's rules are being configured. null is the blanket "all units"
+  // rule — a real, distinct setting rather than "no filter".
+  const [units, setUnits] = useState<BusinessUnit[]>([]);
+  const [unitId, setUnitId] = useState<number | null>(null);
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
@@ -45,11 +61,31 @@ export function AutoAuthSettings() {
   const [auditTotal, setAuditTotal] = useState(0);
   const auditPageSize = 100;
 
+  // The unlock is remembered SERVER-side for this session, so a refresh does
+  // not re-prompt. The browser holds no secret — only the answer to "is this
+  // session through the gate", which it cannot forge.
+  useEffect(() => {
+    let live = true;
+    autoAuthApi.unlockStatus()
+      .then(async (r) => {
+        if (!live) return;
+        if (r.unlocked) {
+          setUnlocked(true);
+          const u = await autoAuthApi.businessUnits().catch(() => ({ units: [] }));
+          if (live) setUnits(u.units);
+        }
+      })
+      .catch(() => { /* treat any failure as locked */ })
+      .finally(() => { if (live) setGateChecked(true); });
+    return () => { live = false; };
+  }, []);
+
   const load = useCallback(async () => {
+    if (!unlocked) return;          // the gate has not been passed
     setLoading(true);
     setError(null);
     try {
-      const r = await autoAuthApi.list(search, onlyEnabled, page, pageSize);
+      const r = await autoAuthApi.list(search, onlyEnabled, unitId, page, pageSize);
       setRows(r.rows);
       setTotal(r.total);
       setFeatureEnabled(r.featureEnabled);
@@ -58,7 +94,7 @@ export function AutoAuthSettings() {
     } finally {
       setLoading(false);
     }
-  }, [search, onlyEnabled, page, pageSize]);
+  }, [search, onlyEnabled, unitId, page, pageSize, unlocked]);
 
   useEffect(() => {
     const id = setTimeout(() => void load(), 300);
@@ -67,7 +103,7 @@ export function AutoAuthSettings() {
 
   // Narrowing the catalogue changes how many pages there are; page 7 of the old
   // result would render blank against the new one.
-  useEffect(() => { setPage(1); }, [search, onlyEnabled, pageSize]);
+  useEffect(() => { setPage(1); }, [search, onlyEnabled, unitId, pageSize]);
 
   const loadAudit = useCallback(async (p: number) => {
     try {
@@ -85,11 +121,6 @@ export function AutoAuthSettings() {
   }, [showAudit, auditPage, loadAudit]);
 
   const toggle = async (row: AutoAuthScopeRow, enabled: boolean) => {
-    if (!password) {
-      setError('Enter the auto-authorisation password before changing a rule.');
-      return;
-    }
-
     const key = `${row.scopeType}:${row.scopeKey}`;
     setBusyKey(key);
     setError(null);
@@ -100,17 +131,23 @@ export function AutoAuthSettings() {
         scopeType: row.scopeType,
         scopeKey: row.scopeKey,
         scopeLabel: row.label,
+        businessUnitId: unitId,
         enabled,
         requireInRange: true,
         allowOutOfRange: false,
+        // The server accepts the session's unlock grant; the password is only
+        // sent when this tab still happens to hold it (same visit as the gate).
         password,
       });
 
       setUnlocked(true);
+      const where = unitId == null
+        ? 'every business unit'
+        : units.find((u) => u.id === unitId)?.name ?? `unit ${unitId}`;
       setNotice(
         enabled
-          ? `Auto-authorisation is ON for ${row.label ?? row.scopeKey}. In-range results will be signed without review.`
-          : `Auto-authorisation is OFF for ${row.label ?? row.scopeKey}.`,
+          ? `Jarvis is ON for ${row.label ?? row.scopeKey} at ${where}. In-range results will be signed without review.`
+          : `Jarvis is OFF for ${row.label ?? row.scopeKey} at ${where}.`,
       );
       await load();
     } catch (e) {
@@ -133,11 +170,89 @@ export function AutoAuthSettings() {
   // change exists to remove. Tick "Only enabled" for the true figure.
   const enabledHere = rows.filter((r) => r.enabled).length;
 
+  /**
+   * Pass the gate. The password is verified SERVER-side against the PBKDF2
+   * hash — there is no client-side comparison to bypass — and only then is the
+   * catalogue fetched. A rejected attempt is recorded in the change log
+   * exactly as a rejected toggle is.
+   */
+  const unlock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!gatePassword) return;
+    setGateBusy(true);
+    setGateError(null);
+    try {
+      await autoAuthApi.unlock(gatePassword);
+      // Carried into the page so an admin toggling six tests types it once.
+      setPassword(gatePassword);
+      setUnlocked(true);
+      setGatePassword('');
+      const u = await autoAuthApi.businessUnits();
+      setUnits(u.units);
+    } catch (err) {
+      setGateError(err instanceof Error ? err.message : 'That password was not accepted.');
+    } finally {
+      setGateBusy(false);
+    }
+  };
+
+  // ---- the gate ----------------------------------------------------------
+  if (!gateChecked) {
+    return (
+      <div className="page">
+        <div className="center"><InfinityLoader /><span className="muted">Checking Jarvis…</span></div>
+      </div>
+    );
+  }
+
+  if (!unlocked) {
+    return (
+      <div className="page">
+        <div className="jarvis-gate">
+          <form className="jarvis-gate__card" onSubmit={unlock}>
+            <div className="jarvis-gate__mark"><InfinityLoader size={150} label="Jarvis" /></div>
+            <h1 className="jarvis-gate__title">Jarvis</h1>
+            <p className="jarvis-gate__sub">
+              Automatic authorisation. This screen decides which results reach a patient
+              without a person reading them, so it is locked separately from your sign-in.
+            </p>
+
+            {gateError && <div className="alert alert--error login__error">{gateError}</div>}
+
+            <div className="field">
+              <label htmlFor="jarvis-pw">Auto-authorisation password</label>
+              <input
+                id="jarvis-pw"
+                className="input"
+                type="password"
+                autoComplete="off"
+                autoFocus
+                placeholder="Required to view or change any rule"
+                value={gatePassword}
+                onChange={(e) => setGatePassword(e.target.value)}
+              />
+            </div>
+
+            <button className="btn btn--primary login__submit" type="submit" disabled={gateBusy || !gatePassword}>
+              {gateBusy && <InfinityLoader size={30} mono label="Checking" />}
+              {gateBusy ? 'Checking…' : 'Unlock'}
+            </button>
+
+            <p className="jarvis-gate__foot">
+              Five wrong attempts in fifteen minutes locks this out. Every attempt, accepted or
+              not, is recorded against your name.
+            </p>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="page">
       <div className="page__head">
         <div>
-          <h1 className="page__title">Auto-authorisation</h1>
+          <h1 className="page__title">Jarvis <span className="muted" style={{ fontWeight: 300 }}>· auto-authorisation</span></h1>
           <p className="page__sub">
             {onlyEnabled
               ? `${total.toLocaleString()} rule${total === 1 ? '' : 's'} active`
@@ -171,31 +286,34 @@ export function AutoAuthSettings() {
         </p>
       </div>
 
-      {/* ---- the unlock ---- */}
+      {/* ---- which lab these rules govern ---- */}
       <div className="card" style={{ marginBottom: '1rem' }}>
-        <div className="field" style={{ marginBottom: 0 }}>
-          <label htmlFor="autoauth-password">
-            Auto-authorisation password
-            {unlocked && <span className="badge badge--infinity" style={{ marginLeft: '.5rem' }}>verified</span>}
-          </label>
-          <input
-            id="autoauth-password"
-            className="input"
-            type="password"
-            autoComplete="off"
-            placeholder="Required for every change"
-            value={password}
-            onChange={(e) => { setPassword(e.target.value); setUnlocked(false); }}
-            style={{ maxWidth: 320 }}
-          />
-          <span className="muted" style={{ fontSize: '.72rem' }}>
-            Kept in this tab only, never saved. Five wrong attempts in fifteen minutes locks the setting out.
-          </span>
+        <div className="row" style={{ gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div className="field" style={{ marginBottom: 0, minWidth: 260 }}>
+            <label htmlFor="jarvis-unit">Business unit</label>
+            <select
+              id="jarvis-unit"
+              className="input"
+              value={unitId ?? ''}
+              onChange={(e) => setUnitId(e.target.value === '' ? null : Number(e.target.value))}
+            >
+              <option value="">All business units (blanket rule)</option>
+              {units.map((u) => (
+                <option key={u.id} value={u.id}>{u.name ?? u.code ?? `Unit ${u.id}`}</option>
+              ))}
+            </select>
+          </div>
+          <p className="muted" style={{ fontSize: '.74rem', maxWidth: 460, lineHeight: 1.6 }}>
+            {unitId == null
+              ? 'Rules set here apply everywhere, unless a specific unit has its own rule for that test.'
+              : 'A rule set for this unit overrides the blanket rule — so a test can be automatic here and manual elsewhere.'}
+          </p>
+          <span className="badge badge--infinity" style={{ marginLeft: 'auto' }}>unlocked</span>
         </div>
       </div>
 
       <div className="row" style={{ marginBottom: '.8rem', flexWrap: 'wrap' }}>
-        <input className="input" placeholder="Search tests or departments…" value={search}
+        <input className="input" placeholder="Search tests…" value={search}
                onChange={(e) => setSearch(e.target.value)} style={{ minWidth: 260 }} />
         <label className="row" style={{ gap: '.4rem', fontSize: '.8rem', cursor: 'pointer' }}>
           <input type="checkbox" checked={onlyEnabled} onChange={(e) => setOnlyEnabled(e.target.checked)} />
@@ -209,16 +327,16 @@ export function AutoAuthSettings() {
       {loading ? (
         <div className="center"><InfinityLoader /><span className="muted">Loading…</span></div>
       ) : (
-        <div className="table-wrap">
+        <div className="table-wrap table-wrap--cards">
           <table>
             <thead>
               <tr>
-                <th style={{ width: 90 }}>Scope</th>
-                <th>Name</th>
+                <th>Test</th>
                 <th style={{ width: 110 }}>Code</th>
-                <th>Department</th>
+                <th style={{ width: 180 }}>Department</th>
+                <th style={{ width: 160 }}>Applies to</th>
                 <th style={{ width: 170 }}>Last changed</th>
-                <th style={{ width: 120, textAlign: 'right' }}>Auto-authorise</th>
+                <th style={{ width: 110, textAlign: 'right' }}>Jarvis</th>
               </tr>
             </thead>
             <tbody>
@@ -226,15 +344,13 @@ export function AutoAuthSettings() {
                 const key = `${r.scopeType}:${r.scopeKey}`;
                 return (
                   <tr key={key} className={r.enabled ? 'worksheet-grid__touched' : undefined}>
-                    <td>
-                      <span className={`badge badge--${r.scopeType === 'department' ? 'telo' : 'lis'}`}>
-                        {r.scopeType}
-                      </span>
+                    <td className="cell--lead">{plainText(r.label) || '—'}</td>
+                    <td className="mono muted cell--meta" data-label="Code" style={{ fontSize: '.76rem' }}>{r.scopeKey}</td>
+                    <td className="muted cell--meta" data-label="Department" style={{ fontSize: '.78rem' }}>{r.departmentName ?? '—'}</td>
+                    <td className="muted cell--meta" data-label="Applies to" style={{ fontSize: '.76rem' }}>
+                      {r.businessUnitName ?? (unitId == null ? 'All units' : '—')}
                     </td>
-                    <td>{r.label ?? '—'}</td>
-                    <td className="mono muted" style={{ fontSize: '.76rem' }}>{r.scopeKey}</td>
-                    <td className="muted" style={{ fontSize: '.78rem' }}>{r.departmentName ?? '—'}</td>
-                    <td className="muted" style={{ fontSize: '.74rem' }}>
+                    <td className="muted cell--meta" data-label="Last changed" style={{ fontSize: '.74rem' }}>
                       {r.updatedAt ? (
                         <>
                           {fmtDateTime(r.updatedAt)}
@@ -242,15 +358,22 @@ export function AutoAuthSettings() {
                         </>
                       ) : '—'}
                     </td>
-                    <td style={{ textAlign: 'right' }}>
+                    {/* The switch is the point of the row, so it stays on the
+                        headline beside the test name rather than sinking to the
+                        bottom of the card. */}
+                    <td className="cell--tag">
                       <button
-                        className={`btn btn--sm ${r.enabled ? 'btn--danger' : 'btn--ghost'}`}
-                        disabled={!featureEnabled || busyKey === key || !password}
-                        title={!password ? 'Enter the password above first' : undefined}
+                        type="button"
+                        role="switch"
+                        aria-checked={r.enabled}
+                        aria-label={`Auto-authorise ${plainText(r.label) || r.scopeKey}`}
+                        className={`toggle${r.enabled ? ' toggle--on' : ''}`}
+                        disabled={!featureEnabled || busyKey === key}
+                        title={r.enabled
+                          ? 'On — in-range results are signed without review'
+                          : 'Off — every result waits for a person'}
                         onClick={() => void toggle(r, !r.enabled)}
-                      >
-                        {busyKey === key ? '…' : r.enabled ? 'On — turn off' : 'Off — turn on'}
-                      </button>
+                      />
                     </td>
                   </tr>
                 );
@@ -278,7 +401,7 @@ export function AutoAuthSettings() {
             <p className="muted" style={{ fontSize: '.78rem' }}>
               Append-only, and includes rejected password attempts.
             </p>
-            <div className="table-wrap" style={{ maxHeight: '58vh', overflowY: 'auto' }}>
+            <div className="table-wrap table-wrap--cards" style={{ maxHeight: '58vh', overflowY: 'auto' }}>
               <table>
                 <thead>
                   <tr>
@@ -292,9 +415,9 @@ export function AutoAuthSettings() {
                 <tbody>
                   {audit.map((a) => (
                     <tr key={a.id}>
-                      <td className="muted" style={{ fontSize: '.74rem' }}>{fmtDateTime(a.occurredAt)}</td>
-                      <td style={{ fontSize: '.78rem' }}>{a.actorUsername ?? '—'}</td>
-                      <td>
+                      <td className="muted cell--meta" data-label="When" style={{ fontSize: '.74rem' }}>{fmtDateTime(a.occurredAt)}</td>
+                      <td className="cell--meta" data-label="Who" style={{ fontSize: '.78rem' }}>{a.actorUsername ?? '—'}</td>
+                      <td className="cell--tag">
                         <span
                           className={`badge badge--${a.action === 'enable' ? 'telo' : 'lis'}`}
                           style={a.action === 'unlock_failed'
@@ -304,11 +427,11 @@ export function AutoAuthSettings() {
                           {a.action.replace(/_/g, ' ')}
                         </span>
                       </td>
-                      <td style={{ fontSize: '.78rem' }}>
-                        {a.scopeLabel ?? a.scopeKey ?? '—'}
+                      <td className="cell--lead" style={{ fontSize: '.78rem' }}>
+                        {plainText(a.scopeLabel) || a.scopeKey || '—'}
                         <div className="muted mono" style={{ fontSize: '.68rem' }}>{a.scopeType}</div>
                       </td>
-                      <td className="muted" style={{ fontSize: '.74rem' }}>{a.detail ?? '—'}</td>
+                      <td className="muted cell--body" data-label="Detail" style={{ fontSize: '.74rem' }}>{a.detail ?? '—'}</td>
                     </tr>
                   ))}
                   {audit.length === 0 && (

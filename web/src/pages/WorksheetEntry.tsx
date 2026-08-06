@@ -5,7 +5,7 @@ import {
   type WorksheetResultRow,
   type WorksheetSampleResponse,
 } from '../api/client';
-import { fmtDateTime } from '../lib/format';
+import { fmtDateTime, plainText } from '../lib/format';
 import { WorksheetHistory } from './WorksheetHistory';
 import { InfinityLoader } from '../components/InfinityLoader';
 
@@ -45,7 +45,7 @@ function RangeCell({ text }: { text: string }) {
   const multiline = text.includes('\n') || text.length > 48;
 
   return (
-    <td className="muted range-cell" style={{ fontSize: '.75rem' }}>
+    <td className="muted range-cell cell--body" data-label="Reference" style={{ fontSize: '.75rem' }}>
       <div
         className="range-cell__clamp"
         tabIndex={multiline ? 0 : -1}
@@ -408,7 +408,13 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
             {notice && <div className="alert alert--ok">{notice}</div>}
 
             {/* ---- grid ---- */}
-            <div className="table-wrap worksheet-grid" ref={gridRef} style={{ maxHeight: '46vh', overflowY: 'auto' }}>
+            {/* Card mode reaches the entry grid too. A six-column spreadsheet
+                on a phone is not enterable, and the fields it becomes — one
+                analyte per card, a full-width value box, the range printed in
+                full underneath — is closer to how the work is actually done
+                away from a bench. */}
+            <div className="table-wrap table-wrap--cards worksheet-grid" ref={gridRef}
+                 style={{ maxHeight: '46vh', overflowY: 'auto' }}>
               <table>
                 <thead>
                   <tr>
@@ -425,7 +431,7 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                     if (isHeading(r)) {
                       return (
                         <tr key={r.resultId} className="worksheet-grid__heading">
-                          <td colSpan={6}>{r.testName}</td>
+                          <td colSpan={6}>{plainText(r.testName)}</td>
                         </tr>
                       );
                     }
@@ -437,8 +443,8 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
 
                     return (
                       <tr key={r.resultId} className={touched ? 'worksheet-grid__touched' : undefined}>
-                        <td>
-                          {r.testName ?? r.testCode ?? '—'}
+                        <td className="cell--lead">
+                          {plainText(r.testName) || r.testCode || '—'}
                           {r.enteredBy && (
                             <div className="muted" style={{ fontSize: '.68rem' }}>
                               last updated {fmtDateTime(r.updatedAt)}
@@ -446,7 +452,7 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                           )}
                         </td>
 
-                        <td>
+                        <td className="cell--body" data-label="Result">
                           {r.codedOptions.length > 0 ? (
                             <select
                               className="input input--sm"
@@ -468,7 +474,7 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                                 value={value}
                                 onKeyDown={onValueKeyDown}
                                 onChange={(e) => setDraft(r, { value: e.target.value })}
-                                aria-label={`Result for ${r.testName ?? r.testCode ?? 'test'}`}
+                                aria-label={`Result for ${plainText(r.testName) || r.testCode || 'test'}`}
                               />
                               {pos === 'high' && <span className="flag flag--high" title="Above reference range">H</span>}
                               {pos === 'low' && <span className="flag flag--low" title="Below reference range">L</span>}
@@ -476,7 +482,7 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                           )}
                         </td>
 
-                        <td className="muted" style={{ fontSize: '.78rem' }}>{r.unit ?? '—'}</td>
+                        <td className="muted cell--meta" data-label="Unit" style={{ fontSize: '.78rem' }}>{r.unit ?? '—'}</td>
 
                         {/* The frozen string is what the report prints, so it is
                             what the operator is shown. The live bounds only
@@ -487,9 +493,9 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                             in full they push a single analyte to ~150px and make
                             the grid unusable for data entry. The whole text is
                             revealed on hover and on keyboard focus. */}
-                        <RangeCell text={r.normalRange ?? (r.rangeLow != null ? `${r.rangeLow} – ${r.rangeHigh}` : '—')} />
+                        <RangeCell text={plainText(r.normalRange) || (r.rangeLow != null ? `${r.rangeLow} – ${r.rangeHigh}` : '—')} />
 
-                        <td>
+                        <td className="cell--body" data-label="Comment">
                           <input
                             className="input input--sm"
                             disabled={readOnly}
@@ -499,7 +505,10 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                           />
                         </td>
 
-                        <td style={{ textAlign: 'center' }}>
+                        {/* A bare checkbox in the corner of a card does not say
+                            what it signs off. cell--check keeps the box and its
+                            word side by side rather than at opposite edges. */}
+                        <td className="cell--check" data-label="Authorise">
                           <input
                             type="checkbox"
                             checked={authOf(r)}

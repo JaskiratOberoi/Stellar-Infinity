@@ -167,7 +167,7 @@ export function Instruments() {
       {loading ? (
         <div className="center"><InfinityLoader /><span className="muted">Loading inbox…</span></div>
       ) : (
-        <div className="table-wrap">
+        <div className="table-wrap table-wrap--cards">
           <table>
             <thead>
               <tr>
@@ -184,20 +184,25 @@ export function Instruments() {
             <tbody>
               {inbox.map((m) => (
                 <tr key={m.id}>
-                  <td className="muted" style={{ fontSize: '.76rem', whiteSpace: 'nowrap' }}>{fmtDateTime(m.receivedAt)}</td>
-                  <td style={{ fontSize: '.78rem' }}>
+                  <td className="muted cell--meta" data-label="Received" style={{ fontSize: '.76rem', whiteSpace: 'nowrap' }}>
+                    {fmtDateTime(m.receivedAt)}
+                  </td>
+                  <td className="cell--meta" data-label="Analyser" style={{ fontSize: '.78rem' }}>
                     {m.source === 'import'
                       ? <span title={m.sourceName ?? 'file import'}>
                           <span className="badge badge--role">file</span>
                         </span>
                       : <span className="mono">{m.instrumentCode ?? '—'}</span>}
                   </td>
-                  <td className="mono">{m.sid ?? <span className="muted">—</span>}</td>
-                  <td className="mono" style={{ fontSize: '.78rem' }}>{m.testCode ?? '—'}</td>
-                  <td className="mono">{m.value ?? '—'} <span className="muted">{m.unit}</span></td>
-                  <td><MatchBadge status={m.matchStatus} /></td>
-                  <td className="muted" style={{ fontSize: '.76rem', maxWidth: 280 }}>{m.failureReason ?? '—'}</td>
-                  <td style={{ textAlign: 'right' }}>
+                  <td className="mono cell--lead">{m.sid ?? <span className="muted">—</span>}</td>
+                  <td className="mono cell--meta" data-label="Test" style={{ fontSize: '.78rem' }}>{m.testCode ?? '—'}</td>
+                  <td className="mono cell--meta" data-label="Value">{m.value ?? '—'} <span className="muted">{m.unit}</span></td>
+                  <td className="cell--tag"><MatchBadge status={m.matchStatus} /></td>
+                  <td className="muted cell--body" data-label="Reason" style={{ fontSize: '.76rem' }}>{m.failureReason ?? '—'}</td>
+                  {/* Replay only exists for messages that can be replayed, so
+                      this cell is often empty — cell--action:empty removes the
+                      rule and the gap it would otherwise draw for nothing. */}
+                  <td className="cell--action">
                     {m.matchStatus !== 'applied' && m.matchStatus !== 'duplicate' && (
                       <button className="btn btn--ghost btn--sm" disabled={busyId === m.id} onClick={() => void replay(m.id)}>
                         {busyId === m.id ? '…' : 'Replay'}

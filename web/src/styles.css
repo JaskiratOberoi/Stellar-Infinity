@@ -728,6 +728,344 @@ button, input, select { font: inherit; color: inherit; }
   .topbar__user { margin-left: auto; }
 }
 
+/* =========================================================
+   The printed report
+
+   This is the PDF. The render service points headless Chromium at
+   /print/report/:sid and composites the output onto the Noble letterhead, so
+   these rules decide what the lab hands to a patient.
+
+   The page box is the letterhead's CLEAR AREA, not the paper: 26mm at the top
+   and 34mm at the foot are Noble's printed header and footer bands, and content
+   inside them prints on top of the branding. Puppeteer is told
+   preferCSSPageSize with zero margins of its own, so @page below is the single
+   authority on where ink may land.
+
+   Deliberately theme-free. Every colour here is literal rather than a token —
+   a report is a fixed document, and a technologist with dark mode on must not
+   produce a different PDF from one with it off.
+   ========================================================= */
+
+@page {
+  size: A4;
+  margin: 26mm 14mm 34mm 14mm;
+}
+
+.print {
+  background: #fff;
+  color: #111;
+  font-size: 10.5pt;
+  line-height: 1.45;
+  /* On screen this route is previewed in a normal window; the padding stands in
+     for @page so what you see is roughly what prints. */
+  padding: 1.5rem;
+  max-width: 210mm;
+  margin: 0 auto;
+}
+
+@media print {
+  .print { padding: 0; max-width: none; }
+}
+
+.print__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 2rem;
+  padding-bottom: .6rem;
+  border-bottom: 1.5pt solid #111;
+}
+
+.print__patient { font-size: 15pt; font-weight: 600; letter-spacing: .01em; }
+
+.print__meta { display: grid; gap: .1rem; margin-top: .35rem; font-size: 9pt; }
+.print__meta > div { display: flex; gap: .4rem; }
+.print__meta dt { color: #555; min-width: 4.6rem; }
+.print__meta dd { margin: 0; font-weight: 500; }
+.print__meta--right { text-align: left; margin-top: 0; }
+
+.print__history { margin-top: .5rem; font-size: 9pt; color: #333; }
+
+.print__dept { margin-top: .9rem; }
+/* break-inside on the section keeps a one-line department off the bottom edge;
+   break-after on the heading stops a heading orphaned at the foot of a page. */
+.print__dept h2 {
+  font-size: 8.5pt;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  padding: .25rem 0;
+  border-bottom: .75pt solid #999;
+  break-after: avoid;
+}
+
+.print__table { width: 100%; border-collapse: collapse; }
+.print__table thead { display: table-header-group; }   /* repeat on every page */
+.print__table th {
+  font-size: 8pt;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: #444;
+  text-align: left;
+  padding: .3rem .4rem;
+  border-bottom: .5pt solid #bbb;
+}
+.print__table td {
+  padding: .28rem .4rem;
+  border-bottom: .25pt solid #e2e2e2;
+  vertical-align: top;
+}
+/* A result must never be split across two pages from its own analyte name. */
+.print__table tr { break-inside: avoid; }
+
+.print__num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.print__num--flag { font-weight: 700; }
+/* Letters, not colour: reports print on mono lasers constantly, and an
+   out-of-range value flagged only in red survives none of them. */
+.print__flag {
+  margin-left: .35rem;
+  font-size: 7.5pt;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+.print__range { font-size: 9pt; color: #333; white-space: pre-line; }
+.print__comment { font-size: 8.5pt; color: #555; margin-top: .1rem; }
+
+.print__section td {
+  font-size: 8.5pt;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding-top: .5rem;
+  border-bottom: none;
+}
+
+.print__foot { margin-top: 1.2rem; font-size: 8pt; color: #555; }
+.print__end { margin-top: .5rem; text-align: center; letter-spacing: .18em; text-transform: uppercase; }
+.print__error { padding: 2rem 0; font-size: 10pt; }
+
+/* =========================================================
+   The invoice
+
+   Shares `.print` with the report — same paper, same theme-free literal
+   colours, same rule that what is on screen is what prints.
+
+   It does NOT share the page box. The report's 26mm/34mm bands are Noble's
+   pre-printed letterhead, and an invoice issued in a CLIENT's name prints its
+   own header on plain paper — inside those bands it would sit a third of the
+   way down an empty sheet. A named page gives this route its own margins
+   without disturbing the report's.
+   ========================================================= */
+
+@page invoice { size: A4; margin: 14mm; }
+.print--invoice { page: invoice; }
+
+/* The only screen control on the route, and it must not appear in what it
+   produces. */
+.print__toolbar {
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+  margin-bottom: 1rem;
+  padding-bottom: .8rem;
+  border-bottom: 1px dashed #ccc;
+}
+@media print { .print__toolbar { display: none; } }
+
+.inv__lab { font-size: 15pt; font-weight: 600; letter-spacing: .01em; }
+.inv__addr { font-size: 9pt; color: #444; margin-top: .12rem; }
+.inv__title {
+  font-size: 11pt;
+  font-weight: 700;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+}
+
+.inv__party { margin-top: .7rem; }
+.inv__lines { margin-top: .9rem; }
+.inv__note { font-size: 8.5pt; color: #666; }
+/* Struck through rather than dropped: the invoice has to agree with the order
+   the client placed, or someone rings to ask where a test went. */
+.inv__cancelled td { text-decoration: line-through; color: #777; }
+
+/* Right-aligned block against the table's amount column. */
+.inv__totals { display: flex; justify-content: flex-end; margin-top: .7rem; }
+.inv__totals dl { min-width: 15rem; margin: 0; font-size: 9.5pt; }
+.inv__totals dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: .16rem 0;
+}
+.inv__totals dt { color: #555; }
+.inv__totals dd { margin: 0; font-variant-numeric: tabular-nums; }
+.inv__totals-net {
+  font-weight: 700;
+  border-top: .75pt solid #111;
+  border-bottom: .25pt solid #999;
+  margin-top: .2rem;
+}
+.inv__totals-net dt { color: #111; }
+/* Weight, not colour — invoices print on the same mono lasers the reports do. */
+.inv__totals-due { font-weight: 700; }
+
+/* Attribution, not letterhead — see PrintInvoice for why this is a line under
+   the totals rather than a switch on the header. */
+.inv__behalf {
+  margin-top: .3rem;
+  text-align: right;
+  font-size: 8.5pt;
+  font-style: italic;
+  color: #555;
+}
+
+.inv__samples { margin-top: 1rem; break-inside: avoid; }
+.inv__samples h2 {
+  font-size: 8.5pt;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  padding: .25rem 0;
+  border-bottom: .75pt solid #999;
+  break-after: avoid;
+}
+
+.inv__disclaimer {
+  margin-top: 1rem;
+  font-size: 8.5pt;
+  color: #333;
+  line-height: 1.5;
+  border-left: 2pt solid #999;
+  padding-left: .6rem;
+}
+
+.inv__foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 2rem;
+  margin-top: 1.4rem;
+  font-size: 8.5pt;
+  color: #555;
+  break-inside: avoid;
+}
+.inv__sign { text-align: center; }
+.inv__sign-line { width: 12rem; border-bottom: .5pt solid #111; margin-bottom: .25rem; height: 2.2rem; }
+
+/* =========================================================
+   The Smart Report, printed
+
+   A different document from the clinical report above, for a different reader.
+   That one is composited onto Noble's letterhead and numbered for NABL; this is
+   a self-branded booklet for the patient, rendered headless with no letterhead
+   behind it and no page stamp — so it owns the whole sheet and sets its own,
+   narrower margins.
+
+   Literal colours again, and for a sharper reason than the clinical report:
+   this goes out on whatever printer a collection centre has, so nothing may
+   depend on a token, and nothing may depend on colour ALONE — every zone is
+   spelled out in words beside its marker.
+   ========================================================= */
+
+.smartprint {
+  background: #fff;
+  color: #14202c;
+  font-size: 10.5pt;
+  line-height: 1.55;
+  padding: 1.5rem;
+  max-width: 210mm;
+  margin: 0 auto;
+}
+
+@media print {
+  .smartprint { padding: 0; max-width: none; }
+  /* Its own page box: this document is not sharing a sheet with a letterhead. */
+  @page { margin: 16mm 15mm 16mm 15mm; }
+}
+
+/* ---- cover ---- */
+
+.smartprint__cover { break-after: page; padding-bottom: 1rem; }
+.smartprint__kicker {
+  font-size: 8.5pt; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: #0f766e;
+}
+.smartprint__cover h1 { font-size: 26pt; font-weight: 300; letter-spacing: .01em; margin-top: .3rem; }
+.smartprint__who { font-size: 10pt; color: #52606d; margin-top: .15rem; }
+
+.smartprint__facts { display: flex; flex-wrap: wrap; gap: .2rem 2rem; margin-top: 1.1rem; font-size: 9pt; }
+.smartprint__facts > div { display: flex; gap: .45rem; }
+.smartprint__facts dt { color: #6b7a88; }
+.smartprint__facts dd { margin: 0; font-weight: 600; }
+
+.smartprint__tally { margin-top: 1.1rem; font-size: 11pt; }
+.smartprint__caveat {
+  margin-top: 1.1rem; padding: .8rem .9rem;
+  border: .75pt solid #cfd8de; border-radius: 8px;
+  font-size: 9pt; color: #3d4b57;
+}
+.smartprint__withheld { margin-top: .6rem; font-size: 9pt; color: #8a5a00; }
+
+/* ---- sections ---- */
+
+.smartprint__section { margin-top: 1.4rem; }
+.smartprint__sectionhead { break-after: avoid; border-bottom: 1pt solid #0f766e; padding-bottom: .35rem; }
+.smartprint__sectionhead h2 { font-size: 13pt; font-weight: 600; }
+.smartprint__sectionhead p { font-size: 9pt; color: #52606d; }
+.smartprint__sectionflag { font-weight: 600; color: #a13b0c; }
+.smartprint__about { font-size: 9.5pt; color: #3d4b57; margin-top: .55rem; }
+
+/* ---- one analyte ---- */
+
+.smartprint__analyte {
+  /* An explanation split across a page break is unreadable; these blocks are
+     short enough to keep whole. */
+  break-inside: avoid;
+  margin-top: .8rem;
+  padding: .7rem .85rem;
+  border: .75pt solid #dbe3e8;
+  border-radius: 8px;
+}
+/* 1pt, not a colour slab: the flag is carried by the words in the gauge scale,
+   and this is only a hint for the eye scanning the page. */
+.smartprint__analyte--flag { border-color: #d97706; }
+
+.smartprint__analyte header { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+.smartprint__analyte h3 { font-size: 11pt; font-weight: 600; }
+.smartprint__alias { display: block; font-size: 8pt; font-weight: 400; color: #6b7a88; }
+.smartprint__value { font-size: 15pt; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.smartprint__unit { font-size: 9.5pt; font-weight: 400; color: #52606d; }
+
+.smartprint__gauge { margin-top: .5rem; }
+.smartprint__track {
+  position: relative; height: 7pt;
+  border-radius: 999px;
+  background: #eceff1;
+  border: .5pt solid #dbe3e8;
+}
+.smartprint__band { position: absolute; inset: 0; border-radius: 999px; background: #d7ece8; }
+/* A solid triangle rather than a coloured dot — it survives a mono printer. */
+.smartprint__marker {
+  position: absolute; top: -3.5pt;
+  width: 0; height: 0;
+  margin-left: -3.5pt;
+  border-left: 3.5pt solid transparent;
+  border-right: 3.5pt solid transparent;
+  border-top: 6pt solid #14202c;
+}
+.smartprint__scale {
+  display: flex; justify-content: space-between; gap: .5rem;
+  margin-top: .5rem; font-size: 8pt; color: #6b7a88;
+  font-variant-numeric: tabular-nums;
+}
+.smartprint__zone { font-weight: 700; color: #14202c; letter-spacing: .04em; }
+
+.smartprint__ref { font-size: 8.5pt; color: #6b7a88; margin-top: .35rem; }
+.smartprint__what { font-size: 9.5pt; margin-top: .5rem; }
+.smartprint__meaning, .smartprint__advice { font-size: 9.5pt; margin-top: .35rem; color: #3d4b57; }
+.smartprint__note { font-size: 8.5pt; font-style: italic; color: #6b7a88; margin-top: .35rem; }
+
+.smartprint__foot { margin-top: 1.6rem; padding-top: .6rem; border-top: .5pt solid #dbe3e8; font-size: 8pt; color: #6b7a88; }
+
 /* ---------- the menu sheet ---------- */
 
 /* The sheet takes the page's own ground rather than floating a panel over it:
@@ -2077,4 +2415,54 @@ td.cell--value [aria-label] { font-size: .8em; vertical-align: .12em; }
 @media (max-width: 640px) {
   .table-wrap--cards .report-section > td { display: block; width: 100%; }
   .table-wrap--cards .report-section > td::before { content: none; }
+}
+
+/* ---------- batch selection on the reporting list ----------
+   Appears only once something is picked, so it is never a toolbar of disabled
+   controls sitting above an untouched list. */
+
+.batchbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .8rem;
+  margin-bottom: .8rem;
+  padding: .6rem .9rem;
+  border: 1px solid var(--accent-ring);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+}
+
+.batchbar__count { font-size: .8rem; margin-right: auto; }
+.batchbar__count b { font-variant-numeric: tabular-nums; }
+
+/* The checkbox column. Sized to the control so it never steals width from the
+   patient name beside it. */
+th.cell--pick, td.cell--pick { width: 1%; padding-right: .2rem; }
+
+/* On a card the tick takes a left gutter rather than a row of the grid.
+   Given a grid cell it would land in column 1 — the same column the SID claims —
+   and stack ABOVE it, which reads as a field of the record instead of a control
+   over the whole card. Lifted out of flow, it sits where a mail client puts it
+   and the card indents to make room. */
+@media (max-width: 880px) {
+  .table-wrap--cards tbody tr:has(> .cell--pick) {
+    position: relative;
+    padding-left: 2.7rem;
+  }
+  .table-wrap--cards td.cell--pick {
+    position: absolute;
+    left: .95rem;
+    top: 1rem;
+    width: auto;
+    padding: 0;
+  }
+  .table-wrap--cards td.cell--pick::before { content: none; }
+
+  /* A picked card says so on its own edge — the batch bar's count is at the top
+     of a long list and cannot be seen from row forty. */
+  .table-wrap--cards tbody tr:has(.cell--pick input:checked) {
+    border-color: var(--accent-ring);
+    background: var(--accent-soft);
+  }
 }

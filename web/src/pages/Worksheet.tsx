@@ -5,6 +5,7 @@ import { StatusBadge, type WorksheetRow } from './Reports';
 import { WorksheetEntry } from './WorksheetEntry';
 import { Pager } from '../components/Pager';
 import { InfinityLoader } from '../components/InfinityLoader';
+import { TestList } from '../components/TestList';
 
 /**
  * LIS sample statuses. Verified against tbl_med_mcc_patient_samples_status_master.
@@ -528,7 +529,11 @@ export function Worksheet() {
         <div className="center"><InfinityLoader /><span className="muted">Loading worklist…</span></div>
       ) : (
         <>
-          <div className="table-wrap">
+          {/* --cards: below 880px every row re-lays as a card. Same markup,
+              one stylesheet block — see "Rows as cards" in styles.css. Half the
+              people opening this screen are on a phone at a collection centre,
+              and an eight-column table is a sideways drag on one. */}
+          <div className="table-wrap table-wrap--cards">
             <table>
               <thead>
                 <tr>
@@ -555,9 +560,14 @@ export function Worksheet() {
                       style={{ cursor: 'pointer' }}
                       onClick={() => setOpenSid(r.sid)}
                     >
-                      <td className="mono"><b>{r.sid}</b></td>
+                      {/* The cell--* classes say what each cell becomes once
+                          the row is a card: the SID is the headline, the status
+                          badge sits beside it, and the button becomes the
+                          card's foot. data-label carries the column heading
+                          down, because the <thead> is off-screen there. */}
+                      <td className="mono cell--lead"><b>{r.sid}</b></td>
 
-                      <td className="mono muted" style={{ fontSize: '.78rem' }}>
+                      <td className="mono muted cell--meta" data-label="PID" style={{ fontSize: '.78rem' }}>
                         {r.pid || '—'}
                         {/* Only the first row of a multi-sample patient carries
                             the count, so the repetition reads as one patient
@@ -569,7 +579,7 @@ export function Worksheet() {
                         )}
                       </td>
 
-                      <td>
+                      <td className="cell--head">
                         {/* Repeating the name on every sample of the same
                             patient is noise; the grouping already says it. */}
                         {groupByPid && i > 0 ? (
@@ -584,16 +594,15 @@ export function Worksheet() {
                         )}
                       </td>
 
-                      <td className="muted">{r.clientCode ?? '—'}</td>
-                      <td style={{ maxWidth: 240 }}>
-                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                             title={r.testNames ?? ''}>
-                          {r.testNames ?? '—'}
-                        </div>
+                      <td className="muted cell--meta" data-label="Client">{r.clientCode ?? '—'}</td>
+                      <td className="cell--body" data-label="Tests">
+                        <TestList names={r.testNames} />
                       </td>
-                      <td><StatusBadge status={r.status} statusCode={r.statusCode} /></td>
-                      <td className="muted" style={{ fontSize: '.78rem' }}>{fmtDateTime(r.registeredAt)}</td>
-                      <td style={{ textAlign: 'right' }}>
+                      <td className="cell--tag"><StatusBadge status={r.status} statusCode={r.statusCode} /></td>
+                      <td className="muted cell--meta" data-label="Registered" style={{ fontSize: '.78rem' }}>
+                        {fmtDateTime(r.registeredAt)}
+                      </td>
+                      <td className="cell--action">
                         <ActionButton statusCode={r.statusCode} onOpen={() => setOpenSid(r.sid)} />
                       </td>
                     </tr>
