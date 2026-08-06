@@ -154,7 +154,11 @@ public sealed record AutoAuthScopeRow(
     string ScopeType,
     string ScopeKey,
     string? Label,
+    /// <summary>Context only — the department is a property of the test, not a scope.</summary>
     string? DepartmentName,
+    /// <summary>Which lab this rule governs. NULL means every unit.</summary>
+    int? BusinessUnitId,
+    string? BusinessUnitName,
     bool Enabled,
     bool RequireInRange,
     bool AllowOutOfRange,
@@ -174,6 +178,12 @@ public sealed record SetAutoAuthRequest(
     string ScopeType,
     string ScopeKey,
     string? ScopeLabel,
+    /// <summary>
+    /// The lab this rule applies to. NULL is the blanket "every unit" rule; a
+    /// unit-specific rule overrides it for that unit only, so a test can be
+    /// automatic at the main lab and manual at a satellite.
+    /// </summary>
+    int? BusinessUnitId,
     bool Enabled,
     bool RequireInRange,
     bool AllowOutOfRange,
@@ -185,9 +195,22 @@ public sealed record AutoAuthAuditRow(
     string? ScopeType,
     string? ScopeKey,
     string? ScopeLabel,
+    int? BusinessUnitId,
+    string? BusinessUnitName,
     bool? OldEnabled,
     bool? NewEnabled,
     string? Detail,
     string? ActorUsername,
     string? ActorIp,
     DateTimeOffset OccurredAt);
+
+/// <summary>A lab an auto-authorisation rule can be scoped to.</summary>
+public sealed record BusinessUnitRow(int Id, string? Code, string? Name);
+
+/// <summary>
+/// A bare password check, used to unlock the settings screen before any rule
+/// is shown. Separate from <see cref="SetAutoAuthRequest"/> because the gate
+/// runs before the operator has chosen anything to change.
+/// </summary>
+public sealed record AutoAuthUnlockRequest(
+    [property: JsonPropertyName("password")] string Password);

@@ -50,6 +50,16 @@ public static class WorksheetEndpoints
                       .RequireCapability(Capabilities.AutoAuthManage);
 
         auto.MapGet("/", ListAutoAuth).WithName("ListAutoAuth");
+        auto.MapGet("/business-units", ListBusinessUnits).WithName("ListAutoAuthBusinessUnits");
+        // The gate the settings screen opens with. Rate limited on the same
+        // policy as the write, so it cannot be used as a cheaper guessing
+        // oracle than the endpoint it protects.
+        auto.MapPost("/unlock", UnlockAutoAuth)
+            .RequireRateLimiting(RateLimitPolicies.AutoAuth)
+            .WithName("UnlockAutoAuth");
+        // Lets a reloaded page ask "am I still through the gate?" without
+        // re-prompting. Cheap, and reveals nothing but a boolean.
+        auto.MapGet("/unlock", UnlockStatus).WithName("AutoAuthUnlockStatus");
         auto.MapGet("/audit", AutoAuthAudit).WithName("AutoAuthAudit");
         // Rate limited: the unlock password is a shared secret a caller can
         // submit repeatedly, so the endpoint that checks it must not be a free
@@ -264,10 +274,11 @@ public static class WorksheetEndpoints
         CancellationToken ct,
         string? search = null,
         bool onlyEnabled = false,
+        int? businessUnitId = null,
         int page = 1,
         int pageSize = 200)
     {
-        var result = await repo.ListAsync(search, onlyEnabled, page, pageSize, ct).ConfigureAwait(false);
+        var result = await repo.ListAsync(search, onlyEnabled, businessUnitId, page, pageSize, ct).ConfigureAwait(false);
         return Results.Ok(new
         {
             rows = result.Rows,
@@ -277,7 +288,75 @@ public static class WorksheetEndpoints
             pageSize = result.PageSize,
             pageCount = result.PageCount,
             featureEnabled = gate.FeatureEnabled,
+            businessUnitId,
         });
+    }
+
+    private static async Task<IResult> ListBusinessUnits(AutoAuthRepository repo, CancellationToken ct)
+    {
+        var units = await repo.GetBusinessUnitsAsync(ct).ConfigureAwait(false);
+        return Results.Ok(new { units });
+    }
+
+    /// <summary>
+    /// Verify the unlock password WITHOUT changing anything.
+    ///
+    /// The settings screen calls this before it renders any rule, so the list
+    /// of which tests release results unread is not on display to anyone who
+    /// merely reached the URL. Holding autoauth:manage is still required — the
+    /// group filter enforces that before this runs — so this is the second
+    /// factor, not the only one.
+    ///
+    /// A rejected attempt is recorded exactly as a rejected change is: the
+    /// signature worth seeing is a run of failures, and it should not matter
+    /// whether they came from the gate or from a toggle.
+    /// </summary>
+    private static async Task<IResult> UnlockAutoAuth(
+        [FromBody] AutoAuthUnlockRequest request,
+        System.Security.Claims.ClaimsPrincipal principal,
+        HttpContext http,
+        AutoAuthGate gate,
+        AutoAuthRepository repo,
+        CancellationToken ct)
+    {
+        var actor = AuditActorAccessor.For(http);
+
+        if (!gate.FeatureEnabled)
+        {
+            return Results.Problem(
+                title: "Disabled",
+                detail: "Auto-authorisation is switched off for this deployment.",
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        if (!gate.Verify(request.Password))
+        {
+            await repo.RecordFailedUnlockAsync(null, null, actor, ct).ConfigureAwait(false);
+            return Results.Problem(
+                title: "Forbidden",
+                detail: "The auto-authorisation password is not correct.",
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        // Remember it SERVER-side, keyed to this user and session version. The
+        // password itself is never persisted anywhere — the browser holds only
+        // the fact that a grant exists, which it cannot forge.
+        if (principal.UserId() is int uid)
+        {
+            await gate.GrantAsync(uid, principal.SessionVersion(), ct).ConfigureAwait(false);
+        }
+
+        return Results.Ok(new { unlocked = true });
+    }
+
+    private static async Task<IResult> UnlockStatus(
+        System.Security.Claims.ClaimsPrincipal principal,
+        AutoAuthGate gate,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int uid) return Results.Unauthorized();
+        var unlocked = await gate.HasGrantAsync(uid, principal.SessionVersion(), ct).ConfigureAwait(false);
+        return Results.Ok(new { unlocked, featureEnabled = gate.FeatureEnabled });
     }
 
     private static async Task<IResult> AutoAuthAudit(
@@ -299,13 +378,21 @@ public static class WorksheetEndpoints
     /// Turn auto-authorization on or off for one scope.
     ///
     /// TWO independent gates, both required. The autoauth:manage capability is
-    /// enforced by the group filter above; the unlock password is checked here.
-    /// Holding the capability says who may ask. The password says this change
-    /// was deliberate — it is the difference between a mis-click on a settings
-    /// screen and a decision to release results without a person reading them.
+    /// enforced by the group filter above; the unlock is checked here. Holding
+    /// the capability says who may ask. The unlock says this change was
+    /// deliberate — the difference between a mis-click on a settings screen and
+    /// a decision to release results without a person reading them.
+    ///
+    /// The unlock may be satisfied either by supplying the password on this
+    /// request, or by an existing server-side grant earned at the gate. The
+    /// grant is what lets a refreshed page keep working without re-prompting;
+    /// it lives in the shared cache keyed to user AND session version, so it is
+    /// not something the browser can fabricate and it dies when the session is
+    /// revoked.
     /// </summary>
     private static async Task<IResult> SetAutoAuth(
         [FromBody] SetAutoAuthRequest request,
+        System.Security.Claims.ClaimsPrincipal principal,
         HttpContext http,
         AutoAuthGate gate,
         AutoAuthRepository repo,
@@ -321,7 +408,15 @@ public static class WorksheetEndpoints
                 statusCode: StatusCodes.Status403Forbidden);
         }
 
-        if (!gate.Verify(request.Password))
+        if (principal.UserId() is not int uid) return Results.Unauthorized();
+
+        var granted = await gate.HasGrantAsync(uid, principal.SessionVersion(), ct).ConfigureAwait(false);
+        // A password on the request still works and still re-grants, so a
+        // caller that never visited the gate is not locked out.
+        var byPassword = !granted && gate.Verify(request.Password);
+        if (byPassword) await gate.GrantAsync(uid, principal.SessionVersion(), ct).ConfigureAwait(false);
+
+        if (!granted && !byPassword)
         {
             await repo.RecordFailedUnlockAsync(request.ScopeType, request.ScopeKey, actor, ct).ConfigureAwait(false);
 
@@ -333,9 +428,9 @@ public static class WorksheetEndpoints
                 statusCode: StatusCodes.Status403Forbidden);
         }
 
-        if (request.ScopeType is not ("test" or "profile" or "department"))
+        if (request.ScopeType is not ("test" or "profile"))
         {
-            return Results.BadRequest(new { error = "Scope must be test, profile or department." });
+            return Results.BadRequest(new { error = "Scope must be test or profile." });
         }
 
         if (string.IsNullOrWhiteSpace(request.ScopeKey))

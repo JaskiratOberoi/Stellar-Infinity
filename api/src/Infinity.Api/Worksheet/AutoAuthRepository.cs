@@ -17,7 +17,8 @@ namespace Infinity.Api.Worksheet;
 public sealed class AutoAuthRepository(NobleConnectionFactory db, SqlRetry retry, ILogger<AutoAuthRepository> logger)
 {
     public Task<Paged<AutoAuthScopeRow>> ListAsync(
-        string? search, bool onlyEnabled, int page, int pageSize, CancellationToken ct = default) =>
+        string? search, bool onlyEnabled, int? businessUnitId,
+        int page, int pageSize, CancellationToken ct = default) =>
         retry.ExecuteAsync("autoauth.list", token =>
             db.QueryAsync("autoauth.list", async (conn, inner) =>
             {
@@ -27,6 +28,10 @@ public sealed class AutoAuthRepository(NobleConnectionFactory db, SqlRetry retry
                 cmd.Parameters.Add("@search", SqlDbType.NVarChar, 100).Value =
                     string.IsNullOrWhiteSpace(search) ? DBNull.Value : search.Trim();
                 cmd.Parameters.Add("@only_enabled", SqlDbType.Bit).Value = onlyEnabled;
+                // NULL is meaningful here — it selects the blanket "all units"
+                // rule rather than meaning "no filter".
+                cmd.Parameters.Add("@business_unit_id", SqlDbType.Int).Value =
+                    (object?)businessUnitId ?? DBNull.Value;
                 cmd.Parameters.Add("@page", SqlDbType.Int).Value = p;
                 cmd.Parameters.Add("@page_size", SqlDbType.Int).Value = size;
 
@@ -44,6 +49,8 @@ public sealed class AutoAuthRepository(NobleConnectionFactory db, SqlRetry retry
                         ScopeKey: reader.Str("scope_key") ?? "",
                         Label: reader.Str("label"),
                         DepartmentName: reader.Str("department_name"),
+                        BusinessUnitId: reader.NullableInt("business_unit_id"),
+                        BusinessUnitName: reader.Str("business_unit_name"),
                         Enabled: reader.Bit("enabled"),
                         RequireInRange: reader.Bit("require_in_range"),
                         AllowOutOfRange: reader.Bit("allow_out_of_range"),
@@ -59,6 +66,29 @@ public sealed class AutoAuthRepository(NobleConnectionFactory db, SqlRetry retry
     /// Apply one rule change. Not retried — it is a non-idempotent write that
     /// appends an audit row, and a replay would overstate what happened.
     /// </summary>
+    /// <summary>
+    /// The labs a rule can be scoped to. Cached briefly — the list changes
+    /// perhaps twice a year, and the settings screen asks for it on every open.
+    /// </summary>
+    public Task<IReadOnlyList<BusinessUnitRow>> GetBusinessUnitsAsync(CancellationToken ct = default) =>
+        retry.ExecuteAsync("autoauth.units", token =>
+            db.QueryAsync("autoauth.units", async (conn, inner) =>
+            {
+                await using var cmd = db.CreateWriteCommand(conn, "dbo.usp_inf_business_units");
+                await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SingleResult, inner)
+                    .ConfigureAwait(false);
+
+                var list = new List<BusinessUnitRow>();
+                while (await reader.ReadAsync(inner).ConfigureAwait(false))
+                {
+                    list.Add(new BusinessUnitRow(
+                        Id: reader.Int("id"),
+                        Code: reader.Str("code"),
+                        Name: reader.Str("name")));
+                }
+                return (IReadOnlyList<BusinessUnitRow>)list;
+            }, token), ct);
+
     public async Task SetAsync(SetAutoAuthRequest request, AuditActor actor, CancellationToken ct = default)
     {
         if (actor.UserId is not int userId)
@@ -71,6 +101,8 @@ public sealed class AutoAuthRepository(NobleConnectionFactory db, SqlRetry retry
             await using var cmd = db.CreateWriteCommand(conn, "dbo.usp_inf_auto_auth_set");
             cmd.Parameters.Add("@scope_type", SqlDbType.VarChar, 12).Value = request.ScopeType;
             cmd.Parameters.Add("@scope_key", SqlDbType.NVarChar, 50).Value = request.ScopeKey;
+            cmd.Parameters.Add("@business_unit_id", SqlDbType.Int).Value =
+                (object?)request.BusinessUnitId ?? DBNull.Value;
             cmd.Parameters.Add("@scope_label", SqlDbType.NVarChar, 200).Value =
                 (object?)request.ScopeLabel ?? DBNull.Value;
             cmd.Parameters.Add("@enabled", SqlDbType.Bit).Value = request.Enabled;
@@ -159,6 +191,8 @@ public sealed class AutoAuthRepository(NobleConnectionFactory db, SqlRetry retry
                         ScopeType: reader.Str("scope_type"),
                         ScopeKey: reader.Str("scope_key"),
                         ScopeLabel: reader.Str("scope_label"),
+                        BusinessUnitId: reader.NullableInt("business_unit_id"),
+                        BusinessUnitName: reader.Str("business_unit_name"),
                         OldEnabled: reader.NullableBit("old_enabled"),
                         NewEnabled: reader.NullableBit("new_enabled"),
                         Detail: reader.Str("detail"),

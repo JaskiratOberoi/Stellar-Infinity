@@ -304,9 +304,24 @@ BEGIN
     ------------------------------------------------------------------
     -- Auto-authorisation.
     ------------------------------------------------------------------
-    -- Most specific scope wins: test beats profile beats department.
+    -- Scoped per test per BUSINESS UNIT since migration 54. Department
+    -- scoping is gone: a department is a property of the test (potassium is
+    -- biochemistry everywhere), so it could not express "automatic at the main
+    -- lab, manual at the satellite" — which is the distinction that actually
+    -- governs whether an unread result may go out.
+    --
+    -- Resolution, most specific first:
+    --   1. this test, THIS unit
+    --   2. this test, all units (business_unit_id IS NULL)
+    --   3. the profile, same two steps
+    -- so a blanket rule can be carved out for one branch.
+    --
+    -- @sample_bu is the unit that actually ran the sample.
     -- `rule` is a reserved word in T-SQL (the deprecated CREATE RULE object),
     -- so the derived table is aliased aa.
+    DECLARE @sample_bu INT =
+        (SELECT business_unit_id FROM dbo.tbl_med_mcc_patient_samples WHERE id = @sample_id);
+
     UPDATE w
     SET auto_auth = 1
     FROM #work w
@@ -315,11 +330,15 @@ BEGIN
         FROM dbo.inf_auto_auth_config cfg
         WHERE cfg.enabled = 1
           AND (
-                (cfg.scope_type = 'test'       AND cfg.scope_key = w.testcode)
-             OR (cfg.scope_type = 'profile'    AND TRY_CONVERT(INT, cfg.scope_key) IN (w.profile_id, w.master_profile_id))
-             OR (cfg.scope_type = 'department' AND TRY_CONVERT(INT, cfg.scope_key) = w.department_id)
+                (cfg.scope_type = 'test'    AND cfg.scope_key = w.testcode)
+             OR (cfg.scope_type = 'profile' AND TRY_CONVERT(INT, cfg.scope_key) IN (w.profile_id, w.master_profile_id))
               )
-        ORDER BY CASE cfg.scope_type WHEN 'test' THEN 0 WHEN 'profile' THEN 1 ELSE 2 END
+          -- A unit-specific rule applies only to that unit; a NULL rule is the
+          -- blanket one. Nothing else matches.
+          AND (cfg.business_unit_id IS NULL OR cfg.business_unit_id = @sample_bu)
+        ORDER BY
+            CASE WHEN cfg.business_unit_id IS NOT NULL THEN 0 ELSE 1 END,
+            CASE cfg.scope_type WHEN 'test' THEN 0 ELSE 1 END
     ) aa
     WHERE w.testtype IN ('Test', 'Param')      -- never Head or Profile rows
       AND w.old_auth = 0                       -- do not re-fire on an already-signed row

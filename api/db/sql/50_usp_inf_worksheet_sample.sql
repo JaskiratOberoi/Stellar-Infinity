@@ -236,10 +236,19 @@ BEGIN
     -- Returned so the screen can tell the technologist which analytes will be
     -- signed by the system on save. Auto-authorisation that the operator cannot
     -- see coming is how the legacy "Check" button surprised people.
+    -- Scoped to THIS sample's business unit, matching usp_inf_result_save.
+    -- Listing a rule that will not actually fire here would mislead the
+    -- technologist in the direction that matters least safely: telling them
+    -- the system will sign something when it will not.
+    DECLARE @sample_bu INT =
+        (SELECT business_unit_id FROM dbo.tbl_med_mcc_patient_samples WHERE id = @sample_id);
+
     SELECT DISTINCT
         cfg.scope_type,
         cfg.scope_key,
         cfg.scope_label,
+        cfg.business_unit_id,
+        cfg.business_unit_name,
         cfg.require_in_range,
         cfg.allow_out_of_range,
         cfg.numeric_only
@@ -248,6 +257,7 @@ BEGIN
       -- Same guard as the rows query: an out-of-scope SID must produce nothing
       -- from any result set, not just the header.
       AND @sample_id IS NOT NULL
+      AND (cfg.business_unit_id IS NULL OR cfg.business_unit_id = @sample_bu)
       AND (
             (cfg.scope_type = 'test'
              AND EXISTS (SELECT 1 FROM dbo.tbl_med_mcc_patient_test_result r
@@ -256,10 +266,6 @@ BEGIN
              AND EXISTS (SELECT 1 FROM dbo.tbl_med_mcc_patient_test_result r
                          WHERE r.vailid = @sid
                            AND TRY_CONVERT(INT, cfg.scope_key) IN (r.profile_id, r.master_profile_id)))
-         OR (cfg.scope_type = 'department'
-             AND EXISTS (SELECT 1 FROM dbo.tbl_med_mcc_patient_test_result r
-                         JOIN dbo.tbl_med_test_master tm ON tm.id = r.testid
-                         WHERE r.vailid = @sid AND tm.DepartmentId = TRY_CONVERT(INT, cfg.scope_key)))
           );
 END
 GO

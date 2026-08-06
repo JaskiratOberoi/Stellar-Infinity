@@ -206,3 +206,39 @@ tables are `IF NOT EXISTS`, procedures are `CREATE OR ALTER`.
 **These have not been deployed.** They target the live production Noble server
 shared with the running LIS, so applying them is a production migration and
 needs explicit sign-off.
+
+## Session security
+
+The JWT is delivered as an **httpOnly cookie**, not in the response body. Script
+cannot read it, so an XSS defect can no longer lift a credential and replay it
+from elsewhere — the attacker is confined to acting through the open page.
+`/api/auth/login` returns only the expiry and the user.
+
+Cookies ride along on cross-site requests, so that protection is paid for with
+CSRF exposure, and `Auth/CsrfProtection.cs` closes it: login also sets a
+readable random token which the SPA echoes in `X-CSRF-Token`. A cross-origin
+page can make the browser *send* our cookies but cannot *read* them, so it
+cannot produce the header. Exempt: safe methods, `/api/auth/login`, and any
+request carrying an explicit `Authorization` header — which is what keeps
+instrument drivers, curl and scripts working unchanged.
+
+**`AuthCookie__Secure` is currently `false`**, set in `docker-compose.yml`. This
+is a deliberate concession to the stack serving plain HTTP on `127.0.0.1:3121`:
+browsers silently discard a `Secure` cookie on an insecure origin, which would
+break sign-in outright rather than degrade it. The API logs
+`authcookie.insecure` at every startup while it is off. **Set it to `true` the
+moment TLS terminates in front of the SPA.**
+
+Three further rules live in the SPA (`web/src/auth/sessionGuard.ts`):
+
+* **Closing the last tab signs out.** Tabs register in a heartbeat registry, so
+  a crashed tab goes stale rather than making the session immortal. A reload is
+  indistinguishable from a close at the moment it happens, so the close is
+  timestamped and judged at the next startup — a tab returning within five
+  seconds was a refresh. The deliberate gap: `Ctrl+Shift+T` within that window
+  resumes the session.
+* **45 minutes idle signs out**, counted across every tab, with a two-minute
+  warning so a half-typed worksheet is not lost silently.
+* **Jarvis unlock is remembered server-side** for the session, keyed to user and
+  session version, so a refresh does not re-prompt and revoking a session drops
+  the grant.

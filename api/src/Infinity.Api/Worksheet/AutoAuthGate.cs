@@ -61,9 +61,47 @@ public sealed class AutoAuthOptions
 /// and they supply the unlock password. Neither alone is enough — the capability
 /// says who may ask, the password says that this particular change was intended.
 /// </summary>
-public sealed class AutoAuthGate(IOptions<AutoAuthOptions> options, ILogger<AutoAuthGate> logger)
+public sealed class AutoAuthGate(
+    IOptions<AutoAuthOptions> options,
+    Infinity.Api.Caching.InfinityCache cache,
+    ILogger<AutoAuthGate> logger)
 {
     private readonly AutoAuthOptions _options = options.Value;
+
+    /// <summary>
+    /// How long a successful unlock is remembered. Generous because the
+    /// session's own limits bite first — the SPA signs out after 45 minutes
+    /// idle and the JWT expires at 8 hours — and because a grant that outlived
+    /// its session would be harmless anyway: it is keyed to the session
+    /// version, so revoking a user invalidates it.
+    /// </summary>
+    private static readonly TimeSpan GrantTtl = TimeSpan.FromHours(8);
+
+    /// <summary>
+    /// Keyed on session version as well as user, so an admin revoking a
+    /// session (password reset, role change, deactivation) also drops any
+    /// Jarvis grant that session had earned.
+    /// </summary>
+    private static string GrantKey(int userId, int sessionVersion) =>
+        $"inf:jarvis:{userId}:{sessionVersion}";
+
+    /// <summary>
+    /// Record that this user has passed the password gate, so a page refresh
+    /// does not ask again. The PASSWORD is never stored — only the fact that
+    /// it was verified, server-side, where the client cannot forge it.
+    /// </summary>
+    public Task GrantAsync(int userId, int sessionVersion, CancellationToken ct = default) =>
+        cache.SetAsync(GrantKey(userId, sessionVersion), "1", GrantTtl, ct);
+
+    public async Task<bool> HasGrantAsync(int userId, int sessionVersion, CancellationToken ct = default)
+    {
+        if (!_options.Enabled) return false;
+        return await cache.GetAsync(GrantKey(userId, sessionVersion), ct).ConfigureAwait(false) is not null;
+    }
+
+    /// <summary>Drop the grant — on sign-out, so the next sign-in re-locks.</summary>
+    public Task RevokeAsync(int userId, int sessionVersion, CancellationToken ct = default) =>
+        cache.RemoveAsync(GrantKey(userId, sessionVersion), ct);
 
     public bool FeatureEnabled => _options.Enabled;
 
