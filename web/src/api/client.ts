@@ -662,6 +662,13 @@ export const cartApi = {
   preview: (channel: OrderChannel = 'b2c') =>
     api.post<OrderPreview>(`/api/orders/preview?channel=${channel}`),
   place: (body: unknown) => api.post<PlacedOrder>('/api/orders/', body),
+  /**
+   * Is this barcode already on a tube? Advisory — the create procedure is what
+   * actually enforces uniqueness, and a race still ends in a clean rejection.
+   */
+  sidTaken: (vailid: string) =>
+    api.get<{ vailid: string; taken: boolean }>(
+      `/api/orders/sid-taken?vailid=${encodeURIComponent(vailid)}`),
 };
 
 export interface PendingAccession {

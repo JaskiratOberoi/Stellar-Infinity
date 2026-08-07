@@ -9,6 +9,7 @@ import { ClientPicker } from '../components/ClientPicker';
 import { useAuth } from '../auth/AuthContext';
 import { RateSourceBadge } from './Catalogue';
 import { Combobox } from '../components/Combobox';
+import { SidField, type SidStatus } from '../components/SidField';
 
 interface PatientForm {
   name: string;
@@ -76,10 +77,25 @@ interface Referrer { id: number; code: string; name: string }
  * every price depends on the client, and the operator should see what the order
  * costs before typing out a person's details.
  *
- * Barcodes are NOT collected here. An order is booked first and accessioned
- * when the tubes physically arrive, which may be hours later and is somebody
- * else's job; see the Accessioning screen. That is also why the confirmation
- * says the order is not yet on the worksheet.
+ * ── BARCODES ARE OPTIONAL HERE, AND THAT IS A CHANGE ──────────────────────
+ * This screen used to collect no barcodes at all, on the reasoning that an
+ * order is booked first and accessioned when the tubes physically arrive —
+ * which may be hours later and is somebody else's job; see the Accessioning
+ * screen. That is right for a collection centre, and it is wrong for a hospital
+ * counter, where the person taking the order is holding the tubes and the
+ * sticker sheet while they type. Telo reached the same conclusion and opens its
+ * SID panel by default for B2B.
+ *
+ * So the panel is offered, defaults open in B2B and closed in B2C, and every
+ * field in it may be left blank. Nothing about accessioning changed: an order
+ * booked with barcodes simply arrives at the NEXT queue instead of the first
+ * one — usp_inf_pending_accessions selects orders still short of a tube, and
+ * usp_inf_pending_registrations selects samples at status 1, which is what a
+ * barcode attached here creates. An order can also be part-barcoded, and it
+ * then appears in both queues, correctly.
+ *
+ * The confirmation below says which of those happened rather than asserting,
+ * as it used to, that the order has no Sample IDs.
  *
  * ── THE CHANNEL IS THE FIRST DECISION, NOT A SETTING ───────────────────────
  * B2C bills the basket at the client's own rate. B2B bills it at catalogue
@@ -137,7 +153,27 @@ export function NewOrder() {
     return () => { live = false; };
   }, []);
 
+  /*
+   * Sample IDs, keyed by sample type. Optional — see the note on the component.
+   *
+   * Keyed rather than a list so a tube keeps its barcode when the basket
+   * changes shape around it: adding a test that needs a new tube must not
+   * renumber the ones already scanned.
+   */
+  const [sids, setSids] = useState<Record<number, string>>({});
+  const [sidStatus, setSidStatus] = useState<Record<number, SidStatus>>({});
+
+  /*
+   * null means "follow the channel". Once the operator opens or closes the
+   * panel themselves that choice sticks, which an effect keyed on the channel
+   * could not do — it would reopen the panel under someone who had just shut
+   * it every time the preview re-quoted.
+   */
+  const [sidsOpen, setSidsOpen] = useState<boolean | null>(null);
+
   const [placed, setPlaced] = useState<PlacedOrder | null>(null);
+  /** What the order that was just placed went out with, for the confirmation. */
+  const [placedSids, setPlacedSids] = useState({ attached: 0, required: 0 });
 
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<CatalogItem[]>([]);
@@ -191,6 +227,34 @@ export function NewOrder() {
   // numbers it is showing rather than the ones that were asked for.
   const b2b = (preview?.channel ?? channel) === 'b2b';
 
+  // ---- sample ids ----
+  // The tubes the server says this basket needs. Read off the preview for the
+  // same reason the price table is: it is the quote that will be billed.
+  const groups = preview?.groups ?? [];
+  const showSids = sidsOpen ?? b2b;
+
+  /*
+   * Only barcodes for tubes the CURRENT basket needs. Removing a test can
+   * remove a tube, and its barcode stays in state — deliberately, so re-adding
+   * the test brings it back — but sending it would offer the create procedure a
+   * label for a tube the order does not need, which it rejects outright.
+   */
+  const enteredSids = groups
+    .map((g) => ({ sampleTypeId: g.sampleTypeId, vailid: (sids[g.sampleTypeId] ?? '').trim() }))
+    .filter((s) => s.vailid !== '');
+
+  // The same sticker on two tubes. The server cannot see this — neither barcode
+  // exists yet, so both come back free — and it is the likelier mistake, since
+  // the labels are being peeled off one sheet.
+  const sidCounts = new Map<string, number>();
+  for (const s of enteredSids) sidCounts.set(s.vailid, (sidCounts.get(s.vailid) ?? 0) + 1);
+  const dupSid = (v: string) => v.trim() !== '' && (sidCounts.get(v.trim()) ?? 0) > 1;
+
+  const sidTaken = enteredSids.some((s) => sidStatus[s.sampleTypeId] === 'taken' || dupSid(s.vailid));
+  // A check still in flight blocks for the half-second it takes. Letting it
+  // through would trade a disabled button for a rejected order.
+  const sidChecking = enteredSids.some((s) => sidStatus[s.sampleTypeId] === 'checking');
+
   async function place() {
     if (cart.mcc == null) return;
     setBusy(true);
@@ -200,9 +264,9 @@ export function NewOrder() {
       const result = await cartApi.place({
         mcc: cart.mcc,
         items: cart.items,
-        // None in either channel. Barcodes are attached at accessioning, when
-        // the tubes actually arrive.
-        sampleSids: [],
+        // Whatever the operator scanned, which may be none, some or all of the
+        // tubes. Anything left blank is attached later on Accessioning.
+        sampleSids: enteredSids,
         patientId: 0,
         name: patient.name.trim(),
         initial: patient.initial || null,
@@ -227,12 +291,20 @@ export function NewOrder() {
         channel,
         billAtMrp: false,
       });
+      // Captured before the reset below, because the confirmation describes
+      // what was just placed and the form is about to stop being that order.
+      setPlacedSids({ attached: enteredSids.length, required: groups.length });
       setPlaced(result);
       setCart({ mcc: cart.mcc, items: [] });
       setPatient(EMPTY_PATIENT);
       setRefDoctor(null);
       setRefCustomer(null);
       setPreview(null);
+      // Barcodes are per-order and must never carry into the next one — the
+      // create procedure would reject the second use, but only after the
+      // operator had typed out another patient.
+      setSids({});
+      setSidStatus({});
     } catch (e) {
       setError(e instanceof Error ? e.message : 'The order was not placed.');
     } finally {
@@ -252,6 +324,10 @@ export function NewOrder() {
     && age !== null
     && mobileOk
     && (preview?.unpriced ?? 0) === 0
+    // Barcodes are optional, but a barcode that is WRONG is not — the create
+    // procedure would reject the order after the operator had typed all of it.
+    && !sidTaken
+    && !sidChecking
     && !busy;
 
   // ---- placed confirmation ----
@@ -263,10 +339,29 @@ export function NewOrder() {
           <p style={{ fontSize: '1.1rem' }}>
             Bill <b className="mono">{placed.billNumber}</b> · {inr(placed.total)}
           </p>
+          {/* What happens next depends on how much was barcoded, and saying the
+              wrong one sends the operator to a queue the order is not in. */}
           <p className="muted" style={{ fontSize: '.84rem', lineHeight: 1.7, marginTop: '.6rem' }}>
-            This order is <b>not on the worksheet yet</b>. It has no Sample IDs, so the lab cannot see it.
-            Attach barcodes on the <b>Accessioning</b> screen when the tubes arrive — that is what puts it
-            in front of the bench.
+            {placedSids.attached === 0 ? (
+              <>
+                This order is <b>not on the worksheet yet</b>. It has no Sample IDs, so the lab cannot
+                see it. Attach barcodes on the <b>Accessioning</b> screen when the tubes arrive — that
+                is what puts it in front of the bench.
+              </>
+            ) : placedSids.attached < placedSids.required ? (
+              <>
+                <b>{placedSids.attached} of {placedSids.required}</b> tubes are barcoded. This order is{' '}
+                <b>not on the worksheet yet</b>: the barcoded tubes are waiting to be registered, and the
+                rest still need labels. Both are on the <b>Accessioning</b> screen.
+              </>
+            ) : (
+              <>
+                All <b>{placedSids.attached}</b> tube{placedSids.attached === 1 ? '' : 's'} are barcoded.
+                This order is <b>not on the worksheet yet</b> — the samples still have to be registered,
+                which is what receives them into the lab. Do that on the <b>Accessioning</b> screen, under{' '}
+                <b>Awaiting registration</b>.
+              </>
+            )}
           </p>
           <div className="row" style={{ marginTop: '1rem' }}>
             <button className="btn btn--primary btn--sm" onClick={() => setPlaced(null)}>
@@ -698,6 +793,60 @@ export function NewOrder() {
                        onChange={(e) => setPatient({ ...patient, clinicalHistory: e.target.value })} />
               </div>
 
+              {/* Sample IDs. Open by default in B2B, where the counter is
+                  holding the tubes; collapsed in B2C, where the sample is
+                  drawn later and there is nothing to scan yet. */}
+              {groups.length > 0 && (
+                <div className="sid-panel">
+                  <button
+                    type="button"
+                    className="sid-panel__head"
+                    aria-expanded={showSids}
+                    aria-controls="sid-panel-body"
+                    onClick={() => setSidsOpen(!showSids)}
+                  >
+                    <svg className="sid-panel__caret" viewBox="0 0 24 24" aria-hidden="true" fill="none"
+                         stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                    <span className="sid-panel__title">Sample IDs</span>
+                    <span className="sid-panel__count">
+                      {/* Counts what is typed, not what is valid — the fields
+                          below say which ones are a problem. */}
+                      {enteredSids.length} of {groups.length} tube
+                      {groups.length === 1 ? '' : 's'}
+                      {enteredSids.length === 0 ? ' · optional' : ''}
+                    </span>
+                  </button>
+
+                  <div className="sid-panel__body" id="sid-panel-body"
+                       style={showSids ? undefined : { display: 'none' }}>
+                    <p className="muted" style={{ fontSize: '.76rem', margin: 0, lineHeight: 1.6 }}>
+                      Scan the barcodes now if you have the tubes. Leave any blank and they can be
+                      attached later on the <b>Accessioning</b> screen — either way the samples still
+                      have to be registered before the lab sees them.
+                    </p>
+
+                    {groups.map((g, i) => (
+                      <SidField
+                        key={g.sampleTypeId}
+                        group={g}
+                        value={sids[g.sampleTypeId] ?? ''}
+                        status={sidStatus[g.sampleTypeId] ?? 'idle'}
+                        dupInForm={dupSid(sids[g.sampleTypeId] ?? '')}
+                        // Only when the operator opened it themselves. Stealing
+                        // focus into a panel that opened on its own would move
+                        // the cursor out of the patient name they are typing.
+                        autoFocus={i === 0 && sidsOpen === true}
+                        onChange={(v) => setSids((s) => ({ ...s, [g.sampleTypeId]: v }))}
+                        onStatus={(st) => setSidStatus((s) => (
+                          s[g.sampleTypeId] === st ? s : { ...s, [g.sampleTypeId]: st }))}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="row" style={{ marginTop: '.9rem' }}>
                 <button className="btn btn--primary" disabled={!canPlace} onClick={() => void place()}>
                   {busy ? 'Placing…' : `Place order · ${inr(preview?.total ?? 0)}`}
@@ -712,6 +861,8 @@ export function NewOrder() {
                       : !patient.name.trim() ? 'A patient name is required.'
                       : age === null ? 'An age is required — years and/or months.'
                       : !mobileOk ? 'The mobile number is incomplete.'
+                      : sidTaken ? 'A Sample ID is already in use — see the barcodes above.'
+                      : sidChecking ? 'Still checking a Sample ID…'
                       : 'Some tests have no price for this client.'}
                   </span>
                 )}

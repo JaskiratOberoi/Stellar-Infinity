@@ -37,6 +37,9 @@ public static class OrderEntryEndpoints
         // that PlaceOrder needs.
         entry.MapGet("/referrers", GetReferrers).WithName("GetOrderReferrers");
 
+        // Barcode collision feedback for the order form's Sample ID panel.
+        entry.MapGet("/sid-taken", GetSidTaken).WithName("GetOrderSidTaken");
+
         entry.MapPost("/preview", PreviewOrder).WithName("PreviewOrder");
         entry.MapPost("/", PlaceOrder).WithName("PlaceOrder");
     }
@@ -52,6 +55,39 @@ public static class OrderEntryEndpoints
         ReferrerRepository repo,
         CancellationToken ct)
         => Results.Ok(await repo.GetAsync(ct).ConfigureAwait(false));
+
+    /// <summary>
+    /// Whether a barcode is already on a tube, so the order form can say so
+    /// before the operator has typed out the rest of the patient.
+    /// </summary>
+    /// <remarks>
+    /// Returns one bit and nothing about the sample it collides with — see the
+    /// procedure's own note on why the check is global rather than scoped to
+    /// the caller's centres, and why that does not make it a disclosure.
+    ///
+    /// Not scope-checked beyond the OrderCreate capability the whole group
+    /// carries, because there is no client in the question to check against: a
+    /// barcode is unique across the LIS, and the answer is the same whichever
+    /// centre is asking.
+    /// </remarks>
+    private static async Task<IResult> GetSidTaken(
+        AccessionRepository repo,
+        [FromQuery] string? vailid,
+        CancellationToken ct)
+    {
+        var v = (vailid ?? string.Empty).Trim();
+
+        // Blank is not a question. Answering "free" would be true and useless;
+        // the caller should not have asked.
+        if (v.Length == 0) return Results.BadRequest(new { error = "A Sample ID is required." });
+
+        // Bounded before it reaches SQL. The column is nvarchar(50), and a
+        // longer string would either be silently truncated into a match against
+        // a DIFFERENT barcode or rejected deep in the driver.
+        if (v.Length > 50) return Results.BadRequest(new { error = "That Sample ID is too long." });
+
+        return Results.Ok(new { vailid = v, taken = await repo.SidTakenAsync(v, ct).ConfigureAwait(false) });
+    }
 
     // ---- cart --------------------------------------------------------------
 

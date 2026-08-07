@@ -193,6 +193,36 @@ public sealed class AccessionRepository(NobleConnectionFactory db, SqlRetry retr
             }, token), ct);
 
     /// <summary>
+    /// Is this barcode already on a tube somewhere in the LIS?
+    /// </summary>
+    /// <remarks>
+    /// Advisory feedback for a form, not a gate. The answer can be stale by the
+    /// time the order is submitted, and the create procedure re-checks under the
+    /// uniqueness constraint that actually enforces it — so a false "free" here
+    /// costs a clean rejection, not a duplicate barcode.
+    ///
+    /// Retried, unlike the writes on either side of it: this reads one row and
+    /// changes nothing, so a replay after a timeout is free. It also runs on
+    /// every debounce tick, which is exactly the traffic a transient network
+    /// blip will land on.
+    /// </remarks>
+    public Task<bool> SidTakenAsync(string vailid, CancellationToken ct = default) =>
+        retry.ExecuteAsync("accession.sidTaken", token =>
+            db.QueryAsync("accession.sidTaken", async (conn, inner) =>
+            {
+                await using var cmd = db.CreateWriteCommand(conn, "dbo.usp_inf_sid_taken");
+                // Must be NVarChar(50) — the column's own type. A mismatch here
+                // makes the predicate non-sargable and scans the sample table.
+                cmd.Parameters.Add("@vailid", SqlDbType.NVarChar, 50).Value = vailid;
+
+                await using var r = await cmd.ExecuteReaderAsync(CommandBehavior.SingleRow, inner)
+                    .ConfigureAwait(false);
+
+                return await r.ReadAsync(inner).ConfigureAwait(false)
+                    && r.GetOrdinalBool("taken");
+            }, token), ct);
+
+    /// <summary>
     /// Attach barcodes to an order's tubes.
     ///
     /// NOT retried. Barcodes are globally unique in Noble, so a replay after a
