@@ -5,6 +5,10 @@ import { ReportViewer } from './ReportViewer';
 import { SmartReportModal } from './SmartReport';
 import { InfinityLoader } from '../components/InfinityLoader';
 import { TestList } from '../components/TestList';
+import {
+  SampleFilters, ActiveFilterChips, useFilterOptions, applyFilterParams,
+  EMPTY_FILTERS, type SampleFilterValues,
+} from '../components/SampleFilters';
 
 export interface WorksheetRow {
   sid: string;
@@ -72,6 +76,11 @@ export function Reports() {
   const [merging, setMerging] = useState(false);
   const [mergeError, setMergeError] = useState<string | null>(null);
 
+  // The same filter set the worksheet offers. Reporting reads the same endpoint,
+  // which accepts the same filters, so there is no reason for it to offer fewer.
+  const [filters, setFilters] = useState<SampleFilterValues>(EMPTY_FILTERS);
+  const options = useFilterOptions();
+
   const toggle = (sid: string) =>
     setSelected((prev) => {
       const next = new Set(prev);
@@ -108,6 +117,7 @@ export function Reports() {
       // which reads as "that is all there is" when it is not. The worksheet
       // learned this the same way — see PENDING_STATUSES there.
       p.set('statusIds', REPORTABLE_STATUSES.join(','));
+      applyFilterParams(p, filters);
       const r = await api.get<{ rows: WorksheetRow[]; count: number; scope: string }>(`/api/reports/?${p}`);
       setRows(r.rows);
       setScope(r.scope);
@@ -116,12 +126,16 @@ export function Reports() {
     } finally {
       setLoading(false);
     }
-  }, [from, to, patient, sidQuery, page]);
+  }, [from, to, patient, sidQuery, filters, page]);
 
   useEffect(() => {
     const id = setTimeout(() => void load(), 300);
     return () => clearTimeout(id);
   }, [load]);
+
+  // A filter that narrows the set must reset the page, or page 4 of the old
+  // result set silently shows nothing for the new one.
+  useEffect(() => { setPage(1); }, [filters]);
 
   return (
     <div className="page">
@@ -145,6 +159,13 @@ export function Reports() {
                  onChange={(e) => { setTo(e.target.value); setPage(1); }} title="To" />
         </div>
       </div>
+
+      {/* Applied filters, listed so nothing narrows the list invisibly. */}
+      <ActiveFilterChips value={filters} options={options} onChange={setFilters} />
+
+      {/* Every filter, always on screen — same set and same component as the
+          worksheet, so the two cannot drift apart. */}
+      <SampleFilters value={filters} options={options} onChange={setFilters} />
 
       {scope === 'none' && (
         <div className="alert alert--info" style={{ marginBottom: '.9rem' }}>
