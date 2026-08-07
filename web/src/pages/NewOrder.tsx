@@ -473,6 +473,22 @@ export function NewOrder() {
 
       {error && <div className="alert alert--error" style={{ marginBottom: '.9rem' }}>{error}</div>}
 
+      {/* ── ONE SCREEN, TWO COLUMNS ──────────────────────────────────────────
+          Measured at 1366×768 the form ran to 1586px — 2.07 viewports — so
+          booking an order meant scrolling twice and losing sight of the basket
+          while typing the patient.
+
+          A flex column that WRAPS, rather than a two-column grid: grid rows
+          are shared across columns, so a 98px channel card beside a 138px
+          tests card leaves 40px of dead space under the shorter one, and every
+          row compounds it. Wrapping flow packs each column independently and
+          balances itself when a card's height changes — which it does, every
+          time a test is added to the basket.
+
+          The height cap is what makes it wrap at all. Below the breakpoint the
+          cap is removed and it becomes the single column it always was. */}
+      <div className="order-flow">
+
       {/* ---- channel ----
           Above step 1 rather than inside it, because it governs every price on
           the page — including the client's own rates, which it can override
@@ -785,6 +801,9 @@ export function NewOrder() {
               </div>
             </div>
           ) : (
+            /* Two cards now, not one — the patient's details and the
+               transaction that finishes the order. See the split below. */
+            <>
             <div className="card order-step">
               <div className="order-step__head">
                 <span className="order-step__num order-step__num--on">3</span>
@@ -914,6 +933,10 @@ export function NewOrder() {
                 </div>
               </div>
 
+              {/* Paired: the typed history and the letter it came from are one
+                  subject, and stacked they were the two tallest rows on the
+                  card — 152px between them for two inputs. */}
+              <div className="grid2">
               <div className="field">
                 <label htmlFor="p-hist">Clinical history</label>
                 <input id="p-hist" className="input" value={patient.clinicalHistory} maxLength={500}
@@ -944,6 +967,22 @@ export function NewOrder() {
                       Optional · PDF up to 10 MB
                       {clinicalFile && ` · ${clinicalFile.name} attached`}
                     </span>}
+              </div>
+              </div>
+
+            </div>
+
+            {/* ---- finish: barcodes, money, place ----
+                Its own card rather than the tail of the patient card, because
+                the patient card alone measured 777px — more than a 768px
+                laptop can give one column, so no arrangement of whole cards
+                could ever fit the form on one screen. Split here because this
+                is where the subject changes: everything above describes the
+                person, everything below settles the transaction. */}
+            <div className="card order-step">
+              <div className="order-step__head">
+                <span className="order-step__num order-step__num--on">4</span>
+                <h2 className="order-step__title">Barcodes &amp; payment</h2>
               </div>
 
               {/* Sample IDs. Open by default in B2B, where the counter is
@@ -1099,9 +1138,12 @@ export function NewOrder() {
                 )}
               </div>
             </div>
+            </>
           )}
         </>
       )}
+
+      </div>
 
       {busy && <div className="center" style={{ marginTop: '1rem' }}><InfinityLoader /></div>}
     </div>

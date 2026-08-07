@@ -1555,6 +1555,48 @@ tbody tr:hover { background: var(--accent-softer); }
 .seg__btn.is-on { background: var(--accent-softer); color: var(--teal); font-weight: 600; }
 .seg__btn:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
 
+/* ---------- new order: one screen, two columns ----------
+
+   A wrapping flex column, not a grid. See the note in NewOrder: grid rows are
+   shared between columns, so a short card beside a tall one leaves dead space
+   under the short one and every row compounds it. Wrap lets each column pack
+   independently and rebalance when the basket grows.
+
+   Cards must not be split down the middle of a column, hence break-inside on
+   the children. */
+@media (min-width: 1180px) {
+  /* Multi-column, not flex-wrap and not grid.
+
+     Flex column-wrap was the first attempt and it cannot be pinned to two
+     columns: the column count falls out of the height cap, so tall cards
+     produced FOUR columns and 2000px of horizontal scroll.
+
+     Grid cannot do it either — grid rows are shared between columns, so a 98px
+     channel card sitting beside a 555px patient card forces the row to 555 and
+     leaves 450px of dead space under the channel.
+
+     Multi-column balances by height and breaks wherever that balance falls,
+     which with these cards lands after the basket: choose a client and build
+     the order on the left, describe the patient and settle up on the right. */
+  .order-flow {
+    column-count: 2;
+    column-gap: .9rem;
+  }
+
+  /* A card split down the middle of a column is unreadable, and a form control
+     torn across the gap is unusable. */
+  .order-flow > * {
+    break-inside: avoid;
+    margin-bottom: .9rem;
+  }
+}
+
+/* Below the breakpoint it is the single column it always was — no cap, no
+   wrap, nothing to balance. */
+@media (max-width: 1179px) {
+  .order-flow > * { margin-bottom: .9rem; }
+}
+
 /* ---------- order channel (B2C / B2B) ---------- */
 
 .channel__opts { display: flex; gap: .6rem; flex-wrap: wrap; }
@@ -2968,3 +3010,20 @@ th.cell--pick, td.cell--pick { width: 1%; padding-right: .2rem; }
     background: var(--accent-soft);
   }
 }
+
+/* ---------- pickable search rows ----------
+   The whole row adds the test, so it must look like it does: pointer cursor
+   and a hover tint strong enough to read as "this is the target", not the
+   incidental row highlight the table gives every row. */
+.pick-row { cursor: pointer; }
+.pick-row:hover > td { background: var(--accent-soft); }
+.pick-row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--teal);
+}
+
+/* Already in the basket, or unpriced for this client. Still legible — it is
+   information, not clutter — but plainly not a target. */
+.pick-row--off { cursor: default; }
+.pick-row--off > td { opacity: .55; }
+.pick-row--off:hover > td { background: transparent; }
