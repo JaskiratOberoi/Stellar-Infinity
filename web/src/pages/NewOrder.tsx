@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  api, cartApi, catalogApi,
+  api, cartApi, catalogApi, PAYMENT_MODES,
   type Cart, type CatalogItem, type OrderChannel, type OrderPreview, type PlacedOrder,
 } from '../api/client';
 import { inr, plainText } from '../lib/format';
@@ -164,6 +164,28 @@ export function NewOrder() {
   const [sidStatus, setSidStatus] = useState<Record<number, SidStatus>>({});
 
   /*
+   * Money taken at the counter, and the Gold Card.
+   *
+   * The create procedure has accepted all of this since Telo wrote it —
+   * @discountAmount, @receiptAmount, @payMode, @paymentRef, @goldCard — and
+   * Infinity sent hard-coded zeros for every one. A counter could book an
+   * order but not take a rupee for it, and the patient had to be sent to the
+   * order screen afterwards to pay for what they were standing at the desk to
+   * pay for.
+   */
+  const [discount, setDiscount] = useState('');
+  const [receipt, setReceipt] = useState('');
+  const [payMode, setPayMode] = useState<number | ''>('');
+  const [paymentRef, setPaymentRef] = useState('');
+  const [gold, setGold] = useState(false);
+  const [goldNumber, setGoldNumber] = useState('');
+  const [goldHolder, setGoldHolder] = useState('');
+
+  /** The clinical-history attachment, held as base64 for the JSON body. */
+  const [clinicalFile, setClinicalFile] = useState<{ name: string; base64: string } | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+
+  /*
    * null means "follow the channel". Once the operator opens or closes the
    * panel themselves that choice sticks, which an effect keyed on the channel
    * could not do — it would reopen the panel under someone who had just shut
@@ -223,9 +245,59 @@ export function NewOrder() {
   const inCart = (i: CatalogItem) => cart.items.some((c) => c.kind === i.kind && c.id === i.id);
 
   // Read off the PREVIEW, not the local state: the preview is what the server
-  // actually quoted, and if the two ever disagree the table must describe the
-  // numbers it is showing rather than the ones that were asked for.
-  const b2b = (preview?.channel ?? channel) === 'b2b';
+  // actually quoted. Declared here because the payable figure below needs it.
+  const isB2b = (preview?.channel ?? channel) === 'b2b';
+
+  /*
+   * What the bill will actually come to.
+   *
+   * Mirrors the procedure's order of operations: the Gold Card halves every
+   * line at the source FIRST, then the discount comes off what is left. Doing
+   * it the other way round would quote a different number from the one that
+   * gets billed, which is the whole failure this figure exists to prevent.
+   *
+   * The card only counts once both its fields are filled — the procedure
+   * requires them too, so a half-entered card is not yet a reduction.
+   */
+  const goldOk = gold && !isB2b && goldNumber.trim() !== '' && goldHolder.trim() !== '';
+  const payable = Math.max(
+    0,
+    Math.round((preview?.total ?? 0) * (goldOk ? 0.5 : 1)) - Number(discount || 0),
+  );
+
+  /**
+   * Read the chosen PDF into base64 for the order body.
+   *
+   * Checked here as well as at the API, because the operator should learn the
+   * file is too big while they are still looking at the picker, not after
+   * filling in a patient and pressing Place order.
+   */
+  async function readClinicalPdf(file: File | null) {
+    setFileError(null);
+    if (!file) { setClinicalFile(null); return; }
+    if (file.size > 10 * 1024 * 1024) {
+      setClinicalFile(null);
+      setFileError('That PDF is larger than 10 MB.');
+      return;
+    }
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onerror = () => reject(new Error('read failed'));
+        // A data URL, whose prefix the API strips — FileReader has no
+        // bare-base64 mode and slicing it here would just move the same work.
+        r.onload = () => resolve(String(r.result));
+        r.readAsDataURL(file);
+      });
+      setClinicalFile({ name: file.name, base64 });
+    } catch {
+      setFileError('That file could not be read.');
+    }
+  }
+
+  // Same value as isB2b above, kept under the name the table markup already
+  // uses so the two cannot drift apart.
+  const b2b = isB2b;
 
   // ---- sample ids ----
   // The tubes the server says this basket needs. Read off the preview for the
@@ -283,8 +355,19 @@ export function NewOrder() {
         refCustomer: refCustomer?.kind === 'existing' ? refCustomer.id : null,
         newRefCustomerName: refCustomer?.kind === 'new' ? refCustomer.name : null,
         clinicalHistory: patient.clinicalHistory.trim() || null,
-        discountAmount: 0,
-        receiptAmount: 0,
+        discountAmount: Number(discount || 0),
+        receiptAmount: Number(receipt || 0),
+        payMode: payMode === '' ? null : payMode,
+        paymentRef: paymentRef.trim() || null,
+
+        // The API ignores these on a B2B order; sent as typed so the request
+        // says what the operator asked for and the server decides.
+        goldCard: gold,
+        goldCardNumber: gold ? goldNumber.trim() || null : null,
+        goldCardHolder: gold ? goldHolder.trim() || null : null,
+
+        clinicalFileBase64: clinicalFile?.base64 ?? null,
+        clinicalFileName: clinicalFile?.name ?? null,
         // The API derives billAtMrp from the channel after checking the
         // capability, and ignores anything sent here — so the channel is the
         // only thing worth sending.
@@ -300,6 +383,12 @@ export function NewOrder() {
       setRefDoctor(null);
       setRefCustomer(null);
       setPreview(null);
+      // Money and the attachment are per-order for the same reason the
+      // barcodes are: carrying a receipt into the next patient would take
+      // their money twice.
+      setDiscount(''); setReceipt(''); setPayMode(''); setPaymentRef('');
+      setGold(false); setGoldNumber(''); setGoldHolder('');
+      setClinicalFile(null); setFileError(null);
       // Barcodes are per-order and must never carry into the next one — the
       // create procedure would reject the second use, but only after the
       // operator had typed out another patient.
@@ -483,29 +572,67 @@ export function NewOrder() {
                     {searching && results.length === 0 && (
                       <tr><td className="muted" style={{ padding: '1rem' }}>Searching…</td></tr>
                     )}
-                    {results.map((i) => (
-                      <tr key={`${i.kind}:${i.id}`}>
-                        <td>
-                          {plainText(i.name) || i.code}
-                          <span className="muted mono" style={{ fontSize: '.72rem' }}> {i.code}</span>
-                        </td>
-                        <td style={{ width: 110, textAlign: 'right' }} className="mono">
-                          {i.rate != null ? inr(i.rate) : <span className="muted">no price</span>}
-                        </td>
-                        <td style={{ width: 90 }}><RateSourceBadge source={i.rateSource} /></td>
-                        <td style={{ width: 90, textAlign: 'right' }}>
-                          <button
-                            className="btn btn--ghost btn--sm"
-                            disabled={inCart(i) || i.rateSource === 'none'}
-                            title={i.rateSource === 'none' ? 'No price for this client' : undefined}
-                            onClick={() => void act(() => cartApi.add(
-                              { kind: i.kind, id: i.id, code: i.code, name: i.name }))}
-                          >
-                            {inCart(i) ? 'Added' : 'Add'}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {results.map((i) => {
+                      // A row is addable unless it is already in the basket or
+                      // has no price for this client.
+                      const already = inCart(i);
+                      const noPrice = i.rateSource === 'none';
+                      const addable = !already && !noPrice;
+
+                      const add = () => {
+                        if (!addable) return;
+                        void act(() => cartApi.add(
+                          { kind: i.kind, id: i.id, code: i.code, name: i.name }));
+                      };
+
+                      return (
+                        <tr
+                          key={`${i.kind}:${i.id}`}
+                          // The whole row is the target. Picking tests is the
+                          // most repeated action on this screen, and a 60px
+                          // button at the far right of a 1300px row is a long
+                          // way to travel for something the eye already
+                          // selected by reading the name.
+                          onClick={add}
+                          // Reachable without a mouse: the row takes focus and
+                          // answers Enter/Space, which is what a button did for
+                          // free and must not be lost by moving the handler up.
+                          tabIndex={addable ? 0 : -1}
+                          role={addable ? 'button' : undefined}
+                          aria-disabled={!addable}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); add(); }
+                          }}
+                          className={`pick-row${addable ? '' : ' pick-row--off'}`}
+                          title={noPrice ? 'No price for this client'
+                               : already ? 'Already in the basket'
+                               : 'Click to add'}
+                        >
+                          <td>
+                            {plainText(i.name) || i.code}
+                            <span className="muted mono" style={{ fontSize: '.72rem' }}> {i.code}</span>
+                          </td>
+                          <td style={{ width: 110, textAlign: 'right' }} className="mono">
+                            {i.rate != null ? inr(i.rate) : <span className="muted">no price</span>}
+                          </td>
+                          <td style={{ width: 90 }}><RateSourceBadge source={i.rateSource} /></td>
+                          <td style={{ width: 90, textAlign: 'right' }}>
+                            {/* Kept as an affordance, not the only way in: it
+                                is what tells a first-time user the row does
+                                anything. stopPropagation so the row handler
+                                does not also fire and double-add. */}
+                            <button
+                              className="btn btn--ghost btn--sm"
+                              disabled={!addable}
+                              tabIndex={-1}
+                              onClick={(e) => { e.stopPropagation(); add(); }}
+                            >
+                              {already ? 'Added' : 'Add'}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                     {!searching && results.length === 0 && (
                       <tr><td className="muted" style={{ padding: '1rem' }}>Nothing matches.</td></tr>
                     )}
@@ -793,6 +920,32 @@ export function NewOrder() {
                        onChange={(e) => setPatient({ ...patient, clinicalHistory: e.target.value })} />
               </div>
 
+              {/* The referral letter itself. Telo has carried this since its
+                  B2B form shipped; the procedure files it against the patient
+                  in tbl_med_mcc_patient_clinicaldata tagged 'HISTORY', so it
+                  travels with the order rather than living in someone's inbox. */}
+              <div className="field">
+                <label htmlFor="p-file">Clinical history PDF</label>
+                <div className="row" style={{ gap: '.5rem', flexWrap: 'wrap' }}>
+                  <input
+                    id="p-file" type="file" accept="application/pdf"
+                    onChange={(e) => void readClinicalPdf(e.target.files?.[0] ?? null)}
+                  />
+                  {clinicalFile && (
+                    <button className="btn btn--ghost btn--sm"
+                            onClick={() => { setClinicalFile(null); setFileError(null); }}>
+                      Remove
+                    </button>
+                  )}
+                </div>
+                {fileError
+                  ? <span style={{ fontSize: '.72rem', color: 'var(--danger)' }}>{fileError}</span>
+                  : <span className="muted" style={{ fontSize: '.72rem' }}>
+                      Optional · PDF up to 10 MB
+                      {clinicalFile && ` · ${clinicalFile.name} attached`}
+                    </span>}
+              </div>
+
               {/* Sample IDs. Open by default in B2B, where the counter is
                   holding the tubes; collapsed in B2C, where the sample is
                   drawn later and there is nothing to scan yet. */}
@@ -847,10 +1000,88 @@ export function NewOrder() {
                 </div>
               )}
 
+              {/* ---- money taken at the counter ----
+                  Every field here already existed on the create procedure and
+                  Infinity sent zeros for all of them, so an order could be
+                  booked but not paid for. Left blank it still sends zeros and
+                  behaves exactly as before. */}
+              <fieldset className="fgroup" style={{ marginTop: '1.2rem' }}>
+                <legend>Payment</legend>
+                <div className="fgroup__grid fgroup__grid--narrow">
+                  <label className="field">
+                    <span>Discount ₹</span>
+                    <input className="input mono" inputMode="numeric" placeholder="0"
+                           value={discount}
+                           onChange={(e) => setDiscount(e.target.value.replace(/\D/g, ''))} />
+                  </label>
+
+                  <label className="field">
+                    <span>Paying now ₹</span>
+                    <input className="input mono" inputMode="numeric" placeholder="0"
+                           value={receipt}
+                           onChange={(e) => setReceipt(e.target.value.replace(/\D/g, ''))} />
+                  </label>
+
+                  <label className="field">
+                    <span>Pay mode</span>
+                    <select className="input" value={payMode}
+                            onChange={(e) => setPayMode(e.target.value === '' ? '' : Number(e.target.value))}>
+                      <option value="">Not specified</option>
+                      {PAYMENT_MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                    </select>
+                  </label>
+
+                  <label className="field">
+                    <span>Reference</span>
+                    <input className="input" placeholder="UTR, card slip…" maxLength={100}
+                           value={paymentRef} onChange={(e) => setPaymentRef(e.target.value)} />
+                  </label>
+                </div>
+
+                {/* B2C only. A B2B bill is the patient's at MRP and the
+                    centre's margin is not the lab's to halve — the procedure
+                    ignores the card there, so offering it would be a control
+                    that silently does nothing. */}
+                {!b2b && (
+                  <div style={{ marginTop: '.8rem' }}>
+                    <label className="row" style={{ gap: '.4rem', fontSize: '.8rem', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={gold}
+                             onChange={(e) => setGold(e.target.checked)} />
+                      Gold Card — charge the whole bill at 50%
+                    </label>
+
+                    {gold && (
+                      <div className="fgroup__grid fgroup__grid--narrow" style={{ marginTop: '.6rem' }}>
+                        <label className="field">
+                          <span>Card number</span>
+                          <input className="input mono" maxLength={50} value={goldNumber}
+                                 onChange={(e) => setGoldNumber(e.target.value)} />
+                        </label>
+                        <label className="field">
+                          <span>Card holder</span>
+                          <input className="input" maxLength={200} value={goldHolder}
+                                 onChange={(e) => setGoldHolder(e.target.value)} />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </fieldset>
+
               <div className="row" style={{ marginTop: '.9rem' }}>
                 <button className="btn btn--primary" disabled={!canPlace} onClick={() => void place()}>
-                  {busy ? 'Placing…' : `Place order · ${inr(preview?.total ?? 0)}`}
+                  {busy ? 'Placing…' : `Place order · ${inr(payable)}`}
                 </button>
+                {/* Only when the button's figure is no longer the basket total,
+                    so the operator can see WHY. Without this the button quietly
+                    said ₹70 while the bill came out at ₹35. */}
+                {!busy && payable !== (preview?.total ?? 0) && (
+                  <span className="muted" style={{ fontSize: '.76rem' }}>
+                    {inr(preview?.total ?? 0)}
+                    {gold && goldOk && ' less 50% Gold Card'}
+                    {Number(discount || 0) > 0 && ` less ${inr(Number(discount))} discount`}
+                  </span>
+                )}
                 {/* Names whichever thing is actually missing. A disabled button
                     beside "A patient name is required" when the name is filled
                     and the AGE is not is worse than no message. */}

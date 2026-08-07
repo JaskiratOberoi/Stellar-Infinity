@@ -395,6 +395,19 @@ public static class OrderEntryEndpoints
         var (channel, channelError) = ResolveChannel(principal, body.Channel);
         if (channelError is not null) return channelError;
 
+        // Checked before anything is decoded: base64 inflates by a third, so a
+        // 40 MB string is a 30 MB allocation before the cap would otherwise be
+        // reached. The number matches Telo's cap so the same file is accepted
+        // by both systems.
+        if (body.ClinicalFileBase64 is { Length: > 0 } b64
+            && b64.Length / 4 * 3 > OrderWriteRepository.ClinicalFileMaxBytes)
+        {
+            return Results.BadRequest(new
+            {
+                error = "The clinical history PDF is larger than 10 MB.",
+            });
+        }
+
         // The request's own BillAtMrp is DISCARDED and rederived here. It is the
         // bit that decides whether this basket is billed at the client's rate or
         // at MRP, and honouring a posted value would let any order:create holder

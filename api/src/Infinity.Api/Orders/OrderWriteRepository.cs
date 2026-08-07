@@ -68,7 +68,39 @@ public sealed record CreateOrderRequest(
     /// order, billed at MRP). Absent means b2c, so callers written before the
     /// split behave exactly as they did.
     /// </summary>
-    string? Channel = null);
+    string? Channel = null,
+
+    // ---- Gold Card (B2C only) ----------------------------------------------
+    /// <summary>
+    /// Halve every line on the bill under the Gold Card scheme.
+    /// </summary>
+    /// <remarks>
+    /// The procedure applies the 50% at the SOURCE — header amount, billing
+    /// lines and the LIS-facing test rows are all halved together, so nothing
+    /// downstream has to know a discount happened. It records which card was
+    /// used in dbo.telo_gold_card, one row per bill, so the reduction is
+    /// auditable rather than just cheaper.
+    ///
+    /// Ignored when the order is B2B: that bill is the patient's at MRP and
+    /// the centre's margin is not the lab's to give away.
+    /// </remarks>
+    bool GoldCard = false,
+    string? GoldCardNumber = null,
+    string? GoldCardHolder = null,
+
+    // ---- clinical history attachment ---------------------------------------
+    /// <summary>
+    /// A clinical-history PDF, base64. Stored by the procedure into
+    /// tbl_med_mcc_patient_clinicaldata against the patient, tagged 'HISTORY'.
+    /// </summary>
+    /// <remarks>
+    /// Base64 in the JSON body rather than multipart, because everything else
+    /// about placing an order is one atomic call and splitting the attachment
+    /// into a second request would mean an order could exist with its history
+    /// lost in flight. Capped at the endpoint; see ClinicalFileMaxBytes.
+    /// </remarks>
+    string? ClinicalFileBase64 = null,
+    string? ClinicalFileName = null);
 
 public sealed record CreateOrderResult(
     bool Ok,
@@ -107,6 +139,35 @@ public sealed record IssuedSample(int SampleId, string? Vailid, int SampleTypeId
 /// </summary>
 public sealed class OrderWriteRepository(NobleConnectionFactory db, SqlRetry retry)
 {
+    /// <summary>
+    /// Largest clinical-history attachment accepted, matching Telo's own cap.
+    /// </summary>
+    public const int ClinicalFileMaxBytes = 10 * 1024 * 1024;
+
+    /// <summary>
+    /// Base64 to bytes, or null for anything that is not a usable attachment.
+    /// </summary>
+    /// <remarks>
+    /// Returns null rather than throwing on malformed input: a corrupt
+    /// attachment must not cost the operator the order. The endpoint checks
+    /// the size first, so what reaches here is either decodable or junk.
+    /// </remarks>
+    private static byte[]? DecodeClinicalFile(string? base64)
+    {
+        if (string.IsNullOrWhiteSpace(base64)) return null;
+
+        // Data URLs arrive from a browser's FileReader as
+        // "data:application/pdf;base64,JVBERi0..." — take what follows.
+        var comma = base64.IndexOf(',');
+        var payload = comma >= 0 && base64.StartsWith("data:", StringComparison.Ordinal)
+            ? base64[(comma + 1)..]
+            : base64;
+
+        return Convert.TryFromBase64String(payload, new byte[payload.Length], out var written)
+            ? Convert.FromBase64String(payload)[..written]
+            : null;
+    }
+
     /// <summary>Infinity's origin marker. See the class remarks.</summary>
     private const string Origin = "inf:";
 
@@ -188,6 +249,26 @@ public sealed class OrderWriteRepository(NobleConnectionFactory db, SqlRetry ret
             cmd.Parameters.Add("@receiptAmount", SqlDbType.Int).Value = req.ReceiptAmount;
             cmd.Parameters.Add("@billAtMrp", SqlDbType.Bit).Value = req.BillAtMrp;
             AddVarChar(cmd, "@paymentRef", 100, req.PaymentRef);
+
+            // Gold Card. Sent as 0 for a B2B order even if the caller set it —
+            // the procedure ignores it there anyway, and passing it would
+            // suggest, in the audit trail and to the next reader, that a
+            // reduction was attempted on a bill that cannot take one.
+            var gold = req.GoldCard
+                       && !req.BillAtMrp
+                       && !string.IsNullOrWhiteSpace(req.GoldCardNumber)
+                       && !string.IsNullOrWhiteSpace(req.GoldCardHolder);
+            cmd.Parameters.Add("@goldCard", SqlDbType.Bit).Value = gold;
+            AddNVarChar(cmd, "@goldCardNumber", 50, gold ? req.GoldCardNumber : null);
+            AddNVarChar(cmd, "@goldCardHolder", 200, gold ? req.GoldCardHolder : null);
+
+            // The attachment. Decoded here rather than at the endpoint so the
+            // bytes exist only for the life of this call.
+            var pdf = DecodeClinicalFile(req.ClinicalFileBase64);
+            cmd.Parameters.Add("@clinicalFile", SqlDbType.VarBinary, -1).Value =
+                (object?)pdf ?? DBNull.Value;
+            AddVarChar(cmd, "@clinicalFileName", 100,
+                pdf is null ? null : (req.ClinicalFileName ?? "clinical-history.pdf"));
 
             // THE marker. See the class remarks.
             cmd.Parameters.Add("@origin", SqlDbType.NVarChar, 20).Value = Origin;
