@@ -65,8 +65,6 @@ export function Accessioning() {
   const { can } = useAuth();
   const canSeeMoney = can('billing:view');
 
-  const [tab, setTab] = useState<'pending' | 'unregistered'>('pending');
-
   const [pending, setPending] = useState<PendingAccession[]>([]);
   const [pendingTotal, setPendingTotal] = useState(0);
   const [pendingPage, setPendingPage] = useState(1);
@@ -168,25 +166,24 @@ export function Accessioning() {
       {error && <div className="alert alert--error" style={{ marginBottom: '.8rem' }}>{error}</div>}
       {notice && <div className="alert alert--ok" style={{ marginBottom: '.8rem' }}>{notice}</div>}
 
-      <div className="tabs" role="tablist">
-        <button role="tab" aria-selected={tab === 'pending'}
-                className={`tab${tab === 'pending' ? ' tab--on' : ''}`}
-                onClick={() => setTab('pending')}>
-          Awaiting Sample IDs
-          {pendingTotal > 0 && <span className="tab__count">{pendingTotal}</span>}
-        </button>
-        <button role="tab" aria-selected={tab === 'unregistered'}
-                className={`tab${tab === 'unregistered' ? ' tab--on' : ''}`}
-                onClick={() => setTab('unregistered')}>
-          Awaiting accessioning
-          {unregTotal > 0 && <span className="tab__count">{unregTotal}</span>}
-        </button>
-      </div>
+      {/* Both queues on one page, stacked, the way Telo lays them out.
+          The jump is what makes that work here: Telo's lists are a handful of
+          rows, this first one is routinely a hundred, and the second queue
+          would otherwise be a scroll nobody knows is there. */}
+      {!loading && (
+        <div className="queuebar">
+          <span><b>{pendingTotal.toLocaleString('en-IN')}</b> awaiting Sample IDs</span>
+          <a href="#awaiting-accessioning">
+            <b>{unregTotal.toLocaleString('en-IN')}</b> awaiting accessioning ↓
+          </a>
+        </div>
+      )}
 
       {loading ? (
         <div className="center"><InfinityLoader /><span className="muted">Loading queues…</span></div>
-      ) : tab === 'pending' ? (
+      ) : (
         <>
+          <h2 className="queue__title">Awaiting Sample IDs</h2>
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline',
                                         gap: '1rem', flexWrap: 'wrap', margin: '.6rem 0' }}>
             <p className="muted" style={{ fontSize: '.78rem', margin: 0 }}>
@@ -270,9 +267,12 @@ export function Accessioning() {
             <Pager page={pendingPage} pageSize={pageSize} total={pendingTotal} noun="order"
                    onPage={setPendingPage} />
           </div>
-        </>
-      ) : (
-        <>
+
+          {/* scroll-margin so the sticky top bar does not cover the heading
+              when the jump link lands here — see .queue__title. */}
+          <h2 className="queue__title queue__title--next" id="awaiting-accessioning">
+            Awaiting accessioning
+          </h2>
           <p className="muted" style={{ fontSize: '.78rem', margin: '.6rem 0' }}>
             Barcodes exist, but the lab has not received them — still <b>Sample Sent</b>, so still off the
             worksheet. Registering is what hands them to the bench.

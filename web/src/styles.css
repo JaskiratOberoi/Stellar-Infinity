@@ -1397,6 +1397,40 @@ tbody tr:hover { background: var(--accent-softer); }
   padding: 0 .25rem;
 }
 
+/* ---------- stacked queues ---------- */
+
+/* The counts for both queues, and the way down to the second one. Replaces the
+   tabs that used to hide one queue behind the other. */
+.queuebar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: .5rem .8rem;
+  margin-bottom: .9rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  font-size: .8rem;
+  color: var(--ink-dim);
+}
+.queuebar a { color: var(--teal); text-decoration: none; }
+.queuebar a:hover { text-decoration: underline; }
+
+.queue__title {
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--teal);
+  /* The top bar is sticky; without this the jump link parks the heading
+     underneath it and the section looks like it starts at row three. */
+  scroll-margin-top: 5rem;
+}
+/* Air between the two queues, so the second reads as its own thing rather than
+   as more of the first. */
+.queue__title--next { margin-top: 2.2rem; padding-top: 1.4rem; border-top: 1px solid var(--line-soft); }
+
 /* ---------- row actions ---------- */
 
 /* Wraps rather than overflowing: three buttons do not fit a narrow last column,
