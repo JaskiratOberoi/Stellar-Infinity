@@ -372,7 +372,7 @@ public static class ApiEndpoints
         var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
         if (scope.IsDenied)
         {
-            return Results.Ok(new WorksheetFilterOptions([], [], []));
+            return Results.Ok(new WorksheetFilterOptions([], [], [], []));
         }
 
         return Results.Ok(await repo.GetFilterOptionsAsync(scope.ClientCodes, ct).ConfigureAwait(false));

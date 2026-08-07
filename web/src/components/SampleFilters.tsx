@@ -19,6 +19,19 @@ import { Combobox } from './Combobox';
  */
 
 export interface SampleFilterValues {
+  // The four that used to sit up in the page header, beside the title. They are
+  // filters like any other and belong with the rest — see the note on
+  // SampleFilters below.
+  patient: string;
+  sid: string;
+  from: string;
+  to: string;
+  /**
+   * One status, or '' for the page's own default set. Reporting pins its own
+   * (authorised/printed) and does not offer this control at all, which is why
+   * it is optional rather than assumed.
+   */
+  statusId: number | '';
   clientCode: string;
   departmentId: number | '';
   businessUnitId: number | '';
@@ -28,7 +41,17 @@ export interface SampleFilterValues {
   toHour: number;
 }
 
+/**
+ * Everything cleared. The dates are blank here on purpose — a window is always
+ * required, so each page supplies its own default through initialFilters()
+ * rather than inheriting a shared guess about how far back to look.
+ */
 export const EMPTY_FILTERS: SampleFilterValues = {
+  patient: '',
+  sid: '',
+  from: '',
+  to: '',
+  statusId: '',
   clientCode: '',
   departmentId: '',
   businessUnitId: '',
@@ -38,13 +61,34 @@ export const EMPTY_FILTERS: SampleFilterValues = {
   toHour: 24,
 };
 
+const daysAgo = (n: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0, 10);
+};
+
+/** Cleared filters over the page's own default window. */
+export function initialFilters(fromDaysAgo: number): SampleFilterValues {
+  return { ...EMPTY_FILTERS, from: daysAgo(fromDaysAgo), to: daysAgo(0) };
+}
+
+/** True when anything beyond the date window is narrowing the list. */
+export function hasNarrowingFilters(f: SampleFilterValues): boolean {
+  return Boolean(
+    f.patient.trim() || f.sid.trim() || f.statusId !== '' || f.clientCode
+    || f.departmentId !== '' || f.businessUnitId !== '' || f.testCode.trim()
+    || f.pid.trim() || f.fromHour !== 0 || f.toHour !== 24,
+  );
+}
+
 export interface FilterOptions {
   departments: { id: number; name: string | null }[];
   businessUnits: { id: number; name: string | null }[];
   clientCodes: { code: string; name: string | null }[];
+  tests: { code: string; name: string | null }[];
 }
 
-const EMPTY_OPTIONS: FilterOptions = { departments: [], businessUnits: [], clientCodes: [] };
+const EMPTY_OPTIONS: FilterOptions = { departments: [], businessUnits: [], clientCodes: [], tests: [] };
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
@@ -106,6 +150,10 @@ export function describeFilters(
  * all there is" when it is not.
  */
 export function applyFilterParams(p: URLSearchParams, f: SampleFilterValues): void {
+  if (f.from) p.set('from', f.from);
+  if (f.to) p.set('to', f.to);
+  if (f.patient.trim()) p.set('patient', f.patient.trim());
+  if (f.sid.trim()) p.set('sid', f.sid.trim());
   if (f.clientCode) p.set('clientCode', f.clientCode);
   if (f.departmentId !== '') p.set('departmentId', String(f.departmentId));
   if (f.businessUnitId !== '') p.set('businessUnitId', String(f.businessUnitId));
@@ -151,19 +199,77 @@ export function ActiveFilterChips({
   );
 }
 
+/**
+ * One filter area.
+ *
+ * The name, SID, status and dates used to live up in the page header beside the
+ * title, with the rest in a card below — so the same job was split across two
+ * places that looked like different kinds of thing. They are all filters; they
+ * are all here now, in one grid, in the order an operator reaches for them.
+ *
+ * `statusOptions` is what makes this reusable rather than worksheet-specific:
+ * reporting pins its own status set and passes nothing, so the control is
+ * absent there instead of offering a choice the page would override.
+ *
+ * `children` is the page's own switches — the worksheet's "Outstanding only"
+ * and "Group by patient" — which sit in the panel's footer so that every
+ * control that changes the list is inside one boundary.
+ */
 export function SampleFilters({
-  value, options, onChange,
+  value, options, onChange, statusOptions, children,
 }: {
   value: SampleFilterValues;
   options: FilterOptions;
   onChange: (next: SampleFilterValues) => void;
+  statusOptions?: { id: number; label: string }[];
+  children?: React.ReactNode;
 }) {
   const set = <K extends keyof SampleFilterValues>(key: K, v: SampleFilterValues[K]) =>
     onChange({ ...value, [key]: v });
 
+  // The dates always have a value, so "clear" means the narrowing filters —
+  // wiping the window would leave the page asking for every sample ever taken.
+  const clearable = hasNarrowingFilters(value);
+
   return (
     <div className="card filter-panel">
       <div className="filter-panel__grid">
+        <label className="field">
+          <span>Patient name</span>
+          <input className="input" placeholder="Any patient" value={value.patient}
+                 onChange={(e) => set('patient', e.target.value)} />
+        </label>
+
+        <label className="field">
+          <span>SID</span>
+          <input className="input mono" placeholder="Any sample" value={value.sid}
+                 onChange={(e) => set('sid', e.target.value)} />
+        </label>
+
+        {statusOptions && (
+          <label className="field">
+            <span>Status</span>
+            <Combobox
+              value={value.statusId === '' ? '' : String(value.statusId)}
+              emptyLabel="Any status"
+              onChange={(v) => set('statusId', v === '' ? '' : Number(v))}
+              options={statusOptions.map((st) => ({ value: String(st.id), label: st.label }))}
+            />
+          </label>
+        )}
+
+        <label className="field">
+          <span>From</span>
+          <input className="input" type="date" value={value.from} max={value.to || undefined}
+                 onChange={(e) => set('from', e.target.value)} />
+        </label>
+
+        <label className="field">
+          <span>To</span>
+          <input className="input" type="date" value={value.to} min={value.from || undefined}
+                 onChange={(e) => set('to', e.target.value)} />
+        </label>
+
         <label className="field">
           <span>Client code</span>
           <Combobox
@@ -172,9 +278,7 @@ export function SampleFilters({
             onChange={(v) => set('clientCode', v)}
             // Code and name as separate columns rather than one "AG0050A — MEHAR"
             // string: both are searchable, and an operator knows one or the other.
-            options={options.clientCodes.map((c) => ({
-              value: c.code, label: c.code, hint: c.name,
-            }))}
+            options={options.clientCodes.map((c) => ({ value: c.code, label: c.code, hint: c.name }))}
           />
         </label>
 
@@ -203,20 +307,29 @@ export function SampleFilters({
         </label>
 
         <label className="field">
-          <span>Test code</span>
-          <input className="input mono" placeholder="e.g. HE011" value={value.testCode}
-                 onChange={(e) => set('testCode', e.target.value)} />
+          <span>Test</span>
+          {/* Was free text, which only helped someone who already knew the code.
+              The filter still SENDS a code — the server matches on the sample's
+              stored codes — but you can now find it by the test's name. */}
+          <Combobox
+            value={value.testCode}
+            emptyLabel="Any test"
+            onChange={(v) => set('testCode', v)}
+            options={options.tests.map((t) => ({ value: t.code, label: t.code, hint: t.name }))}
+          />
         </label>
 
         <label className="field">
           <span>Patient number</span>
           <input className="input mono" placeholder="PID" inputMode="numeric" value={value.pid}
-                 onChange={(e) => set('pid', e.target.value.replace(/\D/g, ''))} />
+                 onChange={(e) => set('pid', e.target.value.replace(/D/g, ''))} />
         </label>
 
         <div className="field">
           <span>Time of day</span>
           <div className="row" style={{ gap: '.35rem' }}>
+            {/* Native, deliberately: 00:00 to 24:00 is an ordered scale you scan,
+                not a set you search, and a combobox over it is slower. */}
             <select className="input" value={value.fromHour} aria-label="From hour"
                     onChange={(e) => set('fromHour', Number(e.target.value))}>
               {HOURS.map((h) => <option key={h} value={h}>{pad2(h)}:00</option>)}
@@ -230,11 +343,17 @@ export function SampleFilters({
         </div>
       </div>
 
-      <p className="muted" style={{ fontSize: '.72rem', marginTop: '.7rem', lineHeight: 1.6 }}>
-        The same filters the LIS worksheet offers, with one exception: the LIS's <b>TAT</b> checkbox is
-        passed to its stored procedure but never used by it, so ticking it there changes nothing. It is
-        left out here rather than reproduced as a control that does nothing.
-      </p>
+      <div className="filter-panel__foot">
+        {children}
+        {clearable && (
+          <button
+            className="btn btn--ghost btn--sm filter-panel__clear"
+            onClick={() => onChange({ ...EMPTY_FILTERS, from: value.from, to: value.to })}
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
     </div>
   );
 }

@@ -2005,6 +2005,29 @@ tbody tr:hover { background: var(--accent-softer); }
   color: var(--ink-dim);
 }
 
+/* The panel's footer: the page's own switches, and the way back to no filters.
+   Inside the card rather than above it, so every control that changes the list
+   sits within one boundary — which is the whole point of the panel. */
+.filter-panel__foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem 1.2rem;
+  margin-top: .9rem;
+  padding-top: .8rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+/* Pushed to the far end: it undoes everything to its left, so it should not sit
+   among the switches as though it were another one of them. */
+.filter-panel__clear { margin-left: auto; }
+
+/* Nothing to push against on a phone — a right-floated action under a stack of
+   full-width fields reads as detached. */
+@media (max-width: 620px) {
+  .filter-panel__clear { margin-left: 0; width: 100%; }
+}
+
 /* A toggle that is currently open reads as pressed, not as a link. */
 .btn--on {
   color: var(--teal);

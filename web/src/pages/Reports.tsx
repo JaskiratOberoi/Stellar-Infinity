@@ -6,8 +6,8 @@ import { SmartReportModal } from './SmartReport';
 import { InfinityLoader } from '../components/InfinityLoader';
 import { TestList } from '../components/TestList';
 import {
-  SampleFilters, ActiveFilterChips, useFilterOptions, applyFilterParams,
-  EMPTY_FILTERS, type SampleFilterValues,
+  SampleFilters, useFilterOptions, applyFilterParams,
+  initialFilters, type SampleFilterValues,
 } from '../components/SampleFilters';
 
 export interface WorksheetRow {
@@ -50,19 +50,9 @@ export interface WorksheetRow {
  */
 const REPORTABLE_STATUSES = [7, 8, 9];
 
-function daysAgo(n: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
-}
-
 export function Reports() {
   const [rows, setRows] = useState<WorksheetRow[]>([]);
   const [scope, setScope] = useState<string>('');
-  const [from, setFrom] = useState(daysAgo(7));
-  const [to, setTo] = useState(daysAgo(0));
-  const [patient, setPatient] = useState('');
-  const [sidQuery, setSidQuery] = useState('');
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -78,7 +68,7 @@ export function Reports() {
 
   // The same filter set the worksheet offers. Reporting reads the same endpoint,
   // which accepts the same filters, so there is no reason for it to offer fewer.
-  const [filters, setFilters] = useState<SampleFilterValues>(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<SampleFilterValues>(() => initialFilters(7));
   const options = useFilterOptions();
 
   const toggle = (sid: string) =>
@@ -109,15 +99,13 @@ export function Reports() {
     setLoading(true);
     setError(null);
     try {
-      const p = new URLSearchParams({ from, to, page: String(page), pageSize: '50' });
-      if (patient.trim()) p.set('patient', patient.trim());
-      if (sidQuery.trim()) p.set('sid', sidQuery.trim());
+      const p = new URLSearchParams({ page: String(page), pageSize: '50' });
+      applyFilterParams(p, filters);
       // Sent to the SERVER, not applied to the response: filtering after the
       // fact would make a page of 50 arrive as 6 rows with a dead Next button,
       // which reads as "that is all there is" when it is not. The worksheet
       // learned this the same way — see PENDING_STATUSES there.
       p.set('statusIds', REPORTABLE_STATUSES.join(','));
-      applyFilterParams(p, filters);
       const r = await api.get<{ rows: WorksheetRow[]; count: number; scope: string }>(`/api/reports/?${p}`);
       setRows(r.rows);
       setScope(r.scope);
@@ -126,7 +114,7 @@ export function Reports() {
     } finally {
       setLoading(false);
     }
-  }, [from, to, patient, sidQuery, filters, page]);
+  }, [filters, page]);
 
   useEffect(() => {
     const id = setTimeout(() => void load(), 300);
@@ -148,23 +136,11 @@ export function Reports() {
           </p>
         </div>
 
-        <div className="row" style={{ marginLeft: 'auto', flexWrap: 'wrap' }}>
-          <input className="input" placeholder="Patient name…" value={patient}
-                 onChange={(e) => { setPatient(e.target.value); setPage(1); }} style={{ minWidth: 170 }} />
-          <input className="input" placeholder="SID" value={sidQuery}
-                 onChange={(e) => { setSidQuery(e.target.value); setPage(1); }} style={{ minWidth: 130 }} />
-          <input className="input" type="date" value={from} max={to}
-                 onChange={(e) => { setFrom(e.target.value); setPage(1); }} title="From" />
-          <input className="input" type="date" value={to} min={from}
-                 onChange={(e) => { setTo(e.target.value); setPage(1); }} title="To" />
-        </div>
       </div>
 
-      {/* Applied filters, listed so nothing narrows the list invisibly. */}
-      <ActiveFilterChips value={filters} options={options} onChange={setFilters} />
-
-      {/* Every filter, always on screen — same set and same component as the
-          worksheet, so the two cannot drift apart. */}
+      {/* One filter area, the same component the worksheet uses. No status
+          control: this page pins the reportable set, so offering a choice it
+          would override would be a control that lies. */}
       <SampleFilters value={filters} options={options} onChange={setFilters} />
 
       {scope === 'none' && (

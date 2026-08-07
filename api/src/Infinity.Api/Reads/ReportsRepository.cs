@@ -82,10 +82,16 @@ public sealed record LookupItem(int Id, string? Name);
 /// the worklist does not.
 /// </param>
 public sealed record ClientCodeItem(int Id, string Code, string? Name, bool IsActive);
+/// <param name="Name">
+/// The test's own name, so the filter can be searched by what the test is
+/// called and not only by a code the operator would have to know already.
+/// </param>
+public sealed record TestItem(string Code, string? Name);
 public sealed record WorksheetFilterOptions(
     IReadOnlyList<LookupItem> Departments,
     IReadOnlyList<LookupItem> BusinessUnits,
-    IReadOnlyList<ClientCodeItem> ClientCodes);
+    IReadOnlyList<ClientCodeItem> ClientCodes,
+    IReadOnlyList<TestItem> Tests);
 
 /// <param name="AsOf">
 /// The instant this page describes. Echoed back by the client on every later
@@ -423,7 +429,14 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
                             (r.NullableInt("is_active") ?? 0) == 1));
                 }
 
-                return new WorksheetFilterOptions(departments, units, codes);
+                var tests = new List<TestItem>();
+                if (await r.NextResultAsync(inner).ConfigureAwait(false))
+                {
+                    while (await r.ReadAsync(inner).ConfigureAwait(false))
+                        tests.Add(new TestItem(r.Str("code") ?? "", r.Str("name")));
+                }
+
+                return new WorksheetFilterOptions(departments, units, codes, tests);
             }, token), ct).ConfigureAwait(false);
     }
 

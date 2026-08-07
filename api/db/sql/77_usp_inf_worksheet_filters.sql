@@ -58,5 +58,23 @@ BEGIN
     WHERE u.MCCUnitCode IS NOT NULL AND LTRIM(RTRIM(u.MCCUnitCode)) <> ''
       AND (@codeCount = 0 OR EXISTS (SELECT 1 FROM @client_codes c WHERE c.code = u.MCCUnitCode))
     ORDER BY u.MCCUnitCode;
+    /* ---- 4. tests, for the test-code filter ------------------------------
+     * The worksheet's test-code box used to be free text, so it only helped
+     * someone who already knew the code. 1,821 active tests is small enough to
+     * hand over once and filter in the browser, which is what makes typing
+     * "thyroid" find HE011 rather than needing the code up front.
+     *
+     * Reference data, so not scoped by client code — every centre orders from
+     * the same catalogue. Inactive tests are excluded: they cannot be ordered,
+     * but history that already carries them is still reachable by typing the
+     * code, because the filter matches the sample's stored codes rather than
+     * this list.
+     */
+    SELECT t.TestCode AS code, t.Testname AS name
+    FROM dbo.tbl_med_test_master t
+    WHERE ISNULL(t.IsActive, 1) = 1
+      AND ISNULL(t.TestCode, '') <> ''
+    ORDER BY t.Testname;
+
 END
 GO

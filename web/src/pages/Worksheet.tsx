@@ -6,8 +6,8 @@ import { WorksheetEntry } from './WorksheetEntry';
 import { Pager } from '../components/Pager';
 import { InfinityLoader } from '../components/InfinityLoader';
 import {
-  SampleFilters, ActiveFilterChips, useFilterOptions, applyFilterParams,
-  EMPTY_FILTERS, type SampleFilterValues,
+  SampleFilters, useFilterOptions, applyFilterParams,
+  initialFilters, type SampleFilterValues,
 } from '../components/SampleFilters';
 import { TestList } from '../components/TestList';
 
@@ -91,12 +91,6 @@ function ActionButton({ statusCode, onOpen }: { statusCode: number | null | unde
   );
 }
 
-function daysAgo(n: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
-}
-
 /**
  * The bench worklist: samples waiting for results, and the way into entry.
  *
@@ -107,11 +101,6 @@ function daysAgo(n: number) {
 export function Worksheet() {
   const [rows, setRows] = useState<WorksheetRow[]>([]);
   const [scope, setScope] = useState('');
-  const [from, setFrom] = useState(daysAgo(1));
-  const [to, setTo] = useState(daysAgo(0));
-  const [patient, setPatient] = useState('');
-  const [sidQuery, setSidQuery] = useState('');
-  const [statusId, setStatusId] = useState<number | ''>('');
   const [pendingOnly, setPendingOnly] = useState(true);
   const [groupByPid, setGroupByPid] = useState(true);
   const [page, setPage] = useState(1);
@@ -131,7 +120,7 @@ export function Worksheet() {
   const [openSid, setOpenSid] = useState<string | null>(null);
 
   /** Every filter is on screen; there is no hidden set to track a count for. */
-  const [adv, setAdv] = useState<SampleFilterValues>(EMPTY_FILTERS);
+  const [adv, setAdv] = useState<SampleFilterValues>(() => initialFilters(1));
   const options = useFilterOptions();
 
 
@@ -140,16 +129,14 @@ export function Worksheet() {
     setLoading(true);
     setError(null);
     try {
-      const p = new URLSearchParams({ from, to, page: String(page), pageSize: String(pageSize) });
-      if (patient.trim()) p.set('patient', patient.trim());
-      if (sidQuery.trim()) p.set('sid', sidQuery.trim());
+      const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+      applyFilterParams(p, adv);
 
       // Every filter goes to the server so that paging and the total count
-      // describe the same set the operator is looking at.
-      if (statusId !== '') p.set('statusIds', String(statusId));
+      // describe the same set the operator is looking at. An explicit status
+      // beats "outstanding only", which is itself just a status set.
+      if (adv.statusId !== '') p.set('statusIds', String(adv.statusId));
       else if (pendingOnly) p.set('statusIds', PENDING_STATUSES.join(','));
-
-      applyFilterParams(p, adv);
 
       // Only while paging within one result set. Page 1 always takes a fresh
       // snapshot, so the list is never stale without the operator asking for it.
@@ -169,7 +156,7 @@ export function Worksheet() {
     } finally {
       setLoading(false);
     }
-  }, [from, to, patient, sidQuery, statusId, pendingOnly, adv, page, pageSize]);
+  }, [pendingOnly, adv, page, pageSize]);
 
   useEffect(() => {
     const id = setTimeout(() => void load(), 300);
@@ -276,59 +263,36 @@ export function Worksheet() {
           </p>
         </div>
 
-        <div className="row" style={{ marginLeft: 'auto', flexWrap: 'wrap' }}>
-          <input className="input" placeholder="Patient name…" value={patient}
-                 onChange={(e) => { setPatient(e.target.value); setPage(1); }} style={{ minWidth: 160 }} />
-          <input className="input mono" placeholder="SID" value={sidQuery}
-                 onChange={(e) => { setSidQuery(e.target.value); setPage(1); }} style={{ minWidth: 120 }} />
-          <select className="input" value={statusId}
-                  onChange={(e) => { setStatusId(e.target.value === '' ? '' : Number(e.target.value)); setPage(1); }}>
-            <option value="">Any status</option>
-            {STATUSES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-          </select>
-          <input className="input" type="date" value={from} max={to}
-                 onChange={(e) => { setFrom(e.target.value); setPage(1); }} title="From" />
-          <input className="input" type="date" value={to} min={from}
-                 onChange={(e) => { setTo(e.target.value); setPage(1); }} title="To" />
-          {/* Back to page 1 takes a fresh snapshot, which is the only way to
-              pick up samples registered since the walk began. */}
-          <button className="btn btn--ghost btn--sm"
-                  onClick={() => { asOfRef.current = null; setPage(1); void load(); }}>
-            Refresh
-          </button>
-        </div>
+        {/* Only the action stays in the header. Back to page 1 takes a fresh
+            snapshot, which is the only way to pick up samples registered since
+            the walk began. */}
+        <button className="btn btn--ghost btn--sm" style={{ marginLeft: 'auto' }}
+                onClick={() => { asOfRef.current = null; setPage(1); void load(); }}>
+          Refresh
+        </button>
       </div>
 
-      <div className="row" style={{ marginBottom: '.8rem' }}>
-        <label className="row" style={{ gap: '.4rem', fontSize: '.8rem', cursor: 'pointer' }}>
-          <input type="checkbox" checked={pendingOnly} disabled={statusId !== ''}
+      {/* Every control that narrows the list, in one place — including the two
+          switches, which are filters in all but name. */}
+      <SampleFilters value={adv} options={options} onChange={setAdv} statusOptions={STATUSES}>
+        <label className="row" style={{ gap: '.4rem', fontSize: '.8rem', cursor: 'pointer' }}
+               title="Hides authorised, printed and rejected samples.">
+          {/* An explicit status wins, so the shorthand is disabled rather than
+              silently ignored. */}
+          <input type="checkbox" checked={pendingOnly} disabled={adv.statusId !== ''}
                  onChange={(e) => setPendingOnly(e.target.checked)} />
           Outstanding only
         </label>
-        <span className="muted" style={{ fontSize: '.74rem' }}>
-          Hides authorised, printed and rejected samples.
-        </span>
 
-        <label className="row" style={{ gap: '.4rem', fontSize: '.8rem', cursor: 'pointer', marginLeft: '1.2rem' }}>
+        <label className="row" style={{ gap: '.4rem', fontSize: '.8rem', cursor: 'pointer' }}
+               title={multiSamplePatients > 0
+                 ? `${multiSamplePatients} patient${multiSamplePatients === 1 ? '' : 's'} with more than one sample.`
+                 : 'Keeps a patient’s samples together.'}>
           <input type="checkbox" checked={groupByPid}
                  onChange={(e) => setGroupByPid(e.target.checked)} />
           Group by patient
         </label>
-        <span className="muted" style={{ fontSize: '.74rem' }}>
-          {multiSamplePatients > 0
-            ? `${multiSamplePatients} patient${multiSamplePatients === 1 ? '' : 's'} with more than one sample.`
-            : 'Keeps a patient’s samples together.'}
-        </span>
-
-      </div>
-
-      {/* Applied filters, listed so nothing narrows the list invisibly. */}
-      <ActiveFilterChips value={adv} options={options} onChange={setAdv} />
-
-      {/* Every filter, always on screen. They used to sit behind a "More
-          filters" disclosure; an operator who cannot see a control does not
-          know it exists. */}
-      <SampleFilters value={adv} options={options} onChange={setAdv} />
+      </SampleFilters>
 
       {scope === 'none' && (
         <div className="alert alert--info" style={{ marginBottom: '.9rem' }}>
