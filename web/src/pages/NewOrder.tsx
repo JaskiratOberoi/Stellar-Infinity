@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  cartApi, catalogApi,
+  api, cartApi, catalogApi,
   type Cart, type CatalogItem, type OrderChannel, type OrderPreview, type PlacedOrder,
 } from '../api/client';
 import { inr, plainText } from '../lib/format';
@@ -8,22 +8,66 @@ import { InfinityLoader } from '../components/InfinityLoader';
 import { ClientPicker } from '../components/ClientPicker';
 import { useAuth } from '../auth/AuthContext';
 import { RateSourceBadge } from './Catalogue';
+import { Combobox } from '../components/Combobox';
 
 interface PatientForm {
   name: string;
   initial: string;
-  age: string;
-  ageType: number;
+  /**
+   * Age is entered as years AND months, and resolved to the LIS's single
+   * age + age_type at submit — see resolveAge. Telo moved to the same pair on
+   * its B2B form: "6 months" is a real paediatric age that a years box cannot
+   * express, and asking the operator to also pick the unit is a second thing
+   * to get wrong.
+   */
+  ageYears: string;
+  ageMonths: string;
   gender: number;
   mobile: string;
+  email: string;
+  /** Passport / travel ID. Written to patient_master.MRNID. */
   mrnId: string;
   clinicalHistory: string;
 }
 
 const EMPTY_PATIENT: PatientForm = {
-  name: '', initial: 'Mr', age: '', ageType: 1, gender: 1,
-  mobile: '', mrnId: '', clinicalHistory: '',
+  name: '', initial: 'Mr', ageYears: '', ageMonths: '', gender: 1,
+  mobile: '', email: '', mrnId: '', clinicalHistory: '',
 };
+
+/**
+ * Years + months, as the LIS stores it: one number and a unit.
+ *
+ * Ported from Telo's resolveB2bAge so the two systems record the same patient
+ * the same way. Under two years the age is kept in MONTHS, because that is the
+ * unit a paediatric reference range is banded in — "1 year" and "18 months" are
+ * different ranges, and rounding the second to the first would pick the wrong
+ * one. Above that it is years, and months beyond 11 are a typo rather than an
+ * age.
+ *
+ * null means "not a usable age", which the submit gate treats as incomplete
+ * rather than guessing.
+ */
+function resolveAge(yearsStr: string, monthsStr: string): { age: number; ageType: number } | null {
+  const y = yearsStr.trim() === '' ? 0 : Number(yearsStr.trim());
+  const m = monthsStr.trim() === '' ? 0 : Number(monthsStr.trim());
+  if (!Number.isInteger(y) || !Number.isInteger(m) || y < 0 || m < 0) return null;
+  if (y === 0 && m === 0) return null;
+  if (y > 150 || m > 150) return null;
+
+  const totalMonths = y * 12 + m;
+  if (y === 0 || (m > 0 && totalMonths < 24)) {
+    if (totalMonths <= 0 || totalMonths > 150) return null;
+    return { age: totalMonths, ageType: 2 };
+  }
+  if (m > 11) return null;
+  return { age: y, ageType: 1 };
+}
+
+/** A referrer the operator picked, or a name they typed that does not exist yet. */
+type RefPick = { kind: 'existing'; id: number; name: string } | { kind: 'new'; name: string } | null;
+
+interface Referrer { id: number; code: string; name: string }
 
 /**
  * Book an order.
@@ -77,6 +121,22 @@ export function NewOrder() {
   const [cart, setCart] = useState<Cart>({ mcc: null, items: [] });
   const [preview, setPreview] = useState<OrderPreview | null>(null);
   const [patient, setPatient] = useState<PatientForm>(EMPTY_PATIENT);
+
+  // Referrers. The create procedure has always accepted these — an id, or a
+  // name it upserts — but nothing offered a way to pick one, so every order so
+  // far was booked with none.
+  const [refs, setRefs] = useState<{ doctors: Referrer[]; customers: Referrer[] }>(
+    { doctors: [], customers: [] });
+  const [refDoctor, setRefDoctor] = useState<RefPick>(null);
+  const [refCustomer, setRefCustomer] = useState<RefPick>(null);
+  useEffect(() => {
+    let live = true;
+    api.get<{ doctors: Referrer[]; customers: Referrer[] }>('/api/orders/referrers')
+      .then((r) => { if (live) setRefs(r); })
+      .catch(() => { /* Pickers degrade to create-only; the order still books. */ });
+    return () => { live = false; };
+  }, []);
+
   const [placed, setPlaced] = useState<PlacedOrder | null>(null);
 
   const [search, setSearch] = useState('');
@@ -136,6 +196,7 @@ export function NewOrder() {
     setBusy(true);
     setError(null);
     try {
+      const resolved = resolveAge(patient.ageYears, patient.ageMonths);
       const result = await cartApi.place({
         mcc: cart.mcc,
         items: cart.items,
@@ -145,11 +206,18 @@ export function NewOrder() {
         patientId: 0,
         name: patient.name.trim(),
         initial: patient.initial || null,
-        age: patient.age ? Number(patient.age) : null,
-        ageType: patient.ageType,
+        age: resolved?.age ?? null,
+        ageType: resolved?.ageType ?? null,
         gender: patient.gender,
         mobile: patient.mobile.trim() || null,
+        email: patient.email.trim() || null,
         mrnId: patient.mrnId.trim() || null,
+        // An existing referrer travels as its id; a typed one as a name the
+        // create procedure upserts. Never both.
+        refDoctor: refDoctor?.kind === 'existing' ? refDoctor.id : null,
+        newRefDoctorName: refDoctor?.kind === 'new' ? refDoctor.name : null,
+        refCustomer: refCustomer?.kind === 'existing' ? refCustomer.id : null,
+        newRefCustomerName: refCustomer?.kind === 'new' ? refCustomer.name : null,
         clinicalHistory: patient.clinicalHistory.trim() || null,
         discountAmount: 0,
         receiptAmount: 0,
@@ -162,6 +230,8 @@ export function NewOrder() {
       setPlaced(result);
       setCart({ mcc: cart.mcc, items: [] });
       setPatient(EMPTY_PATIENT);
+      setRefDoctor(null);
+      setRefCustomer(null);
       setPreview(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'The order was not placed.');
@@ -170,9 +240,17 @@ export function NewOrder() {
     }
   }
 
+  const age = resolveAge(patient.ageYears, patient.ageMonths);
+  // A half-typed number is a typo, not a phone number. Blank is fine —
+  // hospital counters often have no reachable number — but six digits is
+  // someone who was interrupted, and the LIS would keep it forever.
+  const mobileOk = patient.mobile.trim() === '' || patient.mobile.trim().length === 10;
+
   const canPlace = cart.mcc != null
     && cart.items.length > 0
     && patient.name.trim().length > 0
+    && age !== null
+    && mobileOk
     && (preview?.unpriced ?? 0) === 0
     && !busy;
 
@@ -509,28 +587,53 @@ export function NewOrder() {
                 <div className="field">
                   <label htmlFor="p-mobile">Mobile</label>
                   <input id="p-mobile" className="input mono" value={patient.mobile} inputMode="numeric"
-                         maxLength={12}
+                         maxLength={10}
                          onChange={(e) => setPatient({ ...patient, mobile: e.target.value.replace(/\D/g, '') })} />
                   <span className="muted" style={{ fontSize: '.7rem' }}>
-                    Optional — but a patient with no mobile gets no result history on the worksheet.
+                    {patient.mobile.trim() !== '' && patient.mobile.trim().length !== 10
+                      ? <b style={{ color: 'var(--danger)' }}>A mobile number is 10 digits — finish it or clear it.</b>
+                      : 'Optional — but a patient with no mobile gets no result history on the worksheet.'}
                   </span>
                 </div>
               </div>
 
               <div className="grid2">
                 <div className="field">
-                  <label htmlFor="p-age">Age</label>
+                  <label htmlFor="p-email">Email</label>
+                  <input id="p-email" className="input" type="email" value={patient.email} maxLength={100}
+                         onChange={(e) => setPatient({ ...patient, email: e.target.value })} />
+                </div>
+
+                <div className="field">
+                  <label htmlFor="p-mrn">Passport / travel ID</label>
+                  {/* Written to patient_master.MRNID. Left blank, the create
+                      procedure backfills the patient id, as the LIS form does. */}
+                  <input id="p-mrn" className="input mono" value={patient.mrnId} maxLength={50}
+                         placeholder="Optional"
+                         onChange={(e) => setPatient({ ...patient, mrnId: e.target.value })} />
+                </div>
+              </div>
+
+              <div className="grid2">
+                <div className="field">
+                  <label htmlFor="p-age-y">Age</label>
                   <div className="row" style={{ gap: '.35rem' }}>
-                    <input id="p-age" className="input mono" value={patient.age} inputMode="numeric"
-                           style={{ width: 90 }}
-                           onChange={(e) => setPatient({ ...patient, age: e.target.value.replace(/\D/g, '') })} />
-                    <select className="input" value={patient.ageType} style={{ width: 110 }}
-                            onChange={(e) => setPatient({ ...patient, ageType: Number(e.target.value) })}>
-                      <option value={1}>Years</option>
-                      <option value={2}>Months</option>
-                      <option value={3}>Days</option>
-                    </select>
+                    <input id="p-age-y" className="input mono" value={patient.ageYears} inputMode="numeric"
+                           style={{ width: 88 }} placeholder="Years" aria-label="Age in years"
+                           onChange={(e) => setPatient({ ...patient, ageYears: e.target.value.replace(/\D/g, '') })} />
+                    <input id="p-age-m" className="input mono" value={patient.ageMonths} inputMode="numeric"
+                           style={{ width: 88 }} placeholder="Months" aria-label="Age in months"
+                           onChange={(e) => setPatient({ ...patient, ageMonths: e.target.value.replace(/\D/g, '') })} />
                   </div>
+                  {/* Says what will actually be stored. "2 and 6" becoming
+                      "30 months" is surprising unless it is stated. */}
+                  <span className="muted" style={{ fontSize: '.7rem' }}>
+                    {patient.ageYears || patient.ageMonths
+                      ? age
+                        ? `Recorded as ${age.age} ${age.ageType === 2 ? 'month' : 'year'}${age.age === 1 ? '' : 's'}.`
+                        : <b style={{ color: 'var(--danger)' }}>Not a usable age — months must be 0–11 alongside years.</b>
+                      : 'Years and/or months — 6 months for an infant, 2 and 3 for a toddler.'}
+                  </span>
                 </div>
 
                 <div className="field">
@@ -540,6 +643,52 @@ export function NewOrder() {
                     <option value={1}>Male</option>
                     <option value={2}>Female</option>
                   </select>
+                </div>
+              </div>
+
+              {/* Referrers. The create procedure has always accepted these —
+                  an id, or a name it upserts — but nothing offered a way to
+                  pick one, so every Infinity order so far was booked with
+                  none. Optional in both channels here: Telo makes the doctor
+                  compulsory for B2C, and adding that gate would start
+                  rejecting orders this form accepts today. */}
+              <div className="grid2">
+                <div className="field">
+                  <label>Ref. doctor</label>
+                  <Combobox
+                    value={refDoctor?.kind === 'existing' ? String(refDoctor.id) : ''}
+                    createdName={refDoctor?.kind === 'new' ? refDoctor.name : null}
+                    emptyLabel="No referring doctor"
+                    options={refs.doctors.map((d) => ({
+                      value: String(d.id), label: d.name, hint: d.code || null,
+                    }))}
+                    onChange={(v) => setRefDoctor(v === '' ? null : {
+                      kind: 'existing', id: Number(v),
+                      name: refs.doctors.find((d) => String(d.id) === v)?.name ?? '',
+                    })}
+                    creatable
+                    createLabel={(t) => `Add referring doctor “${t}”`}
+                    onCreate={(name) => setRefDoctor({ kind: 'new', name })}
+                  />
+                </div>
+
+                <div className="field">
+                  <label>Referring customer</label>
+                  <Combobox
+                    value={refCustomer?.kind === 'existing' ? String(refCustomer.id) : ''}
+                    createdName={refCustomer?.kind === 'new' ? refCustomer.name : null}
+                    emptyLabel="No referring customer"
+                    options={refs.customers.map((x) => ({
+                      value: String(x.id), label: x.name, hint: x.code || null,
+                    }))}
+                    onChange={(v) => setRefCustomer(v === '' ? null : {
+                      kind: 'existing', id: Number(v),
+                      name: refs.customers.find((x) => String(x.id) === v)?.name ?? '',
+                    })}
+                    creatable
+                    createLabel={(t) => `Add referring customer “${t}”`}
+                    onCreate={(name) => setRefCustomer({ kind: 'new', name })}
+                  />
                 </div>
               </div>
 
@@ -553,8 +702,18 @@ export function NewOrder() {
                 <button className="btn btn--primary" disabled={!canPlace} onClick={() => void place()}>
                   {busy ? 'Placing…' : `Place order · ${inr(preview?.total ?? 0)}`}
                 </button>
-                {!patient.name.trim() && (
-                  <span className="muted" style={{ fontSize: '.76rem' }}>A patient name is required.</span>
+                {/* Names whichever thing is actually missing. A disabled button
+                    beside "A patient name is required" when the name is filled
+                    and the AGE is not is worse than no message. */}
+                {!canPlace && !busy && (
+                  <span className="muted" style={{ fontSize: '.76rem' }}>
+                    {cart.mcc == null ? 'Choose a client to bill.'
+                      : cart.items.length === 0 ? 'Add at least one test.'
+                      : !patient.name.trim() ? 'A patient name is required.'
+                      : age === null ? 'An age is required — years and/or months.'
+                      : !mobileOk ? 'The mobile number is incomplete.'
+                      : 'Some tests have no price for this client.'}
+                  </span>
                 )}
               </div>
             </div>

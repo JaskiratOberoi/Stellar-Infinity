@@ -6,7 +6,7 @@ import { WorksheetEntry } from './WorksheetEntry';
 import { Pager } from '../components/Pager';
 import { InfinityLoader } from '../components/InfinityLoader';
 import {
-  SampleFilters, useFilterOptions, applyFilterParams,
+  SampleFilters, ActiveFilterChips, useFilterOptions, applyFilterParams,
   initialFilters, type SampleFilterValues,
 } from '../components/SampleFilters';
 import { TestList } from '../components/TestList';
@@ -101,7 +101,6 @@ function ActionButton({ statusCode, onOpen }: { statusCode: number | null | unde
 export function Worksheet() {
   const [rows, setRows] = useState<WorksheetRow[]>([]);
   const [scope, setScope] = useState('');
-  const [pendingOnly, setPendingOnly] = useState(true);
   const [groupByPid, setGroupByPid] = useState(true);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
@@ -133,10 +132,13 @@ export function Worksheet() {
       applyFilterParams(p, adv);
 
       // Every filter goes to the server so that paging and the total count
-      // describe the same set the operator is looking at. An explicit status
-      // beats "outstanding only", which is itself just a status set.
-      if (adv.statusId !== '') p.set('statusIds', String(adv.statusId));
-      else if (pendingOnly) p.set('statusIds', PENDING_STATUSES.join(','));
+      // describe the same set the operator is looking at.
+      //
+      // Three cases, one control: 'all' asks for no status filter, a number
+      // asks for that status, and '' is this page's default — outstanding.
+      if (adv.statusId === 'all') { /* no status filter */ }
+      else if (adv.statusId !== '') p.set('statusIds', String(adv.statusId));
+      else p.set('statusIds', PENDING_STATUSES.join(','));
 
       // Only while paging within one result set. Page 1 always takes a fresh
       // snapshot, so the list is never stale without the operator asking for it.
@@ -156,7 +158,7 @@ export function Worksheet() {
     } finally {
       setLoading(false);
     }
-  }, [pendingOnly, adv, page, pageSize]);
+  }, [adv, page, pageSize]);
 
   useEffect(() => {
     const id = setTimeout(() => void load(), 300);
@@ -165,7 +167,7 @@ export function Worksheet() {
 
   // A filter that narrows the result set must reset the page, or page 4 of the
   // old set silently shows nothing for the new one.
-  useEffect(() => { setPage(1); }, [pendingOnly, pageSize, adv]);
+  useEffect(() => { setPage(1); }, [pageSize, adv]);
 
   // Nothing is hidden after the fact: what the server returned is what shows.
   const visible = rows;
@@ -272,18 +274,23 @@ export function Worksheet() {
         </button>
       </div>
 
-      {/* Every control that narrows the list, in one place — including the two
-          switches, which are filters in all but name. */}
-      <SampleFilters value={adv} options={options} onChange={setAdv} statusOptions={STATUSES}>
-        <label className="row" style={{ gap: '.4rem', fontSize: '.8rem', cursor: 'pointer' }}
-               title="Hides authorised, printed and rejected samples.">
-          {/* An explicit status wins, so the shorthand is disabled rather than
-              silently ignored. */}
-          <input type="checkbox" checked={pendingOnly} disabled={adv.statusId !== ''}
-                 onChange={(e) => setPendingOnly(e.target.checked)} />
-          Outstanding only
-        </label>
+      {/* What is currently narrowing the list, above the panel and removable.
+          The component has exported these since it was written and no screen
+          ever rendered them. */}
+      <ActiveFilterChips value={adv} options={options} onChange={setAdv} statusOptions={STATUSES} />
 
+      <SampleFilters
+        value={adv} options={options} onChange={setAdv} statusOptions={STATUSES}
+        // "Outstanding" is this page's default status set, so it is named and
+        // selectable inside the Status control rather than being a second
+        // checkbox that the status has to disable.
+        defaultStatusLabel="Outstanding"
+      >
+        {/* Group by patient is NOT a filter — it changes how the same rows are
+            drawn, not which rows they are. It sits in the footer alone now that
+            the status shorthand has moved into the status control, so the panel
+            no longer presents a display option and a filter as the same kind of
+            thing. */}
         <label className="row" style={{ gap: '.4rem', fontSize: '.8rem', cursor: 'pointer' }}
                title={multiSamplePatients > 0
                  ? `${multiSamplePatients} patient${multiSamplePatients === 1 ? '' : 's'} with more than one sample.`
@@ -389,8 +396,10 @@ export function Worksheet() {
                 {visible.length === 0 && scope !== 'none' && (
                   <tr>
                     <td colSpan={8} className="muted" style={{ textAlign: 'center', padding: '2rem' }}>
-                      {pendingOnly && rows.length > 0
-                        ? 'Nothing outstanding in this window — untick "Outstanding only" to see completed samples.'
+                      {/* Names the control that is hiding them, by the label it
+                          now carries in the panel. */}
+                      {adv.statusId === ''
+                        ? 'Nothing outstanding in this window — set Status to “Any status” to see completed samples.'
                         : 'No samples in this window.'}
                     </td>
                   </tr>

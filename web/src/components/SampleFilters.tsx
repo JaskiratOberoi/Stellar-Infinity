@@ -27,11 +27,25 @@ export interface SampleFilterValues {
   from: string;
   to: string;
   /**
-   * One status, or '' for the page's own default set. Reporting pins its own
-   * (authorised/printed) and does not offer this control at all, which is why
-   * it is optional rather than assumed.
+   * One status, <c>''</c> for the page's own default set, or <c>'all'</c> for
+   * no status filter at all.
+   *
+   * ── WHY 'all' EXISTS ────────────────────────────────────────────────────
+   * The worksheet used to carry a separate "Outstanding only" checkbox, and
+   * the two were one filter wearing two controls. It was handled honestly —
+   * choosing a status disabled the checkbox rather than quietly overriding it
+   * — but that is still a control in the panel's footer greying itself out
+   * because of a dropdown several rows above, with nothing on either of them
+   * saying so.
+   *
+   * They are one control now. '' is the page's own default set — "Outstanding"
+   * on the worksheet — and 'all' is what unticking that checkbox used to mean.
+   * A single selector cannot contradict itself, so nothing has to police it.
+   *
+   * Reporting pins its own statuses and passes no statusOptions, so the
+   * control is absent there and this value is never read.
    */
-  statusId: number | '';
+  statusId: number | '' | 'all';
   clientCode: string;
   departmentId: number | '';
   businessUnitId: number | '';
@@ -61,10 +75,18 @@ export const EMPTY_FILTERS: SampleFilterValues = {
   toHour: 24,
 };
 
+/**
+ * n days back on the LOCAL calendar.
+ *
+ * toISOString() renders UTC, so for anyone east of Greenwich it names
+ * yesterday for the first hours of every day — in IST, midnight to 05:30. The
+ * window would silently open a day early, which on a worksheet is a shift's
+ * worth of samples appearing or vanishing depending on what time you looked.
+ */
 const daysAgo = (n: number) => {
   const d = new Date();
   d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+  return isoLocal(d);
 };
 
 /** Cleared filters over the page's own default window. */
@@ -80,6 +102,24 @@ export function hasNarrowingFilters(f: SampleFilterValues): boolean {
     || f.pid.trim() || f.fromHour !== 0 || f.toHour !== 24,
   );
 }
+
+/** Local calendar date as yyyy-MM-dd — not toISOString, which is UTC. */
+function isoLocal(d: Date) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+/**
+ * The windows people actually ask for.
+ *
+ * Typing two dates is the most repeated act on this panel and the slowest — a
+ * native date input takes six keystrokes or four clicks per side. "Today" is
+ * one. The custom inputs stay right there for everything else.
+ */
+const DATE_PRESETS: { label: string; days: number }[] = [
+  { label: 'Today', days: 0 },
+  { label: '7 days', days: 6 },
+  { label: '30 days', days: 29 },
+];
 
 export interface FilterOptions {
   departments: { id: number; name: string | null }[];
@@ -118,8 +158,20 @@ export function useFilterOptions(): FilterOptions {
 export function describeFilters(
   f: SampleFilterValues,
   options: FilterOptions,
+  statusOptions?: { id: number; label: string }[],
 ): { key: keyof SampleFilterValues; label: string }[] {
   const out: { key: keyof SampleFilterValues; label: string }[] = [];
+
+  // Status leads: it is the filter that decides whether the list is a work
+  // queue or an archive, and since it absorbed the old "Outstanding only"
+  // checkbox it is the one most worth being able to see and undo from here.
+  // '' is the page default and is not a narrowing, so it produces no chip.
+  if (f.statusId === 'all') {
+    out.push({ key: 'statusId', label: 'Any status' });
+  } else if (f.statusId !== '') {
+    const s = statusOptions?.find((x) => x.id === f.statusId);
+    out.push({ key: 'statusId', label: s?.label ?? `Status ${f.statusId}` });
+  }
 
   if (f.clientCode) out.push({ key: 'clientCode', label: `Client ${f.clientCode}` });
   if (f.departmentId !== '') {
@@ -165,13 +217,17 @@ export function applyFilterParams(p: URLSearchParams, f: SampleFilterValues): vo
 
 /** The chips above the panel: what is currently narrowing the list, removable. */
 export function ActiveFilterChips({
-  value, options, onChange,
+  value, options, onChange, statusOptions,
 }: {
   value: SampleFilterValues;
   options: FilterOptions;
   onChange: (next: SampleFilterValues) => void;
+  statusOptions?: { id: number; label: string }[];
 }) {
-  const active = useMemo(() => describeFilters(value, options), [value, options]);
+  const active = useMemo(
+    () => describeFilters(value, options, statusOptions),
+    [value, options, statusOptions],
+  );
   if (active.length === 0) return null;
 
   return (
@@ -216,12 +272,19 @@ export function ActiveFilterChips({
  * control that changes the list is inside one boundary.
  */
 export function SampleFilters({
-  value, options, onChange, statusOptions, children,
+  value, options, onChange, statusOptions, defaultStatusLabel, children,
 }: {
   value: SampleFilterValues;
   options: FilterOptions;
   onChange: (next: SampleFilterValues) => void;
   statusOptions?: { id: number; label: string }[];
+  /**
+   * What the page's default status set is CALLED — "Outstanding" on the
+   * worksheet. Naming it turns the empty value from "no filter" into a real,
+   * selectable choice, which is what lets the separate checkbox go away.
+   * Omit it and the empty value reads "Any status", with no default set.
+   */
+  defaultStatusLabel?: string;
   children?: React.ReactNode;
 }) {
   const set = <K extends keyof SampleFilterValues>(key: K, v: SampleFilterValues[K]) =>
@@ -231,117 +294,170 @@ export function SampleFilters({
   // wiping the window would leave the page asking for every sample ever taken.
   const clearable = hasNarrowingFilters(value);
 
+  const preset = (days: number) => {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - days);
+    onChange({ ...value, from: isoLocal(from), to: isoLocal(to) });
+  };
+
+  const activePreset = DATE_PRESETS.find(
+    (p) => value.to === daysAgo(0) && value.from === daysAgo(p.days),
+  );
+
   return (
     <div className="card filter-panel">
-      <div className="filter-panel__grid">
-        <label className="field">
-          <span>Patient name</span>
-          <input className="input" placeholder="Any patient" value={value.patient}
-                 onChange={(e) => set('patient', e.target.value)} />
-        </label>
+      {/* Three groups, because there are three questions: which sample, from
+          when, and narrowed how. They were one undifferentiated run of eleven
+          identical boxes, which gives the eye no entry point and puts the two
+          halves of the time window — the dates and the hours — on different
+          rows with five unrelated controls between them.
 
-        <label className="field">
-          <span>SID</span>
-          <input className="input mono" placeholder="Any sample" value={value.sid}
-                 onChange={(e) => set('sid', e.target.value)} />
-        </label>
-
-        {statusOptions && (
+          fieldset/legend rather than a div and a heading: this IS a group of
+          form controls, and the grouping then reaches assistive technology for
+          free instead of being purely visual. */}
+      <fieldset className="fgroup">
+        <legend>Find a sample</legend>
+        <div className="fgroup__grid fgroup__grid--find">
           <label className="field">
-            <span>Status</span>
-            <Combobox
-              value={value.statusId === '' ? '' : String(value.statusId)}
-              emptyLabel="Any status"
-              onChange={(v) => set('statusId', v === '' ? '' : Number(v))}
-              options={statusOptions.map((st) => ({ value: String(st.id), label: st.label }))}
-            />
+            <span>Patient name</span>
+            <input className="input" placeholder="Any patient" value={value.patient}
+                   onChange={(e) => set('patient', e.target.value)} />
           </label>
-        )}
 
-        <label className="field">
-          <span>From</span>
-          <input className="input" type="date" value={value.from} max={value.to || undefined}
-                 onChange={(e) => set('from', e.target.value)} />
-        </label>
+          <label className="field">
+            <span>SID</span>
+            <input className="input mono" placeholder="Any sample" value={value.sid}
+                   onChange={(e) => set('sid', e.target.value)} />
+          </label>
 
-        <label className="field">
-          <span>To</span>
-          <input className="input" type="date" value={value.to} min={value.from || undefined}
-                 onChange={(e) => set('to', e.target.value)} />
-        </label>
+          <label className="field">
+            <span>Patient number</span>
+            <input className="input mono" placeholder="PID" inputMode="numeric" value={value.pid}
+                   onChange={(e) => set('pid', e.target.value.replace(/\D/g, ''))} />
+          </label>
+        </div>
+      </fieldset>
 
-        <label className="field">
-          <span>Client code</span>
-          <Combobox
-            value={value.clientCode}
-            emptyLabel="Any centre in your scope"
-            onChange={(v) => set('clientCode', v)}
-            // Code and name as separate columns rather than one "AG0050A — MEHAR"
-            // string: both are searchable, and an operator knows one or the other.
-            options={options.clientCodes.map((c) => ({ value: c.code, label: c.code, hint: c.name }))}
-          />
-        </label>
+      <fieldset className="fgroup">
+        <legend>When</legend>
+        <div className="fgroup__grid fgroup__grid--when">
+          <label className="field">
+            <span>From</span>
+            <input className="input" type="date" value={value.from} max={value.to || undefined}
+                   onChange={(e) => set('from', e.target.value)} />
+          </label>
 
-        <label className="field">
-          <span>Department</span>
-          <Combobox
-            value={value.departmentId === '' ? '' : String(value.departmentId)}
-            emptyLabel="Any department"
-            onChange={(v) => set('departmentId', v === '' ? '' : Number(v))}
-            options={options.departments.map((d) => ({
-              value: String(d.id), label: d.name ?? `Department ${d.id}`,
-            }))}
-          />
-        </label>
+          <label className="field">
+            <span>To</span>
+            <input className="input" type="date" value={value.to} min={value.from || undefined}
+                   onChange={(e) => set('to', e.target.value)} />
+          </label>
 
-        <label className="field">
-          <span>Business unit</span>
-          <Combobox
-            value={value.businessUnitId === '' ? '' : String(value.businessUnitId)}
-            emptyLabel="Any unit"
-            onChange={(v) => set('businessUnitId', v === '' ? '' : Number(v))}
-            options={options.businessUnits.map((b) => ({
-              value: String(b.id), label: b.name ?? `Unit ${b.id}`,
-            }))}
-          />
-        </label>
+          <div className="field">
+            <span>Time of day</span>
+            <div className="row" style={{ gap: '.35rem' }}>
+              {/* Native, deliberately: 00:00 to 24:00 is an ordered scale you
+                  scan, not a set you search, and a combobox over it is slower. */}
+              <select className="input" value={value.fromHour} aria-label="From hour"
+                      onChange={(e) => set('fromHour', Number(e.target.value))}>
+                {HOURS.map((h) => <option key={h} value={h}>{pad2(h)}:00</option>)}
+              </select>
+              <span className="muted">to</span>
+              <select className="input" value={value.toHour} aria-label="To hour"
+                      onChange={(e) => set('toHour', Number(e.target.value))}>
+                {HOURS.map((h) => <option key={h} value={h}>{pad2(h)}:00</option>)}
+              </select>
+            </div>
+          </div>
 
-        <label className="field">
-          <span>Test</span>
-          {/* Was free text, which only helped someone who already knew the code.
-              The filter still SENDS a code — the server matches on the sample's
-              stored codes — but you can now find it by the test's name. */}
-          <Combobox
-            value={value.testCode}
-            emptyLabel="Any test"
-            onChange={(v) => set('testCode', v)}
-            options={options.tests.map((t) => ({ value: t.code, label: t.code, hint: t.name }))}
-          />
-        </label>
-
-        <label className="field">
-          <span>Patient number</span>
-          <input className="input mono" placeholder="PID" inputMode="numeric" value={value.pid}
-                 onChange={(e) => set('pid', e.target.value.replace(/D/g, ''))} />
-        </label>
-
-        <div className="field">
-          <span>Time of day</span>
-          <div className="row" style={{ gap: '.35rem' }}>
-            {/* Native, deliberately: 00:00 to 24:00 is an ordered scale you scan,
-                not a set you search, and a combobox over it is slower. */}
-            <select className="input" value={value.fromHour} aria-label="From hour"
-                    onChange={(e) => set('fromHour', Number(e.target.value))}>
-              {HOURS.map((h) => <option key={h} value={h}>{pad2(h)}:00</option>)}
-            </select>
-            <span className="muted">to</span>
-            <select className="input" value={value.toHour} aria-label="To hour"
-                    onChange={(e) => set('toHour', Number(e.target.value))}>
-              {HOURS.map((h) => <option key={h} value={h}>{pad2(h)}:00</option>)}
-            </select>
+          <div className="field">
+            <span>Quick range</span>
+            <div className="seg" role="group" aria-label="Quick date range">
+              {DATE_PRESETS.map((p) => (
+                <button key={p.label} type="button"
+                        className={`seg__btn${activePreset?.label === p.label ? ' is-on' : ''}`}
+                        aria-pressed={activePreset?.label === p.label}
+                        onClick={() => preset(p.days)}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      </fieldset>
+
+      <fieldset className="fgroup">
+        <legend>Narrow to</legend>
+        <div className="fgroup__grid fgroup__grid--narrow">
+          {statusOptions && (
+            <label className="field">
+              <span>Status</span>
+              {/* Absorbs what used to be a separate "Outstanding only"
+                  checkbox in the footer — one filter that needed two controls
+                  to police each other across the panel. See statusId. */}
+              <Combobox
+                value={value.statusId === '' ? '' : String(value.statusId)}
+                emptyLabel={defaultStatusLabel ?? 'Any status'}
+                onChange={(v) => set('statusId', v === '' ? '' : v === 'all' ? 'all' : Number(v))}
+                options={[
+                  ...(defaultStatusLabel ? [{ value: 'all', label: 'Any status' }] : []),
+                  ...statusOptions.map((st) => ({ value: String(st.id), label: st.label })),
+                ]}
+              />
+            </label>
+          )}
+
+          <label className="field">
+            <span>Client code</span>
+            <Combobox
+              value={value.clientCode}
+              emptyLabel="Any centre in your scope"
+              onChange={(v) => set('clientCode', v)}
+              // Code and name as separate columns rather than one "AG0050A — MEHAR"
+              // string: both are searchable, and an operator knows one or the other.
+              options={options.clientCodes.map((c) => ({ value: c.code, label: c.code, hint: c.name }))}
+            />
+          </label>
+
+          <label className="field">
+            <span>Department</span>
+            <Combobox
+              value={value.departmentId === '' ? '' : String(value.departmentId)}
+              emptyLabel="Any department"
+              onChange={(v) => set('departmentId', v === '' ? '' : Number(v))}
+              options={options.departments.map((d) => ({
+                value: String(d.id), label: d.name ?? `Department ${d.id}`,
+              }))}
+            />
+          </label>
+
+          <label className="field">
+            <span>Test</span>
+            {/* Was free text, which only helped someone who already knew the code.
+                The filter still SENDS a code — the server matches on the sample's
+                stored codes — but you can now find it by the test's name. */}
+            <Combobox
+              value={value.testCode}
+              emptyLabel="Any test"
+              onChange={(v) => set('testCode', v)}
+              options={options.tests.map((t) => ({ value: t.code, label: t.code, hint: t.name }))}
+            />
+          </label>
+
+          <label className="field">
+            <span>Business unit</span>
+            <Combobox
+              value={value.businessUnitId === '' ? '' : String(value.businessUnitId)}
+              emptyLabel="Any unit"
+              onChange={(v) => set('businessUnitId', v === '' ? '' : Number(v))}
+              options={options.businessUnits.map((b) => ({
+                value: String(b.id), label: b.name ?? `Unit ${b.id}`,
+              }))}
+            />
+          </label>
+        </div>
+      </fieldset>
 
       <div className="filter-panel__foot">
         {children}

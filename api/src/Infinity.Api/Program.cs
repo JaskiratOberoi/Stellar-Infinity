@@ -46,6 +46,7 @@ builder.Services.AddSingleton<Infinity.Api.Orders.InvoiceRepository>();
 // Singletons: the knowledge base is parsed once at startup, not per request.
 builder.Services.AddSingleton<Infinity.Api.Reports.SmartMeta>();
 builder.Services.AddSingleton<Infinity.Api.Reports.SmartReportService>();
+builder.Services.AddSingleton<Infinity.Api.Orders.ReferrerRepository>();
 builder.Services.AddSingleton<Infinity.Api.Reports.GraphRepository>();
 builder.Services.AddSingleton<Infinity.Api.Reports.ReportLockRepository>();
 

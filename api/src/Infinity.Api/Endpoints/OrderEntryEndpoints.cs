@@ -32,9 +32,26 @@ public static class OrderEntryEndpoints
                        .RequireAuthorization()
                        .RequireCapability(Capabilities.OrderCreate);
 
+        // Reference data for the order form's referrer pickers. A read, so it
+        // sits with the rest of order entry rather than behind the write gate
+        // that PlaceOrder needs.
+        entry.MapGet("/referrers", GetReferrers).WithName("GetOrderReferrers");
+
         entry.MapPost("/preview", PreviewOrder).WithName("PreviewOrder");
         entry.MapPost("/", PlaceOrder).WithName("PlaceOrder");
     }
+
+    /// <summary>
+    /// The referring doctors and customers the order form can offer.
+    /// </summary>
+    /// <remarks>
+    /// Not scoped by client code: referrers are shared across the network, and
+    /// the order itself is scoped by the centre the operator picked.
+    /// </remarks>
+    private static async Task<IResult> GetReferrers(
+        ReferrerRepository repo,
+        CancellationToken ct)
+        => Results.Ok(await repo.GetAsync(ct).ConfigureAwait(false));
 
     // ---- cart --------------------------------------------------------------
 
