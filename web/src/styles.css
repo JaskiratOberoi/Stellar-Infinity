@@ -1142,6 +1142,99 @@ body:has(.envbar) .modal-backdrop { padding-top: calc(1.5rem + var(--envbar-h));
   body:has(.envbar) .login { padding-top: 0; }
 }
 
+/* =========================================================
+   Combobox — a select you can type into
+
+   Used where the list is data rather than a fixed scale: client codes are
+   several hundred centres, departments a few dozen. The hour selects in the
+   same panel stay native on purpose — 00:00 to 24:00 is an ordered scale you
+   scan, not a set you search.
+   ========================================================= */
+
+.combo { position: relative; }
+
+/* Room for the caret, so a long centre name never runs under it. */
+.combo .input { width: 100%; padding-right: 2rem; }
+
+.combo__caret {
+  position: absolute;
+  right: .65rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 15px; height: 15px;
+  color: var(--ink-dim);
+  pointer-events: none;   /* the input owns every click in this box */
+}
+
+.combo__list {
+  position: absolute;
+  z-index: 40;            /* over the page, under modals (50) and the sheet (60) */
+  top: calc(100% + .3rem);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: .25rem;
+  list-style: none;
+  max-height: 17rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;   /* scrolling the list must not scroll the page */
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-card);
+}
+
+.combo__opt {
+  display: flex;
+  align-items: baseline;
+  gap: .5rem;
+  padding: .45rem .55rem;
+  border-radius: 7px;
+  font-size: .8rem;
+  cursor: pointer;
+  /* A hundred rows of wrapped text is unreadable; the hint truncates instead. */
+  white-space: nowrap;
+}
+
+/* Driven by data-active rather than :hover, so the keyboard and the pointer
+   highlight the same row. Focus never leaves the input — see Combobox.tsx. */
+.combo__opt[data-active='true'] { background: var(--accent-soft); }
+.combo__opt--on { color: var(--teal); font-weight: 600; }
+.combo__opt--any { color: var(--ink-dim); font-style: italic; }
+
+.combo__label { flex: none; }
+.combo__hint {
+  color: var(--ink-dim);
+  font-size: .74rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Not a colour swap: the row may already be teal or dimmed, and a second
+   colour on top of that reads as a third state. Weight and a wash instead. */
+.combo__mark {
+  background: var(--accent-ring);
+  color: inherit;
+  font-weight: 700;
+  border-radius: 3px;
+}
+
+.combo__empty,
+.combo__more {
+  padding: .5rem .55rem;
+  font-size: .74rem;
+  color: var(--ink-dim);
+}
+.combo__more { border-top: 1px solid var(--line-soft); margin-top: .2rem; }
+
+/* A dropdown that opens under the fold on a phone is a dropdown you scroll the
+   page to read. Shorter list, and the panel's own scrolling keeps it in view. */
+@media (max-width: 880px) {
+  .combo__list { max-height: 13rem; }
+  .combo__opt { padding: .6rem .55rem; }   /* thumb-sized rows */
+}
+
 /* ---------- the menu sheet ---------- */
 
 /* The sheet takes the page's own ground rather than floating a panel over it:

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
+import { Combobox } from './Combobox';
 
 /**
  * The sample filter set, shared by the worksheet and reporting.
@@ -165,33 +166,40 @@ export function SampleFilters({
       <div className="filter-panel__grid">
         <label className="field">
           <span>Client code</span>
-          <select className="input" value={value.clientCode}
-                  onChange={(e) => set('clientCode', e.target.value)}>
-            <option value="">Any centre in your scope</option>
-            {options.clientCodes.map((c) => (
-              <option key={c.code} value={c.code}>
-                {c.code}{c.name ? ` — ${c.name}` : ''}
-              </option>
-            ))}
-          </select>
+          <Combobox
+            value={value.clientCode}
+            emptyLabel="Any centre in your scope"
+            onChange={(v) => set('clientCode', v)}
+            // Code and name as separate columns rather than one "AG0050A — MEHAR"
+            // string: both are searchable, and an operator knows one or the other.
+            options={options.clientCodes.map((c) => ({
+              value: c.code, label: c.code, hint: c.name,
+            }))}
+          />
         </label>
 
         <label className="field">
           <span>Department</span>
-          <select className="input" value={value.departmentId}
-                  onChange={(e) => set('departmentId', e.target.value === '' ? '' : Number(e.target.value))}>
-            <option value="">Any department</option>
-            {options.departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
+          <Combobox
+            value={value.departmentId === '' ? '' : String(value.departmentId)}
+            emptyLabel="Any department"
+            onChange={(v) => set('departmentId', v === '' ? '' : Number(v))}
+            options={options.departments.map((d) => ({
+              value: String(d.id), label: d.name ?? `Department ${d.id}`,
+            }))}
+          />
         </label>
 
         <label className="field">
           <span>Business unit</span>
-          <select className="input" value={value.businessUnitId}
-                  onChange={(e) => set('businessUnitId', e.target.value === '' ? '' : Number(e.target.value))}>
-            <option value="">Any unit</option>
-            {options.businessUnits.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
+          <Combobox
+            value={value.businessUnitId === '' ? '' : String(value.businessUnitId)}
+            emptyLabel="Any unit"
+            onChange={(v) => set('businessUnitId', v === '' ? '' : Number(v))}
+            options={options.businessUnits.map((b) => ({
+              value: String(b.id), label: b.name ?? `Unit ${b.id}`,
+            }))}
+          />
         </label>
 
         <label className="field">
