@@ -1597,6 +1597,31 @@ tbody tr:hover { background: var(--accent-softer); }
   .order-flow > * { margin-bottom: .9rem; }
 }
 
+/* ---------- orders booked in this run ---------- */
+
+.runlist { margin-bottom: .9rem; padding: .6rem .8rem; }
+.runlist__head {
+  display: flex; align-items: baseline; gap: .4rem;
+  flex-wrap: wrap; font-size: .82rem; margin-bottom: .35rem;
+}
+/* Capped and scrollable: a long run must not push the form off the screen,
+   which is the whole thing this layout just fixed. */
+.runlist__rows {
+  list-style: none; margin: 0; padding: 0;
+  max-height: 5.5rem; overflow-y: auto;
+}
+.runlist__rows li {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr auto auto;
+  gap: .6rem;
+  align-items: baseline;
+  padding: .18rem 0;
+  font-size: .78rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+.runlist__rows li:last-child { border-bottom: none; }
+.runlist__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ---------- order channel (B2C / B2B) ---------- */
 
 .channel__opts { display: flex; gap: .6rem; flex-wrap: wrap; }

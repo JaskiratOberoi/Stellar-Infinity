@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   api, cartApi, catalogApi, PAYMENT_MODES,
   type Cart, type CatalogItem, type OrderChannel, type OrderPreview, type PlacedOrder,
@@ -184,6 +184,22 @@ export function NewOrder() {
   /** The clinical-history attachment, held as base64 for the JSON body. */
   const [clinicalFile, setClinicalFile] = useState<{ name: string; base64: string } | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+
+  /**
+   * Orders booked in this sitting, newest first. B2B only — see place().
+   *
+   * Deliberately not persisted and not re-fetched: it is a record of what THIS
+   * person has just done, which is a different question from "what is on the
+   * accessioning queue" and is answered by that screen. Reloading the page
+   * clears it, correctly — the run is over.
+   */
+  const [session, setSession] = useState<{
+    billId: number | null; billNumber: number | null;
+    patient: string; total: number; sids: number; tubes: number;
+  }[]>([]);
+
+  /** Focused after each B2B booking so the next patient can just be typed. */
+  const searchRef = useRef<HTMLInputElement>(null);
 
   /*
    * null means "follow the channel". Once the operator opens or closes the
@@ -377,7 +393,39 @@ export function NewOrder() {
       // Captured before the reset below, because the confirmation describes
       // what was just placed and the form is about to stop being that order.
       setPlacedSids({ attached: enteredSids.length, required: groups.length });
-      setPlaced(result);
+
+      /*
+       * ── B2B BOOKS IN A RUN, B2C BOOKS ONE ────────────────────────────────
+       * A centre sends a batch: one client, many patients, back to back. Taking
+       * the operator to a full-page confirmation after each one and making them
+       * find their way back — and re-pick the client — costs more than the
+       * booking did. So B2B stacks: the order joins a list on this screen and
+       * the form is immediately ready for the next patient, with the client
+       * still selected.
+       *
+       * B2C is a walk-in at a counter, one person in front of you, and the
+       * confirmation with its barcodes is the thing you act on next. It keeps
+       * the full-page receipt.
+       */
+      if (isB2b) {
+        setSession((s) => [{
+          billId: result.billId, billNumber: result.billNumber,
+          patient: patient.name.trim(), total: result.total,
+          sids: enteredSids.length, tubes: groups.length,
+        }, ...s]);
+        /*
+         * Focus the TEST SEARCH, not the patient name.
+         *
+         * Placing empties the basket, and with no tests the patient step
+         * correctly falls back to its disabled state — so the name field the
+         * cursor was aimed at no longer exists. The real next action is the
+         * first one of the next order: search a test.
+         */
+        setTimeout(() => searchRef.current?.focus(), 0);
+      } else {
+        setPlaced(result);
+      }
+
       setCart({ mcc: cart.mcc, items: [] });
       setPatient(EMPTY_PATIENT);
       setRefDoctor(null);
@@ -487,6 +535,37 @@ export function NewOrder() {
 
           The height cap is what makes it wrap at all. Below the breakpoint the
           cap is removed and it becomes the single column it always was. */}
+      {/* Booked in this run. Sits above the form because it is the answer to
+          "did that go through" — the question asked between one patient and
+          the next — and it must not push the form down as the run grows,
+          hence the fixed height and its own scroll. */}
+      {session.length > 0 && (
+        <div className="card runlist">
+          <div className="runlist__head">
+            <b>{session.length}</b> booked this run
+            <span className="muted">
+              · {inr(session.reduce((s, o) => s + o.total, 0))} · client still selected
+            </span>
+            <button className="btn btn--ghost btn--sm" style={{ marginLeft: 'auto' }}
+                    onClick={() => setSession([])}>
+              Clear list
+            </button>
+          </div>
+          <ol className="runlist__rows">
+            {session.map((o, i) => (
+              <li key={`${o.billId}-${i}`}>
+                <span className="mono">{o.billNumber ?? o.billId}</span>
+                <span className="runlist__name">{o.patient || 'Unnamed'}</span>
+                <span className="muted">
+                  {o.sids} of {o.tubes} tube{o.tubes === 1 ? '' : 's'}
+                </span>
+                <span className="mono">{inr(o.total)}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
       <div className="order-flow">
 
       {/* ---- channel ----
@@ -521,7 +600,7 @@ export function NewOrder() {
           <span className="order-step__num order-step__num--on">1</span>
           <h2 className="order-step__title">Client</h2>
           <span className="muted" style={{ fontSize: '.76rem' }}>
-            Every price depends on this, so it comes first.
+            Sets every price.
           </span>
         </div>
 
@@ -534,7 +613,7 @@ export function NewOrder() {
           />
           {cart.items.length > 0 && (
             <span className="muted" style={{ fontSize: '.72rem' }}>
-              Changing client empties the basket — the rates are different.
+              Changing it empties the basket.
             </span>
           )}
         </div>
@@ -547,7 +626,7 @@ export function NewOrder() {
               <span className="order-step__num">2</span>
               <h2 className="order-step__title">Tests</h2>
               <span className="muted" style={{ fontSize: '.76rem' }}>
-                Search the catalogue once a client is chosen — prices are theirs, not list price.
+                Choose a client first.
               </span>
             </div>
           </div>
@@ -577,7 +656,7 @@ export function NewOrder() {
 
             <div className="field">
               <label htmlFor="test-search">Add tests</label>
-              <input id="test-search" className="input" placeholder="Search by name or code…"
+              <input id="test-search" ref={searchRef} className="input" placeholder="Search by name or code…"
                      value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
 
@@ -833,7 +912,7 @@ export function NewOrder() {
                   <span className="muted" style={{ fontSize: '.7rem' }}>
                     {patient.mobile.trim() !== '' && patient.mobile.trim().length !== 10
                       ? <b style={{ color: 'var(--danger)' }}>A mobile number is 10 digits — finish it or clear it.</b>
-                      : 'Optional — but a patient with no mobile gets no result history on the worksheet.'}
+                      : 'Optional · no mobile, no result history'}
                   </span>
                 </div>
               </div>
@@ -873,7 +952,7 @@ export function NewOrder() {
                       ? age
                         ? `Recorded as ${age.age} ${age.ageType === 2 ? 'month' : 'year'}${age.age === 1 ? '' : 's'}.`
                         : <b style={{ color: 'var(--danger)' }}>Not a usable age — months must be 0–11 alongside years.</b>
-                      : 'Years and/or months — 6 months for an infant, 2 and 3 for a toddler.'}
+                      : 'Years and/or months'}
                   </span>
                 </div>
 
@@ -964,7 +1043,7 @@ export function NewOrder() {
                 {fileError
                   ? <span style={{ fontSize: '.72rem', color: 'var(--danger)' }}>{fileError}</span>
                   : <span className="muted" style={{ fontSize: '.72rem' }}>
-                      Optional · PDF up to 10 MB
+                      PDF, up to 10 MB
                       {clinicalFile && ` · ${clinicalFile.name} attached`}
                     </span>}
               </div>
