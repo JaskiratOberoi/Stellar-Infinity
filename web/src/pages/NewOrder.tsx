@@ -70,6 +70,10 @@ type RefPick = { kind: 'existing'; id: number; name: string } | { kind: 'new'; n
 
 interface Referrer { id: number; code: string; name: string }
 
+/** What the payment list starts as in each channel. See the seeding effect. */
+const startingPayments = (b2b: boolean) =>
+  (b2b ? [] : [{ method: 'Cash', amount: '', ref: '' }]);
+
 /**
  * Book an order.
  *
@@ -193,6 +197,13 @@ export function NewOrder() {
    * over the single pay mode whenever it has rows.
    */
   const [payments, setPayments] = useState<{ method: string; amount: string; ref: string }[]>([]);
+
+  /*
+   * null means "follow the channel" — shown in B2C, behind a button in B2B.
+   * Once the operator opens it themselves that sticks, so switching channel
+   * mid-order cannot take away a discount they have already typed.
+   */
+  const [discountOpen, setDiscountOpen] = useState<boolean | null>(null);
   const [gold, setGold] = useState(false);
   const [goldNumber, setGoldNumber] = useState('');
   const [goldHolder, setGoldHolder] = useState('');
@@ -281,6 +292,28 @@ export function NewOrder() {
   const isB2b = (preview?.channel ?? channel) === 'b2b';
 
   /*
+   * Seeds a Cash line for a walk-in, when the channel settles and only while
+   * the list is empty.
+   *
+   * A walk-in almost always pays something at the counter and cash is the
+   * common case, so the line is already there and the operator just types an
+   * amount. A B2B order usually settles against the centre's account later, so
+   * an empty list is the honest starting point and "+ Add payment" is there
+   * for when money does change hands.
+   *
+   * Guarded on whether an AMOUNT has been typed, not on emptiness. Guarding on
+   * emptiness was wrong for the same reason the channel default was: the first
+   * render is B2C before the session resolves, so a Cash line was seeded and
+   * then survived the flip to B2B — the list was no longer empty, so nothing
+   * took it away. Keyed on real input instead, so an untouched list snaps to
+   * whichever channel is now in force, and money already entered is never
+   * discarded by a channel switch.
+   */
+  useEffect(() => {
+    setPayments((p) => (p.some((x) => x.amount.trim() !== '') ? p : startingPayments(isB2b)));
+  }, [isB2b]);
+
+  /*
    * What the bill will actually come to.
    *
    * Mirrors the procedure's order of operations: the Gold Card halves every
@@ -293,6 +326,10 @@ export function NewOrder() {
    */
   /** What the split lines add up to, ignoring blank rows. */
   const paidNow = payments.reduce((s, p) => s + Number(p.amount || 0), 0);
+
+  // Shown in B2C, behind "+ Add discount" in B2B — unless it already holds a
+  // value, which must never be hidden by a channel switch.
+  const showDiscount = discountOpen ?? (!isB2b || discount !== '');
 
   const goldOk = gold && !isB2b && goldNumber.trim() !== '' && goldHolder.trim() !== '';
   const payable = Math.max(
@@ -458,7 +495,9 @@ export function NewOrder() {
       // Money and the attachment are per-order for the same reason the
       // barcodes are: carrying a receipt into the next patient would take
       // their money twice.
-      setDiscount(''); setPayments([]);
+      // Back to the channel's starting state, not to empty — otherwise the
+      // second walk-in of a run loses the Cash line the first one had.
+      setDiscount(''); setDiscountOpen(null); setPayments(startingPayments(isB2b));
       setGold(false); setGoldNumber(''); setGoldHolder('');
       setClinicalFile(null); setFileError(null);
       // Barcodes are per-order and must never carry into the next one — the
@@ -1172,12 +1211,25 @@ export function NewOrder() {
                   behaves exactly as before. */}
               <fieldset className="fgroup" style={{ marginTop: '1.2rem' }}>
                 <legend>Payment</legend>
-                <label className="field" style={{ maxWidth: '11rem' }}>
-                  <span>Discount ₹</span>
-                  <input className="input mono" inputMode="numeric" placeholder="0"
-                         value={discount}
-                         onChange={(e) => setDiscount(e.target.value.replace(/\D/g, ''))} />
-                </label>
+                {/* B2C keeps the box on show; B2B hides it behind a button.
+                    A discount on a B2B bill is the exception — that bill is
+                    the patient's at MRP and the centre's margin is the thing
+                    being adjusted — whereas at a walk-in counter it is
+                    everyday. An empty box on every B2B order is a field to
+                    skip past a hundred times a day. */}
+                {showDiscount ? (
+                  <label className="field" style={{ maxWidth: '11rem' }}>
+                    <span>Discount ₹</span>
+                    <input className="input mono" inputMode="numeric" placeholder="0" autoFocus={isB2b}
+                           value={discount}
+                           onChange={(e) => setDiscount(e.target.value.replace(/\D/g, ''))} />
+                  </label>
+                ) : (
+                  <button className="btn btn--ghost btn--sm" style={{ marginBottom: '.4rem' }}
+                          onClick={() => setDiscountOpen(true)}>
+                    + Add discount
+                  </button>
+                )}
 
                 {/* Split tender. One row per method, as Telo collects it —
                     "₹500 cash and the rest on UPI" is one transaction at the
