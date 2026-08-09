@@ -20,7 +20,21 @@ public sealed record TestResult(
     [property: JsonPropertyName("abnormal")] bool Abnormal,
     [property: JsonPropertyName("authorized")] bool Authorized,
     [property: JsonPropertyName("comments")] string? Comments,
-    [property: JsonPropertyName("departmentName")] string? DepartmentName);
+    [property: JsonPropertyName("departmentName")] string? DepartmentName,
+    /// <summary>The catalogue's display name, which the result row does not always carry.</summary>
+    [property: JsonPropertyName("reportTestName")] string? ReportTestName = null,
+    /// <summary>How it was measured — CLIA, ELISA. A printed report names its method.</summary>
+    [property: JsonPropertyName("method")] string? Method = null,
+    /// <summary>Clinical significance, from the catalogue. Printed under the test.</summary>
+    [property: JsonPropertyName("interpretation")] string? Interpretation = null,
+    /// <summary>
+    /// The profile this row belongs to, when it belongs to one. The real parent
+    /// link — nesting was previously inferred from row order, which is right
+    /// only while a profile's rows stay contiguous.
+    /// </summary>
+    [property: JsonPropertyName("profileId")] int? ProfileId = null,
+    /// <summary>The tube it came from, e.g. "WB - EDTA".</summary>
+    [property: JsonPropertyName("specimen")] string? Specimen = null);
 
 public sealed record WorksheetRow(
     string Sid,
@@ -40,7 +54,16 @@ public sealed record WorksheetRow(
     string? OrderNumber,
     string? BillNumber,
     string? ClinicalHistory,
-    IReadOnlyList<TestResult> Results);
+    IReadOnlyList<TestResult> Results,
+    // Report-only, and therefore defaulted: the worklist procedure does not
+    // return these and its call site is unchanged. Only GetBySidAsync fills
+    // them, because only a printed report has a place to put them.
+    /// <summary>Referring doctor — the master row's name, else the typed one.</summary>
+    string? RefDoctor = null,
+    /// <summary>Referring customer — the master row's name, else the typed one.</summary>
+    string? RefCustomer = null,
+    /// <summary>Passport / travel ID, absent when the LIS backfilled it with the patient id.</summary>
+    string? PassportNo = null);
 
 public sealed record WorksheetPage(IReadOnlyList<WorksheetRow> Rows, int Count);
 
@@ -516,7 +539,10 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
                     OrderNumber: reader.Str("order_number"),
                     BillNumber: reader.Str("bill_number"),
                     ClinicalHistory: reader.Str("clinical_history"),
-                    Results: ParseResults(reader.Str("results_json")));
+                    Results: ParseResults(reader.Str("results_json")),
+                    RefDoctor: reader.Str("ref_doctor"),
+                    RefCustomer: reader.Str("ref_customer"),
+                    PassportNo: reader.Str("passport_no"));
             }, token), ct).ConfigureAwait(false);
     }
 
@@ -542,7 +568,12 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
                     Abnormal: GetBool(el, "abnormal"),
                     Authorized: GetBool(el, "authorized"),
                     Comments: GetString(el, "comments"),
-                    DepartmentName: GetString(el, "department_name")));
+                    DepartmentName: GetString(el, "department_name"),
+                    ReportTestName: GetString(el, "report_test_name"),
+                    Method: GetString(el, "method"),
+                    Interpretation: GetString(el, "interpretation"),
+                    ProfileId: GetNullableInt(el, "profile_id"),
+                    Specimen: GetString(el, "specimen")));
             }
 
             // Restore DOCUMENT order.
@@ -581,6 +612,15 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
 
     private static int GetInt(JsonElement e, string name) =>
         e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : 0;
+
+    /// <summary>
+    /// Absent and zero are different here: profile_id 0 is "not in a profile"
+    /// in the legacy data just as null is, and both must read as no parent
+    /// rather than as profile number zero.
+    /// </summary>
+    private static int? GetNullableInt(JsonElement e, string name) =>
+        e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number && v.GetInt32() > 0
+            ? v.GetInt32() : null;
 
     private static bool GetBool(JsonElement e, string name) =>
         e.TryGetProperty(name, out var v) && v.ValueKind switch

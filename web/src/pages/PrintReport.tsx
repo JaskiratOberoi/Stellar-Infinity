@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { fmtDateTime, plainText } from '../lib/format';
+import { notesForCodes } from '../lib/reportNotes';
 import type { FullRow, TestResult } from './ReportViewer';
 
 /**
@@ -11,14 +12,8 @@ import type { FullRow, TestResult } from './ReportViewer';
  * composites the result onto the Noble letterhead, which is why the report's
  * layout lives here in CSS rather than being composed a second time in C#: one
  * description of what a report looks like, and the thing on screen is the thing
- * that prints.
- *
- * It is now also what the Reporting tab previews. The modal used to show a
- * separate summary table built from the same data — a second layout that could
- * disagree with the printed one, and did: it had no page breaks, no letterhead
- * band and no notion of what would actually land on paper. The preview loads
- * THIS route in an iframe instead, so what the operator approves is the render
- * they are about to download. Telo settled on the same arrangement.
+ * that prints. It is also what the Reporting tab previews, so what an operator
+ * approves is the render they are about to download.
  *
  * The page margins are the letterhead's clear area (26mm top, 34mm bottom,
  * 14mm sides). Content outside that band would print over Noble's printed
@@ -29,38 +24,56 @@ import type { FullRow, TestResult } from './ReportViewer';
  * would then be a picture of a spinner — so the renderer waits for this
  * attribute instead, and it is only ever set once the data is in hand.
  *
- * ── THREE MODES, ONE COMPONENT ────────────────────────────────────────────
- * `?pdf=1`   the renderer. No checkboxes, no letterhead placeholder.
+ * ── MODES ─────────────────────────────────────────────────────────────────
+ * `?pdf=1`      the renderer. No tick boxes, no letterhead placeholder, and
+ *               unticked rows are gone rather than dimmed.
  * `?headless=1` preview of what prints onto pre-printed letterhead paper: the
- *            letterhead band is blanked but its space is kept, so the preview
- *            has the same pagination as the PDF. The PDF route drops the
- *            background itself, so this is ignored under ?pdf=1.
- * default    the in-app preview: tickable, with the letterhead band drawn.
+ *               band is blanked but keeps its space, so the preview paginates
+ *               exactly like the PDF. Ignored under ?pdf=1, where the render
+ *               service drops the background itself.
+ * `?t=…`        the patient's own copy, opened from the QR. No session, so the
+ *               data comes from the public route the token opens.
+ * default       the in-app preview: tickable, with the band drawn.
  */
 
 /** Head and Profile rows are the report's own section headings, not analytes. */
 const isHeading = (t: TestResult) => t.testType === 'Head' || t.testType === 'Profile';
 
+/** The catalogue's display name wins; the result row's name is the fallback. */
+const nameOf = (t: TestResult) =>
+  plainText(t.reportTestName) || plainText(t.testName) || t.testCode || '—';
+
 /**
  * A heading and the analytes it introduces.
  *
- * The LIS returns one flat, report-ordered list with headings inline among the
- * readings, so the nesting the printed report shows is implied by position: a
- * Head/Profile row owns every analyte after it until the next heading. That
- * implied structure is what the tick boxes cascade along — unticking a profile
- * has to drop the tests under it, and there is no parent id in the data to ask.
+ * profile_id is the real parent link and is used when both rows carry one. It
+ * is absent on about a sixth of the result rows, and on those the LIS's own
+ * ordering is the only structure there is: a Head/Profile row owns every
+ * analyte after it until the next heading. Both paths matter — the id is
+ * correct when a profile's rows are not contiguous, and the order is all there
+ * is when the id was never written.
  */
 interface Group { heading: TestResult | null; items: TestResult[] }
 
 function groupResults(results: TestResult[]): Group[] {
   const groups: Group[] = [];
+  const byProfile = new Map<number, Group>();
   let current: Group | null = null;
+
   for (const r of results) {
     if (isHeading(r)) {
       current = { heading: r, items: [] };
       groups.push(current);
+      // A heading's own id is what its members point at.
+      const key = r.profileId ?? r.resultId;
+      byProfile.set(key, current);
       continue;
     }
+
+    // Claimed by its stated parent when there is one and we have seen it.
+    const owner = r.profileId != null ? byProfile.get(r.profileId) : undefined;
+    if (owner) { owner.items.push(r); continue; }
+
     // Analytes before any heading — common on single-test orders — hang off a
     // headless group rather than being dropped.
     if (!current) { current = { heading: null, items: [] }; groups.push(current); }
@@ -84,27 +97,25 @@ export function PrintReport() {
   const [error, setError] = useState<string | null>(null);
 
   const pdfMode = params.get('pdf') === '1';
+  const token = params.get('t');
 
-  /*
-   * Display options are seeded from the URL and then driven by postMessage.
-   *
-   * The renderer only ever reads the URL — it loads the route once and
-   * photographs it. The preview cannot work that way: changing the URL would
-   * remount the iframe, re-boot the SPA and re-fetch the report just to move a
-   * page break, which is seconds of blank white for a toggle. So the modal
-   * pushes the options in and they are applied here, client-side.
-   */
   const [split, setSplit] = useState(params.get('split') === '1');
   const [headless, setHeadless] = useState(params.get('headless') === '1');
   const [excluded, setExcluded] = useState<Set<number>>(() => parseExcluded(params.get('exclude')));
 
   useEffect(() => {
     let live = true;
-    api.get<FullRow>(`/api/reports/${encodeURIComponent(sid)}`)
+    // With a token there is no session to authenticate with, so the request
+    // goes to the route the token opens. The token is the whole credential —
+    // see PublicReportEndpoints for what it does and does not permit.
+    const url = token
+      ? `/api/public/reports/${encodeURIComponent(sid)}?t=${encodeURIComponent(token)}`
+      : `/api/reports/${encodeURIComponent(sid)}`;
+    api.get<FullRow>(url)
       .then((r) => { if (live) setRow(r); })
       .catch((e) => { if (live) setError(e instanceof Error ? e.message : 'Could not load this report.'); });
     return () => { live = false; };
-  }, [sid]);
+  }, [sid, token]);
 
   // Departments in the order the LIS returned them — that order is the printed
   // report's order and operators read it that way.
@@ -132,9 +143,23 @@ export function PrintReport() {
     return { total, remaining };
   }, [departments, excluded]);
 
-  // Ready means "there is something to photograph", and an error counts: a
-  // failed render must come back as a one-page PDF saying so, not as a 45s
-  // timeout with nothing to show for it.
+  const specimens = useMemo(() => {
+    const seen = new Set<string>();
+    for (const r of row?.results ?? []) {
+      const s = r.specimen?.trim();
+      if (s) seen.add(s);
+    }
+    return [...seen];
+  }, [row]);
+
+  // Only for what is actually being printed: unticking the one test that
+  // carried a note should take the note with it.
+  const notes = useMemo(() => notesForCodes(
+    (row?.results ?? [])
+      .filter((t) => !isHeading(t) && !excluded.has(t.resultId))
+      .map((t) => t.testCode),
+  ), [row, excluded]);
+
   const ready = row !== null || error !== null;
 
   // ---- the preview conversation -------------------------------------------
@@ -154,8 +179,6 @@ export function PrintReport() {
     return () => window.removeEventListener('message', onMessage);
   }, [pdfMode, sid]);
 
-  // Announce the selection on load and on every tick, so the modal knows what
-  // to exclude from the download and whether anything is left to download.
   useEffect(() => {
     if (pdfMode || !ready || window.parent === window) return;
     window.parent.postMessage({
@@ -176,6 +199,7 @@ export function PrintReport() {
   }, []);
 
   const tickable = !pdfMode;
+  const cols = tickable ? 6 : 5;
 
   return (
     <div className={`print${split ? ' print--split' : ''}${headless && !pdfMode ? ' print--headless' : ''}`}
@@ -184,32 +208,50 @@ export function PrintReport() {
         <p className="print__error">{error}</p>
       ) : !row ? null : (
         <>
-          {/* Where the pre-printed letterhead will be. Drawn in the preview so
-              the operator can see what the paper leaves room for; blanked (but
-              still occupying its space) under headless, so the preview
-              paginates exactly like the PDF. */}
           {!pdfMode && <div className="print__letterhead">Pre-printed letterhead area</div>}
 
+          {/* Two columns of label/value, as the LIS prints it. The QR sits to
+              the right of both, where it survives being folded. */}
           <header className="print__head">
-            <div>
-              <h1 className="print__patient">{row.patientName ?? 'Unnamed patient'}</h1>
-              <dl className="print__meta">
-                <div><dt>SID</dt><dd className="mono">{row.sid}</dd></div>
-                {row.pid ? <div><dt>PID</dt><dd className="mono">{row.pid}</dd></div> : null}
-                <div>
-                  <dt>Age / Sex</dt>
-                  <dd>{[row.age != null ? `${row.age} ${row.ageUnit ?? ''}`.trim() : null, row.sex]
-                        .filter(Boolean).join(' · ') || '—'}</dd>
-                </div>
-                {row.clientCode ? <div><dt>Client</dt><dd>{row.clientCode}</dd></div> : null}
-              </dl>
-            </div>
-            <dl className="print__meta print__meta--right">
+            <dl className="print__meta">
+              <div><dt>Name</dt><dd className="print__name">{row.patientName ?? 'Unnamed patient'}</dd></div>
+              <div><dt>SID</dt><dd className="mono">{row.sid}</dd></div>
+              {row.refCustomer && <div><dt>Ref. Customer</dt><dd>{plainText(row.refCustomer)}</dd></div>}
+              {specimens.length > 0 && <div><dt>Specimen</dt><dd>{specimens.join(', ')}</dd></div>}
               <div><dt>Registered</dt><dd>{fmtDateTime(row.registeredAt)}</dd></div>
+              {row.collectedAt?.name && (
+                <div className="print__meta--wide">
+                  <dt>Collected at</dt>
+                  <dd>
+                    {plainText(row.collectedAt.name)}
+                    {row.collectedAt.address && <>, {plainText(row.collectedAt.address)}</>}
+                    {row.collectedAt.email && <> · {row.collectedAt.email}</>}
+                    {row.collectedAt.phone && <> · Ph: {row.collectedAt.phone}</>}
+                  </dd>
+                </div>
+              )}
+            </dl>
+
+            <dl className="print__meta">
+              <div>
+                <dt>Age / Gender</dt>
+                <dd>{[row.age != null ? `${row.age} ${row.ageUnit ?? ''}`.trim() : null, row.sex]
+                      .filter(Boolean).join(' / ') || '—'}</dd>
+              </div>
+              <div><dt>Patient Id</dt><dd className="mono">{row.pid}</dd></div>
+              <div><dt>Ref. Doctor</dt><dd>{plainText(row.refDoctor) || 'SELF'}</dd></div>
+              {row.passportNo && <div><dt>Passport</dt><dd className="mono">{row.passportNo}</dd></div>}
               <div><dt>Collected</dt><dd>{fmtDateTime(row.sampleDrawn)}</dd></div>
               <div><dt>Reported</dt><dd>{fmtDateTime(row.lastModifiedAt)}</dd></div>
               {row.billNumber ? <div><dt>Bill</dt><dd className="mono">{row.billNumber}</dd></div> : null}
             </dl>
+
+            {row.qr && (
+              <div className="print__qr">
+                <img src={row.qr} alt="" />
+                <span>Scan for your copy</span>
+              </div>
+            )}
           </header>
 
           {row.clinicalHistory && (
@@ -224,8 +266,6 @@ export function PrintReport() {
           )}
 
           {departments.map((dept, di) => (
-            /* Split puts each department on its own sheet. The first one must
-               not break or the PDF opens on a blank page — see .print--split. */
             <section key={dept.name} className="print__dept" data-dept-index={di}>
               <h2>{dept.name}</h2>
               <table className="print__table">
@@ -234,28 +274,43 @@ export function PrintReport() {
                       are unlabelled is a table you have to scroll back to read. */}
                   <tr>
                     {tickable && <th className="print__tick" aria-label="Include" />}
-                    <th>Investigation</th>
-                    <th className="print__num">Result</th>
+                    <th>Test Name</th>
+                    <th className="print__num">Value</th>
                     <th>Unit</th>
-                    <th>Biological reference interval</th>
+                    <th>Biological Ref Interval</th>
+                    <th>Method</th>
                   </tr>
                 </thead>
                 <tbody>
                   {dept.groups.map((g) => {
                     const headOff = g.heading != null && excluded.has(g.heading.resultId);
+                    // A profile's own clinical text, from Telo's sidecar, keyed
+                    // on the heading's profile id.
+                    const profileKey = g.heading?.profileId ?? g.heading?.resultId;
+                    const profileInterp = profileKey != null
+                      ? row.profileInterpretations?.[profileKey] : undefined;
+                    // A standalone test carries its own from the catalogue.
+                    const ownInterp = g.heading == null && g.items.length === 1
+                      ? g.items[0].interpretation : g.heading?.interpretation;
+                    const interp = profileInterp || ownInterp;
+
+                    if (headOff && pdfMode) return null;
+
                     return (
                       <Fragment key={g.heading?.resultId ?? `g${g.items[0]?.resultId ?? di}`}>
                         {g.heading && (
                           <tr className={`print__section${headOff ? ' print__row--off' : ''}`}>
                             {tickable && (
                               <td className="print__tick">
-                                <input type="checkbox" checked={!headOff} aria-label={`Include ${plainText(g.heading.testName) || g.heading.testCode || 'section'}`}
+                                <input type="checkbox" checked={!headOff}
+                                       aria-label={`Include ${nameOf(g.heading)}`}
                                        onChange={() => toggle(g.heading!.resultId)} />
                               </td>
                             )}
-                            <td colSpan={4}>{plainText(g.heading.testName) || g.heading.testCode}</td>
+                            <td colSpan={5}>{nameOf(g.heading)}</td>
                           </tr>
                         )}
+
                         {g.items.map((t) => {
                           const off = headOff || excluded.has(t.resultId);
                           // Under the renderer an unticked row is simply not
@@ -267,12 +322,12 @@ export function PrintReport() {
                               {tickable && (
                                 <td className="print__tick">
                                   <input type="checkbox" checked={!off} disabled={headOff}
-                                         aria-label={`Include ${plainText(t.testName) || t.testCode || 'test'}`}
+                                         aria-label={`Include ${nameOf(t)}`}
                                          onChange={() => toggle(t.resultId)} />
                                 </td>
                               )}
                               <td>
-                                {plainText(t.testName) || t.testCode || '—'}
+                                {nameOf(t)}
                                 {t.comments && <div className="print__comment">{plainText(t.comments)}</div>}
                               </td>
                               <td className={`print__num mono${t.abnormal ? ' print__num--flag' : ''}`}>
@@ -284,9 +339,24 @@ export function PrintReport() {
                               </td>
                               <td>{t.unit ?? '—'}</td>
                               <td className="print__range">{plainText(t.normalRange) || '—'}</td>
+                              <td className="print__method">{plainText(t.method)}</td>
                             </tr>
                           );
                         })}
+
+                        {/* Clinical significance, under the profile it belongs
+                            to rather than at the end of the report — a doctor
+                            reads it against the numbers immediately above. */}
+                        {interp && !headOff && (
+                          <tr className="print__interp-row">
+                            <td colSpan={cols}>
+                              <div className="print__interp">
+                                <h3>Interpretation</h3>
+                                <p>{plainText(interp)}</p>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
                       </Fragment>
                     );
                   })}
@@ -297,14 +367,40 @@ export function PrintReport() {
 
           {row.results.length === 0 && <p className="print__error">No results have been entered for this sample.</p>}
 
-          {/* Everything unticked. Only reachable in the preview — the download
-              is blocked before it gets here — but a blank sheet with no
-              explanation would look like a broken render. */}
           {pdfMode && counts.total > 0 && counts.remaining === 0 && (
             <p className="print__error">No tests were selected for this report.</p>
           )}
 
+          {notes.length > 0 && (
+            <section className="print__notes">
+              <h3>Note</h3>
+              <ol>{notes.map((n) => <li key={n}>{n}</li>)}</ol>
+            </section>
+          )}
+
           <footer className="print__foot">
+            {/* Signatures first: the disclaimer is boilerplate, and who signed
+                the report is the part that makes it a report. */}
+            {row.signers && row.signers.length > 0 && (
+              <div className="print__signs">
+                {row.signers.map((s) => (
+                  <div className="print__sign" key={s.id}>
+                    {s.signatureDataUrl && <img src={s.signatureDataUrl} alt="" />}
+                    <b>{plainText(s.doctorName) || ''}</b>
+                    {s.designation && <span>{plainText(s.designation)}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {row.processedAt?.name && (
+              <p className="print__processed">
+                Processed at {plainText(row.processedAt.name)}
+                {row.processedAt.address && <>, {plainText(row.processedAt.address)}</>}
+                {row.processedAt.phone && <> · {row.processedAt.phone}</>}
+              </p>
+            )}
+
             <p>
               Results relate only to the sample tested. This report is not valid for medico-legal purposes.
               Please correlate clinically.

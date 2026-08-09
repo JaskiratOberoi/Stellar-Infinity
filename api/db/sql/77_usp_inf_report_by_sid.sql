@@ -81,10 +81,34 @@ BEGIN
             P.order_number,
             P.bill_number,
             S.Sample_Comments AS sample_comments,
-            S.Sample_ClinicalHistory AS clinical_history
+            S.Sample_ClinicalHistory AS clinical_history,
+            -- Referrers. A linked master row wins; the free-text column is what
+            -- the LIS keeps when the name was typed rather than picked, and a
+            -- report that prints neither is a report that lost the referral.
+            ISNULL(NULLIF(LTRIM(RTRIM(RD.doctor_name)), N''),
+                   NULLIF(LTRIM(RTRIM(P.ref_doctor_other)), '')) AS ref_doctor,
+            ISNULL(NULLIF(LTRIM(RTRIM(RC.customer_name)), N''),
+                   NULLIF(LTRIM(RTRIM(P.ref_customer_other)), '')) AS ref_customer,
+            /*
+             * Passport / travel ID.
+             *
+             * usp_telo_create_order mirrors the LIS order form and never leaves
+             * MRNID blank: with no passport entered it backfills the PATIENT
+             * ID. Printing that verbatim would put the patient id under a
+             * "Passport" label on every report that never had one, so an MRNID
+             * equal to the pid is treated as absent. Telo draws the same
+             * distinction, for the same reason.
+             */
+            CASE WHEN NULLIF(LTRIM(RTRIM(P.MRNID)), '') IS NOT NULL
+                  AND LTRIM(RTRIM(P.MRNID)) <> CONVERT(VARCHAR(20), P.id)
+                 THEN LTRIM(RTRIM(P.MRNID)) END AS passport_no
         FROM dbo.tbl_med_mcc_patient_samples S
         INNER JOIN dbo.tbl_med_mcc_patient_master P
             ON S.patient_id = P.id
+        LEFT JOIN dbo.tbl_med_mcc_doctors RD
+            ON RD.id = P.ref_doctor
+        LEFT JOIN dbo.tbl_med_mcc_customer RC
+            ON RC.id = P.ref_customer
         INNER JOIN dbo.tbl_med_mcc_unit_master U
             ON P.mcc_code = U.id
         LEFT JOIN dbo.tbl_med_business_unit_master BU
@@ -123,6 +147,9 @@ BEGIN
         H.bill_number,
         H.sample_comments,
         H.clinical_history,
+        H.ref_doctor,
+        H.ref_customer,
+        H.passport_no,
         (
             SELECT MAX(r2.updateddate)
             FROM dbo.tbl_med_mcc_patient_test_result r2
@@ -142,10 +169,23 @@ BEGIN
                 r.comments,
                 r.updateddate AS updated_at,
                 d.Code AS department_code,
-                d.Name AS department_name
+                d.Name AS department_name,
+                -- The catalogue's own display name for the printed report,
+                -- which is not always the name the result row was written with.
+                m.ReportTestname AS report_test_name,
+                m.Method AS method,
+                -- NVARCHAR(MAX): Interpretation is a text/ntext column on the
+                -- legacy schema and FOR JSON will not serialise it untouched.
+                CAST(m.Interpretation AS NVARCHAR(MAX)) AS interpretation,
+                -- The real parent link. The report's nesting was being inferred
+                -- from row order alone, which is right until a profile's rows
+                -- are not contiguous.
+                r.profile_id,
+                sm.Sampletype AS specimen
             FROM dbo.tbl_med_mcc_patient_test_result r
             LEFT JOIN dbo.tbl_med_test_master m ON r.testid = m.id
             LEFT JOIN dbo.tbl_med_department_master d ON m.DepartmentId = d.id
+            LEFT JOIN dbo.tbl_med_sample_master sm ON sm.id = m.SampleId
             WHERE r.vailid = H.sid
               AND (@include_unauthorized = 1 OR r.auth = 1)
             -- Report order: headings, then profile rows, then analytes.

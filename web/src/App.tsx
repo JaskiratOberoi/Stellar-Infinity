@@ -23,6 +23,7 @@ import { InfinityLoader } from './components/InfinityLoader';
 import { IdleWarning } from './components/IdleWarning';
 import { NavMenu, navItemActive, type NavItem } from './components/NavMenu';
 import { PrintReport } from './pages/PrintReport';
+import { PublicReport } from './pages/PublicReport';
 import { PrintSmartReport } from './pages/PrintSmartReport';
 import { EnvBanner } from './components/EnvBanner';
 import { PrintInvoice } from './pages/PrintInvoice';
@@ -117,12 +118,37 @@ export function App() {
   const { user, loading, signOut, can, entering, finishEntering } = useAuth();
   const loc = useLocation();
   const isPrint = loc.pathname.startsWith('/print/');
+  // The patient's landing page from the printed QR. Rendered before the session
+  // is even resolved: it has nothing to do with one, and making a patient watch
+  // "Restoring session…" for a document they scanned off paper is the
+  // application talking about itself.
+  const isPublicReport = loc.pathname.startsWith('/r/');
+
+  if (isPublicReport) {
+    return (
+      <Routes>
+        <Route path="/r/:sid" element={<PublicReport />} />
+      </Routes>
+    );
+  }
 
   if (loading) {
     return <div className="center"><InfinityLoader /><span className="muted">Restoring session…</span></div>;
   }
 
-  if (!user) return <><EnvBanner /><Login /></>;
+  /*
+   * A print route carrying a token is the PATIENT's copy, opened from the QR on
+   * their report — there is no session and there is not meant to be one.
+   *
+   * The SPA does not check the token and must not be read as though it did:
+   * the API verifies it on every request behind this page, and a wrong one
+   * leaves the route rendering its own "could not load" state. What this line
+   * decides is only whether to show a login form to someone who was never going
+   * to log in.
+   */
+  const tokened = isPrint && new URLSearchParams(loc.search).has('t');
+
+  if (!user && !tokened) return <><EnvBanner /><Login /></>;
 
   // The print routes are what headless Chromium photographs for the PDF, so
   // they render alone — no top bar, no shell. A PDF is the report, not a
@@ -140,6 +166,12 @@ export function App() {
       </Routes>
     );
   }
+
+  // Past the print branch a session is guaranteed: the only way to reach the
+  // gate above without one is a tokened print route, and that returned. Written
+  // out rather than asserted with `!` so the day someone adds a third anonymous
+  // route, the shell shows a login form instead of dereferencing null.
+  if (!user) return <><EnvBanner /><Login /></>;
 
   const navItems = NAV.filter((i) => !i.cap || can(i.cap));
 

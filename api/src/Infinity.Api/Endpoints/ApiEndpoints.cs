@@ -399,11 +399,28 @@ public static class ApiEndpoints
         return single is int one ? [one] : null;
     }
 
+    /// <summary>
+    /// One sample's full report: the header, the results, and everything around
+    /// them that gets printed.
+    /// </summary>
+    /// <remarks>
+    /// The extras — collection centre, processing unit, signatories, profile
+    /// interpretations — ride along on this response rather than sitting behind
+    /// a second route, because the only caller that needs them is the print
+    /// route, and that page is being photographed by a headless browser. A
+    /// second round trip there is another window in which the render can settle
+    /// early and produce a report with no signature on it.
+    ///
+    /// They are fetched only AFTER the row is found and scope has been
+    /// satisfied, so an out-of-scope SID costs one query and reveals nothing.
+    /// </remarks>
     private static async Task<IResult> GetReport(
         string sid,
         System.Security.Claims.ClaimsPrincipal principal,
         ScopeRepository scopes,
         ReportsRepository repo,
+        Infinity.Api.Reports.ReportExtrasRepository extras,
+        Infinity.Api.Reports.ReportLink links,
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
@@ -415,7 +432,32 @@ public static class ApiEndpoints
         if (scope.IsDenied) return Results.NotFound();
 
         var row = await repo.GetBySidAsync(scope.ClientCodes, sid, ct).ConfigureAwait(false);
-        return row is null ? Results.NotFound() : Results.Ok(row);
+        if (row is null) return Results.NotFound();
+
+        // A report still prints without its surroundings — unsigned and with no
+        // centre block, but with every result on it. Failing the whole request
+        // because a signature table was briefly unreachable would be the wrong
+        // trade for a document someone is waiting on.
+        Infinity.Api.Reports.ReportExtras? more = null;
+        try { more = await extras.GetAsync(row.Sid, ct).ConfigureAwait(false); }
+        catch (Exception) when (!ct.IsCancellationRequested) { /* print it bare */ }
+
+        return Results.Ok(new
+        {
+            row.Sid, row.ClientCode, row.BusinessUnit, row.Pid, row.PatientName, row.Sex,
+            row.Age, row.AgeUnit, row.SampleDrawn, row.RegisteredAt, row.LastModifiedAt,
+            row.StatusCode, row.Status, row.TestNames, row.OrderNumber, row.BillNumber,
+            row.ClinicalHistory, row.Results, row.RefDoctor, row.RefCustomer, row.PassportNo,
+            CollectedAt = more?.CollectedAt,
+            ProcessedAt = more?.ProcessedAt,
+            Signers = more?.Signers ?? [],
+            ProfileInterpretations = more?.ProfileInterpretations
+                ?? new Dictionary<int, string>(),
+            // Null unless a secret and a public base URL are both configured,
+            // which is what keeps the patient link off a deployment that has
+            // not been set up to serve one.
+            Qr = links.QrDataUrl(row.Sid),
+        });
     }
 
     /// <summary>

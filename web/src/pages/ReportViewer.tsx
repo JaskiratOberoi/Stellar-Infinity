@@ -16,9 +16,66 @@ export interface TestResult {
   authorized: boolean;
   comments: string | null;
   departmentName: string | null;
+  /** The catalogue's display name, which the result row does not always carry. */
+  reportTestName: string | null;
+  /** How it was measured — CLIA, ELISA. A printed report names its method. */
+  method: string | null;
+  /** Clinical significance from the catalogue, printed under the test. */
+  interpretation: string | null;
+  /** The profile this row belongs to. Null on roughly a sixth of the rows. */
+  profileId: number | null;
+  /** The tube it came from, e.g. "WB - EDTA". */
+  specimen: string | null;
 }
 
-export type FullRow = WorksheetRow & { results: TestResult[] };
+/** Where the sample was taken — the centre a patient rings, not the lab. */
+export interface CollectionCentre {
+  code: string;
+  name: string | null;
+  address: string | null;
+  city: string | null;
+  phone: string | null;
+  email: string | null;
+}
+
+/** The lab that processed it. */
+export interface ProcessingUnit {
+  id: number;
+  name: string | null;
+  address: string | null;
+  city: string | null;
+  phone: string | null;
+}
+
+export interface ReportSigner {
+  id: number;
+  doctorName: string | null;
+  designation: string | null;
+  docType: number;
+  /** The signature image, inlined so the renderer never waits on a second fetch. */
+  signatureDataUrl: string | null;
+}
+
+/**
+ * Everything the print route draws.
+ *
+ * The extras ride on the same response as the results rather than sitting
+ * behind a second call, because the only page that needs them is being
+ * photographed by a headless browser — see GetReport's remarks.
+ */
+export type FullRow = WorksheetRow & {
+  results: TestResult[];
+  refDoctor: string | null;
+  refCustomer: string | null;
+  passportNo: string | null;
+  collectedAt: CollectionCentre | null;
+  processedAt: ProcessingUnit | null;
+  signers: ReportSigner[];
+  /** profile id → clinical significance, from Telo's shared sidecar table. */
+  profileInterpretations: Record<number, string>;
+  /** QR PNG data URI for the patient's copy; null when the link is not configured. */
+  qr: string | null;
+};
 
 /**
  * Preview one report, then download it.

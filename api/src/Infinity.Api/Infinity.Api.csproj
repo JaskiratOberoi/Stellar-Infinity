@@ -26,6 +26,13 @@
          in-process path when Redis is not configured, so this reference is
          needed to COMPILE even in a deployment that never connects to Redis. -->
     <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
+    <!-- The QR on the printed report (Reports/ReportLink.cs). PngByteQRCode is
+         pure managed — no System.Drawing, so nothing native to install in the
+         container. Taken as a dependency rather than written because a QR
+         encoder is Reed-Solomon error correction and mask selection, and a
+         subtly wrong one produces a code that scans on the phone you tested
+         with and fails on a patient's. -->
+    <PackageReference Include="QRCoder" Version="1.6.0" />
   </ItemGroup>
 
 </Project>

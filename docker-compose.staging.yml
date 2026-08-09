@@ -56,6 +56,11 @@ services:
       # Points at THIS stack's renderer, not the live one — compose resolves the
       # name inside this project's network.
       Render__BaseUrl: "http://render:8090"
+      # Where the QR on a printed report resolves. Per-stack, so a report
+      # printed here never points a patient at live. NOT a secret — the secret
+      # is Reports__TokenSecret in api/.env, and with it unset no QR is drawn
+      # and the public route rejects everything.
+      Reports__PublicBaseUrl: "https://infinity-staging.genomicslab.in"
     depends_on:
       redis:
         condition: service_healthy
