@@ -182,9 +182,17 @@ export function NewOrder() {
    * pay for.
    */
   const [discount, setDiscount] = useState('');
-  const [receipt, setReceipt] = useState('');
-  const [payMode, setPayMode] = useState<number | ''>('');
-  const [paymentRef, setPaymentRef] = useState('');
+
+  /*
+   * Split tender, as Telo collects it: part cash, part UPI, part card.
+   *
+   * A list rather than one method and one amount, because that is how a
+   * counter actually takes money — "₹500 cash and the rest on UPI" was
+   * previously two visits to the order screen, the second one after the
+   * patient had left. The procedure takes a dbo.TeloPayment TVP and prefers it
+   * over the single pay mode whenever it has rows.
+   */
+  const [payments, setPayments] = useState<{ method: string; amount: string; ref: string }[]>([]);
   const [gold, setGold] = useState(false);
   const [goldNumber, setGoldNumber] = useState('');
   const [goldHolder, setGoldHolder] = useState('');
@@ -283,6 +291,9 @@ export function NewOrder() {
    * The card only counts once both its fields are filled — the procedure
    * requires them too, so a half-entered card is not yet a reduction.
    */
+  /** What the split lines add up to, ignoring blank rows. */
+  const paidNow = payments.reduce((s, p) => s + Number(p.amount || 0), 0);
+
   const goldOk = gold && !isB2b && goldNumber.trim() !== '' && goldHolder.trim() !== '';
   const payable = Math.max(
     0,
@@ -380,9 +391,14 @@ export function NewOrder() {
         newRefCustomerName: refCustomer?.kind === 'new' ? refCustomer.name : null,
         clinicalHistory: patient.clinicalHistory.trim() || null,
         discountAmount: Number(discount || 0),
-        receiptAmount: Number(receipt || 0),
-        payMode: payMode === '' ? null : payMode,
-        paymentRef: paymentRef.trim() || null,
+        // Split lines go as a TVP; the scalar pair stays empty so the
+        // procedure takes the TVP path and cannot receipt the money twice.
+        receiptAmount: 0,
+        payMode: null,
+        paymentRef: null,
+        payments: payments
+          .map((x) => ({ method: x.method, amount: Number(x.amount || 0), ref: x.ref.trim() || null }))
+          .filter((x) => x.amount > 0),
 
         // The API ignores these on a B2B order; sent as typed so the request
         // says what the operator asked for and the server decides.
@@ -442,7 +458,7 @@ export function NewOrder() {
       // Money and the attachment are per-order for the same reason the
       // barcodes are: carrying a receipt into the next patient would take
       // their money twice.
-      setDiscount(''); setReceipt(''); setPayMode(''); setPaymentRef('');
+      setDiscount(''); setPayments([]);
       setGold(false); setGoldNumber(''); setGoldHolder('');
       setClinicalFile(null); setFileError(null);
       // Barcodes are per-order and must never carry into the next one — the
@@ -1139,35 +1155,59 @@ export function NewOrder() {
                   behaves exactly as before. */}
               <fieldset className="fgroup" style={{ marginTop: '1.2rem' }}>
                 <legend>Payment</legend>
-                <div className="fgroup__grid fgroup__grid--narrow">
-                  <label className="field">
-                    <span>Discount ₹</span>
-                    <input className="input mono" inputMode="numeric" placeholder="0"
-                           value={discount}
-                           onChange={(e) => setDiscount(e.target.value.replace(/\D/g, ''))} />
-                  </label>
+                <label className="field" style={{ maxWidth: '11rem' }}>
+                  <span>Discount ₹</span>
+                  <input className="input mono" inputMode="numeric" placeholder="0"
+                         value={discount}
+                         onChange={(e) => setDiscount(e.target.value.replace(/\D/g, ''))} />
+                </label>
 
-                  <label className="field">
-                    <span>Paying now ₹</span>
-                    <input className="input mono" inputMode="numeric" placeholder="0"
-                           value={receipt}
-                           onChange={(e) => setReceipt(e.target.value.replace(/\D/g, ''))} />
-                  </label>
-
-                  <label className="field">
-                    <span>Pay mode</span>
-                    <select className="input" value={payMode}
-                            onChange={(e) => setPayMode(e.target.value === '' ? '' : Number(e.target.value))}>
-                      <option value="">Not specified</option>
-                      {PAYMENT_MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                {/* Split tender. One row per method, as Telo collects it —
+                    "₹500 cash and the rest on UPI" is one transaction at the
+                    counter, and it used to take two visits to the order screen
+                    with the second one after the patient had gone. */}
+                {payments.map((p, i) => (
+                  <div className="payline" key={i}>
+                    <select className="input" aria-label="Method" value={p.method}
+                            onChange={(e) => setPayments((ps) =>
+                              ps.map((x, n) => (n === i ? { ...x, method: e.target.value } : x)))}>
+                      {PAYMENT_MODES.map((m) => <option key={m.id} value={m.label}>{m.label}</option>)}
                     </select>
-                  </label>
 
-                  <label className="field">
-                    <span>Reference</span>
-                    <input className="input" placeholder="UTR, card slip…" maxLength={100}
-                           value={paymentRef} onChange={(e) => setPaymentRef(e.target.value)} />
-                  </label>
+                    <input className="input mono" inputMode="numeric" placeholder="0"
+                           aria-label="Amount" value={p.amount}
+                           onChange={(e) => setPayments((ps) => ps.map((x, n) =>
+                             (n === i ? { ...x, amount: e.target.value.replace(/\D/g, '') } : x)))} />
+
+                    {/* Cash has no reference to keep, so the box goes away
+                        rather than sitting there inviting one. */}
+                    {p.method !== 'Cash' ? (
+                      <input className="input" placeholder="UTR, slip no…" maxLength={50}
+                             aria-label="Reference" value={p.ref}
+                             onChange={(e) => setPayments((ps) => ps.map((x, n) =>
+                               (n === i ? { ...x, ref: e.target.value } : x)))} />
+                    ) : <span />}
+
+                    <button className="btn btn--ghost btn--sm" aria-label="Remove this payment"
+                            onClick={() => setPayments((ps) => ps.filter((_, n) => n !== i))}>
+                      Remove
+                    </button>
+                  </div>
+                ))}
+
+                <div className="row" style={{ gap: '.6rem', marginTop: '.35rem', flexWrap: 'wrap' }}>
+                  <button className="btn btn--ghost btn--sm"
+                          onClick={() => setPayments((ps) => [...ps,
+                            { method: 'Cash', amount: '', ref: '' }])}>
+                    + Add payment
+                  </button>
+                  {paidNow > 0 && (
+                    <span className="muted" style={{ fontSize: '.76rem' }}>
+                      Taking <b>{inr(paidNow)}</b> of {inr(payable)}
+                      {paidNow > payable && ' — more than the bill'}
+                      {paidNow < payable && ` · ${inr(payable - paidNow)} left to pay`}
+                    </span>
+                  )}
                 </div>
 
                 {/* B2C only. A B2B bill is the patient's at MRP and the

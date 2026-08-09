@@ -1638,6 +1638,20 @@ tbody tr:hover { background: var(--accent-softer); }
   .order-flow .field > span:first-child { margin-bottom: .1rem; }
 }
 
+/* One split-tender line: method, amount, reference, remove. The reference
+   column keeps its track even for Cash (which renders an empty span), so the
+   Remove buttons stay in a straight line down the list. */
+.payline {
+  display: grid;
+  grid-template-columns: 8.5rem 6.5rem minmax(0, 1fr) auto;
+  gap: .4rem;
+  align-items: center;
+  margin-bottom: .35rem;
+}
+@media (max-width: 720px) {
+  .payline { grid-template-columns: 1fr 1fr; }
+}
+
 /* ---------- order channel (B2C / B2B) ---------- */
 
 .channel__opts { display: flex; gap: .6rem; flex-wrap: wrap; }

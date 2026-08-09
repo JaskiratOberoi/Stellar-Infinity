@@ -100,7 +100,25 @@ public sealed record CreateOrderRequest(
     /// lost in flight. Capped at the endpoint; see ClinicalFileMaxBytes.
     /// </remarks>
     string? ClinicalFileBase64 = null,
-    string? ClinicalFileName = null);
+    string? ClinicalFileName = null,
+
+    /// <summary>
+    /// Split tender: part cash, part UPI, part card. Empty means "use the
+    /// single PayMode/ReceiptAmount above", which is what every caller written
+    /// before split payments does.
+    /// </summary>
+    /// <remarks>
+    /// The procedure prefers this TVP whenever it has rows and falls back to
+    /// the scalar pair otherwise, so the two cannot both apply and there is no
+    /// double-receipting.
+    /// </remarks>
+    IReadOnlyList<PaymentLine>? Payments = null);
+
+/// <param name="Method">Cash, UPI, Card, Cheque, NEFT — the label, not an id.</param>
+/// <param name="Ref">
+/// UTR, card slip, cheque number. Meaningless for cash and dropped there.
+/// </param>
+public sealed record PaymentLine(string Method, int Amount, string? Ref);
 
 public sealed record CreateOrderResult(
     bool Ok,
@@ -152,6 +170,47 @@ public sealed class OrderWriteRepository(NobleConnectionFactory db, SqlRetry ret
     /// attachment must not cost the operator the order. The endpoint checks
     /// the size first, so what reaches here is either decodable or junk.
     /// </remarks>
+    /// <summary>
+    /// The split-payment lines, as dbo.TeloPayment.
+    /// </summary>
+    /// <remarks>
+    /// Column order and types mirror Telo's builder exactly — seq, method,
+    /// amount, ref — because a TVP is positional and a mismatch here would
+    /// post the amount into the method column rather than failing loudly.
+    ///
+    /// Zero and negative lines are dropped rather than sent: an empty row the
+    /// operator added and did not fill is not a receipt, and the procedure
+    /// decides between the TVP and the scalar pair by whether the TVP has ANY
+    /// rows — so an all-blank TVP would suppress the scalar path and record
+    /// nothing at all.
+    /// </remarks>
+    private static void AddPaymentTvp(SqlCommand cmd, string name, IReadOnlyList<PaymentLine> lines)
+    {
+        var t = new System.Data.DataTable();
+        t.Columns.Add("seq", typeof(int));
+        t.Columns.Add("method", typeof(string));
+        t.Columns.Add("amount", typeof(int));
+        t.Columns.Add("ref", typeof(string));
+
+        var seq = 0;
+        foreach (var p in lines)
+        {
+            if (p.Amount <= 0) continue;
+            var method = string.IsNullOrWhiteSpace(p.Method) ? "Cash" : p.Method.Trim();
+            // Cash has no reference to keep, and storing one invites a
+            // reconciliation against something that was never issued.
+            var reference = method.Equals("Cash", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : (string.IsNullOrWhiteSpace(p.Ref) ? null : p.Ref.Trim());
+            t.Rows.Add(seq++, method[..Math.Min(50, method.Length)], p.Amount,
+                reference?[..Math.Min(50, reference.Length)]);
+        }
+
+        var param = cmd.Parameters.AddWithValue(name, t);
+        param.SqlDbType = SqlDbType.Structured;
+        param.TypeName = "dbo.TeloPayment";
+    }
+
     private static byte[]? DecodeClinicalFile(string? base64)
     {
         if (string.IsNullOrWhiteSpace(base64)) return null;
@@ -228,6 +287,7 @@ public sealed class OrderWriteRepository(NobleConnectionFactory db, SqlRetry ret
 
             AddSidTvp(cmd, "@sids", req.SampleSids ?? []);
             AddTestListTvp(cmd, "@items", req.Items);
+            AddPaymentTvp(cmd, "@payments", req.Payments ?? []);
 
             cmd.Parameters.Add("@patientId", SqlDbType.Int).Value = req.PatientId ?? 0;
             AddNVarChar(cmd, "@name", 200, req.Name);
