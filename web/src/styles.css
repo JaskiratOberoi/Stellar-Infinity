@@ -1632,6 +1632,30 @@ tbody tr:hover { background: var(--accent-softer); }
   .order-flow .card { padding: .6rem .8rem; }
   .order-flow > * { margin-bottom: .75rem; }
   .order-flow .order-step__head { margin-bottom: .4rem; }
+
+}
+
+/* ── WHY THIS IS STILL TWO COLUMNS, AND WHY IT STILL SCROLLS ───────────────
+   Measured in the real shell at 1905×940: cards of 114 / 123 / 181 / 480 / 453
+   with topbar and banner included, page 1130px, so 190px past the fold.
+
+   Multi-column preserves document order, so the only splits available are
+   prefixes. The best two-way split is 898 against 453 — Patient and Barcodes
+   cannot share a column, so everything else piles up behind Patient.
+
+   Two lowering attempts, both measured, both rejected:
+
+   - Widening Patient's field grid does nothing. Its fields sit in FOUR separate
+     two-up grids, so more columns re-flows each block without removing a row.
+   - Three columns makes it worse: the narrower 452px column stacks Patient's
+     fields one per row and it grows from 480 to 886, with horizontal scroll on
+     top.
+
+   The fix is structural, not a layout parameter: Patient's four grids have to
+   become ONE grid so it can run three or four fields across and lose half its
+   height. Until then this is the best stable arrangement — two columns, no
+   horizontal scroll, Place order reachable. */
+@media (min-width: 1180px) {
   .order-flow .field { margin-bottom: .45rem; }
   .order-flow .grid2 { gap: .45rem .75rem; }
   .order-flow .field > label,
