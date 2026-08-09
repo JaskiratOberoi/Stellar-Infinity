@@ -2034,7 +2034,11 @@ tbody tr:hover { background: var(--accent-softer); }
 .preview-backdrop { padding: 1rem; align-items: start; }
 
 .preview {
-  width: min(1000px, 100%);
+  /* 1100, not 1000. The toolbar carries six controls and a patient name and
+     needs 1060 to stay on one line — at 1000 it folded the tools onto a second
+     row. The extra width is not wasted either way: this window is showing a
+     sheet of A4. */
+  width: min(1100px, 100%);
   max-height: calc(100vh - 2rem);
   display: flex; flex-direction: column;
   background: var(--surface);
@@ -2044,21 +2048,36 @@ tbody tr:hover { background: var(--accent-softer); }
   margin: auto;
 }
 
+/* Six controls and a name. They fit on one line on a laptop and must fold
+   predictably below that — the earlier version let every item wrap on its own,
+   which stacked the toggle, the layout select and the buttons onto three
+   ragged rows with the select stretched across the whole bar. The name now
+   takes the leftover space and the tools travel as one block. */
 .preview__bar {
   display: flex; align-items: center; justify-content: space-between;
-  gap: .75rem; flex: none;
+  gap: .5rem .75rem; flex: none; flex-wrap: wrap;
   padding: .6rem .75rem;
   border-bottom: 1px solid var(--line);
 }
-.preview__who { min-width: 0; }
+/* Shrinks before the controls do, and never below a legible stub. */
+.preview__who { flex: 1 1 9rem; min-width: 0; }
 .preview__name {
   font-size: .86rem; font-weight: 500; margin: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .preview__err { margin: .1rem 0 0; font-size: .72rem; color: var(--danger); }
 
-.preview__tools { display: flex; align-items: center; gap: .4rem; flex: none; flex-wrap: wrap; }
-.preview__layout { width: auto; }
+.preview__tools {
+  display: flex; align-items: center; gap: .4rem;
+  flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end;
+}
+/* Explicitly sized, and qualified by the element so it cannot lose.
+   `.input--sm` is width:100% for form fields and carries the same specificity
+   as a bare `.preview__layout`, so which one won came down to whichever the
+   bundler emitted last — it emitted `.input--sm`, and the layout select
+   stretched to 830px and shoved the rest of the toolbar onto three rows.
+   `select.preview__layout` outranks it outright. */
+select.preview__layout { width: 11.25rem; flex: none; }
 
 /* The toggles. Written out rather than borrowed from .toggle, which is a
    full-width settings row — these sit in a toolbar and have to stay small. */
@@ -2095,11 +2114,18 @@ tbody tr:hover { background: var(--accent-softer); }
   border-radius: 8px; overflow: hidden;
   background: var(--teal);
 }
-.preview__dlopt { padding: 0 .5rem 0 .6rem; height: 30px; color: #fff; }
+.preview__dlopt { padding: 0 .5rem 0 .6rem; height: 30px; color: #fff; white-space: nowrap; }
 .preview__dl .btn { border-radius: 0; border: 0; }
 .preview__track--on { background: rgba(255,255,255,.35); }
 :checked + .preview__track--on { background: #fff; }
 :checked + .preview__track--on::after { background: var(--teal); }
+
+/* Nothing to staple. The control stays, dimmed and unclickable, because its
+   absence read as "this download has no attachment option" when what it
+   actually meant was "this report has no attachment" — a different fact, and
+   the one the operator wanted. */
+.preview__dlopt--none { opacity: .5; cursor: not-allowed; }
+.preview__dlopt--none .preview__track { background: rgba(255,255,255,.25); }
 
 /* Grey, like a print preview anywhere else — the point is that the white below
    is a sheet of paper with edges, not the page background. */

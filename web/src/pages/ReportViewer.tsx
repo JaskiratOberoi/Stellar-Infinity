@@ -129,6 +129,16 @@ export function ReportViewer({
 
   const [graphCount, setGraphCount] = useState(0);
   const [includeGraph, setIncludeGraph] = useState(true);
+  /*
+   * True until the attachment probe answers.
+   *
+   * The toolbar has to be drawn before the answer arrives, and a control that
+   * appears half a second later moves everything beside it — so the switch is
+   * rendered from the first frame and only its label settles. It also stops
+   * "no attachment" being asserted during the moment we do not yet know.
+   */
+  const [graphProbing, setGraphProbing] = useState(true);
+  const hasGraph = graphCount > 0;
   const [busy, setBusy] = useState<'pdf' | 'graph' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -184,7 +194,8 @@ export function ReportViewer({
     let live = true;
     api.get<{ count: number }>(`/api/reports/${encodeURIComponent(sid)}/graph?meta=true`)
       .then((g) => { if (live) setGraphCount(g.count); })
-      .catch(() => { /* No graph, or locked. Either way: no button. */ });
+      .catch(() => { /* No graph, or locked. Either way: nothing to staple. */ })
+      .finally(() => { if (live) setGraphProbing(false); });
     return () => { live = false; };
   }, [sid]);
 
@@ -203,7 +214,7 @@ export function ReportViewer({
         const q = new URLSearchParams();
         // withGraph: the LIS staples the graph to the printed report, so
         // Infinity's PDF is the same document unless it is turned off.
-        q.set('withGraph', String(graphCount > 0 && includeGraph));
+        q.set('withGraph', String(hasGraph && includeGraph));
         q.set('headless', String(headless));
         q.set('split', String(split));
         if (excluded.length) q.set('exclude', excluded.join(','));
@@ -214,7 +225,7 @@ export function ReportViewer({
     } finally {
       setBusy(null);
     }
-  }, [sid, nothingSelected, graphCount, includeGraph, headless, split, excluded]);
+  }, [sid, nothingSelected, hasGraph, includeGraph, headless, split, excluded]);
 
   return createPortal(
     <div className="modal-backdrop preview-backdrop" onClick={onClose}>
@@ -252,26 +263,37 @@ export function ReportViewer({
               <option value="split">Split by department</option>
             </select>
 
-            {graphCount > 0 && (
+            {/* Saves the attachment on its own, for the times it is the only
+                thing being sent on. Only when there is one — a button that
+                downloads nothing is not worth the width. */}
+            {hasGraph && (
               <button className="btn btn--ghost btn--sm" disabled={busy !== null}
                       onClick={() => void download('graph')}
-                      title="Download the graph attached to this report on its own">
+                      title="Download the attachment on its own, without the report">
                 {busy === 'graph' ? 'Fetching…' : `Graph${graphCount > 1 ? ` (${graphCount})` : ''}`}
               </button>
             )}
 
-            {/* The "+ Graph" switch lives inside the download button so it
-                reads as what this download will contain. */}
+            {/* The switch lives inside the download button so it reads as what
+                this download will contain rather than as a setting beside it.
+                It stays visible with no attachment, dimmed: vanishing, it said
+                "no such option" where the operator needed to be told "this
+                report has nothing stapled to it". */}
             <div className="preview__dl">
-              {graphCount > 0 && (
-                <label className="preview__dlopt"
-                       title="On: staple the graph pages after the report, as one merged file — the document the LIS prints. Off: the report alone.">
-                  <input type="checkbox" checked={includeGraph} disabled={busy !== null}
-                         onChange={(e) => setIncludeGraph(e.target.checked)} />
-                  <span className="preview__track preview__track--on" aria-hidden="true" />
-                  + Graph
-                </label>
-              )}
+              <label className={`preview__dlopt${hasGraph ? '' : ' preview__dlopt--none'}`}
+                     title={hasGraph
+                       ? 'On: staple the attachment after the report, as one merged file — the document the LIS prints. Off: the report alone.'
+                       : 'This report has no attachment. Graphs are stapled to the reports that carry one, such as Double and Quadruple Marker.'}>
+                <input type="checkbox" checked={hasGraph && includeGraph}
+                       disabled={!hasGraph || busy !== null}
+                       onChange={(e) => setIncludeGraph(e.target.checked)} />
+                <span className="preview__track preview__track--on" aria-hidden="true" />
+                {/* "Graph", not "Attachment": it is what the LIS and Telo both
+                    call this, so it is the word the operator already knows —
+                    and it is two-thirds the width, which is what keeps the
+                    toolbar on one line on a smaller screen. */}
+                {graphProbing ? 'Graph…' : '+ Graph'}
+              </label>
               <button className="btn btn--primary btn--sm" disabled={busy !== null || nothingSelected}
                       title={nothingSelected ? 'Tick at least one test to download' : undefined}
                       onClick={() => void download('pdf')}>
