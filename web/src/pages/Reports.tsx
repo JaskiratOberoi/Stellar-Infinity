@@ -275,7 +275,19 @@ export function Reports() {
         </>
       )}
 
-      {openSid && <ReportViewer sid={openSid} onClose={() => setOpenSid(null)} />}
+      {openSid && (
+        <ReportViewer
+          sid={openSid}
+          // The preview draws its own header from the report; this is only the
+          // name on the modal's own title bar, so the row we already have is
+          // the right source and costs nothing.
+          patientName={rows.find((r) => r.sid === openSid)?.patientName ?? null}
+          onClose={() => setOpenSid(null)}
+          // Swap one modal for the other rather than stacking them — two
+          // dialogs deep, Escape closes the wrong one.
+          onSmart={(s) => { setOpenSid(null); setSmartSid(s); }}
+        />
+      )}
       {smartSid && <SmartReportModal sid={smartSid} onClose={() => setSmartSid(null)} />}
     </div>
   );

@@ -83,6 +83,37 @@ public static class ReportPdfEndpoints
     }
 
     /// <summary>
+    /// The query string the renderer's print route is loaded with.
+    /// </summary>
+    /// <remarks>
+    /// <c>pdf=1</c> always: it is what tells the route to drop the tick boxes
+    /// and the letterhead placeholder, and to omit unticked rows outright
+    /// rather than dimming them.
+    ///
+    /// The exclusion list is re-parsed to integers and re-joined rather than
+    /// forwarded as given. The result is a URL the render service fetches with
+    /// the caller's own session cookie, so a caller-supplied fragment reaching
+    /// it unchecked would be theirs to compose — this keeps the only thing that
+    /// can appear there to digits and commas.
+    /// </remarks>
+    private static string PrintQuery(bool? split, string? exclude)
+    {
+        var ids = (exclude ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => int.TryParse(s, out var n) && n > 0 ? n : 0)
+            .Where(n => n > 0)
+            // A duplicate changes nothing but lengthens a URL that a very wide
+            // report can already make long.
+            .Distinct()
+            .ToArray();
+
+        var q = "?pdf=1";
+        if (split == true) q += "&split=1";
+        if (ids.Length > 0) q += "&exclude=" + string.Join(",", ids);
+        return q;
+    }
+
+    /// <summary>
     /// Identity + scope + lock, or the IResult that should be returned instead.
     /// </summary>
     private static async Task<(bool Ok, IResult? Fail)> GateAsync(
@@ -122,10 +153,19 @@ public static class ReportPdfEndpoints
     }
 
     /// <summary>The report as a PDF on the Noble letterhead.</summary>
+    /// <param name="split">One department per sheet, as the preview shows it.</param>
+    /// <param name="exclude">
+    /// Comma-separated result ids the operator unticked in the preview. Filtered
+    /// to integers here rather than passed through: this string is appended to
+    /// the URL the renderer loads, and anything else in it would be injected
+    /// into that query.
+    /// </param>
     private static async Task<IResult> GetReportPdf(
         string sid,
         bool? withGraph,
         bool? headless,
+        bool? split,
+        string? exclude,
         System.Security.Claims.ClaimsPrincipal principal,
         HttpContext http,
         ScopeRepository scopes,
@@ -144,7 +184,7 @@ public static class ReportPdfEndpoints
         {
             var pdf = await render.RenderAsync(
                 [new RenderClient.ReportRequest(
-                    Url: $"/print/report/{Uri.EscapeDataString(sid)}",
+                    Url: $"/print/report/{Uri.EscapeDataString(sid)}{PrintQuery(split, exclude)}",
                     Attachments: attachments,
                     Headless: headless)],
                 http.Request.Headers.Cookie.ToString(),
@@ -198,8 +238,22 @@ public static class ReportPdfEndpoints
             }
 
             included.Add(new RenderClient.ReportRequest(
-                Url: $"/print/report/{Uri.EscapeDataString(sid)}",
-                Attachments: await CollectGraphsAsync(graphs, sid, body!.WithGraph, ct).ConfigureAwait(false),
+                // pdf=1 matters here too. Without it the print route renders in
+                // its preview shape — tick boxes down the left and a letterhead
+                // placeholder — and a fifty-report batch would carry both on
+                // every page.
+                //
+                // A batch has no per-report selection: it comes from ticking
+                // rows on the worksheet, not from opening each one, so every
+                // report goes out whole.
+                //
+                // Split is accepted but nothing sends it yet — the batch bar
+                // offers only "include graphs". Left at the continuous layout
+                // rather than quietly adopting the preview's new default, which
+                // would change what an existing batch download looks like
+                // without anyone asking for it.
+                Url: $"/print/report/{Uri.EscapeDataString(sid)}{PrintQuery(body!.Split, null)}",
+                Attachments: await CollectGraphsAsync(graphs, sid, body.WithGraph, ct).ConfigureAwait(false),
                 Headless: body.Headless));
         }
 
@@ -277,5 +331,10 @@ public static class ReportPdfEndpoints
     private static string Sanitise(string sid) =>
         new(sid.Where(c => char.IsLetterOrDigit(c) || c is '-' or '_').ToArray());
 
-    public sealed record BulkPdfRequest(IReadOnlyList<string>? Sids, bool WithGraph = true, bool? Headless = null);
+    /// <param name="Split">
+    /// One department per sheet. Defaults off so a batch download keeps the
+    /// layout it has always had; no caller sends it yet.
+    /// </param>
+    public sealed record BulkPdfRequest(
+        IReadOnlyList<string>? Sids, bool WithGraph = true, bool? Headless = null, bool? Split = null);
 }
