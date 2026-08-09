@@ -1622,6 +1622,22 @@ tbody tr:hover { background: var(--accent-softer); }
 .runlist__rows li:last-child { border-bottom: none; }
 .runlist__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ---------- new order density ----------
+
+   Telo fits the same form in a screen by spending almost nothing between
+   controls: label, input, next label. Ours had the app's general rhythm, which
+   is right for a settings page read once and wrong for a form filled fifty
+   times a day. Tightened only inside .order-flow, so nothing else moves. */
+@media (min-width: 1180px) {
+  .order-flow .card { padding: .6rem .8rem; }
+  .order-flow > * { margin-bottom: .75rem; }
+  .order-flow .order-step__head { margin-bottom: .4rem; }
+  .order-flow .field { margin-bottom: .45rem; }
+  .order-flow .grid2 { gap: .45rem .75rem; }
+  .order-flow .field > label,
+  .order-flow .field > span:first-child { margin-bottom: .1rem; }
+}
+
 /* ---------- order channel (B2C / B2B) ---------- */
 
 .channel__opts { display: flex; gap: .6rem; flex-wrap: wrap; }

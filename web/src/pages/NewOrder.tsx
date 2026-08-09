@@ -109,7 +109,7 @@ interface Referrer { id: number; code: string; name: string }
  * path. It was neither labelled nor gated.
  */
 export function NewOrder() {
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   const mayB2b = can('order:b2b');
   const mayB2c = can('order:b2c') || can('order:create');
 
@@ -129,10 +129,18 @@ export function NewOrder() {
    */
   const [channel, setChannel] = useState<OrderChannel>('b2c');
 
-  // An account confined to B2B lands there once we actually know that.
+  /*
+   * Corrected once the session is actually known.
+   *
+   * Two reasons to land on B2B: an account CONFINED to it, and a super admin,
+   * for whom client orders are the normal day's work. Runs once, on the render
+   * where the capabilities settle — so an operator who then switches to
+   * Walk-in stays there rather than being flipped back under their hands.
+   */
   useEffect(() => {
-    if (!mayB2c && mayB2b) setChannel('b2b');
-  }, [mayB2c, mayB2b]);
+    if (!mayB2c && mayB2b) { setChannel('b2b'); return; }
+    if (mayB2b && user?.role === 'super_admin') setChannel('b2b');
+  }, [mayB2c, mayB2b, user?.role]);
 
   const [cart, setCart] = useState<Cart>({ mcc: null, items: [] });
   const [preview, setPreview] = useState<OrderPreview | null>(null);
@@ -512,11 +520,38 @@ export function NewOrder() {
 
   return (
     <div className="page">
+      {/* The channel lives in the header now, as a segmented control.
+          It was a full card with two description blocks — 112px of the
+          viewport spent on a two-way choice. Telo does not spend any: its
+          channel is the route, and the heading states the pricing. Ours has to
+          stay switchable, so it keeps the switch and moves the explanation
+          into the subtitle, which was saying something the layout already
+          shows ("choose a client, add tests, then enter the patient"). */}
       <div className="page__head">
         <div>
           <h1 className="page__title">New order</h1>
-          <p className="page__sub">Choose a client, add tests, then enter the patient</p>
+          <p className="page__sub">
+            {isB2b
+              ? 'Client order · billed at MRP, the centre keeps the margin'
+              : "Walk-in · billed at this client's own rate"}
+          </p>
         </div>
+
+        {mayB2b && mayB2c && (
+          <div className="seg" role="radiogroup" aria-label="Order channel"
+               style={{ marginLeft: 'auto', alignSelf: 'center' }}>
+            <button type="button" role="radio" aria-checked={!isB2b}
+                    className={`seg__btn${!isB2b ? ' is-on' : ''}`}
+                    onClick={() => setChannel('b2c')}>
+              Walk-in
+            </button>
+            <button type="button" role="radio" aria-checked={isB2b}
+                    className={`seg__btn${isB2b ? ' is-on' : ''}`}
+                    onClick={() => setChannel('b2b')}>
+              Client · B2B
+            </button>
+          </div>
+        )}
       </div>
 
       {error && <div className="alert alert--error" style={{ marginBottom: '.9rem' }}>{error}</div>}
@@ -568,27 +603,6 @@ export function NewOrder() {
 
       <div className="order-flow">
 
-      {/* ---- channel ----
-          Above step 1 rather than inside it, because it governs every price on
-          the page — including the client's own rates, which it can override
-          entirely. Hidden when the account only has one channel: a choice with
-          one option is furniture. */}
-      {mayB2b && mayB2c && (
-        <div className="card channel" style={{ marginBottom: '.9rem' }}>
-          <div className="channel__opts" role="radiogroup" aria-label="Order channel">
-            <ChannelOption
-              on={channel === 'b2c'} onPick={() => setChannel('b2c')}
-              title="Walk-in · B2C"
-              sub="Billed at this client's own rate"
-            />
-            <ChannelOption
-              on={channel === 'b2b'} onPick={() => setChannel('b2b')}
-              title="Client order · B2B"
-              sub="Billed at MRP — the centre keeps the margin"
-            />
-          </div>
-        </div>
-      )}
 
       {/* All three steps are ALWAYS rendered, dimmed until reachable.
           Revealing them one at a time left the page as a single card above an
@@ -1226,33 +1240,5 @@ export function NewOrder() {
 
       {busy && <div className="center" style={{ marginTop: '1rem' }}><InfinityLoader /></div>}
     </div>
-  );
-}
-
-/**
- * One side of the channel choice.
- *
- * A radio rather than a toggle or a dropdown: both options carry a consequence
- * worth reading, and the difference between them is what the patient is
- * charged. A two-state switch would put one of those consequences behind an
- * interaction.
- */
-function ChannelOption({ on, onPick, title, sub }: {
-  on: boolean;
-  onPick: () => void;
-  title: string;
-  sub: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={on}
-      className={`channel__opt${on ? ' is-on' : ''}`}
-      onClick={onPick}
-    >
-      <span className="channel__title">{title}</span>
-      <span className="channel__sub">{sub}</span>
-    </button>
   );
 }
