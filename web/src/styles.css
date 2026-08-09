@@ -1629,8 +1629,8 @@ tbody tr:hover { background: var(--accent-softer); }
    is right for a settings page read once and wrong for a form filled fifty
    times a day. Tightened only inside .order-flow, so nothing else moves. */
 @media (min-width: 1180px) {
-  .order-flow .card { padding: .6rem .8rem; }
-  .order-flow > * { margin-bottom: .75rem; }
+  .order-flow .card { padding: .5rem .75rem; }
+  .order-flow > * { margin-bottom: .55rem; }
   .order-flow .order-step__head { margin-bottom: .4rem; }
 
 }
@@ -1656,8 +1656,8 @@ tbody tr:hover { background: var(--accent-softer); }
    height. Until then this is the best stable arrangement — two columns, no
    horizontal scroll, Place order reachable. */
 @media (min-width: 1180px) {
-  .order-flow .field { margin-bottom: .45rem; }
-  .order-flow .grid2 { gap: .45rem .75rem; }
+  .order-flow .field { margin-bottom: .35rem; }
+  .order-flow .grid2 { gap: .35rem .7rem; }
   .order-flow .field > label,
   .order-flow .field > span:first-child { margin-bottom: .1rem; }
 }

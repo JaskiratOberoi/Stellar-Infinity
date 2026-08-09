@@ -996,6 +996,24 @@ export function NewOrder() {
                 </div>
               </div>
 
+            </div>
+
+            {/* ---- referral & history ----
+                Split out of the Patient card, and the reason is arithmetic
+                rather than taste. Multi-column can only break BETWEEN cards, so
+                card sizes are the only lever on the balance. Patient was a
+                single 480px block and Barcodes 434: no split of
+                114/123/181/480/434 lands near the 666 that would balance, so
+                one column always ran ~910 and the page scrolled. Two ~240
+                blocks give the balancer something it can place, and the break
+                falls at a real subject change — who the patient is, versus who
+                sent them and why. */}
+            <div className="card order-step">
+              <div className="order-step__head">
+                <span className="order-step__num order-step__num--on">3</span>
+                <h2 className="order-step__title">Referral &amp; history</h2>
+              </div>
+
               {/* Referrers. The create procedure has always accepted these —
                   an id, or a name it upserts — but nothing offered a way to
                   pick one, so every Infinity order so far was booked with
@@ -1123,9 +1141,8 @@ export function NewOrder() {
                   <div className="sid-panel__body" id="sid-panel-body"
                        style={showSids ? undefined : { display: 'none' }}>
                     <p className="muted" style={{ fontSize: '.76rem', margin: 0, lineHeight: 1.6 }}>
-                      Scan the barcodes now if you have the tubes. Leave any blank and they can be
-                      attached later on the <b>Accessioning</b> screen — either way the samples still
-                      have to be registered before the lab sees them.
+                      Leave blank to barcode later on <b>Accessioning</b>. Either way they still
+                      need registering.
                     </p>
 
                     {groups.map((g, i) => (

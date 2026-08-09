@@ -105,7 +105,12 @@ const NAV: NavItem[] = [
   { to: '/admin/users', label: 'Users', icon: 'users', cap: 'user:manage' },
   // Same capability as Users, and next to it: this edits a document clients
   // receive, and Telo gates its own copy of this screen the same way.
-  { to: '/admin/invoice', label: 'Invoice branding', icon: 'orders', cap: 'user:manage' },
+  // "Branding", not "Invoice branding": with thirteen entries the bar was
+  // 61px wider than the viewport at 1905, which put a horizontal scrollbar on
+  // the document — and that scrollbar's 15px was the last thing keeping the
+  // order form from fitting one screen. The page heading says "Invoice
+  // branding" in full.
+  { to: '/admin/invoice', label: 'Branding', icon: 'orders', cap: 'user:manage' },
 ];
 
 export function App() {
