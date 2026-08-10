@@ -1527,7 +1527,14 @@ body:has(.envbar) .modal-backdrop { padding-top: calc(1.5rem + var(--envbar-h));
   .navsheet__foot .btn { min-height: 44px; }
 }
 
-.page { flex: 1; padding: 1.8rem; max-width: 1400px; width: 100%; margin: 0 auto; }
+/* The extra bottom padding is room for the floating New order button: it is
+   46px tall and sits 20px up from the bottom edge, and the pager's next-page
+   controls are right-aligned into exactly that corner. Without it, scrolling a
+   worklist to the end puts the button on top of the control you scrolled down
+   to reach. Reserved on every page rather than only where a pager appears —
+   the button is on every page, and a rule that has to know which screens
+   paginate is a rule that will be wrong the next time one does. */
+.page { flex: 1; padding: 1.8rem 1.8rem 5.5rem; max-width: 1400px; width: 100%; margin: 0 auto; }
 .page__head { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.2rem; flex-wrap: wrap; }
 .page__title { font-size: 1.4rem; font-weight: 300; letter-spacing: .04em; }
 .page__sub { font-size: .82rem; color: var(--ink-dim); margin-top: .2rem; }
@@ -2004,6 +2011,75 @@ tbody tr:hover { background: var(--accent-softer); }
    fields, so it takes the height it is given and lets the report scroll inside
    it. The frame below is the print route itself — see ReportViewer. */
 
+/* ---------- new-order FAB ----------
+   The one action worth a permanent button. See NewOrderFab.
+
+   z-index 40: under the modal backdrop (50), the nav sheet (80) and the env
+   banner (70), so anything that takes over the screen covers it rather than
+   having a button floating on top of a dialog. */
+
+.fab {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 40;
+
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  height: 46px;
+  padding: 0 1.15rem 0 .95rem;
+  border-radius: 999px;
+
+  background: linear-gradient(135deg, var(--teal), var(--blue));
+  color: #fff;
+  font-size: .88rem;
+  font-weight: 600;
+  letter-spacing: .01em;
+  text-decoration: none;
+  white-space: nowrap;
+
+  /* Tinted rather than neutral, so it reads as lifted off the page instead of
+     stuck to it — this thing floats over a table it does not belong to. */
+  box-shadow: 0 6px 18px rgba(13, 148, 136, .34), 0 2px 6px rgba(15, 34, 51, .18);
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+
+.fab:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(13, 148, 136, .42), 0 3px 8px rgba(15, 34, 51, .2);
+}
+.fab:active { transform: translateY(0) scale(.97); }
+.fab:focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; }
+
+.fab__plus { width: 19px; height: 19px; flex: none; }
+
+/* A phone's list runs under it, and the label is what makes the button
+   self-explanatory to someone who has not used it before — so the label stays
+   and the button shrinks instead. Right-hand side, where a thumb is. */
+@media (max-width: 560px) {
+  .fab {
+    right: .9rem;
+    bottom: .9rem;
+    height: 44px;
+    padding: 0 1rem 0 .8rem;
+    font-size: .84rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fab { transition: none; }
+  .fab:hover, .fab:active { transform: none; }
+}
+
+/* Never on paper. The print routes render outside the shell so this cannot
+   currently appear in a PDF, but the rule costs nothing and the day someone
+   prints a page from inside the shell it is the difference between a report
+   and a report with a button on it. */
+@media print {
+  .fab { display: none; }
+}
+
 /* ---------- the patient's landing page ----------
    Reached from the QR on a printed report, on a phone, by someone who has never
    seen this application and is not going to. One card, one button. */
@@ -2458,65 +2534,85 @@ select.preview__layout { width: 11.25rem; flex: none; }
    here, behind a disclosure — with the applied ones always listed as chips
    above, so nothing narrows the list invisibly. */
 
-.filter-panel { margin-bottom: .9rem; padding: 1rem 1.1rem; }
+/* The panel is a ROW of groups, not a stack of them.
+   
+   Stacked, the three groups cost three full-width field rows plus two rules
+   and their margins — about 450px before a single result appeared, on a page
+   whose entire job is the list underneath. Laid side by side they occupy the
+   horizontal space the screen already has going spare: at 1900px all three
+   fit on one line, at 1400px the last one wraps, and nothing is hidden or
+   moved behind a disclosure at any width.
+
+   flex rather than grid because the groups have genuinely different natural
+   widths (three short fields, two dates plus a segmented control, five
+   comboboxes) and flex-basis lets each ask for what it needs and then share
+   the remainder. An equal-column grid would give the dates the same room as
+   five dropdowns. */
+.filter-panel {
+  margin-bottom: .9rem;
+  padding: .8rem .9rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: .8rem 1.5rem;
+}
 
 /* ---------- filter groups ----------
 
-   Eleven controls used to sit in one auto-fit grid, which gave every one of
-   them the same width and the same weight whatever it was for — and reflowed
-   the columns at each breakpoint, so From and To could land a row apart from
-   Time of day. Grouping by meaning fixes both: three questions, three groups,
-   each with a column template suited to what is in it.
+   Grouped by meaning — which sample, from when, narrowed how — so eleven
+   controls read as three questions rather than one undifferentiated run.
+   fieldset/legend rather than a div and a heading: this IS a group of form
+   controls, so the grouping reaches assistive technology for free.
 
-   The rhythm carries the grouping. Inside a group the gap is .7rem; between
-   groups it is 1.5rem plus a rule. That contrast is what makes the groups
-   legible without wrapping each one in its own card. */
+   The separating rule that used to sit between stacked groups is gone. Laid
+   out in a row it would be a vertical line whose position changed every time
+   a group wrapped; the legends and the column gap carry the grouping without
+   it. */
 
 .fgroup { border: 0; margin: 0; padding: 0; min-width: 0; }
-.fgroup + .fgroup {
-  margin-top: 1.5rem;
-  padding-top: 1.1rem;
-  border-top: 1px solid var(--line-soft);
-}
+
+/* Basis, not fixed width: each group states the width at which its own fields
+   sit comfortably on one line, then flexes. The three sum to more than a
+   1900px screen, so on a smaller one the widest group drops to the next line
+   instead of every field being squeezed. */
+.fgroup--find   { flex: 1 1 26rem; }
+/* Wider basis than it looks like it needs: this group holds two native date
+   inputs, a pair of hour selects and a three-button segmented control, none of
+   which compress. Asking for too little made the grid hand the time-of-day
+   track less room than its contents and the hours ran under the Quick range
+   buttons. */
+.fgroup--when   { flex: 1 1 42rem; }
+.fgroup--narrow { flex: 2 1 40rem; }
 
 .fgroup > legend {
   padding: 0;
-  margin-bottom: .55rem;
-  font-size: .66rem;
+  margin-bottom: .4rem;
+  font-size: .64rem;
   font-weight: 600;
   letter-spacing: .16em;
   text-transform: uppercase;
   color: var(--teal);
 }
 
-.fgroup__grid { display: grid; gap: .7rem 1rem; }
+.fgroup__grid { display: grid; gap: .5rem .7rem; }
 
-/* Width follows how hard the field is to fill, not how important it looks. A
-   patient's name is long and typed from memory; a PID is six digits.
-
-   Every template ends in a bare 1fr that holds nothing. Without it the last
-   real column takes all the leftover space on a wide screen — measured at
-   1425px, the name field reached 606px and the three Quick-range buttons were
-   handed 745px. The spacer parks that slack at the end of the row instead, so
-   the fields keep sane widths and stay left-aligned with each other. */
+/* Inside a group the fields now share a narrower column, so the templates are
+   auto-fit with modest minimums rather than the wide fixed tracks they had
+   when each group owned the full width. */
 .fgroup__grid--find {
-  grid-template-columns:
-    minmax(180px, 24rem) minmax(130px, 14rem) minmax(110px, 10rem) 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr));
 }
-/* The dates size to their own content — a native date input has a fixed width
-   and stretching it just moves the picker icon away from the digits. */
+/* Every track sizes to its own content. These four controls each have a real
+   intrinsic width — a native date input, two hour selects with a "to" between
+   them, three preset buttons — and a fractional track can be narrower than
+   what it holds, which is exactly how the hours ended up overlapping the
+   presets. max-content cannot do that. */
 .fgroup__grid--when {
-  grid-template-columns:
-    max-content max-content minmax(190px, 16rem) minmax(140px, 15rem) 1fr;
+  grid-template-columns: repeat(4, max-content);
   align-items: end;
 }
-/* No trailing spacer here: auto-fit has to own the whole track list, and a
-   1fr beside it collapses the repeat to a single column — which stacked all
-   five of these one per row. Capping the track at 15rem does the same job,
-   and justify-content parks the slack at the end. */
 .fgroup__grid--narrow {
-  grid-template-columns: repeat(auto-fit, minmax(165px, 15rem));
-  justify-content: start;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
 }
 
 /* One column below the tablet break. Ordering by meaning already put the
@@ -2528,23 +2624,38 @@ select.preview__layout { width: 11.25rem; flex: none; }
   .fgroup__grid--narrow { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* Denser controls, panel-only. The app's default input is sized for a form you
+   fill once; these are filters you skim and adjust, and eleven of them at form
+   height is most of a viewport. Still comfortably above the 24px minimum
+   target size, and the type does not shrink — only the padding around it. */
+.filter-panel .input,
+.filter-panel .combo__btn {
+  padding: .42rem .55rem;
+  border-radius: 8px;
+}
+.filter-panel .seg__btn { padding: .38rem .7rem; }
+
 .fgroup__grid .field > span {
-  font-size: .7rem;
-  letter-spacing: .14em;
+  font-size: .64rem;
+  letter-spacing: .12em;
   text-transform: uppercase;
   color: var(--ink-dim);
 }
+.fgroup__grid .field { gap: .2rem; }
 
 /* The panel's footer: the page's own switches, and the way back to no filters.
    Inside the card rather than above it, so every control that changes the list
    sits within one boundary — which is the whole point of the panel. */
 .filter-panel__foot {
+  /* Full width on its own line: it belongs to the whole panel, not to
+     whichever group happens to end nearest it. */
+  flex: 1 0 100%;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: .5rem 1.2rem;
-  margin-top: .9rem;
-  padding-top: .8rem;
+  gap: .4rem 1.2rem;
+  margin-top: .2rem;
+  padding-top: .6rem;
   border-top: 1px solid var(--line-soft);
 }
 
@@ -3406,3 +3517,68 @@ th.cell--pick, td.cell--pick { width: 1%; padding-right: .2rem; }
 .pick-row--off { cursor: default; }
 .pick-row--off > td { opacity: .55; }
 .pick-row--off:hover > td { background: transparent; }
+
+/* ---------- worksheet attachments ----------
+   On every sample, not only tests the LIS flagged Has_graph — see
+   components/Attachments.tsx for why the per-test gate was the wrong model. */
+
+.attachments {
+  margin: .2rem 0 .1rem;
+  padding: .7rem .8rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--accent-softer);
+}
+
+.attachments__head { display: flex; align-items: center; gap: .6rem; }
+.attachments__title {
+  font-size: .66rem; font-weight: 600;
+  letter-spacing: .14em; text-transform: uppercase;
+  color: var(--teal);
+  display: flex; align-items: center; gap: .4rem;
+}
+.attachments__count {
+  font-size: .64rem; letter-spacing: 0;
+  padding: .05rem .35rem; border-radius: 999px;
+  background: var(--accent-soft); color: var(--teal);
+}
+.attachments__head .btn { margin-left: auto; }
+
+.attachments__list { list-style: none; margin: .5rem 0 0; display: flex; flex-direction: column; gap: .3rem; }
+.attachments__item {
+  display: flex; align-items: center; gap: .6rem;
+  padding: .35rem .5rem;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  font-size: .78rem;
+}
+.attachments__link {
+  display: flex; align-items: center; gap: .5rem;
+  color: var(--ink); text-decoration: none; min-width: 0;
+}
+.attachments__link:hover { color: var(--teal); }
+
+/* The file kind as a small tag rather than an icon font: it is three letters,
+   it is exact, and it needs no legend. */
+.attachments__kind {
+  font-size: .6rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  padding: .12rem .3rem; border-radius: 4px;
+  background: var(--accent-soft); color: var(--teal);
+}
+.attachments__meta { margin-left: auto; font-size: .7rem; white-space: nowrap; }
+
+.attachments__drop {
+  margin-top: .5rem;
+  padding: .6rem .7rem;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  font-size: .74rem;
+  color: var(--ink-dim);
+  transition: background .15s, border-color .15s;
+}
+.attachments__drop.is-over {
+  border-color: var(--teal);
+  background: var(--accent-soft);
+  color: var(--ink);
+}

@@ -24,6 +24,7 @@ import { IdleWarning } from './components/IdleWarning';
 import { NavMenu, navItemActive, type NavItem } from './components/NavMenu';
 import { PrintReport } from './pages/PrintReport';
 import { PublicReport } from './pages/PublicReport';
+import { NewOrderFab } from './components/NewOrderFab';
 import { PrintSmartReport } from './pages/PrintSmartReport';
 import { EnvBanner } from './components/EnvBanner';
 import { PrintInvoice } from './pages/PrintInvoice';
@@ -80,9 +81,10 @@ function EnterVeil({ done }: { done: () => void }) {
 const NAV: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
   { to: '/orders', label: 'Orders', icon: 'orders', cap: 'order:view' },
-  // Order entry, in the sequence the work happens: book it, barcode it, then
-  // it appears on the worksheet.
-  { to: '/orders/new', label: 'New order', icon: 'orders', cap: 'order:create' },
+  // "New order" is NOT here any more — it is the floating button, mounted in
+  // the shell below. It is the most repeated action in the building and it was
+  // sitting third in a row of thirteen tabs, level with Rates and Branding. See
+  // NewOrderFab.
   // These two share a pathname, so both declare the query they own — otherwise
   // NavLink lights them together. See NavItem.search.
   { to: '/accessioning', label: 'Accessioning', icon: 'orders', cap: 'order:view', search: '' },
@@ -246,6 +248,11 @@ export function App() {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+
+      {/* Outside <Routes> on purpose: it belongs to the shell, not to a page.
+          Gated on the same capability as the /orders/new route above — a
+          button that navigates to a redirect is worse than no button. */}
+      {can('order:create') && <NewOrderFab />}
     </div>
   );
 }
