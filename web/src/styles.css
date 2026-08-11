@@ -2011,6 +2011,87 @@ tbody tr:hover { background: var(--accent-softer); }
    fields, so it takes the height it is given and lets the report scroll inside
    it. The frame below is the print route itself — see ReportViewer. */
 
+/* ---------- autocorrect ----------
+   A field that has just rewritten what someone typed says so. See
+   SpellChecked.tsx for why the flash is on the field rather than the word. */
+
+.spellfix {
+  animation: spellfix var(--spellfix-ms, 1400ms) ease-out;
+}
+
+/* Tinted, not flashing: this is a notification that something was helpful, and
+   a hard blink in the corner of the eye reads as an error. Teal because that
+   is this application's "we did something" colour; the danger palette would
+   say the correction was a problem. */
+@keyframes spellfix {
+  0%   { background-color: var(--accent-soft); box-shadow: 0 0 0 3px var(--accent-ring); }
+  70%  { background-color: var(--accent-soft); box-shadow: 0 0 0 3px transparent; }
+  100% { background-color: transparent;        box-shadow: 0 0 0 3px transparent; }
+}
+
+/* Above the New order FAB (z 40) and clear of it horizontally, so the two do
+   not sit on top of each other in the same corner. Under modals (50), which
+   should cover it like everything else. */
+.spellundo {
+  position: fixed;
+  left: 50%;
+  bottom: 1.5rem;
+  transform: translateX(-50%);
+  z-index: 45;
+
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+  padding: .55rem .6rem .55rem .9rem;
+  border-radius: 999px;
+
+  background: var(--ink);
+  color: var(--surface);
+  font-size: .8rem;
+  box-shadow: 0 8px 24px rgba(15, 34, 51, .3);
+  animation: spellundo-in .18s ease-out;
+}
+
+.spellundo__text s { opacity: .65; margin-right: .15rem; }
+.spellundo__text b { font-weight: 600; }
+
+.spellundo__btn {
+  border: 0;
+  border-radius: 999px;
+  padding: .3rem .8rem;
+  background: var(--teal);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.spellundo__btn:hover { filter: brightness(1.1); }
+.spellundo__btn:focus-visible { outline: 2px solid var(--surface); outline-offset: 2px; }
+
+@keyframes spellundo-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* On a phone the toast spans the width rather than centring on a pill that
+   would run off both edges, and it sits above the FAB's corner. */
+@media (max-width: 560px) {
+  .spellundo {
+    left: .75rem; right: .75rem; bottom: 4.5rem;
+    transform: none;
+    justify-content: space-between;
+  }
+  @keyframes spellundo-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spellfix { animation: none; background-color: var(--accent-soft); }
+  .spellundo { animation: none; }
+}
+
 /* ---------- new-order FAB ----------
    The one action worth a permanent button. See NewOrderFab.
 
