@@ -79,8 +79,8 @@ const MISSPELLINGS: Record<string, string> = {
   // ---- the bench vocabulary ----
   // Every one of these is a non-word; the intended term is unambiguous.
   aglutination: 'agglutination', agglutinaton: 'agglutination',
-  anisocytosis: 'anisocytosis', anisocitosis: 'anisocytosis',
-  bacteriuria: 'bacteriuria', bacterialogical: 'bacteriological',
+  anisocitosis: 'anisocytosis',
+  bacterialogical: 'bacteriological',
   basophill: 'basophil', basophills: 'basophils',
   bilrubin: 'bilirubin', bilirubine: 'bilirubin',
   colonys: 'colonies', contamintaed: 'contaminated', contamiated: 'contaminated',
@@ -98,13 +98,13 @@ const MISSPELLINGS: Record<string, string> = {
   macrocitic: 'macrocytic', microcitic: 'microcytic',
   metabolights: 'metabolites', microscopc: 'microscopic', micrscopic: 'microscopic',
   moderatly: 'moderately', monocyt: 'monocyte', monocytse: 'monocytes',
-  motil: 'motile', mucoid: 'mucoid',
+  motil: 'motile',
   neutrophill: 'neutrophil', neutrophills: 'neutrophils', nuetrophils: 'neutrophils',
-  occassional: 'occasional', occult: 'occult',
+  occassional: 'occasional',
   organsim: 'organism', organsims: 'organisms', orgamism: 'organism',
   parasyte: 'parasite', parasytes: 'parasites',
   pathogenc: 'pathogenic', platlets: 'platelets', platlet: 'platelet',
-  poikilocytosis: 'poikilocytosis', pyocytes: 'pus cells',
+  pyocytes: 'pus cells',
   reticulocyt: 'reticulocyte', sensitivty: 'sensitivity', sensitivety: 'sensitivity',
   specimin: 'specimen', specemin: 'specimen', speciman: 'specimen',
   sterril: 'sterile', sterlie: 'sterile',
@@ -139,7 +139,7 @@ const US_TO_UK: Record<string, string> = {
   analyze: 'analyse', analyzed: 'analysed', analyzer: 'analyser',
   sterilization: 'sterilisation', sterilized: 'sterilised',
   pediatric: 'paediatric', anesthesia: 'anaesthesia',
-  diagnose: 'diagnose', celiac: 'coeliac', leukemia: 'leukaemia',
+  celiac: 'coeliac', leukemia: 'leukaemia',
 };
 
 /** Ends a word. Everything else is treated as part of one. */
