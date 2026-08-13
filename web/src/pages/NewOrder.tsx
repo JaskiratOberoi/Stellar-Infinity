@@ -77,9 +77,19 @@ const startingPayments = (b2b: boolean) =>
 /**
  * Book an order.
  *
- * Deliberately in this sequence — client, then tests, then patient — because
- * every price depends on the client, and the operator should see what the order
- * costs before typing out a person's details.
+ * ── WHO ON THE LEFT, THE ORDER ON THE RIGHT ────────────────────────────────
+ * Client, then patient, directly below it; tests, barcodes and money in the
+ * second column. The original layout put the patient LAST so nobody typed a
+ * person out before seeing the cost — a concern that belongs to a walk-in
+ * counter quoting a price, not to a hospital desk booking a batch, and the
+ * desk is who this form serves all day. The price is still on screen the whole
+ * time, one column over, so nothing was actually given up.
+ *
+ * The gates run left to right: a client unlocks the patient, any single
+ * patient detail unlocks the tests, a test in the basket unlocks the money.
+ * Every card is always rendered and dimmed until reachable — revealing them
+ * one at a time left the page as a single card above an empty screen, which
+ * read as broken rather than as "do this first".
  *
  * ── BARCODES ARE OPTIONAL HERE, AND THAT IS A CHANGE ──────────────────────
  * This screen used to collect no barcodes at all, on the reasoning that an
@@ -226,6 +236,8 @@ export function NewOrder() {
   }[]>([]);
 
   /** Focused after each B2B booking so the next patient can just be typed. */
+  const nameRef = useRef<HTMLInputElement>(null);
+  /** Refocused after each add so the next test can just be typed. */
   const searchRef = useRef<HTMLInputElement>(null);
 
   /*
@@ -243,6 +255,31 @@ export function NewOrder() {
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<CatalogItem[]>([]);
   const [searching, setSearching] = useState(false);
+
+  /*
+   * The suggestion dropdown. It used to be a results TABLE that stayed on
+   * screen with the query still in the box — after adding a test the operator
+   * had to select-all and retype over the old search. Now it behaves like the
+   * comboboxes everywhere else on this form: pick a suggestion and the list
+   * closes, the box clears, and the next test can be typed immediately.
+   */
+  const [suggOpen, setSuggOpen] = useState(false);
+  const [suggIdx, setSuggIdx] = useState(0);
+  const suggRef = useRef<HTMLDivElement>(null);
+
+  // A list that shrinks under the cursor must not leave the cursor past its end.
+  useEffect(() => { setSuggIdx(0); }, [results]);
+
+  // Pointer-down, not click — mousedown fires before the input's blur, and a
+  // click that starts inside and ends outside should not close the list.
+  useEffect(() => {
+    if (!suggOpen) return;
+    const onDown = (e: PointerEvent) => {
+      if (!suggRef.current?.contains(e.target as Node)) setSuggOpen(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [suggOpen]);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -286,6 +323,18 @@ export function NewOrder() {
   }
 
   const inCart = (i: CatalogItem) => cart.items.some((c) => c.kind === i.kind && c.id === i.id);
+
+  /**
+   * Add a suggestion and reset the search for the next one. The box clears
+   * and keeps focus, so a panel of six tests is six type-pick pairs with no
+   * mouse trip or select-all in between.
+   */
+  const addSuggestion = (i: CatalogItem) => {
+    void act(() => cartApi.add({ kind: i.kind, id: i.id, code: i.code, name: i.name }));
+    setSearch('');
+    setSuggOpen(false);
+    searchRef.current?.focus();
+  };
 
   // Read off the PREVIEW, not the local state: the preview is what the server
   // actually quoted. Declared here because the payable figure below needs it.
@@ -375,7 +424,12 @@ export function NewOrder() {
   // The tubes the server says this basket needs. Read off the preview for the
   // same reason the price table is: it is the quote that will be billed.
   const groups = preview?.groups ?? [];
-  const showSids = sidsOpen ?? b2b;
+  // B2C only now. In B2B the SID fields sit inline under the selected tests —
+  // the counter is holding the tubes, and a disclosure to open on every order
+  // was a click that taught nobody anything. B2C keeps the collapsed panel,
+  // because a walk-in's sample is usually drawn later and there is nothing to
+  // scan yet.
+  const showSids = sidsOpen ?? false;
 
   /*
    * Only barcodes for tubes the CURRENT basket needs. Removing a test can
@@ -475,14 +529,12 @@ export function NewOrder() {
           sids: enteredSids.length, tubes: groups.length,
         }, ...s]);
         /*
-         * Focus the TEST SEARCH, not the patient name.
-         *
-         * Placing empties the basket, and with no tests the patient step
-         * correctly falls back to its disabled state — so the name field the
-         * cursor was aimed at no longer exists. The real next action is the
-         * first one of the next order: search a test.
+         * Focus the PATIENT NAME. Under the patient-first layout the next
+         * order starts with the next person's name — the tests panel is
+         * locked until something is typed there anyway, so aiming the cursor
+         * at the search box would point it at a disabled input.
          */
-        setTimeout(() => searchRef.current?.focus(), 0);
+        setTimeout(() => nameRef.current?.focus(), 0);
       } else {
         setPlaced(result);
       }
@@ -517,6 +569,21 @@ export function NewOrder() {
   // hospital counters often have no reachable number — but six digits is
   // someone who was interrupted, and the LIS would keep it forever.
   const mobileOk = patient.mobile.trim() === '' || patient.mobile.trim().length === 10;
+
+  /*
+   * Any patient detail at all — the gate the tests panel opens on. Not
+   * completeness: the operator asked for tests to unlock the moment the
+   * patient is STARTED, and the Place button still enforces what an order
+   * actually requires.
+   *
+   * A basket keeps the panel open regardless, so clearing the name to fix a
+   * spelling cannot dim a card that is holding live selections.
+   */
+  const patientStarted = patient.name.trim() !== ''
+    || patient.ageYears.trim() !== ''
+    || patient.ageMonths.trim() !== ''
+    || patient.mobile.trim() !== '';
+  const testsOn = cart.mcc != null && (patientStarted || cart.items.length > 0);
 
   const canPlace = cart.mcc != null
     && cart.items.length > 0
@@ -656,15 +723,14 @@ export function NewOrder() {
         </div>
       )}
 
-      <div className="order-flow">
+      {/* Two real columns — see the note on the component. Left is identity,
+          right is the order, and neither pushes the other around as it grows. */}
+      <div className="order-grid">
 
-
-      {/* All three steps are ALWAYS rendered, dimmed until reachable.
-          Revealing them one at a time left the page as a single card above an
-          empty screen, which read as broken rather than as "do this first". */}
+      <div className="order-grid__col">
 
       {/* ---- 1. client ---- */}
-      <div className="card order-step" style={{ marginBottom: '.9rem' }}>
+      <div className="card order-step">
         <div className="order-step__head">
           <span className="order-step__num order-step__num--on">1</span>
           <h2 className="order-step__title">Client</h2>
@@ -688,134 +754,300 @@ export function NewOrder() {
         </div>
       </div>
 
-      {cart.mcc == null ? (
-        <>
-          <div className="card order-step order-step--off" style={{ marginBottom: '.9rem' }}>
-            <div className="order-step__head">
-              <span className="order-step__num">2</span>
-              <h2 className="order-step__title">Tests</h2>
-              <span className="muted" style={{ fontSize: '.76rem' }}>
-                Choose a client first.
-              </span>
-            </div>
-          </div>
-          <div className="card order-step order-step--off">
-            <div className="order-step__head">
-              <span className="order-step__num">3</span>
-              <h2 className="order-step__title">Patient</h2>
-              <span className="muted" style={{ fontSize: '.76rem' }}>
-                Entered last, so nobody types out a person before seeing the cost.
-              </span>
-            </div>
-          </div>
-        </>
-      ) : (
-        <>
-          {/* ---- 2. tests ---- */}
-          <div className="card order-step" style={{ marginBottom: '.9rem' }}>
-            <div className="order-step__head">
-              <span className="order-step__num order-step__num--on">2</span>
-              <h2 className="order-step__title">Tests</h2>
-              {cart.items.length > 0 && (
-                <span className="muted" style={{ fontSize: '.76rem' }}>
-                  {cart.items.length} in the basket
-                </span>
-              )}
+      {/* ---- 2. patient ----
+          Directly under the client and BEFORE the tests. The person is in
+          front of the operator, so their details are the first thing typed,
+          and any single detail unlocks the tests on the right. The fieldset
+          is what makes a dimmed card's inputs actually inert — order-step--off
+          only fades them. */}
+      <div className={`card order-step${cart.mcc == null ? ' order-step--off' : ''}`}>
+        <div className="order-step__head">
+          <span className={`order-step__num${cart.mcc != null ? ' order-step__num--on' : ''}`}>2</span>
+          <h2 className="order-step__title">Patient</h2>
+          <span className="muted" style={{ fontSize: '.76rem' }}>
+            {cart.mcc == null ? 'Choose a client first.'
+              : !patientStarted ? 'Any detail here unlocks the tests.' : ''}
+          </span>
+        </div>
+
+        <fieldset className="bare" disabled={cart.mcc == null}>
+          <div className="grid2">
+            <div className="field">
+              <label htmlFor="p-name">Name</label>
+              <div className="row" style={{ gap: '.35rem' }}>
+                <select className="input" value={patient.initial} style={{ width: 82 }}
+                        onChange={(e) => setPatient({ ...patient, initial: e.target.value })}>
+                  {['Mr', 'Ms', 'Mrs', 'Dr', 'Master', 'Baby', ''].map((t) => (
+                    <option key={t || 'none'} value={t}>{t || '—'}</option>
+                  ))}
+                </select>
+                <input id="p-name" ref={nameRef} className="input" value={patient.name} maxLength={200}
+                       onChange={(e) => setPatient({ ...patient, name: e.target.value })} />
+              </div>
             </div>
 
             <div className="field">
-              <label htmlFor="test-search">Add tests</label>
-              <input id="test-search" ref={searchRef} className="input" placeholder="Search by name or code…"
-                     value={search} onChange={(e) => setSearch(e.target.value)} />
+              <label htmlFor="p-mobile">Mobile</label>
+              <input id="p-mobile" className="input mono" value={patient.mobile} inputMode="numeric"
+                     maxLength={10}
+                     onChange={(e) => setPatient({ ...patient, mobile: e.target.value.replace(/\D/g, '') })} />
+              <span className="muted" style={{ fontSize: '.7rem' }}>
+                {patient.mobile.trim() !== '' && patient.mobile.trim().length !== 10
+                  ? <b style={{ color: 'var(--danger)' }}>A mobile number is 10 digits — finish it or clear it.</b>
+                  : 'Optional · no mobile, no result history'}
+              </span>
             </div>
-
-            {search.trim() && (
-              <div className="table-wrap" style={{ maxHeight: 240, overflowY: 'auto' }}>
-                <table>
-                  <tbody>
-                    {searching && results.length === 0 && (
-                      <tr><td className="muted" style={{ padding: '1rem' }}>Searching…</td></tr>
-                    )}
-                    {results.map((i) => {
-                      // A row is addable unless it is already in the basket or
-                      // has no price for this client.
-                      const already = inCart(i);
-                      const noPrice = i.rateSource === 'none';
-                      const addable = !already && !noPrice;
-
-                      const add = () => {
-                        if (!addable) return;
-                        void act(() => cartApi.add(
-                          { kind: i.kind, id: i.id, code: i.code, name: i.name }));
-                      };
-
-                      return (
-                        <tr
-                          key={`${i.kind}:${i.id}`}
-                          // The whole row is the target. Picking tests is the
-                          // most repeated action on this screen, and a 60px
-                          // button at the far right of a 1300px row is a long
-                          // way to travel for something the eye already
-                          // selected by reading the name.
-                          onClick={add}
-                          // Reachable without a mouse: the row takes focus and
-                          // answers Enter/Space, which is what a button did for
-                          // free and must not be lost by moving the handler up.
-                          tabIndex={addable ? 0 : -1}
-                          role={addable ? 'button' : undefined}
-                          aria-disabled={!addable}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); add(); }
-                          }}
-                          className={`pick-row${addable ? '' : ' pick-row--off'}`}
-                          title={noPrice ? 'No price for this client'
-                               : already ? 'Already in the basket'
-                               : 'Click to add'}
-                        >
-                          <td>
-                            {plainText(i.name) || i.code}
-                            <span className="muted mono" style={{ fontSize: '.72rem' }}> {i.code}</span>
-                          </td>
-                          <td style={{ width: 110, textAlign: 'right' }} className="mono">
-                            {i.rate != null ? inr(i.rate) : <span className="muted">no price</span>}
-                          </td>
-                          <td style={{ width: 90 }}><RateSourceBadge source={i.rateSource} /></td>
-                          <td style={{ width: 90, textAlign: 'right' }}>
-                            {/* Kept as an affordance, not the only way in: it
-                                is what tells a first-time user the row does
-                                anything. stopPropagation so the row handler
-                                does not also fire and double-add. */}
-                            <button
-                              className="btn btn--ghost btn--sm"
-                              disabled={!addable}
-                              tabIndex={-1}
-                              onClick={(e) => { e.stopPropagation(); add(); }}
-                            >
-                              {already ? 'Added' : 'Add'}
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {!searching && results.length === 0 && (
-                      <tr><td className="muted" style={{ padding: '1rem' }}>Nothing matches.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {!search.trim() && cart.items.length === 0 && (
-              <p className="muted" style={{ fontSize: '.78rem', marginTop: '.2rem' }}>
-                Start typing to search this client's catalogue. Anything without a price for them
-                cannot be added.
-              </p>
-            )}
           </div>
 
-          {/* ---- 3. the basket ---- */}
+          <div className="grid2">
+            <div className="field">
+              <label htmlFor="p-age-y">Age</label>
+              <div className="row" style={{ gap: '.35rem' }}>
+                <input id="p-age-y" className="input mono" value={patient.ageYears} inputMode="numeric"
+                       style={{ width: 88 }} placeholder="Years" aria-label="Age in years"
+                       onChange={(e) => setPatient({ ...patient, ageYears: e.target.value.replace(/\D/g, '') })} />
+                <input id="p-age-m" className="input mono" value={patient.ageMonths} inputMode="numeric"
+                       style={{ width: 88 }} placeholder="Months" aria-label="Age in months"
+                       onChange={(e) => setPatient({ ...patient, ageMonths: e.target.value.replace(/\D/g, '') })} />
+              </div>
+              {/* Says what will actually be stored. "2 and 6" becoming
+                  "30 months" is surprising unless it is stated. */}
+              <span className="muted" style={{ fontSize: '.7rem' }}>
+                {patient.ageYears || patient.ageMonths
+                  ? age
+                    ? `Recorded as ${age.age} ${age.ageType === 2 ? 'month' : 'year'}${age.age === 1 ? '' : 's'}.`
+                    : <b style={{ color: 'var(--danger)' }}>Not a usable age — months must be 0–11 alongside years.</b>
+                  : 'Years and/or months'}
+              </span>
+            </div>
+
+            <div className="field">
+              <label htmlFor="p-gender">Sex</label>
+              <select id="p-gender" className="input" value={patient.gender}
+                      onChange={(e) => setPatient({ ...patient, gender: Number(e.target.value) })}>
+                <option value={1}>Male</option>
+                <option value={2}>Female</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid2">
+            <div className="field">
+              <label htmlFor="p-email">Email</label>
+              <input id="p-email" className="input" type="email" value={patient.email} maxLength={100}
+                     onChange={(e) => setPatient({ ...patient, email: e.target.value })} />
+            </div>
+
+            <div className="field">
+              <label htmlFor="p-mrn">Passport / travel ID</label>
+              {/* Written to patient_master.MRNID. Left blank, the create
+                  procedure backfills the patient id, as the LIS form does. */}
+              <input id="p-mrn" className="input mono" value={patient.mrnId} maxLength={50}
+                     placeholder="Optional"
+                     onChange={(e) => setPatient({ ...patient, mrnId: e.target.value })} />
+            </div>
+          </div>
+        </fieldset>
+      </div>
+
+      {/* ---- referral & history — the second half of "who" ---- */}
+      <div className={`card order-step${cart.mcc == null ? ' order-step--off' : ''}`}>
+        <div className="order-step__head">
+          <span className={`order-step__num${cart.mcc != null ? ' order-step__num--on' : ''}`}>2</span>
+          <h2 className="order-step__title">Referral &amp; history</h2>
+        </div>
+
+        <fieldset className="bare" disabled={cart.mcc == null}>
+          {/* Referrers. The create procedure has always accepted these —
+              an id, or a name it upserts — but nothing offered a way to
+              pick one, so every Infinity order so far was booked with
+              none. Optional in both channels here: Telo makes the doctor
+              compulsory for B2C, and adding that gate would start
+              rejecting orders this form accepts today. */}
+          <div className="grid2">
+            <div className="field">
+              <label>Ref. doctor</label>
+              <Combobox
+                value={refDoctor?.kind === 'existing' ? String(refDoctor.id) : ''}
+                createdName={refDoctor?.kind === 'new' ? refDoctor.name : null}
+                emptyLabel="No referring doctor"
+                options={refs.doctors.map((d) => ({
+                  value: String(d.id), label: d.name, hint: d.code || null,
+                }))}
+                onChange={(v) => setRefDoctor(v === '' ? null : {
+                  kind: 'existing', id: Number(v),
+                  name: refs.doctors.find((d) => String(d.id) === v)?.name ?? '',
+                })}
+                creatable
+                createLabel={(t) => `Add referring doctor “${t}”`}
+                onCreate={(name) => setRefDoctor({ kind: 'new', name })}
+              />
+            </div>
+
+            <div className="field">
+              <label>Referring customer</label>
+              <Combobox
+                value={refCustomer?.kind === 'existing' ? String(refCustomer.id) : ''}
+                createdName={refCustomer?.kind === 'new' ? refCustomer.name : null}
+                emptyLabel="No referring customer"
+                options={refs.customers.map((x) => ({
+                  value: String(x.id), label: x.name, hint: x.code || null,
+                }))}
+                onChange={(v) => setRefCustomer(v === '' ? null : {
+                  kind: 'existing', id: Number(v),
+                  name: refs.customers.find((x) => String(x.id) === v)?.name ?? '',
+                })}
+                creatable
+                createLabel={(t) => `Add referring customer “${t}”`}
+                onCreate={(name) => setRefCustomer({ kind: 'new', name })}
+              />
+            </div>
+          </div>
+
+          {/* Paired: the typed history and the letter it came from are one
+              subject. */}
+          <div className="grid2">
+          <div className="field">
+            <label htmlFor="p-hist">Clinical history</label>
+            <input id="p-hist" className="input" value={patient.clinicalHistory} maxLength={500}
+                   onChange={(e) => setPatient({ ...patient, clinicalHistory: e.target.value })} />
+          </div>
+
+          {/* The referral letter itself. Telo has carried this since its
+              B2B form shipped; the procedure files it against the patient
+              in tbl_med_mcc_patient_clinicaldata tagged 'HISTORY', so it
+              travels with the order rather than living in someone's inbox. */}
+          <div className="field">
+            <label htmlFor="p-file">Clinical history PDF</label>
+            <div className="row" style={{ gap: '.5rem', flexWrap: 'wrap' }}>
+              <input
+                id="p-file" type="file" accept="application/pdf"
+                onChange={(e) => void readClinicalPdf(e.target.files?.[0] ?? null)}
+              />
+              {clinicalFile && (
+                <button className="btn btn--ghost btn--sm"
+                        onClick={() => { setClinicalFile(null); setFileError(null); }}>
+                  Remove
+                </button>
+              )}
+            </div>
+            {fileError
+              ? <span style={{ fontSize: '.72rem', color: 'var(--danger)' }}>{fileError}</span>
+              : <span className="muted" style={{ fontSize: '.72rem' }}>
+                  PDF, up to 10 MB
+                  {clinicalFile && ` · ${clinicalFile.name} attached`}
+                </span>}
+          </div>
+          </div>
+        </fieldset>
+      </div>
+
+      </div>{/* left column */}
+
+      <div className="order-grid__col">
+
+          {/* ---- 3. tests ---- */}
+          <div className={`card order-step${testsOn ? '' : ' order-step--off'}`}>
+            <div className="order-step__head">
+              <span className={`order-step__num${testsOn ? ' order-step__num--on' : ''}`}>3</span>
+              <h2 className="order-step__title">Tests</h2>
+              <span className="muted" style={{ fontSize: '.76rem' }}>
+                {cart.mcc == null ? 'Choose a client first.'
+                  : !testsOn ? 'Enter the patient first.'
+                  : cart.items.length > 0 ? `${cart.items.length} in the basket`
+                  : 'Anything without a price for this client cannot be added.'}
+              </span>
+            </div>
+
+            {/* One box with suggestions beneath it, like the referrer pickers:
+                pick a suggestion and the list closes, the box clears, and the
+                next test can be typed straight away. The old results TABLE
+                stayed open with the query still in the box, so every add cost
+                a select-all before the next search. */}
+            <div className="field combo" ref={suggRef} style={{ marginBottom: 0 }}>
+              <label htmlFor="test-search">Add tests</label>
+              <input
+                id="test-search" ref={searchRef} className="input"
+                role="combobox"
+                aria-expanded={suggOpen && search.trim() !== ''}
+                aria-controls="test-sugg" aria-autocomplete="list"
+                aria-activedescendant={suggOpen && results[suggIdx] ? `test-sugg-${suggIdx}` : undefined}
+                placeholder={testsOn ? 'Type a test name or code…' : 'Enter the patient first'}
+                autoComplete="off" spellCheck={false}
+                disabled={!testsOn}
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setSuggOpen(true); }}
+                onFocus={() => { if (search.trim()) setSuggOpen(true); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (!suggOpen) { setSuggOpen(true); return; }
+                    const last = results.length - 1;
+                    setSuggIdx((i) => e.key === 'ArrowDown'
+                      ? (i >= last ? 0 : i + 1)
+                      : (i <= 0 ? last : i - 1));
+                    return;
+                  }
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const hit = results[suggIdx];
+                    if (suggOpen && hit) addSuggestion(hit);
+                    return;
+                  }
+                  if (e.key === 'Escape') { setSuggOpen(false); return; }
+                  if (e.key === 'Tab') setSuggOpen(false);
+                }}
+              />
+
+              {suggOpen && search.trim() !== '' && (
+                <ul className="combo__list" id="test-sugg" role="listbox">
+                  {results.map((i, idx) => {
+                    // A row is addable unless it is already in the basket or
+                    // has no price for this client. Both stay VISIBLE — a test
+                    // that silently never appears reads as "we don't do it",
+                    // where the truth is "no rate is set".
+                    const already = inCart(i);
+                    const noPrice = i.rateSource === 'none';
+                    const addable = !already && !noPrice;
+                    return (
+                      <li
+                        key={`${i.kind}:${i.id}`}
+                        id={`test-sugg-${idx}`}
+                        role="option"
+                        aria-selected={false}
+                        aria-disabled={!addable}
+                        data-active={idx === suggIdx}
+                        className={`combo__opt${addable ? '' : ' combo__opt--dead'}`}
+                        // pointerdown, not click: click lands after the
+                        // input's blur, by which point the list is gone.
+                        onPointerDown={(e) => { e.preventDefault(); if (addable) addSuggestion(i); }}
+                        onPointerEnter={() => setSuggIdx(idx)}
+                      >
+                        <span className="combo__label">
+                          {plainText(i.name) || i.code}
+                          <span className="muted mono" style={{ fontSize: '.72rem' }}> {i.code}</span>
+                        </span>
+                        <span className="combo__hint">
+                          {already ? 'already added'
+                            : noPrice ? 'no price for this client'
+                            : i.rate != null ? inr(i.rate) : ''}
+                        </span>
+                      </li>
+                    );
+                  })}
+                  {searching && results.length === 0 && (
+                    <li className="combo__empty" role="presentation">Searching…</li>
+                  )}
+                  {!searching && results.length === 0 && (
+                    <li className="combo__empty" role="presentation">Nothing matches “{search}”.</li>
+                  )}
+                </ul>
+              )}
+            </div>
+
+          {/* ---- the selected tests, at the prices that will bill ---- */}
           {cart.items.length > 0 && preview && (
-            <div className="card" style={{ marginBottom: '.9rem' }}>
+            <div style={{ marginTop: '.9rem' }}>
               <div className="table-wrap table-wrap--cards">
                 <table>
                   <thead>
@@ -918,9 +1150,10 @@ export function NewOrder() {
                 </div>
               )}
 
-              {/* The tubes this order will need. Shown while booking so a
-                  collection centre knows how many barcodes to put out. */}
-              {preview.groups.length > 0 && (
+              {/* The tubes this order will need. B2C only — in B2B the SID
+                  fields themselves are on screen just below, each named for
+                  its tube, and this line would say the same thing twice. */}
+              {!b2b && preview.groups.length > 0 && (
                 <p className="muted" style={{ fontSize: '.76rem', marginTop: '.7rem' }}>
                   Needs <b>{preview.groups.length}</b> tube{preview.groups.length === 1 ? '' : 's'}:{' '}
                   {preview.groups.map((g) => g.sampleTypeName || 'Unspecified').join(', ')}
@@ -937,280 +1170,111 @@ export function NewOrder() {
             </div>
           )}
 
-          {/* ---- 3. patient ---- */}
-          {cart.items.length === 0 ? (
-            <div className="card order-step order-step--off">
-              <div className="order-step__head">
-                <span className="order-step__num">3</span>
-                <h2 className="order-step__title">Patient</h2>
-                <span className="muted" style={{ fontSize: '.76rem' }}>
-                  Add at least one test first.
+          {/* ---- barcodes, beside the tests they label ----
+              One barcode per TUBE, not per test: several tests usually share
+              a tube — T3, T4 and TSH are one serum draw — and the LIS accepts
+              exactly one label for it. A box on every test row would collect
+              three barcodes where one is wanted, which is why these are
+              grouped, each field naming its tube and the tests in it.
+
+              B2B: inline and always on screen, because the counter is holding
+              the tubes and the sticker sheet right now, and a disclosure to
+              open on every order taught nobody anything. B2C keeps the
+              collapsed panel — a walk-in's sample is usually drawn later and
+              there is nothing to scan yet. */}
+          {b2b && groups.length > 0 && (
+            <div className="sid-inline">
+              <h3 className="sid-inline__title">
+                Sample IDs <span className="muted">· one per tube · blank ones attach later on Accessioning</span>
+              </h3>
+              {groups.map((g) => (
+                <SidField
+                  key={g.sampleTypeId}
+                  group={g}
+                  value={sids[g.sampleTypeId] ?? ''}
+                  status={sidStatus[g.sampleTypeId] ?? 'idle'}
+                  dupInForm={dupSid(sids[g.sampleTypeId] ?? '')}
+                  onChange={(v) => setSids((s) => ({ ...s, [g.sampleTypeId]: v }))}
+                  onStatus={(st) => setSidStatus((s) => (
+                    s[g.sampleTypeId] === st ? s : { ...s, [g.sampleTypeId]: st }))}
+                />
+              ))}
+            </div>
+          )}
+
+          {!b2b && groups.length > 0 && (
+            <div className="sid-panel" style={{ marginTop: '1rem' }}>
+              <button
+                type="button"
+                className="sid-panel__head"
+                aria-expanded={showSids}
+                aria-controls="sid-panel-body"
+                onClick={() => setSidsOpen(!showSids)}
+              >
+                <svg className="sid-panel__caret" viewBox="0 0 24 24" aria-hidden="true" fill="none"
+                     stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+                <span className="sid-panel__title">Sample IDs</span>
+                <span className="sid-panel__count">
+                  {/* Counts what is typed, not what is valid — the fields
+                      below say which ones are a problem. */}
+                  {enteredSids.length} of {groups.length} tube
+                  {groups.length === 1 ? '' : 's'}
+                  {enteredSids.length === 0 ? ' · optional' : ''}
                 </span>
+              </button>
+
+              <div className="sid-panel__body" id="sid-panel-body"
+                   style={showSids ? undefined : { display: 'none' }}>
+                <p className="muted" style={{ fontSize: '.76rem', margin: 0, lineHeight: 1.6 }}>
+                  Leave blank to barcode later on <b>Accessioning</b>. Either way they still
+                  need registering.
+                </p>
+
+                {groups.map((g, i) => (
+                  <SidField
+                    key={g.sampleTypeId}
+                    group={g}
+                    value={sids[g.sampleTypeId] ?? ''}
+                    status={sidStatus[g.sampleTypeId] ?? 'idle'}
+                    dupInForm={dupSid(sids[g.sampleTypeId] ?? '')}
+                    // Only when the operator opened it themselves. Stealing
+                    // focus into a panel that opened on its own would move
+                    // the cursor out of whatever they are typing.
+                    autoFocus={i === 0 && sidsOpen === true}
+                    onChange={(v) => setSids((s) => ({ ...s, [g.sampleTypeId]: v }))}
+                    onStatus={(st) => setSidStatus((s) => (
+                      s[g.sampleTypeId] === st ? s : { ...s, [g.sampleTypeId]: st }))}
+                  />
+                ))}
               </div>
             </div>
-          ) : (
-            /* Two cards now, not one — the patient's details and the
-               transaction that finishes the order. See the split below. */
-            <>
-            <div className="card order-step">
-              <div className="order-step__head">
-                <span className="order-step__num order-step__num--on">3</span>
-                <h2 className="order-step__title">Patient</h2>
-              </div>
+          )}
+          </div>
 
-              <div className="grid2">
-                <div className="field">
-                  <label htmlFor="p-name">Name</label>
-                  <div className="row" style={{ gap: '.35rem' }}>
-                    <select className="input" value={patient.initial} style={{ width: 82 }}
-                            onChange={(e) => setPatient({ ...patient, initial: e.target.value })}>
-                      {['Mr', 'Ms', 'Mrs', 'Dr', 'Master', 'Baby', ''].map((t) => (
-                        <option key={t || 'none'} value={t}>{t || '—'}</option>
-                      ))}
-                    </select>
-                    <input id="p-name" className="input" value={patient.name} maxLength={200}
-                           onChange={(e) => setPatient({ ...patient, name: e.target.value })} />
-                  </div>
-                </div>
-
-                <div className="field">
-                  <label htmlFor="p-mobile">Mobile</label>
-                  <input id="p-mobile" className="input mono" value={patient.mobile} inputMode="numeric"
-                         maxLength={10}
-                         onChange={(e) => setPatient({ ...patient, mobile: e.target.value.replace(/\D/g, '') })} />
-                  <span className="muted" style={{ fontSize: '.7rem' }}>
-                    {patient.mobile.trim() !== '' && patient.mobile.trim().length !== 10
-                      ? <b style={{ color: 'var(--danger)' }}>A mobile number is 10 digits — finish it or clear it.</b>
-                      : 'Optional · no mobile, no result history'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid2">
-                <div className="field">
-                  <label htmlFor="p-email">Email</label>
-                  <input id="p-email" className="input" type="email" value={patient.email} maxLength={100}
-                         onChange={(e) => setPatient({ ...patient, email: e.target.value })} />
-                </div>
-
-                <div className="field">
-                  <label htmlFor="p-mrn">Passport / travel ID</label>
-                  {/* Written to patient_master.MRNID. Left blank, the create
-                      procedure backfills the patient id, as the LIS form does. */}
-                  <input id="p-mrn" className="input mono" value={patient.mrnId} maxLength={50}
-                         placeholder="Optional"
-                         onChange={(e) => setPatient({ ...patient, mrnId: e.target.value })} />
-                </div>
-              </div>
-
-              <div className="grid2">
-                <div className="field">
-                  <label htmlFor="p-age-y">Age</label>
-                  <div className="row" style={{ gap: '.35rem' }}>
-                    <input id="p-age-y" className="input mono" value={patient.ageYears} inputMode="numeric"
-                           style={{ width: 88 }} placeholder="Years" aria-label="Age in years"
-                           onChange={(e) => setPatient({ ...patient, ageYears: e.target.value.replace(/\D/g, '') })} />
-                    <input id="p-age-m" className="input mono" value={patient.ageMonths} inputMode="numeric"
-                           style={{ width: 88 }} placeholder="Months" aria-label="Age in months"
-                           onChange={(e) => setPatient({ ...patient, ageMonths: e.target.value.replace(/\D/g, '') })} />
-                  </div>
-                  {/* Says what will actually be stored. "2 and 6" becoming
-                      "30 months" is surprising unless it is stated. */}
-                  <span className="muted" style={{ fontSize: '.7rem' }}>
-                    {patient.ageYears || patient.ageMonths
-                      ? age
-                        ? `Recorded as ${age.age} ${age.ageType === 2 ? 'month' : 'year'}${age.age === 1 ? '' : 's'}.`
-                        : <b style={{ color: 'var(--danger)' }}>Not a usable age — months must be 0–11 alongside years.</b>
-                      : 'Years and/or months'}
-                  </span>
-                </div>
-
-                <div className="field">
-                  <label htmlFor="p-gender">Sex</label>
-                  <select id="p-gender" className="input" value={patient.gender}
-                          onChange={(e) => setPatient({ ...patient, gender: Number(e.target.value) })}>
-                    <option value={1}>Male</option>
-                    <option value={2}>Female</option>
-                  </select>
-                </div>
-              </div>
-
-            </div>
-
-            {/* ---- referral & history ----
-                Split out of the Patient card, and the reason is arithmetic
-                rather than taste. Multi-column can only break BETWEEN cards, so
-                card sizes are the only lever on the balance. Patient was a
-                single 480px block and Barcodes 434: no split of
-                114/123/181/480/434 lands near the 666 that would balance, so
-                one column always ran ~910 and the page scrolled. Two ~240
-                blocks give the balancer something it can place, and the break
-                falls at a real subject change — who the patient is, versus who
-                sent them and why. */}
-            <div className="card order-step">
-              <div className="order-step__head">
-                <span className="order-step__num order-step__num--on">3</span>
-                <h2 className="order-step__title">Referral &amp; history</h2>
-              </div>
-
-              {/* Referrers. The create procedure has always accepted these —
-                  an id, or a name it upserts — but nothing offered a way to
-                  pick one, so every Infinity order so far was booked with
-                  none. Optional in both channels here: Telo makes the doctor
-                  compulsory for B2C, and adding that gate would start
-                  rejecting orders this form accepts today. */}
-              <div className="grid2">
-                <div className="field">
-                  <label>Ref. doctor</label>
-                  <Combobox
-                    value={refDoctor?.kind === 'existing' ? String(refDoctor.id) : ''}
-                    createdName={refDoctor?.kind === 'new' ? refDoctor.name : null}
-                    emptyLabel="No referring doctor"
-                    options={refs.doctors.map((d) => ({
-                      value: String(d.id), label: d.name, hint: d.code || null,
-                    }))}
-                    onChange={(v) => setRefDoctor(v === '' ? null : {
-                      kind: 'existing', id: Number(v),
-                      name: refs.doctors.find((d) => String(d.id) === v)?.name ?? '',
-                    })}
-                    creatable
-                    createLabel={(t) => `Add referring doctor “${t}”`}
-                    onCreate={(name) => setRefDoctor({ kind: 'new', name })}
-                  />
-                </div>
-
-                <div className="field">
-                  <label>Referring customer</label>
-                  <Combobox
-                    value={refCustomer?.kind === 'existing' ? String(refCustomer.id) : ''}
-                    createdName={refCustomer?.kind === 'new' ? refCustomer.name : null}
-                    emptyLabel="No referring customer"
-                    options={refs.customers.map((x) => ({
-                      value: String(x.id), label: x.name, hint: x.code || null,
-                    }))}
-                    onChange={(v) => setRefCustomer(v === '' ? null : {
-                      kind: 'existing', id: Number(v),
-                      name: refs.customers.find((x) => String(x.id) === v)?.name ?? '',
-                    })}
-                    creatable
-                    createLabel={(t) => `Add referring customer “${t}”`}
-                    onCreate={(name) => setRefCustomer({ kind: 'new', name })}
-                  />
-                </div>
-              </div>
-
-              {/* Paired: the typed history and the letter it came from are one
-                  subject, and stacked they were the two tallest rows on the
-                  card — 152px between them for two inputs. */}
-              <div className="grid2">
-              <div className="field">
-                <label htmlFor="p-hist">Clinical history</label>
-                <input id="p-hist" className="input" value={patient.clinicalHistory} maxLength={500}
-                       onChange={(e) => setPatient({ ...patient, clinicalHistory: e.target.value })} />
-              </div>
-
-              {/* The referral letter itself. Telo has carried this since its
-                  B2B form shipped; the procedure files it against the patient
-                  in tbl_med_mcc_patient_clinicaldata tagged 'HISTORY', so it
-                  travels with the order rather than living in someone's inbox. */}
-              <div className="field">
-                <label htmlFor="p-file">Clinical history PDF</label>
-                <div className="row" style={{ gap: '.5rem', flexWrap: 'wrap' }}>
-                  <input
-                    id="p-file" type="file" accept="application/pdf"
-                    onChange={(e) => void readClinicalPdf(e.target.files?.[0] ?? null)}
-                  />
-                  {clinicalFile && (
-                    <button className="btn btn--ghost btn--sm"
-                            onClick={() => { setClinicalFile(null); setFileError(null); }}>
-                      Remove
-                    </button>
-                  )}
-                </div>
-                {fileError
-                  ? <span style={{ fontSize: '.72rem', color: 'var(--danger)' }}>{fileError}</span>
-                  : <span className="muted" style={{ fontSize: '.72rem' }}>
-                      PDF, up to 10 MB
-                      {clinicalFile && ` · ${clinicalFile.name} attached`}
-                    </span>}
-              </div>
-              </div>
-
-            </div>
-
-            {/* ---- finish: barcodes, money, place ----
-                Its own card rather than the tail of the patient card, because
-                the patient card alone measured 777px — more than a 768px
-                laptop can give one column, so no arrangement of whole cards
-                could ever fit the form on one screen. Split here because this
-                is where the subject changes: everything above describes the
-                person, everything below settles the transaction. */}
-            <div className="card order-step">
-              <div className="order-step__head">
-                <span className="order-step__num order-step__num--on">4</span>
-                <h2 className="order-step__title">Barcodes &amp; payment</h2>
-              </div>
-
-              {/* Sample IDs. Open by default in B2B, where the counter is
-                  holding the tubes; collapsed in B2C, where the sample is
-                  drawn later and there is nothing to scan yet. */}
-              {groups.length > 0 && (
-                <div className="sid-panel">
-                  <button
-                    type="button"
-                    className="sid-panel__head"
-                    aria-expanded={showSids}
-                    aria-controls="sid-panel-body"
-                    onClick={() => setSidsOpen(!showSids)}
-                  >
-                    <svg className="sid-panel__caret" viewBox="0 0 24 24" aria-hidden="true" fill="none"
-                         stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="m6 9 6 6 6-6" />
-                    </svg>
-                    <span className="sid-panel__title">Sample IDs</span>
-                    <span className="sid-panel__count">
-                      {/* Counts what is typed, not what is valid — the fields
-                          below say which ones are a problem. */}
-                      {enteredSids.length} of {groups.length} tube
-                      {groups.length === 1 ? '' : 's'}
-                      {enteredSids.length === 0 ? ' · optional' : ''}
-                    </span>
-                  </button>
-
-                  <div className="sid-panel__body" id="sid-panel-body"
-                       style={showSids ? undefined : { display: 'none' }}>
-                    <p className="muted" style={{ fontSize: '.76rem', margin: 0, lineHeight: 1.6 }}>
-                      Leave blank to barcode later on <b>Accessioning</b>. Either way they still
-                      need registering.
-                    </p>
-
-                    {groups.map((g, i) => (
-                      <SidField
-                        key={g.sampleTypeId}
-                        group={g}
-                        value={sids[g.sampleTypeId] ?? ''}
-                        status={sidStatus[g.sampleTypeId] ?? 'idle'}
-                        dupInForm={dupSid(sids[g.sampleTypeId] ?? '')}
-                        // Only when the operator opened it themselves. Stealing
-                        // focus into a panel that opened on its own would move
-                        // the cursor out of the patient name they are typing.
-                        autoFocus={i === 0 && sidsOpen === true}
-                        onChange={(v) => setSids((s) => ({ ...s, [g.sampleTypeId]: v }))}
-                        onStatus={(st) => setSidStatus((s) => (
-                          s[g.sampleTypeId] === st ? s : { ...s, [g.sampleTypeId]: st }))}
-                      />
-                    ))}
-                  </div>
-                </div>
+          {/* ---- 4. payment ---- */}
+          <div className={`card order-step${cart.items.length > 0 ? '' : ' order-step--off'}`}>
+            <div className="order-step__head">
+              <span className={`order-step__num${cart.items.length > 0 ? ' order-step__num--on' : ''}`}>4</span>
+              <h2 className="order-step__title">Payment</h2>
+              {cart.items.length === 0 && (
+                <span className="muted" style={{ fontSize: '.76rem' }}>
+                  Add at least one test.
+                </span>
               )}
+            </div>
+
+            {cart.items.length > 0 && (
+              <>
 
               {/* ---- money taken at the counter ----
                   Every field here already existed on the create procedure and
                   Infinity sent zeros for all of them, so an order could be
                   booked but not paid for. Left blank it still sends zeros and
-                  behaves exactly as before. */}
-              <fieldset className="fgroup" style={{ marginTop: '1.2rem' }}>
-                <legend>Payment</legend>
+                  behaves exactly as before. The card supplies the title now,
+                  so the fieldset and its legend went with the move. */}
+              <div>
                 {/* B2C keeps the box on show; B2B hides it behind a button.
                     A discount on a B2B bill is the exception — that bill is
                     the patient's at MRP and the centre's margin is the thing
@@ -1307,7 +1371,7 @@ export function NewOrder() {
                     )}
                   </div>
                 )}
-              </fieldset>
+              </div>
 
               <div className="row" style={{ marginTop: '.9rem' }}>
                 <button className="btn btn--primary" disabled={!canPlace} onClick={() => void place()}>
@@ -1339,13 +1403,13 @@ export function NewOrder() {
                   </span>
                 )}
               </div>
-            </div>
-            </>
-          )}
-        </>
-      )}
+              </>
+            )}
+          </div>
 
-      </div>
+      </div>{/* right column */}
+
+      </div>{/* the grid */}
 
       {busy && <div className="center" style={{ marginTop: '1rem' }}><InfinityLoader /></div>}
     </div>

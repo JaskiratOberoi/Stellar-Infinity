@@ -353,17 +353,28 @@ public sealed class OrderWriteRepository(NobleConnectionFactory db, SqlRetry ret
             }
 
             // Second result set: the samples actually issued. Always present,
-            // empty on failure and on a B2B order booked without barcodes.
+            // empty on failure and on an order booked without barcodes.
+            //
+            // snake_case, exactly as the procedure declares them (sample_id,
+            // vailid, sample_type_id, sample_type_name — 60_usp_telo_create_
+            // order.sql) and as AddSidsAsync reads the same shape. This read
+            // was written camelCase, and the mistake stayed invisible for as
+            // long as every order was booked WITHOUT barcodes: with zero rows
+            // the column lookup never ran. The first real order with a scanned
+            // SID reached the first row, asked for a column that does not
+            // exist, and turned a successfully booked order into a 500 — the
+            // procedure had already committed by the time the read blew up, so
+            // the operator was told it failed while the LIS said it happened.
             var samples = new List<IssuedSample>();
             if (await r.NextResultAsync(inner).ConfigureAwait(false))
             {
                 while (await r.ReadAsync(inner).ConfigureAwait(false))
                 {
                     samples.Add(new IssuedSample(
-                        SampleId: r.NullableInt("sampleId") ?? 0,
+                        SampleId: r.NullableInt("sample_id") ?? 0,
                         Vailid: r.Str("vailid"),
-                        SampleTypeId: r.NullableInt("sampleTypeId") ?? -1,
-                        SampleTypeName: r.Str("sampleTypeName")));
+                        SampleTypeId: r.NullableInt("sample_type_id") ?? -1,
+                        SampleTypeName: r.Str("sample_type_name")));
                 }
             }
 

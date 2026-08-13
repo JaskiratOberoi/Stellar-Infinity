@@ -1696,47 +1696,64 @@ tbody tr:hover { background: var(--accent-softer); }
 .seg__btn.is-on { background: var(--accent-softer); color: var(--teal); font-weight: 600; }
 .seg__btn:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
 
-/* ---------- new order: one screen, two columns ----------
+/* ---------- new order: who on the left, the order on the right ----------
 
-   A wrapping flex column, not a grid. See the note in NewOrder: grid rows are
-   shared between columns, so a short card beside a tall one leaves dead space
-   under the short one and every row compounds it. Wrap lets each column pack
-   independently and rebalance when the basket grows.
+   The old layout was CSS multi-column balancing five cards by height, which
+   put the break wherever the heights fell. It is a real grid now because the
+   columns finally MEAN something — identity on the left, the order on the
+   right — and a break that landed anywhere else would be wrong, not merely
+   unbalanced. Each side is its own flex column, so a card growing (the basket,
+   every time a test is added) never opens dead space beside it: that was the
+   objection to grid when the rows were shared, and per-column flex is what
+   removes it.
 
-   Cards must not be split down the middle of a column, hence break-inside on
-   the children. */
-@media (min-width: 1180px) {
-  /* Multi-column, not flex-wrap and not grid.
-
-     Flex column-wrap was the first attempt and it cannot be pinned to two
-     columns: the column count falls out of the height cap, so tall cards
-     produced FOUR columns and 2000px of horizontal scroll.
-
-     Grid cannot do it either — grid rows are shared between columns, so a 98px
-     channel card sitting beside a 555px patient card forces the row to 555 and
-     leaves 450px of dead space under the channel.
-
-     Multi-column balances by height and breaks wherever that balance falls,
-     which with these cards lands after the basket: choose a client and build
-     the order on the left, describe the patient and settle up on the right. */
-  .order-flow {
-    column-count: 2;
-    column-gap: .9rem;
-  }
-
-  /* A card split down the middle of a column is unreadable, and a form control
-     torn across the gap is unusable. */
-  .order-flow > * {
-    break-inside: avoid;
-    margin-bottom: .9rem;
-  }
+   The right side is wider on purpose. It holds the price table — five columns
+   of figures in B2B — while the left is a form whose longest row is a name. */
+.order-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: .9rem;
+  align-items: start;
+}
+.order-grid__col {
+  display: flex;
+  flex-direction: column;
+  gap: .9rem;
+  min-width: 0;
 }
 
-/* Below the breakpoint it is the single column it always was — no cap, no
-   wrap, nothing to balance. */
-@media (max-width: 1179px) {
-  .order-flow > * { margin-bottom: .9rem; }
+/* One column below a laptop, in DOM order — client, patient, referral, tests,
+   payment — which is exactly the order the work happens in. */
+@media (max-width: 1080px) {
+  .order-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* A fieldset that exists only to disable its contents as a group when the
+   card is not reachable yet. The dimming is the card's job; this is what
+   makes the inputs actually inert instead of merely faint. */
+fieldset.bare {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-inline-size: 0;
+}
+
+/* ---------- sample IDs inline under the selected tests (B2B) ---------- */
+
+.sid-inline {
+  margin-top: 1rem;
+  padding-top: .9rem;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: .7rem;
+}
+.sid-inline__title { font-size: .8rem; font-weight: 600; }
+.sid-inline__title .muted { font-weight: 400; font-size: .72rem; }
+
+/* A suggestion that cannot be added — already in the basket, or no rate set.
+   Kept visible rather than filtered out: a test that silently never appears
+   reads as "we don't do it", where the truth is "no price for this client". */
+.combo__opt--dead { opacity: .55; cursor: default; }
 
 /* ---------- orders booked in this run ---------- */
 
