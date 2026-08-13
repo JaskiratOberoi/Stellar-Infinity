@@ -37,6 +37,22 @@ const EMPTY_PATIENT: PatientForm = {
 };
 
 /**
+ * What a salutation already says about sex, so picking one fills the Sex field
+ * and the operator never types the same fact twice. 1 = Male, 2 = Female, per
+ * the LIS's gender codes.
+ *
+ * Only the unambiguous titles are mapped. Dr says nothing about sex. Baby and
+ * "Baby of" name a NEWBORN whose sex the title does not carry — "Baby of
+ * Meena" puts the mother's name on the patient line, and guessing the child's
+ * sex from it would be wrong half the time on a value that picks reference
+ * ranges. Those leave Sex exactly as it is.
+ */
+const TITLE_SEX: Record<string, 1 | 2> = {
+  Mr: 1, Master: 1,
+  Ms: 2, Mrs: 2,
+};
+
+/**
  * Years + months, as the LIS stores it: one number and a unit.
  *
  * Ported from Telo's resolveB2bAge so the two systems record the same patient
@@ -775,9 +791,23 @@ export function NewOrder() {
             <div className="field">
               <label htmlFor="p-name">Name</label>
               <div className="row" style={{ gap: '.35rem' }}>
-                <select className="input" value={patient.initial} style={{ width: 82 }}
-                        onChange={(e) => setPatient({ ...patient, initial: e.target.value })}>
-                  {['Mr', 'Ms', 'Mrs', 'Dr', 'Master', 'Baby', ''].map((t) => (
+                <select
+                  className="input" value={patient.initial} style={{ width: 96 }}
+                  aria-label="Title"
+                  // The title drives Sex where it can — see TITLE_SEX. Picking
+                  // Mrs after Sex was set flips it, deliberately: the title is
+                  // the later, more explicit statement of the same fact, and
+                  // the Sex field is right there to correct on the rare
+                  // occasion that is wrong.
+                  onChange={(e) => {
+                    const initial = e.target.value;
+                    const implied = TITLE_SEX[initial];
+                    setPatient({ ...patient, initial, ...(implied ? { gender: implied } : {}) });
+                  }}>
+                  {/* "Baby of" is the newborn convention: the MOTHER's name
+                      goes on the patient line, because the child does not
+                      have one yet. */}
+                  {['Mr', 'Ms', 'Mrs', 'Dr', 'Master', 'Baby', 'Baby of', ''].map((t) => (
                     <option key={t || 'none'} value={t}>{t || '—'}</option>
                   ))}
                 </select>
@@ -919,24 +949,36 @@ export function NewOrder() {
               travels with the order rather than living in someone's inbox. */}
           <div className="field">
             <label htmlFor="p-file">Clinical history PDF</label>
-            <div className="row" style={{ gap: '.5rem', flexWrap: 'wrap' }}>
+            {/* The native input is the picker and the keyboard path; the label
+                is what anyone sees. See .filepick for why the input itself is
+                never shown. Keyed on the file so that Remove also empties the
+                BROWSER's copy — with state cleared but the FileList intact,
+                re-choosing the same file fires no change event and looks like
+                a dead button. */}
+            <div className="filepick" key={clinicalFile?.name ?? 'none'}>
               <input
                 id="p-file" type="file" accept="application/pdf"
+                className="filepick__native"
                 onChange={(e) => void readClinicalPdf(e.target.files?.[0] ?? null)}
               />
-              {clinicalFile && (
-                <button className="btn btn--ghost btn--sm"
-                        onClick={() => { setClinicalFile(null); setFileError(null); }}>
-                  Remove
-                </button>
+              <label htmlFor="p-file" className="btn btn--ghost btn--sm filepick__btn">
+                {clinicalFile ? 'Replace PDF' : 'Attach PDF'}
+              </label>
+              {clinicalFile ? (
+                <>
+                  <span className="filepick__name" title={clinicalFile.name}>{clinicalFile.name}</span>
+                  <button className="btn btn--ghost btn--sm"
+                          onClick={() => { setClinicalFile(null); setFileError(null); }}>
+                    Remove
+                  </button>
+                </>
+              ) : (
+                <span className="muted filepick__name">PDF, up to 10 MB · optional</span>
               )}
             </div>
-            {fileError
-              ? <span style={{ fontSize: '.72rem', color: 'var(--danger)' }}>{fileError}</span>
-              : <span className="muted" style={{ fontSize: '.72rem' }}>
-                  PDF, up to 10 MB
-                  {clinicalFile && ` · ${clinicalFile.name} attached`}
-                </span>}
+            {fileError && (
+              <span style={{ fontSize: '.72rem', color: 'var(--danger)' }}>{fileError}</span>
+            )}
           </div>
           </div>
         </fieldset>
