@@ -64,8 +64,36 @@ Rough taxonomy of the 166:
 | `tbl_med_mcc_test_transactions` | 5.5M | 0.7 GB | Test status transitions |
 | `tbl_med_mcc_patient_tests` | 5.0M | 0.5 GB | Ordered tests per registration |
 
-Total ≈ 55 GB, of which **~28 GB is embedded binary** and ~1.3 GB is a click
-log. The *relational* payload worth modernising is ≈ 25 GB.
+Those figures are **base table data only** (heap/clustered pages). The MDF
+on disk is 151 GB, and the reconciliation is worth spelling out because it
+was the census's own first error — the initial scan counted only
+`index_id IN (0,1)` and reported 55 GB:
+
+| Component | Size |
+|---|---:|
+| Base table data (the 55 GB above) | 55 GB |
+| **Nonclustered indexes** | **~68 GB** |
+| Free space inside the MDF | 25 GB |
+| Internal/system allocations | ~3 GB |
+| **MDF file** | **151 GB** |
+
+**57.8 GB of that index weight sits on one table** —
+`tbl_med_mcc_patient_test_result`, which carries **16 indexes on 21.4 GB of
+data**, a 2.7× index-to-data ratio. Reading the definitions tells the story:
+five are `_dta_index_…` (Database Engine Tuning Advisor output applied
+verbatim, one of them 8 keys + 6 includes at ~17 GB), the rest are named
+`NonClusteredIndex-20190418…20220328` — dated accretion. **Seven of the
+sixteen lead on `vailid`**, i.e. they are near-duplicates of each other.
+`patient_samples` (13 indexes, 6.9 GB on 2.2 GB of data) and
+`patient_master` (12 indexes) show the same pattern.
+
+Two consequences. Every result write — the hottest write in the lab —
+maintains 16 indexes; combined with RCSI being off, this is the mechanical
+explanation for the write latency the LIS is known for. And the replica
+sized from *data*, not from the MDF: the *relational* payload worth
+modernising is ≈ 25 GB, which lands in PostgreSQL with roughly half a dozen
+deliberately chosen indexes per hot table instead of sixteen accumulated
+ones. The 150 GB file does not predict a 150 GB replica.
 
 ### The pathologies the new schema must fix
 
