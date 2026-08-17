@@ -95,6 +95,78 @@ modernising is ≈ 25 GB, which lands in PostgreSQL with roughly half a dozen
 deliberately chosen indexes per hot table instead of sixteen accumulated
 ones. The 150 GB file does not predict a 150 GB replica.
 
+### Which indexes are actually used (measured, after the VIEW SERVER STATE grant)
+
+**Calibration first: the instance restarted at 01:26 UTC and these counters
+were read 8.2 hours later**, so this is one working day's morning-to-mid-
+afternoon traffic. That is ample to identify what is *hot*; it is NOT enough
+to declare an index dead, because weekly and month-end work has not run. Any
+pruning of Noble itself should re-read these after a full month.
+
+**`tbl_med_mcc_patient_test_result`** — in 8.2 hours, seven indexes totalling
+**≈15.7 GB served essentially no reads** while paying full write cost:
+
+| Index | Size | Reads | Writes |
+|---|---:|---:|---:|
+| `NonClusteredIndex-20190418-133420` | 4.45 GB | **0** | 59,385 |
+| `index_result_vailid_patientid` | 3.61 GB | **0** | 1,958 |
+| `NonClusteredIndex-20220108-153032` | 1.99 GB | **0** | 79,232 |
+| `NonClusteredIndex-20201231-214832` | 1.70 GB | 1 scan | 62,982 |
+| `NonClusteredIndex-20191102-143530` | 1.70 GB | 76 | 59,385 |
+| `NonClusteredIndex-20220328-212349` | 1.29 GB | **0** | 2,825 |
+| `NonClusteredIndex-20201231-221816` | 0.94 GB | **0** | 59,385 |
+
+The genuinely hot paths are few and they agree with each other: the PK
+(453k seeks + 206k lookups), and four indexes leading on **`vailid`** —
+`_dta…K3_K19` (157k), `IX_patient_test_result_vailid` (156k),
+`_dta…K3_K4_K1` (39k), `IX_result_vailid` (35k). *Four near-duplicate
+indexes are splitting the same access pattern.* In the replica that is
+**one** index: `result(sample_id)`, plus `result(sample_id, test_id)` if
+measurement justifies it.
+
+One unexplained reading, recorded rather than rationalised: the 16.86 GB
+`_dta…K7_K2_K1_K3_K2320_K4_K21_K6…` shows 8,936 seeks but only **1** write,
+where its siblings on the same table show ~59,000. It is not disabled and
+not filtered (checked). Something about how it is maintained differs and I
+cannot account for it from here; it does not change the conclusion, since
+it is demonstrably read.
+
+**`tbl_med_mcc_patient_samples` — the structural finding.** The clustered
+index is **`_dta_index_…_c_…__K7`, i.e. clustered on `sample_status`** — a
+DTA artifact on a *mutable, low-cardinality* column (10 distinct values,
+non-unique). The real PK `(id, vailid)` is merely nonclustered.
+
+This is the single worst thing in the schema, and it is expensive in three
+compounding ways:
+
+1. A sample's life is a sequence of status transitions (registered →
+   received → in progress → authorised → printed). Because the row's
+   physical position is *keyed on status*, *every transition physically
+   relocates the row* in a 2.2 GB clustered index. Five moves per sample,
+   5.5M samples.
+2. The clustered key is non-unique, so SQL Server appends a hidden 4-byte
+   uniquifier to every row.
+3. Every one of the 12 nonclustered indexes carries the clustering key as
+   its row locator, so all of them embed `sample_status` — making each
+   wider *and* forcing each to be updated on every status change.
+
+It also explains the 491,988 key lookups counted against that clustered
+index in 8.2 hours.
+
+**In the replica**: `sample` clusters on its own identity, `sid` gets a
+unique index (replacing `trigger_PreventDuplicate`), and status is a plain
+indexed column — ideally a partial index on the few open statuses, since
+worklist queries only ever ask for those. Four samples indexes also showed
+zero reads, including one named — literally — **`<Name of Missing Index,
+sysname,>`**: somebody pasted a tuning-advisor suggestion into production
+without replacing the placeholder, and it has been costing 45,928 writes a
+day since, for no reads.
+
+**`tbl_med_mcc_patient_master`**: PK dominates (766k seeks); five indexes
+totalling 0.49 GB served zero reads. Telo's own
+`IX_telo_patient_master_mobile_number` is used (188 seeks) — worth keeping
+as a real index on the person/registration split.
+
 ### The pathologies the new schema must fix
 
 1. **No people, only registrations.** `patient_master` is 3.4M *visits*;
@@ -277,14 +349,13 @@ make the sync idempotent and re-runnable from any point.
    sample key correctly. CT internal tables at 0.4 MB, database ONLINE and
    MULTI_USER, writes landing normally.
 
-   **Still to watch, because it cannot be measured from this login:**
-   `ALLOW_SNAPSHOT_ISOLATION` starts row versioning, which consumes tempdb.
-   Version-store size lives in `tempdb.sys.dm_db_file_space_usage`, which
-   needs VIEW SERVER STATE. It should stay near zero without long-running
-   snapshot readers — and nothing opens one until the initial load — but it
-   is worth an eyeball from an admin session before phase 3 starts
-   snapshotting 25 GB. If it is ever a problem, snapshot isolation can be
-   turned off independently of CT; only the initial load needs it.
+   **Post-grant follow-ups, all now measured and clear:** the tempdb version
+   store that `ALLOW_SNAPSHOT_ISOLATION` feeds sits at **1.1 MB** — noise,
+   as expected with no long-running snapshot readers. **SQL Server Agent is
+   Running/Automatic**, so CDC would in fact have been viable had the login
+   been sysadmin; Change Tracking remains the right choice and is already
+   deployed. Change Tracking's own internal tables were at 0.4 MB shortly
+   after enablement. Nothing here blocks phase 3.
 2. **Stand up PostgreSQL 17 + `stellar` schema** in Docker on this machine;
    DDL under `db/pg/` in the Infinity repo, migration-tracked.
 3. **Build `stellar-sync`** (.NET worker): snapshot + CDC tail for those
