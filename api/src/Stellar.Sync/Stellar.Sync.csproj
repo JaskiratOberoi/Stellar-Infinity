@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Stellar.Sync</RootNamespace>
+    <!-- Same reason as Infinity.Api: Microsoft.Data.SqlClient throws
+         "Globalization Invariant Mode is not supported" on every Open(). -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The Worker SDK sets up the global usings for Hosting/Configuration but
+         does not bring the assemblies; without this the generated
+         GlobalUsings file does not compile. -->
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="6.0.1" />
+    <!-- Npgsql's binary COPY is what makes the initial load of 68M result rows
+         finish in a reasonable time; row-by-row INSERT would not. -->
+    <PackageReference Include="Npgsql" Version="9.0.2" />
+  </ItemGroup>
+
+</Project>
