@@ -39,22 +39,45 @@ internal static class Upsert
     /// </summary>
     private const int MaxParameters = 65_000;   // headroom under the 65535 cap
 
+    /// <summary>
+    /// Rows per statement, independent of the parameter cap.
+    ///
+    /// The parameter limit alone is not enough. A statement with 65,000
+    /// parameters is legal and catastrophically slow — Postgres has to parse
+    /// and plan a query string hundreds of kilobytes long, and the bill
+    /// snapshot (31 columns, so 2,096 rows fitted the cap) simply timed out.
+    /// A thousand rows keeps each statement small enough to plan quickly while
+    /// still amortising the round trip.
+    /// </summary>
+    private const int MaxRowsPerStatement = 1_000;
+
+    /// <param name="conflict">
+    /// Conflict target, defaulting to <c>noble_id</c>. A PARTITIONED table
+    /// needs its partition key here too: Postgres requires a unique index to
+    /// back ON CONFLICT, and on a partitioned table every unique index must
+    /// include the partition column — so `result` conflicts on
+    /// <c>(noble_id, created_at)</c>, which only works because its created_at
+    /// comes from Noble's addeddate and is therefore stable across re-syncs.
+    /// Were it now(), every update would land as a new row in a new partition.
+    /// </param>
     public static async Task RunAsync(
         NpgsqlConnection conn,
         string table,
         string[] columns,
         IReadOnlyList<object?[]> rows,
-        CancellationToken ct)
+        CancellationToken ct,
+        string conflict = "noble_id")
     {
         if (rows.Count == 0) return;
 
-        var perStatement = Math.Max(1, MaxParameters / columns.Length);
+        var perStatement = Math.Min(MaxRowsPerStatement,
+                                    Math.Max(1, MaxParameters / columns.Length));
         if (rows.Count > perStatement)
         {
             for (var offset = 0; offset < rows.Count; offset += perStatement)
             {
                 var slice = rows.Skip(offset).Take(perStatement).ToList();
-                await RunAsync(conn, table, columns, slice, ct).ConfigureAwait(false);
+                await RunAsync(conn, table, columns, slice, ct, conflict).ConfigureAwait(false);
             }
             return;
         }
@@ -66,7 +89,7 @@ internal static class Upsert
         var sql = new System.Text.StringBuilder(256 + rows.Count * columns.Length * 8);
         sql.Append("INSERT INTO stellar.").Append(table).Append(" (").Append(cols).Append(") VALUES ");
 
-        await using var cmd = new NpgsqlCommand { Connection = conn };
+        await using var cmd = new NpgsqlCommand { Connection = conn, CommandTimeout = 300 };
 
         for (var r = 0; r < rows.Count; r++)
         {
@@ -77,12 +100,31 @@ internal static class Upsert
                 if (c > 0) sql.Append(',');
                 var p = $"@p{r}_{c}";
                 sql.Append(p);
-                cmd.Parameters.AddWithValue(p, rows[r][c] ?? DBNull.Value);
+                var v = rows[r][c];
+
+                // Strings go as UNKNOWN, not as text.
+                //
+                // Several target columns are not text: sex, age_unit,
+                // write_origin and ledger_direction are enums, and code columns
+                // are citext. A parameter typed as text makes Postgres refuse
+                // ("column is of type sex but expression is of type text")
+                // because there is no implicit cast from text to an enum.
+                // Sending it untyped lets the server coerce the literal to
+                // whatever the column actually is — the same thing that makes
+                // a plain SQL literal work.
+                if (v is string s)
+                {
+                    cmd.Parameters.Add(new NpgsqlParameter(p, NpgsqlTypes.NpgsqlDbType.Unknown) { Value = s });
+                }
+                else
+                {
+                    cmd.Parameters.AddWithValue(p, v ?? DBNull.Value);
+                }
             }
             sql.Append(')');
         }
 
-        sql.Append(" ON CONFLICT (noble_id) DO UPDATE SET ").Append(updates)
+        sql.Append(" ON CONFLICT (").Append(conflict).Append(") DO UPDATE SET ").Append(updates)
            .Append(", updated_at = now()");
 
         cmd.CommandText = sql.ToString();

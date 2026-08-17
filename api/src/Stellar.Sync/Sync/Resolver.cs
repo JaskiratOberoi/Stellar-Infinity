@@ -103,6 +103,27 @@ internal static class Resolver
             FROM stellar.centre c
             WHERE c.noble_id = a.centre_noble_id AND a.centre_id IS NULL
             """),
+
+        // Results and events reference a sample by BARCODE, not by id — that is
+        // Noble's own foreign key. sid is citext, so the join is
+        // case-insensitive without either side needing lower().
+        ("sample_event.sample", """
+            UPDATE stellar.sample_event e SET sample_id = s.id
+            FROM stellar.sample s
+            WHERE s.sid = e.sample_vailid AND e.sample_id IS NULL
+            """),
+
+        ("result.sample", """
+            UPDATE stellar.result r SET sample_id = s.id
+            FROM stellar.sample s
+            WHERE s.sid = r.sample_vailid AND r.sample_id IS NULL
+            """),
+
+        ("result.test", """
+            UPDATE stellar.result r SET test_id = t.id
+            FROM stellar.test t
+            WHERE t.noble_id = r.test_noble_id AND r.test_id IS NULL
+            """),
     ];
 
     public static async Task<int> RunAsync(

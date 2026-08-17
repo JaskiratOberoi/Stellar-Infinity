@@ -18,6 +18,33 @@ using Stellar.Sync;
 
 var once = args.Contains("--once");
 
+/*
+ * Which tables to run.
+ *
+ *   (default)     masters + clinical + billing
+ *   --masters     the reference tables only
+ *   --billing     bills, lines, receipts, ledger
+ *   --clinical    registrations, samples, ordered tests, events
+ *   --result      the 68M-row result table, ON ITS OWN
+ *
+ * `result` is excluded from the default set deliberately. Its initial snapshot
+ * is measured in hours, and it should be a decision someone makes rather than
+ * something a routine `--once` starts by surprise. After that first load it
+ * tails like everything else and belongs in the default set.
+ */
+var groups = new List<TableSync>();
+if (args.Contains("--masters")) groups.AddRange(MasterTables.All);
+if (args.Contains("--clinical")) groups.AddRange(ClinicalTables.All);
+if (args.Contains("--billing")) groups.AddRange(BillingTables.All);
+if (args.Contains("--result")) groups.Add(ClinicalTables.Result);
+if (groups.Count == 0)
+{
+    groups.AddRange(MasterTables.All);
+    groups.AddRange(ClinicalTables.All);
+    groups.AddRange(BillingTables.All);
+}
+IReadOnlyList<TableSync> tables = groups;
+
 var builder = Host.CreateApplicationBuilder(args);
 
 // api/.env is the same file the API reads. Loaded by hand because the worker
@@ -75,15 +102,15 @@ if (once)
     var engine = host.Services.GetRequiredService<SyncEngine>();
     var logger = host.Services.GetRequiredService<ILogger<Program>>();
 
-    logger.LogInformation("stellar-sync: single pass over {N} tables", MasterTables.All.Count);
-    var n = await engine.RunAsync(MasterTables.All, CancellationToken.None);
+    logger.LogInformation("stellar-sync: single pass over {N} tables", tables.Count);
+    var n = await engine.RunAsync(tables, CancellationToken.None);
     logger.LogInformation("stellar-sync: {Rows} rows applied", n);
     return;
 }
 
 builder.Services.AddHostedService(sp => new SyncWorker(
     sp.GetRequiredService<SyncEngine>(),
-    sp.GetRequiredService<ILogger<SyncWorker>>(),
+    sp.GetRequiredService<ILogger<SyncWorker>>(), tables,
     TimeSpan.FromSeconds(interval)));
 
 await builder.Build().RunAsync();
@@ -93,7 +120,7 @@ await builder.Build().RunAsync();
 /// (a snapshot, say) must not have a second pass start behind it and fight for
 /// the same watermark.
 /// </summary>
-internal sealed class SyncWorker(SyncEngine engine, ILogger<SyncWorker> log, TimeSpan interval)
+internal sealed class SyncWorker(SyncEngine engine, ILogger<SyncWorker> log, IReadOnlyList<TableSync> tables, TimeSpan interval)
     : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -105,7 +132,7 @@ internal sealed class SyncWorker(SyncEngine engine, ILogger<SyncWorker> log, Tim
         {
             try
             {
-                await engine.RunAsync(MasterTables.All, stoppingToken);
+                await engine.RunAsync(tables, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

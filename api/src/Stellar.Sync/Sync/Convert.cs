@@ -42,7 +42,15 @@ internal static class Conv
         // SQL Server's datetime low value is a placeholder for "unset" in this
         // schema, not a real 1900 event.
         if (dt.Year <= 1900) return null;
-        return new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Unspecified), Ist);
+
+        // Interpret as IST, then hand over as UTC. Both halves matter:
+        // attaching +05:30 is what stops the value shifting by 5h30m, and
+        // Npgsql then REFUSES a non-zero offset outright ("only offset 0 (UTC)
+        // is supported") because timestamptz has no notion of the offset it was
+        // written with. Converting preserves the instant exactly and lets
+        // Postgres store what it was always going to store.
+        return new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Unspecified), Ist)
+            .ToUniversalTime();
     }
 
     public static int? ToInt(object? v) => v switch
