@@ -356,8 +356,18 @@ make the sync idempotent and re-runnable from any point.
    been sysadmin; Change Tracking remains the right choice and is already
    deployed. Change Tracking's own internal tables were at 0.4 MB shortly
    after enablement. Nothing here blocks phase 3.
-2. **Stand up PostgreSQL 17 + `stellar` schema** in Docker on this machine;
-   DDL under `db/pg/` in the Infinity repo, migration-tracked.
+2. ~~Stand up PostgreSQL 17 + `stellar` schema~~ **DONE 2026-08-17.**
+   `docker-compose.stellar.yml` (PG 17, `127.0.0.1:5435` — this box already
+   runs five other Postgres containers), DDL in `api/db/pg/`, applied by
+   `api/db/pg/apply.sh` which wraps each file and its ledger row in one
+   transaction. 22 tables, `result` partitioned by month, 16 `updated_at`
+   triggers, 18 sync watermarks seeded. Re-running is all skips.
+
+   Verified rather than assumed: `sid` uniqueness rejects a duplicate
+   *case-insensitively* (`TESTSID001` vs `testsid001` collide), which is what
+   makes citext the right answer to Noble's `Latin1_General_CI_AI` collation —
+   a plain `text` column would have accepted both and silently diverged from
+   the LIS.
 3. **Build `stellar-sync`** (.NET worker): snapshot + CDC tail for those
    tables; prove row-count and checksum parity; run for a week alongside.
 4. **Point Infinity's read repositories at Postgres** one screen at a time

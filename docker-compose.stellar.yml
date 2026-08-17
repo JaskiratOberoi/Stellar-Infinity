@@ -1,0 +1,71 @@
+# The stellar replica — PostgreSQL 17.
+#
+#   docker compose -f docker-compose.stellar.yml up -d
+#
+# A SEPARATE compose file, not a service in docker-compose.yml, on purpose.
+# The main stack is the running product; this is infrastructure for a
+# migration that will take weeks and must be startable, stoppable and
+# destroyable without touching anything serving users. It joins the main
+# stack's network once the sync service and the API need to reach it.
+#
+# Port 5435 on localhost. This box already runs five Postgres containers —
+# 5432 (stellar-sense), 5433 (stellar-shark), 5434 (stellarmatter), 5442
+# (ares), 25432 (asset tracker) — so the port is picked to avoid them rather
+# than by convention. Bound to 127.0.0.1: nothing outside this machine reaches
+# the replica.
+
+name: stellar
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: stellar
+      POSTGRES_USER: stellar
+      # Local-only replica on a machine behind the tunnel; the port is bound to
+      # localhost and nothing outside this box can reach it. Move to an env
+      # file before this database holds anything Noble does not already hold.
+      POSTGRES_PASSWORD: stellar_dev
+      # Noble is Latin1_General_CI_AI. Case-insensitivity is restored per
+      # column with citext (see 001_foundation.sql) rather than by a database
+      # collation, so the default here stays deterministic and pattern indexes
+      # keep working.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "127.0.0.1:5435:5432"
+    volumes:
+      - stellar_pgdata:/var/lib/postgresql/data
+      # Read-only: the container applies nothing by itself. Migrations are run
+      # deliberately by db/pg/apply.sh, so a container restart can never
+      # re-run DDL against a live replica.
+      - ./api/db/pg:/migrations:ro
+    command:
+      - postgres
+      # 68M result rows arrive in the initial load. These are modest, safe
+      # defaults for a machine doing bulk ingest; tune against the real host
+      # once the load has run once and been measured.
+      - -c
+      - shared_buffers=1GB
+      - -c
+      - work_mem=64MB
+      - -c
+      - maintenance_work_mem=1GB      # index builds during the bulk load
+      - -c
+      - max_wal_size=4GB              # fewer checkpoints while ingesting
+      - -c
+      - checkpoint_timeout=15min
+      - -c
+      - random_page_cost=1.1          # SSD
+      - -c
+      - track_io_timing=on
+      - -c
+      - log_min_duration_statement=1000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stellar -d stellar"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  stellar_pgdata:
