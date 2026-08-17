@@ -177,7 +177,17 @@ internal static class ClinicalTables
 
     // ---- sample event (Noble: tbl_med_mcc_test_transactions, 5.5M) ----------
     //
-    // Noble's table conflates an event log with a running account balance
+    // WARNING, READ BEFORE TOUCHING THE MAPPING BELOW.
+    //
+    // This table has a column named `vailid` that does NOT contain a vial id.
+    // It contains the PATIENT NAME - live rows read 'PRIYA W/O MOHIT',
+    // 'RAMWATI', 'HIMANI'. The first version of this mapper trusted the name,
+    // staged it as sample_vailid and tried to resolve it against sample.sid;
+    // 4.9 million rows staged and exactly zero matched, which is how it was
+    // caught. The real link to the rest of the schema is `patientid`, which is
+    // a registration id.
+    //
+    // Noble's table also conflates an event log with a running account balance
     // (currentbalance / closingbalance recomputed per row). Only the event half
     // is taken; the money is account_entry's job, and duplicating a derived
     // balance is how two sources of truth start disagreeing.
@@ -194,7 +204,9 @@ internal static class ClinicalTables
             var vals = rows.Select(r => new object?[]
             {
                 Conv.ToInt(r["id"]),
-                Conv.Text(r["vailid"]),
+                // patientid, NOT vailid. See the note above: the column called
+                // vailid on this table does not contain a vial id.
+                Conv.ToInt(r["patientid"]),
                 Conv.ToInt(r["mccid"]),
                 Conv.Text(r["tname"]),
                 Conv.Text(r["description"]),
@@ -202,7 +214,7 @@ internal static class ClinicalTables
             }).ToList();
 
             await Upsert.RunAsync(pg, "sample_event",
-                ["noble_id", "sample_vailid", "centre_noble_id", "test_name",
+                ["noble_id", "registration_noble_id", "centre_noble_id", "test_name",
                  "description", "occurred_at"],
                 vals, ct);
         },

@@ -107,10 +107,19 @@ internal static class Resolver
         // Results and events reference a sample by BARCODE, not by id — that is
         // Noble's own foreign key. sid is citext, so the join is
         // case-insensitive without either side needing lower().
-        ("sample_event.sample", """
-            UPDATE stellar.sample_event e SET sample_id = s.id
-            FROM stellar.sample s
-            WHERE s.sid = e.sample_vailid AND e.sample_id IS NULL
+        // NOT by sample_vailid — that column holds a patient name in Noble, not
+        // a barcode, and the join it invites matches nothing. See the warning
+        // on ClinicalTables.SampleEvent.
+        ("sample_event.registration", """
+            UPDATE stellar.sample_event e SET registration_id = r.id
+            FROM stellar.registration r
+            WHERE r.noble_id = e.registration_noble_id AND e.registration_id IS NULL
+            """),
+
+        ("sample_event.centre", """
+            UPDATE stellar.sample_event e SET centre_id = c.id
+            FROM stellar.centre c
+            WHERE c.noble_id = e.centre_noble_id AND e.centre_id IS NULL
             """),
 
         ("result.sample", """
