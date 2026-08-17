@@ -187,27 +187,38 @@ The requirement is two flows, and they are **not symmetric**:
 
 ### Inbound: Noble → stellar (continuous, engine-level)
 
-**SQL Server CDC** (available on 2019 Standard) on the ~60 hot tables, read
-by a **.NET sync service** (`stellar-sync`, same stack as the API, same
-Docker estate) that polls the CDC functions on a short interval, transforms
-rows into the modern schema (decode enums, split blobs, stamp `noble_id`),
-and upserts into Postgres. Latency: seconds. Why CDC and not:
+**SQL Server Change Tracking** on the hot tables, read by a **.NET sync
+service** (`stellar-sync`, same stack as the API, same Docker estate) that
+polls `CHANGETABLE(CHANGES …)` on a short interval, refetches the changed
+rows by PK, transforms them into the modern schema (decode enums, split
+blobs, stamp `noble_id`), and upserts into Postgres. Latency: seconds.
 
-- *Timestamp polling* — dead on arrival; 61% of result rows have NULL
-  `updateddate`.
-- *Triggers on Noble tables* — adds our failure modes to LISTEC's write path;
-  exactly what "don't break the LIS" forbids.
-- *Debezium/Kafka* — does the same job but imports a JVM+broker estate this
-  team doesn't run. A .NET poller over CDC functions is ~hundreds of lines,
-  debuggable with the tools already in use, and sufficient at ~2,500
-  bills/month scale. (If we ever need sub-second fan-out, Debezium slots in
-  without changing the target schema.)
+The mechanism was chosen by **measured permissions**, not preference. The
+platform login (`nobleone`) is **db_owner on Noble but not sysadmin**
+(verified via `IS_SRVROLEMEMBER`/`HAS_PERMS_BY_NAME`, 2026-08-17):
 
-CDC needs SQL Server Agent running and holds log until harvested — the sync
-service's liveness becomes an ops concern; it alerts if lag exceeds minutes.
+| Mechanism | Needs | nobleone has it? |
+|---|---|---|
+| CDC (`sys.sp_cdc_enable_db`) | **sysadmin** + SQL Agent running | ✗ (and Agent status is itself unreadable — server-scoped) |
+| Change Tracking | ALTER on DB + ALTER on each table | ✓ verified for DB, results, samples |
+| Timestamp polling | reliable `updateddate` | ✗ — 41.7M of 68.3M result rows are NULL |
+| Triggers on Noble tables | adding our failure modes to LISTEC's writes | forbidden by "don't break the LIS" |
 
-Initial load: snapshot the 25 GB relational payload table-by-table under a
-CDC low-water mark (start capture, bulk copy, then apply the backlog) — the
+CT's trade-offs against CDC, all acceptable here: it records *that* a PK
+changed and its version, not the old values — the sync refetches current
+rows, so intermediate states within one poll interval collapse (fine for a
+replica; the audit trail lives in `inf_result_audit`, not the sync).
+It needs no SQL Agent, which removes the one prerequisite nobody can
+currently check. Retention window (say 7 days) bounds how long the sync may
+be down before a re-snapshot; auto-cleanup is built in. Composite PKs
+(samples is `(id, vailid)`) are handled natively. If CDC's full change
+history is ever wanted, obtaining sysadmin once upgrades the pipeline
+without touching the target schema.
+
+Enabling CT also wants `ALLOW_SNAPSHOT_ISOLATION` on (db_owner can), which
+gives the initial load a consistent low-water mark: record
+`CHANGE_TRACKING_CURRENT_VERSION()`, snapshot the 25 GB table-by-table
+under snapshot isolation, then apply changes since that version — the
 standard no-downtime bootstrap. The 28 GB of blobs stream out separately
 into the document store, hash-deduplicated.
 
@@ -256,9 +267,10 @@ make the sync idempotent and re-runnable from any point.
 
 ## 4. Phasing
 
-1. **Enable CDC on Noble** for the ~15 core tables (one script, reversible,
-   no schema change, no effect on LISTEC/Telo writes). Watch log growth a
-   week.
+1. **Enable Change Tracking on Noble** for the ~15 core tables (one script,
+   reversible with `DISABLE CHANGE_TRACKING`, no schema change, no effect on
+   LISTEC/Telo writes; `nobleone` has the permissions — verified). Watch
+   version churn and cleanup for a week.
 2. **Stand up PostgreSQL 17 + `stellar` schema** in Docker on this machine;
    DDL under `db/pg/` in the Infinity repo, migration-tracked.
 3. **Build `stellar-sync`** (.NET worker): snapshot + CDC tail for those
@@ -283,11 +295,15 @@ never left it.
   keeps licensing and changes little.)
 - **Where do the 28 GB of PDFs land** — local disk on this machine, or a
   MinIO/S3 bucket in the Docker estate?
-- **SQL Agent**: CDC needs it running on the Noble server. The app login
-  lacks VIEW SERVER STATE (checked — permission denied), so this needs one
-  query from an admin connection:
-  `SELECT servicename, status_desc FROM sys.dm_server_services;`
-  Enabling CDC (`sys.sp_cdc_enable_db` + per-table) also needs sysadmin —
-  the same session can do both.
+- ~~SQL Agent / CDC permissions~~ **Resolved 2026-08-17**: `nobleone` is
+  db_owner, not sysadmin, so CDC is out of reach and Agent status is
+  unreadable — but Change Tracking needs neither, and `nobleone`'s ALTER
+  rights for it are verified. The design above reflects this.
+- **Index usage stats stay unreadable** with any current login:
+  `sys.dm_db_index_usage_stats` is server-scoped and needs VIEW SERVER
+  STATE despite its name. The seven-duplicate-index finding rests on
+  definitions, not observed traffic; one `GRANT VIEW SERVER STATE TO
+  nobleone` from an admin session would let us measure which of the 16
+  result-table indexes the engine actually uses.
 - **This machine's role**: dev replica first, or is it intended to become
   the production Postgres host? Affects backup/HA design, not the schema.
