@@ -267,10 +267,24 @@ make the sync idempotent and re-runnable from any point.
 
 ## 4. Phasing
 
-1. **Enable Change Tracking on Noble** for the ~15 core tables (one script,
-   reversible with `DISABLE CHANGE_TRACKING`, no schema change, no effect on
-   LISTEC/Telo writes; `nobleone` has the permissions — verified). Watch
-   version churn and cleanup for a week.
+1. ~~Enable Change Tracking on Noble~~ **DONE 2026-08-17.**
+   `api/db/sync/01_enable_change_tracking.sql` applied to production: 18
+   tables tracked, database-level CT on with 7-day retention and auto
+   cleanup, `ALLOW_SNAPSHOT_ISOLATION` ON. Verified capturing live traffic
+   immediately — version counter moved 0 → 86 within a minute, with 104
+   result changes, 16 sample changes and 3 patient-master changes from real
+   LISTEC/Telo activity; `CHANGETABLE` returns the composite `(id, vailid)`
+   sample key correctly. CT internal tables at 0.4 MB, database ONLINE and
+   MULTI_USER, writes landing normally.
+
+   **Still to watch, because it cannot be measured from this login:**
+   `ALLOW_SNAPSHOT_ISOLATION` starts row versioning, which consumes tempdb.
+   Version-store size lives in `tempdb.sys.dm_db_file_space_usage`, which
+   needs VIEW SERVER STATE. It should stay near zero without long-running
+   snapshot readers — and nothing opens one until the initial load — but it
+   is worth an eyeball from an admin session before phase 3 starts
+   snapshotting 25 GB. If it is ever a problem, snapshot isolation can be
+   turned off independently of CT; only the initial load needs it.
 2. **Stand up PostgreSQL 17 + `stellar` schema** in Docker on this machine;
    DDL under `db/pg/` in the Infinity repo, migration-tracked.
 3. **Build `stellar-sync`** (.NET worker): snapshot + CDC tail for those
