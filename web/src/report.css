@@ -340,8 +340,17 @@
 
 /* ---------- end of report ---------- */
 
+/* padding-top 2px, not Telo's 12px — DELIBERATELY diverging here.
+   "*** End of Report ***" is a 26px row, and when the results fill page 1 to
+   within a couple of pixels of the footer it was the end marker alone that
+   tipped the sheet onto a second page carrying nothing but itself. Telo has the
+   same artefact; the user asked for the report to be one page in that case.
+   Pulling the marker tight to the last result reclaims the ~14px (with the
+   signature block below) that a CBC/ESR report needs to land on one page. A
+   report whose results genuinely overflow still paginates — this only rescues
+   the borderline sheet. */
 .lr__end {
-  padding-top: 12px;
+  padding-top: 2px;
   text-align: center;
   font-size: 10px;
   font-weight: 600;
@@ -357,7 +366,10 @@
 
 .lr__foot-fixed { position: fixed; left: 0; right: 0; bottom: 0; }
 
-.lr__signs { display: flex; align-items: flex-end; gap: 16px; padding-top: 6px; break-inside: avoid; }
+/* padding-top 2px, not Telo's 6px — part of the same single-page rescue as
+   .lr__end above: a few pixels off the top of the signature band is invisible
+   and helps a borderline report stay on one sheet. */
+.lr__signs { display: flex; align-items: flex-end; gap: 16px; padding-top: 2px; break-inside: avoid; }
 .lr__signs-left { display: flex; flex: 1 1 0%; align-items: flex-end; justify-content: flex-start; gap: 24px; }
 .lr__signs-right { display: flex; flex: 1 1 0%; align-items: flex-end; justify-content: flex-end; gap: 24px; }
 
