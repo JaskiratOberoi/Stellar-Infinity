@@ -43,6 +43,19 @@ public static class PaymentEndpoints
         // Anonymous, and it must stay that way — the customer returns on a
         // cross-site POST with no cookie. Rate-limited because it is the one
         // unauthenticated write in the system.
+        // Both anonymous, and token-signed instead. The customer reading a
+        // receipt has just come back from CCAvenue and has no session cookie
+        // - see PaymentReceiptLink.
+        g.MapGet("/receipt/{orderRef}", Receipt)
+         .AllowAnonymous()
+         .RequireRateLimiting(RateLimitPolicies.Payment)
+         .WithName("PaymentReceipt");
+
+        g.MapGet("/receipt/{orderRef}/pdf", ReceiptPdf)
+         .AllowAnonymous()
+         .RequireRateLimiting(RateLimitPolicies.Payment)
+         .WithName("PaymentReceiptPdf");
+
         g.MapPost("/callback", Callback)
          .AllowAnonymous()
          .RequireRateLimiting(RateLimitPolicies.Payment)
@@ -217,14 +230,30 @@ public static class PaymentEndpoints
         HttpRequest request,
         PaymentRepository payments,
         IOptions<CCAvenueOptions> opts,
+        PaymentReceiptLink receipts,
         ILoggerFactory logs,
         CancellationToken ct)
     {
         var log = logs.CreateLogger("Payments");
         var o = opts.Value;
-        var home = o.PublicBaseUrl.TrimEnd('/') + "/client";
+        /*
+         * Where the customer lands.
+         *
+         * NOT /client. That is behind the session guard, and the cookie is
+         * SameSite=Strict - the browser sends nothing on a navigation chain
+         * started by CCAvenue, so the SPA saw no session and bounced them to
+         * the login screen seconds after taking their money.
+         *
+         * /payment/complete is public and carries its own signed token.
+         */
+        var baseUrl = o.PublicBaseUrl.TrimEnd('/');
+        string Land(string outcome, string? reference = null) =>
+            reference is null || !receipts.Enabled
+                ? $"{baseUrl}/payment/complete?pay={outcome}"
+                : $"{baseUrl}/payment/complete?pay={outcome}&ref={Uri.EscapeDataString(reference)}"
+                  + $"&t={receipts.Token(reference)}";
 
-        if (!o.Enabled) return Results.Redirect(home + "?pay=unavailable");
+        if (!o.Enabled) return Results.Redirect(Land("unavailable"));
 
         string? encResp = null;
         if (request.HasFormContentType)
@@ -244,7 +273,7 @@ public static class PaymentEndpoints
         {
             log.LogWarning("payment.callback.undecryptable len={Len} ip={Ip}",
                 encResp?.Length ?? 0, request.HttpContext.Connection.RemoteIpAddress);
-            return Results.Redirect(home + "?pay=invalid");
+            return Results.Redirect(Land("invalid"));
         }
 
         var p = CCAvenueCrypto.ParsePairs(plain);
@@ -254,7 +283,7 @@ public static class PaymentEndpoints
         var message = p.GetValueOrDefault("failure_message", "").Trim();
         if (message.Length == 0) message = p.GetValueOrDefault("status_message", "").Trim();
 
-        if (orderRef.Length == 0) return Results.Redirect(home + "?pay=invalid");
+        if (orderRef.Length == 0) return Results.Redirect(Land("invalid"));
 
         // CCAvenue says Success / Failure / Aborted / Invalid. Anything we do
         // not recognise is a failure, not a success — the default must be the
@@ -299,7 +328,7 @@ public static class PaymentEndpoints
         // answer comes back. The refs are 20 hex characters of a GUID and so
         // are not realistically guessable, but an endpoint that confirms a
         // guess is a thing not to build in the first place.
-        if (r.ErrorCode == "UNKNOWN") return Results.Redirect(home + "?pay=invalid");
+        if (r.ErrorCode == "UNKNOWN") return Results.Redirect(Land("invalid"));
 
         var outcome = (r.Ok, r.Status) switch
         {
@@ -310,8 +339,94 @@ public static class PaymentEndpoints
             _ => "error",
         };
 
-        return Results.Redirect(home + "?pay=" + outcome);
+        return Results.Redirect(Land(outcome, orderRef));
     }
+
+    /// <summary>
+    /// One receipt, for the page the customer lands on after paying.
+    ///
+    /// Anonymous, because the customer has no session at this moment — the
+    /// return from CCAvenue is a cross-site navigation and SameSite=Strict
+    /// withholds the cookie. The token is what authorises it instead, and the
+    /// 404 for a bad one is deliberate: a wrong token and an unknown reference
+    /// must be indistinguishable, or this becomes a way to test whether a
+    /// reference exists.
+    /// </summary>
+    private static async Task<IResult> Receipt(
+        string orderRef,
+        PaymentRepository payments,
+        PaymentReceiptLink receipts,
+        CancellationToken ct,
+        string? t = null)
+    {
+        if (!receipts.Verify(orderRef, t)) return Results.NotFound();
+
+        var r = await payments.GetReceiptAsync(orderRef, ct).ConfigureAwait(false);
+        if (r is null) return Results.NotFound();
+
+        return Results.Ok(new
+        {
+            orderRef = r.OrderRef,
+            status = r.Status,
+            amount = r.Amount,
+            reference = r.GatewayRef,
+            instrument = r.Instrument,
+            card = r.Card,
+            paidAt = r.SettledAt,
+            clientCode = r.ClientCode,
+            clientName = r.ClientName,
+        });
+    }
+
+    /// <summary>
+    /// The same receipt as a PDF, rendered from the print page.
+    ///
+    /// The token travels through to the renderer in the URL, because the
+    /// headless browser has no session either — it is the same trust story as
+    /// the page itself, not a second one.
+    /// </summary>
+    private static async Task<IResult> ReceiptPdf(
+        string orderRef,
+        PaymentRepository payments,
+        PaymentReceiptLink receipts,
+        Infinity.Api.Reports.RenderClient render,
+        ILoggerFactory logs,
+        CancellationToken ct,
+        string? t = null)
+    {
+        if (!receipts.Verify(orderRef, t)) return Results.NotFound();
+
+        var r = await payments.GetReceiptAsync(orderRef, ct).ConfigureAwait(false);
+        if (r is null) return Results.NotFound();
+        // Only a settled payment has a receipt. Handing someone a PDF for a
+        // pending or failed one would be a document saying money moved when it
+        // has not.
+        if (!string.Equals(r.Status, "success", StringComparison.OrdinalIgnoreCase))
+            return Results.BadRequest(new { error = "That payment is not complete, so there is no receipt." });
+
+        try
+        {
+            var pdf = await render.RenderAsync(
+                [new Infinity.Api.Reports.RenderClient.ReportRequest(
+                    Url: $"/print/payment-receipt/{Uri.EscapeDataString(orderRef)}?t={Uri.EscapeDataString(receipts.Token(orderRef))}",
+                    Attachments: null,
+                    Headless: true,
+                    PageNumbers: false)],
+                null,
+                ct).ConfigureAwait(false);
+
+            return Results.File(pdf, "application/pdf", $"Receipt_{Sanitise(orderRef)}.pdf");
+        }
+        catch (Infinity.Api.Reports.RenderFailedException ex)
+        {
+            logs.CreateLogger("Payments").LogError(ex, "payment.receipt.render.failed ref={Ref}", orderRef);
+            return Results.Problem("The receipt could not be produced. The payment itself is recorded.");
+        }
+    }
+
+    /// <summary>Filename-safe, because the reference reaches a Content-Disposition header.</summary>
+    private static string Sanitise(string s) =>
+        new(s.Where(c => char.IsLetterOrDigit(c) || c is '-' or '_').ToArray());
 
     private static string? Trim(string? s, int max) =>
         string.IsNullOrWhiteSpace(s) ? null : s.Length <= max ? s : s[..max];

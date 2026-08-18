@@ -4213,3 +4213,84 @@ tr:hover > .cell--lead .clip,
   color: var(--teal);
   white-space: nowrap;
 }
+
+/* ---------- payment return, and the receipt it prints ----------
+   The customer lands here from CCAvenue with no session, so this is a page in
+   its own right rather than a card inside the app shell — no nav, no chrome,
+   one thing to read. */
+.paydone {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+}
+.paydone__card {
+  width: min(520px, 100%);
+  text-align: center;
+  padding: 2rem 1.6rem 1.6rem;
+}
+/* The mark carries the outcome before any word is read. Colour alone would
+   fail a colour-blind reader, so the glyph differs too: tick, bang, cross. */
+.paydone__mark {
+  width: 58px; height: 58px; margin: 0 auto .9rem;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  font-size: 1.9rem; line-height: 1; font-weight: 700;
+}
+.paydone__mark--ok    { background: var(--accent-soft); color: var(--teal); }
+.paydone__mark--warn  { background: var(--warn-soft);   color: var(--warn); }
+.paydone__mark--error { background: var(--danger-soft); color: var(--danger); }
+
+.paydone__title { margin: 0 0 .35rem; font-size: 1.3rem; }
+.paydone__body  { margin: 0 auto; max-width: 40ch; color: var(--ink-dim); font-size: .88rem; }
+
+/* Label above value, so the amount can be large without a two-column grid
+   forcing every other row to match its height. */
+.paydone__facts {
+  margin: 1.3rem 0 0; text-align: left;
+  border-top: 1px solid var(--line-soft);
+}
+.paydone__facts > div {
+  display: flex; justify-content: space-between; gap: 1rem;
+  padding: .55rem 0; border-bottom: 1px solid var(--line-soft);
+}
+.paydone__facts dt { color: var(--ink-dim); font-size: .78rem; margin: 0; }
+.paydone__facts dd { margin: 0; font-size: .85rem; text-align: right; }
+.paydone__amount { font-size: 1.05rem; font-weight: 700; color: var(--teal); }
+
+.paydone__actions {
+  display: flex; gap: .6rem; justify-content: center; flex-wrap: wrap;
+  margin-top: 1.4rem;
+}
+
+/* ---- the printed receipt ----
+   Black on white and no accent colours: this is filed against a bank
+   statement and photocopied, and a teal heading is a grey smudge. */
+.rcpt {
+  max-width: 700px; margin: 0 auto; padding: 22mm 18mm;
+  color: #000; background: #fff;
+  font-size: 11pt; line-height: 1.5;
+}
+.rcpt__head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 2rem; padding-bottom: .8rem; border-bottom: 2px solid #000;
+}
+.rcpt__title { margin: 0; font-size: 16pt; letter-spacing: .01em; }
+.rcpt__sub   { margin: .15rem 0 0; font-size: 10pt; }
+.rcpt__amount { text-align: right; white-space: nowrap; }
+.rcpt__amount-label { display: block; font-size: 8.5pt; text-transform: uppercase; letter-spacing: .06em; }
+.rcpt__amount b { font-size: 17pt; }
+
+.rcpt__table { width: 100%; margin-top: 1.2rem; border-collapse: collapse; }
+.rcpt__table th {
+  text-align: left; width: 38%; padding: .42rem 0;
+  font-weight: 600; vertical-align: top;
+}
+.rcpt__table td { padding: .42rem 0; vertical-align: top; }
+.rcpt__table tr + tr th, .rcpt__table tr + tr td { border-top: 1px solid #ddd; }
+
+.rcpt__note { margin-top: 1.4rem; font-size: 9.5pt; }
+.rcpt__foot { margin-top: 2rem; font-size: 8.5pt; text-align: center; }
+
+@page receipt { size: A4; margin: 0; }
+@media print { .rcpt { page: receipt; padding: 18mm; } }

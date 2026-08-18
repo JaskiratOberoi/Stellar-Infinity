@@ -95,7 +95,13 @@ const tabId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 
  * hand a URL to the sidecar, and every one of them is a report.
  */
 function isRenderSurface(): boolean {
-  return typeof window !== 'undefined' && window.location.pathname.startsWith('/print/report/');
+  if (typeof window === 'undefined') return false;
+  const p = window.location.pathname;
+  // Every /print/ page is a document the renderer fetches, not a session.
+  // /payment/complete is the customer returning from CCAvenue: they arrive
+  // on a cross-site navigation that carries no cookie, and bouncing them to
+  // login is exactly the bug this page exists to fix.
+  return p.startsWith('/print/') || p.startsWith('/payment/complete');
 }
 
 function readTabs(): Record<string, number> {

@@ -30,6 +30,8 @@ import { NewOrderFab } from './components/NewOrderFab';
 import { PrintSmartReport } from './pages/PrintSmartReport';
 import { EnvBanner } from './components/EnvBanner';
 import { PrintInvoice } from './pages/PrintInvoice';
+import { PrintPaymentReceipt } from './pages/PrintPaymentReceipt';
+import { PaymentComplete } from './pages/PaymentComplete';
 
 /**
  * Beats 2 and 3 of the sign-in entrance.
@@ -158,11 +160,21 @@ export function App() {
   // "Restoring session…" for a document they scanned off paper is the
   // application talking about itself.
   const isPublicReport = loc.pathname.startsWith('/r/');
+  /*
+   * The payment return, and it must render before any session is considered.
+   *
+   * The customer arrives here on a cross-site navigation from CCAvenue, so
+   * SameSite=Strict withholds the session cookie: waiting on auth would show
+   * them the login screen moments after taking their money. The token in the
+   * URL is what opens the receipt - see PaymentReceiptLink.
+   */
+  const isPaymentReturn = loc.pathname.startsWith('/payment/complete');
 
-  if (isPublicReport) {
+  if (isPublicReport || isPaymentReturn) {
     return (
       <Routes>
         <Route path="/r/:sid" element={<PublicReport />} />
+        <Route path="/payment/complete" element={<PaymentComplete />} />
       </Routes>
     );
   }
@@ -198,6 +210,10 @@ export function App() {
             the render service, but it belongs here for the same reason: no
             application chrome around a document someone hands to a client. */}
         <Route path="/print/invoice/:billId" element={<PrintInvoice />} />
+        {/* Both public and token-signed: the customer returning from CCAvenue
+            has no session, and the renderer producing the PDF has none
+            either. See PaymentReceiptLink. */}
+        <Route path="/print/payment-receipt/:orderRef" element={<PrintPaymentReceipt />} />
       </Routes>
     );
   }

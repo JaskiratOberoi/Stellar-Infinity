@@ -43,6 +43,9 @@ builder.Services.AddSingleton<Infinity.Api.Reports.ReportExtrasRepository>();
 builder.Services.AddSingleton<Infinity.Api.Reports.ReportLink>();
 builder.Services.AddSingleton<Infinity.Api.Orders.ClientAccountRepository>();
 builder.Services.AddSingleton<Infinity.Api.Payments.PaymentRepository>();
+// Signs the public receipt link. Shares Reports:TokenSecret with the report
+// QR links, under a different purpose prefix - see PaymentReceiptLink.
+builder.Services.AddSingleton<Infinity.Api.Payments.PaymentReceiptLink>();
 
 // CCAvenue. Validated at STARTUP so a half-set deployment fails the deploy
 // rather than the first customer who tries to pay. Being entirely unset is

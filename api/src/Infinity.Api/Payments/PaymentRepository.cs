@@ -25,6 +25,12 @@ public sealed record BillingDetails(string? Name, string? Code, string? Email, s
 /// </param>
 public sealed record SettleResult(bool Ok, string? ErrorCode, string? Message, int? MccCode, decimal? Amount, string? Status);
 
+/// <param name="Status">success | failed | aborted | mismatch | pending</param>
+public sealed record Receipt(
+    string OrderRef, string Status, decimal Amount, string? GatewayRef,
+    string? Instrument, string? Card, DateTime? SettledAt,
+    string? ClientCode, string? ClientName);
+
 /// <summary>
 /// The intent record either side of a trip to the gateway.
 ///
@@ -134,6 +140,41 @@ public sealed class PaymentRepository(NobleConnectionFactory db, SqlRetry retry)
             return new SettleResult(false, "NO_RESULT", "The settle procedure returned nothing.", null, null, null);
         }, ct);
 
+    /// <summary>
+    /// One receipt, by our own reference.
+    ///
+    /// Read-only and deliberately narrow: this feeds a page reachable without
+    /// a session, so it returns what belongs on a receipt and nothing that
+    /// would turn the endpoint into a way to browse a centre's account. No
+    /// balance, no ledger, no other payment.
+    /// </summary>
+    public Task<Receipt?> GetReceiptAsync(string orderRef, CancellationToken ct = default) =>
+        retry.ExecuteAsync("payments.receipt", token =>
+            db.QueryAsync<Receipt?>("payments.receipt", async (conn, inner) =>
+            {
+                await using var cmd = NobleConnectionFactory.CreateCommand(conn, @"
+                    SELECT i.order_ref, i.status, i.amount, i.gateway_ref,
+                           i.gateway_instrument, i.gateway_card, i.settled_at,
+                           u.MCCUnitCode, u.MCCUnitName
+                    FROM dbo.inf_payment_intent i
+                    LEFT JOIN dbo.tbl_med_mcc_unit_master u ON u.id = i.mcc_code
+                    WHERE i.order_ref = @ref;");
+                cmd.Parameters.Add("@ref", SqlDbType.VarChar, 40).Value = orderRef;
+
+                await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);
+                if (!await r.ReadAsync(inner).ConfigureAwait(false)) return null;
+
+                return new Receipt(
+                    r.Str("order_ref") ?? orderRef,
+                    r.Str("status") ?? "pending",
+                    r.NullableDec("amount") ?? 0m,
+                    r.StrOpt("gateway_ref"),
+                    r.StrOpt("gateway_instrument"),
+                    r.StrOpt("gateway_card"),
+                    r.Date("settled_at"),
+                    r.StrOpt("MCCUnitCode"),
+                    r.StrOpt("MCCUnitName"));
+            }, token), ct);
     private static string Clip(string s, int max)
     {
         var t = s.Trim();
