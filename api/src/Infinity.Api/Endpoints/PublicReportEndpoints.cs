@@ -97,11 +97,19 @@ public static class PublicReportEndpoints
             more.ProcessedAt,
             more.Signers,
             more.ProfileInterpretations,
-            // No QR on the patient's own copy: they are already holding the
-            // thing it links to, and a code that reopens the page you are on is
-            // furniture. It also keeps the token off a document that gets
-            // forwarded more often than the printed original.
-            Qr = (string?)null,
+            // The QR rides on the patient's copy too, the same as Telo prints
+            // it. The earlier reasoning — that a code reopening the page you
+            // hold is furniture — held only for a patient reading on screen;
+            // the printed sheet is the common case, and there the QR is the ONE
+            // way back to a verifiable copy from a piece of paper. It also has
+            // to match the lab's own report, which carries it, or the two
+            // documents disagree on whether the mark is there.
+            //
+            // The token it encodes is the same token that already opened this
+            // page, so nothing is exposed that the holder of the sheet did not
+            // already have — see ReportLink on that being the intended
+            // property of the patient link, not a leak.
+            Qr = links.QrDataUrl(row.Sid),
         });
     }
 
