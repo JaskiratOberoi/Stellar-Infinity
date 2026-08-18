@@ -99,6 +99,7 @@ public sealed class PaymentRepository(NobleConnectionFactory db, SqlRetry retry)
     public Task<SettleResult> SettleAsync(
         string orderRef, string gatewayRef, string gatewayStatus,
         decimal? gatewayAmount, string? gatewayMessage, int paymentMode,
+        string? instrument, string? card,
         CancellationToken ct = default) =>
         db.QueryAsync("payments.settle", async (conn, inner) =>
         {
@@ -113,6 +114,14 @@ public sealed class PaymentRepository(NobleConnectionFactory db, SqlRetry retry)
             cmd.Parameters.Add("@gatewayMessage", SqlDbType.NVarChar, 400).Value =
                 string.IsNullOrWhiteSpace(gatewayMessage) ? DBNull.Value : gatewayMessage.Trim();
             cmd.Parameters.Add("@paymentMode", SqlDbType.Int).Value = paymentMode;
+            // Descriptive only — these decide no amount and gate no credit, so a
+            // surprising value from the gateway is a labelling problem rather
+            // than a money one. Truncated to the column rather than rejected for
+            // the same reason: losing the label must not lose the payment.
+            cmd.Parameters.Add("@instrument", SqlDbType.VarChar, 40).Value =
+                string.IsNullOrWhiteSpace(instrument) ? DBNull.Value : Clip(instrument, 40);
+            cmd.Parameters.Add("@card", SqlDbType.VarChar, 60).Value =
+                string.IsNullOrWhiteSpace(card) ? DBNull.Value : Clip(card, 60);
 
             await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);
             if (await r.ReadAsync(inner).ConfigureAwait(false))
@@ -124,4 +133,10 @@ public sealed class PaymentRepository(NobleConnectionFactory db, SqlRetry retry)
             }
             return new SettleResult(false, "NO_RESULT", "The settle procedure returned nothing.", null, null, null);
         }, ct);
+
+    private static string Clip(string s, int max)
+    {
+        var t = s.Trim();
+        return t.Length <= max ? t : t[..max];
+    }
 }

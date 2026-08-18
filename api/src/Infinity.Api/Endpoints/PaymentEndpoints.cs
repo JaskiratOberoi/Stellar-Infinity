@@ -269,12 +269,23 @@ public static class PaymentEndpoints
         decimal? amount = decimal.TryParse(p.GetValueOrDefault("amount", ""),
             NumberStyles.Number, CultureInfo.InvariantCulture, out var a) ? a : null;
 
+        // How they actually paid. CCAvenue sends payment_mode as a phrase
+        // ("Credit Card", "Net Banking", "Unified Payments", "Wallet") and
+        // card_name as the issuer or app behind it ("Visa", "Google Pay", a
+        // bank). The LIS files every gateway payment as plain "Online", which
+        // cannot answer "how much of last quarter came in on UPI" — so these
+        // are kept beside the ledger row rather than folded away. See
+        // 114_payment_instrument.sql for why they are not a new deposittype.
+        var instrument = p.GetValueOrDefault("payment_mode", "").Trim();
+        var card = p.GetValueOrDefault("card_name", "").Trim();
+
         var r = await payments.SettleAsync(
-            orderRef, trackingId, status, amount, Trim(message, 400), o.PaymentMode, ct).ConfigureAwait(false);
+            orderRef, trackingId, status, amount, Trim(message, 400), o.PaymentMode,
+            instrument, card, ct).ConfigureAwait(false);
 
         log.LogInformation(
-            "payment.callback ref={Ref} gatewaySaid={Raw} recorded={Status} ok={Ok} code={Code}",
-            orderRef, rawStatus, r.Status, r.Ok, r.ErrorCode);
+            "payment.callback ref={Ref} gatewaySaid={Raw} recorded={Status} ok={Ok} code={Code} instrument={Instrument} card={Card}",
+            orderRef, rawStatus, r.Status, r.Ok, r.ErrorCode, instrument, card);
 
         // A mismatch is reported to the customer as a failure, because from
         // their side nothing was credited. It is separately visible as

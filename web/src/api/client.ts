@@ -907,11 +907,30 @@ export interface LedgerEntry {
 }
 
 /** Deposit types the LIS recognises, from tbl_med_mcc_account_detail.deposittype. */
+/*
+ * The ids are the LIS deposittype column, and these labels were WRONG for
+ * three of the four.
+ *
+ * MccAccountClass.GetPaymentMode is the authority, and it reads:
+ *   1 DD, 2 Cheque, 3 Cash, 4 NEFT/iNet/Transfer, 5 Online, 6 Other, 7 Reject.
+ *
+ * So Infinity offered "Cheque" and wrote DD, offered "NEFT / transfer" and
+ * wrote Cheque, offered "UPI" and wrote NEFT. Only Cash agreed. Nothing was
+ * corrupted - no payment has been booked through this screen yet - but every
+ * one that had been would have been filed under the wrong instrument and
+ * reconciled against the wrong bank line.
+ *
+ * There is no UPI member. The enum predates it and adding an id would render
+ * as blank in the LIS, whose lookup returns an empty string for anything it
+ * does not know. A UPI receipt is recorded as NEFT/iNet/Transfer and named in
+ * the reference, until the LIS enum itself grows one.
+ */
 export const PAYMENT_MODES = [
   { id: 3, label: 'Cash' },
-  { id: 1, label: 'Cheque' },
-  { id: 2, label: 'NEFT / transfer' },
-  { id: 4, label: 'UPI' },
+  { id: 2, label: 'Cheque' },
+  { id: 1, label: 'DD' },
+  { id: 4, label: 'NEFT / transfer / UPI' },
+  { id: 6, label: 'Other' },
 ] as const;
 
 export const accountsApi = {
