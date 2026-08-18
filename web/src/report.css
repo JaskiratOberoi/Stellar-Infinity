@@ -58,6 +58,57 @@
   line-height: 1.375;
 }
 
+/* ---------- start from nothing ----------
+
+   Telo's report is written under Tailwind's preflight, which zeroes every
+   element style before a single utility is applied. This one is not. It renders
+   inside an application stylesheet that styles bare `table`, `th` and `td` for
+   the worklist — .84rem type, UPPERCASE headers with .14em tracking, a rule
+   under every cell, and `color: var(--ink-dim)`, a THEME TOKEN, on every header.
+
+   Those are element selectors. They lose to anything naming a class, but they
+   win every property a class does not name — so they were landing on the
+   printed sheet: column headers reading "T E S T N A M E", the whole results
+   table 22% too large, a line under every cell the design deliberately does
+   not have, and a document that is supposed to be theme-free taking a colour
+   from the operator's theme.
+
+   :where() keeps this at the specificity of `.lr` alone (0,1,0). That is enough
+   to beat a bare element selector and low enough that every `.lr__*` rule below
+   still wins on source order — so the reset can be exhaustive without starting
+   a specificity fight with the rules it exists to protect.
+
+   Found by diffing a real PDF against Telo's, not by reading the CSS. */
+
+.lr :where(table) {
+  width: auto;
+  border-collapse: collapse;
+  font-size: inherit;
+}
+.lr :where(th, td) {
+  padding: 0;
+  border: 0;
+  text-align: left;
+  vertical-align: top;
+  font: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  color: inherit;
+  background: none;
+  white-space: normal;
+}
+.lr :where(p, ol, ul, li, h1, h2, h3, h4, h5, h6) {
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+}
+/* A row tint is a screen affordance for a list you are scanning. This is a
+   document, and on paper the hover never fires but the rule still resolves. */
+.lr tbody tr:hover { background: none; }
+
 /* On screen the route is previewed in an ordinary window, so the padding
    stands in for the page box. The PDF render has neither. */
 .lr--screen { background: #fff; padding: 32px; }

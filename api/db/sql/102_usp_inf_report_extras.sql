@@ -90,7 +90,16 @@ BEGIN
     -- is read twice (once to decide which configured signatory is entitled to
     -- sign, once by the fallback), and a #temp is visible inside the nested
     -- sp_executesql scope the fallback runs in, where a @variable would not be.
-    CREATE TABLE #depts (dept NVARCHAR(200) PRIMARY KEY);
+    --
+    -- COLLATE DATABASE_DEFAULT is not decoration. A temp table takes
+    -- TEMPDB's collation, not this database's, and Noble is Latin1_General_CI_AI
+    -- against a tempdb of SQL_Latin1_General_CP1_CI_AS. Comparing this column
+    -- to a Noble column then fails outright with "Cannot resolve the collation
+    -- conflict", which is how the previous revision of this procedure took the
+    -- collection centre, the processed-at line AND every signature off the
+    -- printed report. The CTE this replaced never had the problem because a
+    -- CTE stays in the database's own collation.
+    CREATE TABLE #depts (dept NVARCHAR(200) COLLATE DATABASE_DEFAULT PRIMARY KEY);
     INSERT INTO #depts (dept)
     SELECT DISTINCT UPPER(LTRIM(RTRIM(d.Name)))
     FROM dbo.tbl_med_mcc_patient_test_result r
@@ -103,8 +112,8 @@ BEGIN
     CREATE TABLE #signers (
         ord          INT IDENTITY(1,1),
         id           INT,
-        doctor_name  NVARCHAR(200),
-        designation  NVARCHAR(200),
+        doctor_name  NVARCHAR(200) COLLATE DATABASE_DEFAULT,
+        designation  NVARCHAR(200) COLLATE DATABASE_DEFAULT,
         doc_type     INT,
         signature    VARBINARY(MAX)
     );
