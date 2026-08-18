@@ -15,24 +15,29 @@ interface PatientForm {
   name: string;
   initial: string;
   /**
-   * Age is entered as years AND months, and resolved to the LIS's single
-   * age + age_type at submit — see resolveAge. Telo moved to the same pair on
-   * its B2B form: "6 months" is a real paediatric age that a years box cannot
-   * express, and asking the operator to also pick the unit is a second thing
-   * to get wrong.
+   * Date of birth, as three boxes — the only age input there is now.
+   *
+   * The years-and-months pair is DERIVED from this at submit and is still what
+   * goes on the wire, because the create procedure takes age + age_type and
+   * knows nothing about a birth date. Nothing about the LIS side changed.
+   *
+   * Three strings rather than a Date, so a half-typed date stays half-typed
+   * instead of silently becoming a different one: "3" in the month box must
+   * not mean March until the operator has finished with it.
    */
-  ageYears: string;
-  ageMonths: string;
+  dobDay: string;
+  dobMonth: string;
+  dobYear: string;
   gender: number;
   mobile: string;
   email: string;
-  /** Passport / travel ID. Written to patient_master.MRNID. */
+  /** Passport / Aadhaar ID. Written to patient_master.MRNID. */
   mrnId: string;
   clinicalHistory: string;
 }
 
 const EMPTY_PATIENT: PatientForm = {
-  name: '', initial: 'Mr', ageYears: '', ageMonths: '', gender: 1,
+  name: '', initial: 'Mr', dobDay: '', dobMonth: '', dobYear: '', gender: 1,
   mobile: '', email: '', mrnId: '', clinicalHistory: '',
 };
 
@@ -79,6 +84,46 @@ function resolveAge(yearsStr: string, monthsStr: string): { age: number; ageType
   }
   if (m > 11) return null;
   return { age: y, ageType: 1 };
+}
+
+/**
+ * A date of birth, turned into the years-and-months pair the LIS stores.
+ *
+ * Returns null for anything that is not a real, past date — and that includes
+ * 31 February, which is why this rebuilds a Date and checks the parts came
+ * back unchanged. `new Date(1990, 1, 31)` is 3 March and would otherwise be
+ * accepted as a birthday nobody has.
+ *
+ * The months figure is the remainder AFTER whole years, so it is always 0-11
+ * and lands inside what resolveAge accepts. Under two years old, resolveAge
+ * converts the pair to months — the LIS's own paediatric rule, unchanged.
+ */
+function ageFromDob(dayStr: string, monthStr: string, yearStr: string):
+  { years: number; months: number } | null {
+  const d = Number(dayStr.trim());
+  const m = Number(monthStr.trim());
+  const y = Number(yearStr.trim());
+  if (dayStr.trim() === '' || monthStr.trim() === '' || yearStr.trim() === '') return null;
+  if (!Number.isInteger(d) || !Number.isInteger(m) || !Number.isInteger(y)) return null;
+  if (d < 1 || d > 31 || m < 1 || m > 12 || y < 1875 || y > 2200) return null;
+
+  const dob = new Date(y, m - 1, d);
+  // Rolled over, so the date does not exist.
+  if (dob.getFullYear() !== y || dob.getMonth() !== m - 1 || dob.getDate() !== d) return null;
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (dob > today) return null;
+
+  let years = today.getFullYear() - dob.getFullYear();
+  let months = today.getMonth() - dob.getMonth();
+  // Borrow a month when the day of the month has not come round yet: someone
+  // born on the 30th is not a month older on the 2nd.
+  if (today.getDate() < dob.getDate()) months -= 1;
+  if (months < 0) { years -= 1; months += 12; }
+  if (years < 0 || years > 150) return null;
+
+  return { years, months };
 }
 
 /** A referrer the operator picked, or a name they typed that does not exist yet. */
@@ -487,7 +532,13 @@ export function NewOrder() {
     setBusy(true);
     setError(null);
     try {
-      const resolved = resolveAge(patient.ageYears, patient.ageMonths);
+      // Derived at the last moment from the birth date. resolveAge still owns
+      // the paediatric rule — under two years old is stored in months — so the
+      // LIS receives exactly what it did when this was two boxes.
+      const fromDob = ageFromDob(patient.dobDay, patient.dobMonth, patient.dobYear);
+      const resolved = fromDob
+        ? resolveAge(String(fromDob.years), String(fromDob.months))
+        : null;
       const result = await cartApi.place({
         mcc: cart.mcc,
         items: cart.items,
@@ -593,7 +644,13 @@ export function NewOrder() {
     }
   }
 
-  const age = resolveAge(patient.ageYears, patient.ageMonths);
+  const dobAge = ageFromDob(patient.dobDay, patient.dobMonth, patient.dobYear);
+  const age = dobAge ? resolveAge(String(dobAge.years), String(dobAge.months)) : null;
+  // Whether the operator has STARTED a date, which is what separates "not
+  // filled in yet" from "filled in wrong". All three blank must stay silent.
+  const dobStarted = patient.dobDay.trim() !== ''
+    || patient.dobMonth.trim() !== ''
+    || patient.dobYear.trim() !== '';
   // A half-typed number is a typo, not a phone number. Blank is fine —
   // hospital counters often have no reachable number — but six digits is
   // someone who was interrupted, and the LIS would keep it forever.
@@ -609,8 +666,7 @@ export function NewOrder() {
    * spelling cannot dim a card that is holding live selections.
    */
   const patientStarted = patient.name.trim() !== ''
-    || patient.ageYears.trim() !== ''
-    || patient.ageMonths.trim() !== ''
+    || dobStarted
     || patient.mobile.trim() !== '';
   const testsOn = cart.mcc != null && (patientStarted || cart.items.length > 0);
 
@@ -792,7 +848,7 @@ export function NewOrder() {
       <div className={`card order-step${cart.mcc == null ? ' order-step--off' : ''}`}>
         <div className="order-step__head">
           <span className={`order-step__num${cart.mcc != null ? ' order-step__num--on' : ''}`}>2</span>
-          <h2 className="order-step__title">Patient</h2>
+          <h2 className="order-step__title">Patient &amp; referral</h2>
           <span className="muted" style={{ fontSize: '.76rem' }}>
             {cart.mcc == null ? 'Choose a client first.'
               : !patientStarted ? 'Any detail here unlocks the tests.' : ''}
@@ -835,30 +891,40 @@ export function NewOrder() {
               </div>
             </div>
 
-          {/* Age, sex and mobile together. None of the three needs half a form:
-              a sex select sized for "Female" was holding a whole column open,
-              and a mobile cannot exceed 13 characters even with a country
-              code. Putting them on one line is also what gives the basket
-              beside this panel the width it needs. */}
+          {/* Date of birth, and the age it works out to.
+
+              A birth date is what the requisition slip carries and what the
+              patient can state without arithmetic; age was being derived by
+              whoever was at the counter, and a wrong subtraction is invisible
+              once it is stored. The calculated age sits beside the boxes so
+              the operator can see the answer agrees with the person in front
+              of them before it is committed. */}
           <div className="grid2 grid2--tight">
             <div className="field">
-              <label htmlFor="p-age-y">Age</label>
-              <div className="row" style={{ gap: '.35rem' }}>
-                <input id="p-age-y" className="input mono" value={patient.ageYears} inputMode="numeric"
-                       style={{ width: 88 }} placeholder="Years" aria-label="Age in years"
-                       onChange={(e) => setPatient({ ...patient, ageYears: e.target.value.replace(/\D/g, '') })} />
-                <input id="p-age-m" className="input mono" value={patient.ageMonths} inputMode="numeric"
-                       style={{ width: 88 }} placeholder="Months" aria-label="Age in months"
-                       onChange={(e) => setPatient({ ...patient, ageMonths: e.target.value.replace(/\D/g, '') })} />
+              <label htmlFor="p-dob-d">Date of birth</label>
+              <div className="row" style={{ gap: '.35rem', alignItems: 'center' }}>
+                <input id="p-dob-d" className="input mono" value={patient.dobDay} inputMode="numeric"
+                       maxLength={2} style={{ width: 58 }} placeholder="DD" aria-label="Day of birth"
+                       onChange={(e) => setPatient({ ...patient, dobDay: e.target.value.replace(/\D/g, '') })} />
+                <input id="p-dob-m" className="input mono" value={patient.dobMonth} inputMode="numeric"
+                       maxLength={2} style={{ width: 58 }} placeholder="MM" aria-label="Month of birth"
+                       onChange={(e) => setPatient({ ...patient, dobMonth: e.target.value.replace(/\D/g, '') })} />
+                <input id="p-dob-y" className="input mono" value={patient.dobYear} inputMode="numeric"
+                       maxLength={4} style={{ width: 74 }} placeholder="YYYY" aria-label="Year of birth"
+                       onChange={(e) => setPatient({ ...patient, dobYear: e.target.value.replace(/\D/g, '') })} />
+                {/* Live, and beside the boxes rather than under them: it is a
+                    read-back of what was just typed, not a note about it.
+                    aria-live so it is announced as it settles. */}
+                <span className="dob-age" aria-live="polite">
+                  {age ? `${age.age} ${age.ageType === 2 ? 'month' : 'year'}${age.age === 1 ? '' : 's'}` : '—'}
+                </span>
               </div>
-              {/* Says what will actually be stored. "2 and 6" becoming
-                  "30 months" is surprising unless it is stated. */}
               <span className="muted" style={{ fontSize: '.7rem' }}>
-                {patient.ageYears || patient.ageMonths
-                  ? age
+                {!dobStarted
+                  ? 'Day, month and year'
+                  : age
                     ? `Recorded as ${age.age} ${age.ageType === 2 ? 'month' : 'year'}${age.age === 1 ? '' : 's'}.`
-                    : <b style={{ color: 'var(--danger)' }}>Not a usable age — months must be 0–11 alongside years.</b>
-                  : 'Years and/or months'}
+                    : <b style={{ color: 'var(--danger)' }}>Not a real past date — check the day, month and year.</b>}
               </span>
             </div>
             <div className="field">
@@ -869,46 +935,8 @@ export function NewOrder() {
                 <option value={2}>Female</option>
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="p-mobile">Mobile</label>
-              <input id="p-mobile" className="input mono" value={patient.mobile} inputMode="numeric"
-                     maxLength={10} style={{ maxWidth: 190 }}
-                     onChange={(e) => setPatient({ ...patient, mobile: e.target.value.replace(/\D/g, '') })} />
-              <span className="muted" style={{ fontSize: '.7rem' }}>
-                {patient.mobile.trim() !== '' && patient.mobile.trim().length !== 10
-                  ? <b style={{ color: 'var(--danger)' }}>A mobile number is 10 digits — finish it or clear it.</b>
-                  : 'Optional · no mobile, no result history'}
-              </span>
-            </div>
           </div>
 
-          <div className="grid2">
-            <div className="field">
-              <label htmlFor="p-email">Email</label>
-              <input id="p-email" className="input" type="email" value={patient.email} maxLength={100}
-                     onChange={(e) => setPatient({ ...patient, email: e.target.value })} />
-            </div>
-
-            <div className="field">
-              <label htmlFor="p-mrn">Passport / travel ID</label>
-              {/* Written to patient_master.MRNID. Left blank, the create
-                  procedure backfills the patient id, as the LIS form does. */}
-              <input id="p-mrn" className="input mono" value={patient.mrnId} maxLength={50}
-                     placeholder="Optional"
-                     onChange={(e) => setPatient({ ...patient, mrnId: e.target.value })} />
-            </div>
-          </div>
-        </fieldset>
-      </div>
-
-      {/* ---- referral & history — the second half of "who" ---- */}
-      <div className={`card order-step${cart.mcc == null ? ' order-step--off' : ''}`}>
-        <div className="order-step__head">
-          <span className={`order-step__num${cart.mcc != null ? ' order-step__num--on' : ''}`}>2</span>
-          <h2 className="order-step__title">Referral &amp; history</h2>
-        </div>
-
-        <fieldset className="bare" disabled={cart.mcc == null}>
           {/* Referrers. The create procedure has always accepted these —
               an id, or a name it upserts — but nothing offered a way to
               pick one, so every Infinity order so far was booked with
@@ -1001,6 +1029,38 @@ export function NewOrder() {
               <span style={{ fontSize: '.72rem', color: 'var(--danger)' }}>{fileError}</span>
             )}
           </div>
+          </div>
+
+          {/* Identity, then how to reach them. Both are optional and neither
+              is asked at the counter until the clinical part is done, so they
+              sit at the end rather than between the patient and their tests. */}
+          <div className="field">
+            <label htmlFor="p-mrn">Passport / Aadhaar ID</label>
+            {/* Written to patient_master.MRNID. Left blank, the create
+                procedure backfills the patient id, as the LIS form does. */}
+            <input id="p-mrn" className="input mono" value={patient.mrnId} maxLength={50}
+                   placeholder="Optional"
+                   onChange={(e) => setPatient({ ...patient, mrnId: e.target.value })} />
+          </div>
+
+          <div className="grid2">
+            <div className="field">
+              <label htmlFor="p-mobile">Mobile</label>
+              <input id="p-mobile" className="input mono" value={patient.mobile} inputMode="numeric"
+                     maxLength={10} style={{ maxWidth: 190 }}
+                     onChange={(e) => setPatient({ ...patient, mobile: e.target.value.replace(/\D/g, '') })} />
+              <span className="muted" style={{ fontSize: '.7rem' }}>
+                {patient.mobile.trim() !== '' && patient.mobile.trim().length !== 10
+                  ? <b style={{ color: 'var(--danger)' }}>A mobile number is 10 digits — finish it or clear it.</b>
+                  : 'Optional · no mobile, no result history'}
+              </span>
+            </div>
+
+            <div className="field">
+              <label htmlFor="p-email">Email</label>
+              <input id="p-email" className="input" type="email" value={patient.email} maxLength={100}
+                     onChange={(e) => setPatient({ ...patient, email: e.target.value })} />
+            </div>
           </div>
         </fieldset>
       </div>

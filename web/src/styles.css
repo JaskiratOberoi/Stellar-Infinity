@@ -4189,3 +4189,18 @@ tr:hover > .cell--lead .clip,
   grid-template-columns: repeat(auto-fit, minmax(140px, max-content));
   align-items: start;
 }
+
+/* The age worked out from the date of birth, sitting beside the three boxes.
+
+   Styled as a read-back rather than an input: no border, no field background,
+   and the accent colour, so the eye does not try to type into it. The fixed
+   min-width stops the row jumping as the text goes from an em dash to
+   "11 months" to "3 years". */
+.dob-age {
+  min-width: 76px;
+  padding: 0 .1rem;
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--teal);
+  white-space: nowrap;
+}
