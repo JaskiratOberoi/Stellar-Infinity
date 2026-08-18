@@ -62,14 +62,15 @@ public sealed class CCAvenueOptions
     /// <summary>
     /// The payment-mode id recorded on the wallet credit.
     ///
-    /// Configurable because Infinity's mode list (3 cash, 1 cheque, 2 transfer,
-    /// 4 UPI) has no "online" member, and inventing an id that the legacy
-    /// screens do not know how to render would make these payments display as
-    /// blank rather than as anything. 2 — an electronic transfer, which this
-    /// is — is the honest existing choice. The CCAvenue tracking id goes in the
-    /// reference field and the origin prefix marks the source unambiguously.
+    /// 5, because that is what the LIS already uses. Its own CCAvenue rows in
+    /// tbl_med_mcc_account_detail carry deposittype 5 ("Online"), going back
+    /// years. This defaulted to 2 ("transfer") on the reasoning that no mode
+    /// id meant "online" - which was a guess made before anyone looked at the
+    /// table, and would have filed these under a heading the lab's existing
+    /// reports do not expect. Still configurable, but the default is now
+    /// copied from evidence rather than inferred.
     /// </summary>
-    public int PaymentMode { get; set; } = 2;
+    public int PaymentMode { get; set; } = 5;
 
     /// <summary>
     /// Configured means all three secrets are present. Checked at startup and
