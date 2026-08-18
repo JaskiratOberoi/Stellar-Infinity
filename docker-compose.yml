@@ -29,14 +29,16 @@ services:
     image: infinity-splash
     ports:
       - "127.0.0.1:3120:80"
-    # It no longer has NO dependency on the platform: this is the only service
-    # published on infinity.genomicslab.in, and the QR on a printed report has
-    # to resolve to a public URL. nginx.conf proxies /r/, /assets/ and the
-    # token-gated /api/public/ through to the SPA, and nothing else — see the
-    # comment there. The marketing page itself still serves if web is down;
-    # only the patient's report route would 502.
-    depends_on:
-      - web
+    # It proxies three paths through to the SPA — /r/, /assets/ and the
+    # token-gated /api/public/ — because this is the only service published on
+    # infinity.genomicslab.in and the QR on a printed report has to resolve to
+    # a public URL. See nginx.conf.
+    #
+    # Still NO depends_on, and that is the point. This page must keep serving
+    # while the platform is rebuilt, so it must not be ordered behind web or
+    # fail with it; nginx resolves the SPA per request rather than at startup,
+    # which turns "the SPA is down" into a 502 on /r/ instead of a marketing
+    # page that will not boot.
     restart: unless-stopped
 
   # ----------------------------------------------------------------- redis --
