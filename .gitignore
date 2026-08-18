@@ -14,3 +14,4 @@ web/dist/
 
 # Generated intermediates from tools/smartmeta-export.mjs
 api/tools/.smartmeta.tmp.*
+api/.env.*

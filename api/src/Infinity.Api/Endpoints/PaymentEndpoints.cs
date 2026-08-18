@@ -217,6 +217,17 @@ public static class PaymentEndpoints
         // A mismatch is reported to the customer as a failure, because from
         // their side nothing was credited. It is separately visible as
         // 'mismatch' in inf_payment_intent for whoever reconciles.
+        // An order we never minted is reported exactly like a body that did not
+        // decrypt: "invalid", the same answer undecryptable garbage gets.
+        //
+        // Not cosmetic. Distinguishing "unknown order" from "known order, wrong
+        // amount" makes this endpoint an oracle for which references exist —
+        // anyone could sit on it and learn valid order refs by watching which
+        // answer comes back. The refs are 20 hex characters of a GUID and so
+        // are not realistically guessable, but an endpoint that confirms a
+        // guess is a thing not to build in the first place.
+        if (r.ErrorCode == "UNKNOWN") return Results.Redirect(home + "?pay=invalid");
+
         var outcome = (r.Ok, r.Status) switch
         {
             (true, "success") => "success",

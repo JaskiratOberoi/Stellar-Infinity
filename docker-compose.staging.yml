@@ -48,7 +48,16 @@ services:
   api:
     build: ./api
     image: infinity-staging-api
-    env_file: ./api/.env
+    # Layered, and the ORDER matters: later files win. The shared file holds
+    # what both stacks agree on (database, JWT); the second holds the CCAvenue
+    # triple, which CCAvenue issues per registered URL and which therefore
+    # cannot be shared. Both sets briefly lived in api/.env, where the last
+    # binding silently won for both stacks - staging ended up signing with the
+    # live URL credentials, which the gateway rejects as a bad merchant and
+    # which reads like an outage rather than a misconfiguration.
+    env_file:
+      - ./api/.env
+      - ./api/.env.staging
     environment:
       ASPNETCORE_URLS: http://0.0.0.0:8080
       Cache__ConnectionString: "redis:6379"
