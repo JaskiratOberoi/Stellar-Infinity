@@ -27,13 +27,21 @@ GO
 
 DECLARE @jobId BINARY(16);
 
+-- Built as a VARIABLE, not inline. T-SQL does not allow an EXPRESSION as a
+-- stored procedure parameter value: passing N'a' + N'b' directly to
+-- @description is a syntax error ("Incorrect syntax near '+'"), which is
+-- exactly how the first version of this script failed. Variable assignment is
+-- the only place concatenation is legal here.
+DECLARE @desc NVARCHAR(512) =
+    N'Hourly snapshot of index usage into Noble.dbo.inf_index_usage_history. '
+  + N'dm_db_index_usage_stats is in-memory and resets on every service restart; '
+  + N'this preserves the deltas so index-pruning decisions rest on weeks of '
+  + N'evidence rather than whatever has accrued since the last reboot.';
+
 EXEC msdb.dbo.sp_add_job
      @job_name    = N'Infinity - Capture index usage',
      @enabled     = 1,
-     @description = N'Hourly snapshot of index usage into Noble.dbo.inf_index_usage_history. '
-                  + N'dm_db_index_usage_stats is in-memory and resets on every service restart; '
-                  + N'this preserves the deltas so index-pruning decisions rest on weeks of '
-                  + N'evidence rather than whatever has accrued since the last reboot.',
+     @description = @desc,
      @job_id      = @jobId OUTPUT;
 
 EXEC msdb.dbo.sp_add_jobstep
