@@ -1768,7 +1768,10 @@ tbody tr:hover { background: var(--accent-softer); }
      field an operator types into - while the right holds the basket and a
      payment note. It was the narrower of the two, which squeezed the title
      select against the name box until they overlapped. */
-  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  /* Equal. 7/5 gave the form room but starved the basket, whose five columns
+     then needed a horizontal scrollbar. With the name on its own row the
+     form no longer needs the extra, and both halves fit. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: .9rem;
   align-items: start;
 }
@@ -1855,7 +1858,20 @@ fieldset.bare {
    flush — the next row's label touching the input above it, and the eye
    losing where one pair ended and the next began. (An earlier .order-flow
    rule handled this for the old layout and died with the class.) */
-.order-grid .grid2 + .grid2 { margin-top: .9rem; }
+/* Space between CONSECUTIVE blocks in the order form, whatever they are.
+
+   This was .grid2 + .grid2 only. The moment the name became a plain .field on
+   its own row, nothing matched between it and the row beneath - so AGE, SEX
+   and MOBILE sat hard against the name input and read as labels belonging to
+   it rather than headings of their own fields. */
+.order-grid .grid2 + .grid2,
+.order-grid .field + .grid2,
+.order-grid .grid2 + .field,
+.order-grid .field + .field { margin-top: 1.1rem; }
+
+/* A label sits closer to its OWN input than to the field above it - that gap
+   is what says which control a label belongs to. */
+.order-grid .field label { margin-bottom: .05rem; }
 
 /* ---------- attach-a-file, in the design system's own clothes ----------
    `.field input` dresses every input in the text-field pill — padding, border,
@@ -4141,3 +4157,35 @@ tr:hover > .cell--lead .clip,
 .print__foot { padding-top: .1rem; }
 .print__foot p { margin-top: 0; }
 .print__notes { margin-top: .25rem; }
+
+
+/* Round, and evenly padded: equal width and height with the glyph centred both
+   ways, so the ring sits the same distance from the x on every side. A square
+   28px box with a 50% radius is a circle; sizing to the touch target rather
+   than to the glyph is what keeps it from hugging the character. */
+.iconbtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; padding: 0;
+  flex: 0 0 28px;
+  border: 1px solid var(--line); border-radius: 50%;
+  background: transparent; color: var(--ink-dim);
+  font-size: 1rem; line-height: 1; cursor: pointer;
+  transition: color .12s, border-color .12s, background .12s;
+}
+.iconbtn:hover { color: var(--danger); border-color: var(--danger); background: var(--surface); }
+.iconbtn:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
+
+/* The remove column takes only what the button needs. */
+.cart__x { width: 1%; white-space: nowrap; text-align: right; }
+
+/* Age, sex and mobile sit to their content instead of each claiming a 200px
+   track, which is what let all three share one line.
+
+   align-items: START is load-bearing. The age field is taller than the other
+   two - it carries a helper line - so the row measured 103px while sex and
+   mobile were 86px, and those two were landing at the BOTTOM of it. That put
+   their labels 17px below AGE and made one row read as two. */
+.grid2--tight {
+  grid-template-columns: repeat(auto-fit, minmax(140px, max-content));
+  align-items: start;
+}

@@ -800,7 +800,9 @@ export function NewOrder() {
         </div>
 
         <fieldset className="bare" disabled={cart.mcc == null}>
-          <div className="grid2">
+          {/* The name owns its row. It is the longest thing typed on this form
+              and was sharing with age, which left the box barely wider than the
+              title select beside it. */}
             <div className="field">
               <label htmlFor="p-name">Name</label>
               <div className="row" style={{ gap: '.35rem' }}>
@@ -824,11 +826,21 @@ export function NewOrder() {
                     <option key={t || 'none'} value={t}>{t || '—'}</option>
                   ))}
                 </select>
+                {/* Grows into the row. Without flex it kept the width it had
+                   when it was sharing the line with age, so giving it the
+                   whole row changed nothing visible. */}
                 <input id="p-name" ref={nameRef} className="input" value={patient.name} maxLength={200}
+                       style={{ flex: 1, minWidth: 0 }}
                        onChange={(e) => setPatient({ ...patient, name: e.target.value })} />
               </div>
             </div>
 
+          {/* Age, sex and mobile together. None of the three needs half a form:
+              a sex select sized for "Female" was holding a whole column open,
+              and a mobile cannot exceed 13 characters even with a country
+              code. Putting them on one line is also what gives the basket
+              beside this panel the width it needs. */}
+          <div className="grid2 grid2--tight">
             <div className="field">
               <label htmlFor="p-age-y">Age</label>
               <div className="row" style={{ gap: '.35rem' }}>
@@ -849,21 +861,6 @@ export function NewOrder() {
                   : 'Years and/or months'}
               </span>
             </div>
-          </div>
-
-          <div className="grid2">
-            <div className="field">
-              <label htmlFor="p-mobile">Mobile</label>
-              <input id="p-mobile" className="input mono" value={patient.mobile} inputMode="numeric"
-                     maxLength={10}
-                     onChange={(e) => setPatient({ ...patient, mobile: e.target.value.replace(/\D/g, '') })} />
-              <span className="muted" style={{ fontSize: '.7rem' }}>
-                {patient.mobile.trim() !== '' && patient.mobile.trim().length !== 10
-                  ? <b style={{ color: 'var(--danger)' }}>A mobile number is 10 digits — finish it or clear it.</b>
-                  : 'Optional · no mobile, no result history'}
-              </span>
-            </div>
-
             <div className="field">
               <label htmlFor="p-gender">Sex</label>
               <select id="p-gender" className="input" value={patient.gender}
@@ -871,6 +868,17 @@ export function NewOrder() {
                 <option value={1}>Male</option>
                 <option value={2}>Female</option>
               </select>
+            </div>
+            <div className="field">
+              <label htmlFor="p-mobile">Mobile</label>
+              <input id="p-mobile" className="input mono" value={patient.mobile} inputMode="numeric"
+                     maxLength={10} style={{ maxWidth: 190 }}
+                     onChange={(e) => setPatient({ ...patient, mobile: e.target.value.replace(/\D/g, '') })} />
+              <span className="muted" style={{ fontSize: '.7rem' }}>
+                {patient.mobile.trim() !== '' && patient.mobile.trim().length !== 10
+                  ? <b style={{ color: 'var(--danger)' }}>A mobile number is 10 digits — finish it or clear it.</b>
+                  : 'Optional · no mobile, no result history'}
+              </span>
             </div>
           </div>
 
@@ -1146,10 +1154,17 @@ export function NewOrder() {
                           </td>
                         )}
                         <td className="cell--tag"><RateSourceBadge source={l.rateSource} /></td>
-                        <td style={{ textAlign: 'right' }}>
-                          <button className="btn btn--ghost btn--sm"
+                        {/* An icon, not the word. "Remove" repeated down the
+                            column was the widest thing in it and pushed a
+                            five-column table into a horizontal scroll, on the
+                            panel used for every order. The label survives on
+                            aria-label and the tooltip. */}
+                        <td className="cart__x">
+                          <button className="iconbtn"
+                                  title={'Remove ' + (l.name ?? 'this line')}
+                                  aria-label={'Remove ' + (l.name ?? 'this line')}
                                   onClick={() => void act(() => cartApi.remove(l.kind, l.id))}>
-                            Remove
+                            ×
                           </button>
                         </td>
                       </tr>
