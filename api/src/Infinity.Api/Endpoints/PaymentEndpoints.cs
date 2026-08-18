@@ -114,8 +114,42 @@ public static class PaymentEndpoints
         if (!intent.Ok)
             return Results.BadRequest(new { error = intent.Message ?? "The payment could not be started." });
 
-        var plain = CCAvenueCrypto.BuildPairs(
-        [
+        // The centre's details, for billing_*. A failure here must not stop a
+        // payment: these are optional fields and a blank one is better than a
+        // dead button.
+        BillingDetails billing;
+        try
+        {
+            billing = await payments.BillingAsync(body.Mcc, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logs.CreateLogger("Payments").LogWarning(ex, "payment.billing.lookup.failed mcc={Mcc}", body.Mcc);
+            billing = new BillingDetails(null, null, null, null, null, null);
+        }
+
+        /*
+         * Shaped after the LIS's request, not after CCAvenue's documentation.
+         *
+         * The LIS has been taking payments on this same merchant account for
+         * years, and where the two disagree the working one wins. What it does
+         * that this did not:
+         *
+         *   • `tid` FIRST. CCAvenue's own sample leads with it and the LIS
+         *     sends it on every request; we omitted it entirely.
+         *   • billing_* on every request, from the centre's own record.
+         *   • no trailing separator — see BuildPairs.
+         *
+         * `language` is kept, though the LIS omits it: current CCAvenue
+         * documentation lists it as mandatory, and an extra recognised field is
+         * a smaller risk than a missing required one.
+         */
+        var pairs = new List<KeyValuePair<string, string>>
+        {
+            // A per-attempt transaction id. The LIS hardcodes one, which means
+            // every payment it has ever made shares a tid; a fresh value per
+            // attempt is what the field is for.
+            new("tid", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture)),
             new("merchant_id", o.MerchantId),
             new("order_id", orderRef),
             new("amount", body.Amount.ToString("0.00", CultureInfo.InvariantCulture)),
@@ -123,11 +157,33 @@ public static class PaymentEndpoints
             new("redirect_url", o.RedirectUrl),
             new("cancel_url", o.CancelUrl),
             new("language", "EN"),
-            // Echoed back verbatim by the gateway. Useful in the response log;
-            // NOT used to decide anything, since the customer could alter it in
-            // the intervening form post.
-            new("merchant_param1", body.Mcc.ToString(CultureInfo.InvariantCulture)),
-        ]);
+        };
+
+        // Only what we actually hold. An empty billing_email is worse than an
+        // absent one — it is a value the gateway may try to validate.
+        void AddIf(string key, string? value)
+        {
+            var v = value?.Trim();
+            if (string.IsNullOrEmpty(v)) return;
+            // These come from operator-entered LIS records, so unlike our own
+            // URLs they can genuinely contain a separator. Dropping the
+            // character keeps the payload parseable; BuildPairs would throw.
+            pairs.Add(new(key, v.Replace("&", " ").Replace("=", " ")));
+        }
+        AddIf("billing_name", billing.Name);
+        AddIf("billing_address", billing.Code);
+        AddIf("billing_city", billing.City);
+        AddIf("billing_zip", billing.Zip);
+        AddIf("billing_tel", billing.Phone);
+        AddIf("billing_email", billing.Email);
+        if (!string.IsNullOrWhiteSpace(billing.City)) pairs.Add(new("billing_country", "India"));
+
+        // Echoed back verbatim by the gateway. Useful in the response log; NOT
+        // used to decide anything, since the customer could alter it in the
+        // intervening form post.
+        pairs.Add(new("merchant_param1", body.Mcc.ToString(CultureInfo.InvariantCulture)));
+
+        var plain = CCAvenueCrypto.BuildPairs(pairs);
 
         // The plaintext is logged deliberately. It carries no secret — merchant
         // id, our order reference, an amount and our own URLs — and when the

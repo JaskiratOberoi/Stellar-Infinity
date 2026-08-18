@@ -133,16 +133,17 @@ public static class CCAvenueCrypto
             if (p.Value.Contains('&') || p.Value.Contains('='))
                 throw new ArgumentException($"CCAvenue parameter '{p.Key}' cannot contain '&' or '='.", nameof(pairs));
 
-            // TRAILING ampersand, on every pair including the last.
-            //
-            // Not a stray. Both of CCAvenue's official kits build the payload by
-            // appending "name=value&" in a loop, so what their server is fed
-            // always ends in a separator. The two kits disagree about whether to
-            // urlencode the values — the Java one does not, the PHP one does —
-            // but they agree on this, which makes it the part their parser is
-            // most likely to depend on. string.Join would omit it.
-            sb.Append(p.Key).Append('=').Append(p.Value).Append('&');
+            if (sb.Length > 0) sb.Append('&');
+            sb.Append(p.Key).Append('=').Append(p.Value);
         }
+        // NO trailing separator.
+        //
+        // A previous version appended one, reasoning from CCAvenue's published
+        // kits, which build the payload in a loop and therefore always end in
+        // '&'. The LIS is better evidence than the kits: it has been taking
+        // money on THIS merchant account for years and does not send one. When
+        // a working integration and the documentation disagree, follow the one
+        // that is demonstrably accepted.
         return sb.ToString();
     }
 }
