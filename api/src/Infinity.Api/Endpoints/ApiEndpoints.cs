@@ -572,6 +572,7 @@ public static class ApiEndpoints
         Infinity.Api.Reports.ReportExtrasRepository extras,
         Infinity.Api.Reports.CatalogueDetailRepository catalogue,
         Infinity.Api.Reports.ReportLink links,
+        ILoggerFactory loggers,
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
@@ -585,13 +586,15 @@ public static class ApiEndpoints
         var row = await repo.GetBySidAsync(scope.ClientCodes, sid, ct).ConfigureAwait(false);
         if (row is null) return Results.NotFound();
 
-        // A report still prints without its surroundings — unsigned and with no
-        // centre block, but with every result on it. Failing the whole request
-        // because a signature table was briefly unreachable would be the wrong
-        // trade for a document someone is waiting on.
-        Infinity.Api.Reports.ReportExtras? more = null;
-        try { more = await extras.GetAsync(row.Sid, ct).ConfigureAwait(false); }
-        catch (Exception) when (!ct.IsCancellationRequested) { /* print it bare */ }
+        // No signatory, no report. This used to fall back to printing the sheet
+        // bare on the reasoning that a document someone is waiting on beats a
+        // failed request; that reasoning was wrong, and see ReportSignoff for
+        // what it cost. A refusal is loud and fixable. An unsigned report is
+        // neither, because it looks finished.
+        var signoff = await Infinity.Api.Reports.ReportSignoff
+            .RequireAsync(extras, row.Sid, loggers, ct).ConfigureAwait(false);
+        if (signoff.Refusal is not null) return signoff.Refusal;
+        var more = signoff.Extras!;
 
         // The age-narrowed range and the interpretation graphs. Best-effort, in
         // the same spirit as the extras above.
@@ -604,11 +607,10 @@ public static class ApiEndpoints
             row.Age, row.AgeUnit, row.SampleDrawn, row.RegisteredAt, row.LastModifiedAt,
             row.StatusCode, row.Status, row.TestNames, row.OrderNumber, row.BillNumber,
             row.ClinicalHistory, Results = results, row.RefDoctor, row.RefCustomer, row.PassportNo,
-            CollectedAt = more?.CollectedAt,
-            ProcessedAt = more?.ProcessedAt,
-            Signers = more?.Signers ?? [],
-            ProfileInterpretations = more?.ProfileInterpretations
-                ?? new Dictionary<int, string>(),
+            more.CollectedAt,
+            more.ProcessedAt,
+            more.Signers,
+            more.ProfileInterpretations,
             // Null unless a secret and a public base URL are both configured,
             // which is what keeps the patient link off a deployment that has
             // not been set up to serve one.

@@ -67,6 +67,7 @@ public static class PublicReportEndpoints
         ReportExtrasRepository extras,
         CatalogueDetailRepository catalogue,
         ReportLockRepository locks,
+        ILoggerFactory loggers,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(sid) || sid.Length > 50) return Results.NotFound();
@@ -78,9 +79,11 @@ public static class PublicReportEndpoints
         var lockState = await locks.GetAsync(sid, ct).ConfigureAwait(false);
         if (lockState.Locked) return Results.NotFound();
 
-        ReportExtras? more = null;
-        try { more = await extras.GetAsync(row.Sid, ct).ConfigureAwait(false); }
-        catch (Exception) when (!ct.IsCancellationRequested) { /* print it bare */ }
+        // The patient's own copy is held to the same rule as the lab's: an
+        // unsigned report is not a report. See ReportSignoff.
+        var signoff = await ReportSignoff.RequireAsync(extras, row.Sid, loggers, ct).ConfigureAwait(false);
+        if (signoff.Refusal is not null) return signoff.Refusal;
+        var more = signoff.Extras!;
 
         var results = await ReportEnrichment.ApplyAsync(catalogue, row, ct).ConfigureAwait(false);
 
@@ -90,10 +93,10 @@ public static class PublicReportEndpoints
             row.Age, row.AgeUnit, row.SampleDrawn, row.RegisteredAt, row.LastModifiedAt,
             row.StatusCode, row.Status, row.TestNames, row.OrderNumber, row.BillNumber,
             row.ClinicalHistory, Results = results, row.RefDoctor, row.RefCustomer, row.PassportNo,
-            CollectedAt = more?.CollectedAt,
-            ProcessedAt = more?.ProcessedAt,
-            Signers = more?.Signers ?? [],
-            ProfileInterpretations = more?.ProfileInterpretations ?? new Dictionary<int, string>(),
+            more.CollectedAt,
+            more.ProcessedAt,
+            more.Signers,
+            more.ProfileInterpretations,
             // No QR on the patient's own copy: they are already holding the
             // thing it links to, and a code that reopens the page you are on is
             // furniture. It also keeps the token off a document that gets

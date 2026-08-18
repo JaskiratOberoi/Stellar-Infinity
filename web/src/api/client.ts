@@ -157,10 +157,15 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    const message =
-      (body && typeof body === 'object' && ('error' in body || 'detail' in body)
-        ? String((body as Record<string, unknown>).error ?? (body as Record<string, unknown>).detail)
-        : null) ?? `Request failed (${res.status})`;
+    // `message` first: an endpoint that refuses for a reason a PERSON has to act
+    // on sends both, a machine-readable `error` code and the sentence to show.
+    // Preferring the code put "NO_SIGNATORY" in front of an operator.
+    const pick = (k: string) =>
+      body && typeof body === 'object' && k in body
+        ? String((body as Record<string, unknown>)[k])
+        : null;
+    const message = pick('message') ?? pick('error') ?? pick('detail')
+      ?? `Request failed (${res.status})`;
     throw new ApiError(res.status, message, body);
   }
 

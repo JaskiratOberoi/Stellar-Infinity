@@ -57,10 +57,12 @@ public static class ReportPdfEndpoints
         ScopeRepository scopes,
         ReportsRepository repo,
         ReportLockRepository locks,
+        ReportExtrasRepository extras,
+        ILoggerFactory loggers,
         RenderClient render,
         CancellationToken ct)
     {
-        var (ok, fail) = await GateAsync(sid, principal, scopes, repo, locks, ct).ConfigureAwait(false);
+        var (ok, fail) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct).ConfigureAwait(false);
         if (!ok) return fail!;
 
         try
@@ -114,15 +116,26 @@ public static class ReportPdfEndpoints
     }
 
     /// <summary>
-    /// Identity + scope + lock, or the IResult that should be returned instead.
+    /// Identity, scope, balance lock and signatory — or the IResult to return
+    /// instead of a report.
     /// </summary>
+    /// <param name="requireSignatory">
+    /// False only for the graph attachment. That route hands over a
+    /// chromatogram the instrument produced, not a report, and there is nothing
+    /// on it for a doctor to sign; refusing it because the REPORT cannot be
+    /// issued would withhold a file the lab already owns for a reason that has
+    /// nothing to do with it. Every route that renders a report leaves this on.
+    /// </param>
     private static async Task<(bool Ok, IResult? Fail)> GateAsync(
         string sid,
         System.Security.Claims.ClaimsPrincipal principal,
         ScopeRepository scopes,
         ReportsRepository repo,
         ReportLockRepository locks,
-        CancellationToken ct)
+        ReportExtrasRepository extras,
+        ILoggerFactory loggers,
+        CancellationToken ct,
+        bool requireSignatory = true)
     {
         if (principal.UserId() is not int userId)
             return (false, Results.Unauthorized());
@@ -149,6 +162,16 @@ public static class ReportPdfEndpoints
             }, statusCode: StatusCodes.Status423Locked));
         }
 
+        // Last, and deliberately after the lock: a report with nobody to sign it
+        // is not issued at all. Checked HERE rather than inside the print route
+        // so the refusal costs one query instead of a headless browser opening a
+        // page it must then throw away. See ReportSignoff.
+        if (requireSignatory)
+        {
+            var signoff = await ReportSignoff.RequireAsync(extras, sid, loggers, ct).ConfigureAwait(false);
+            if (signoff.Refusal is not null) return (false, signoff.Refusal);
+        }
+
         return (true, null);
     }
 
@@ -171,11 +194,13 @@ public static class ReportPdfEndpoints
         ScopeRepository scopes,
         ReportsRepository repo,
         ReportLockRepository locks,
+        ReportExtrasRepository extras,
+        ILoggerFactory loggers,
         GraphRepository graphs,
         RenderClient render,
         CancellationToken ct)
     {
-        var (ok, fail) = await GateAsync(sid, principal, scopes, repo, locks, ct).ConfigureAwait(false);
+        var (ok, fail) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct).ConfigureAwait(false);
         if (!ok) return fail!;
 
         var attachments = await CollectGraphsAsync(graphs, sid, withGraph == true, ct).ConfigureAwait(false);
@@ -206,6 +231,8 @@ public static class ReportPdfEndpoints
         ScopeRepository scopes,
         ReportsRepository repo,
         ReportLockRepository locks,
+        ReportExtrasRepository extras,
+        ILoggerFactory loggers,
         GraphRepository graphs,
         RenderClient render,
         CancellationToken ct)
@@ -229,11 +256,25 @@ public static class ReportPdfEndpoints
 
         foreach (var sid in sids)
         {
-            var (ok, fail) = await GateAsync(sid, principal, scopes, repo, locks, ct).ConfigureAwait(false);
+            var (ok, fail) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct).ConfigureAwait(false);
             if (!ok)
             {
-                skipped.Add(new { sid, reason = fail is IStatusCodeHttpResult s && s.StatusCode == StatusCodes.Status423Locked
-                    ? "balance" : "unavailable" });
+                // Named separately from "unavailable": an operator can act on
+                // "unsigned" — someone has to configure a signatory — where
+                // "unavailable" tells them only that it did not come.
+                skipped.Add(new
+                {
+                    sid,
+                    reason = fail is IStatusCodeHttpResult s
+                        ? s.StatusCode switch
+                        {
+                            StatusCodes.Status423Locked => "balance",
+                            StatusCodes.Status409Conflict => "unsigned",
+                            StatusCodes.Status503ServiceUnavailable => "unsigned",
+                            _ => "unavailable",
+                        }
+                        : "unavailable",
+                });
                 continue;
             }
 
@@ -291,10 +332,13 @@ public static class ReportPdfEndpoints
         ScopeRepository scopes,
         ReportsRepository repo,
         ReportLockRepository locks,
+        ReportExtrasRepository extras,
+        ILoggerFactory loggers,
         GraphRepository graphs,
         CancellationToken ct)
     {
-        var (ok, fail) = await GateAsync(sid, principal, scopes, repo, locks, ct).ConfigureAwait(false);
+        var (ok, fail) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct,
+                                         requireSignatory: false).ConfigureAwait(false);
         if (!ok) return fail!;
 
         if (meta == true)

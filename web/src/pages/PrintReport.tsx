@@ -170,7 +170,23 @@ export function PrintReport() {
     return { total, remaining };
   }, [report, excluded]);
 
-  const ready = row !== null || error !== null;
+  /*
+   * The contract with the renderer, and the last line of defence on the rule
+   * that no report is issued unsigned.
+   *
+   * It used to be "row OR error", which meant a FAILED load still announced
+   * itself as ready to print — and the renderer would have photographed the
+   * error message and handed back a PDF of it. It now goes true only for a
+   * report that loaded AND carries a signature; anything else leaves the
+   * renderer waiting until it times out, which is a loud failure rather than a
+   * document that should not exist.
+   *
+   * In practice the API refuses first (see ReportSignoff), so a render is never
+   * started for an unsigned report. This is what makes that a second lock
+   * rather than the only one.
+   */
+  const signed = (row?.signers ?? []).some((sg) => !!sg.signatureDataUrl);
+  const ready = row !== null && signed;
 
   /* ---- the preview conversation ------------------------------------------
      Same-origin only, both ways. A report is patient data and the frame must
@@ -377,7 +393,13 @@ export function PrintReport() {
 
   return (
     <div className={shell} data-print-ready={ready ? 'true' : 'false'}>
-      {error ? <p className="lr__error">{error}</p> : !row ? null : (
+      {error ? <p className="lr__error">{error}</p> : !row ? null : !signed ? (
+        <p className="lr__error">
+          This report has no signatory and cannot be issued. No doctor is
+          configured to sign for its processing unit, and its departments have
+          no default signatory either.
+        </p>
+      ) : (
         <>
           {/* The letterhead band, preview only. In split preview it is drawn on
               each sheet instead, so the once-at-top copy is skipped. */}

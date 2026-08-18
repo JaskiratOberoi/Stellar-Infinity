@@ -58,6 +58,26 @@ export interface BalanceLocked {
   dueAmount: number;
 }
 
+/**
+ * What the API sends when a report has nobody to sign it.
+ *
+ * A refusal, not a failure: see the API's ReportSignoff. `unavailable` is
+ * transient and worth retrying; `none-configured` needs a person to configure
+ * a signatory, and no amount of retrying will help.
+ */
+export interface Unsigned {
+  error: 'NO_SIGNATORY';
+  reason: 'unavailable' | 'none-configured';
+  message: string;
+}
+
+export class ReportUnsignedError extends Error {
+  constructor(public readonly detail: Unsigned) {
+    super(detail.message);
+    this.name = 'ReportUnsignedError';
+  }
+}
+
 export class ReportLockedError extends Error {
   constructor(public readonly lock: BalanceLocked) {
     super(
@@ -83,6 +103,15 @@ export async function downloadFile(
   const res = await fetch(url, { credentials: 'include', ...init });
 
   if (res.status === 423) throw new ReportLockedError(await res.json() as BalanceLocked);
+
+  // 409 (nobody configured) and 503 (could not be read) both mean the same
+  // thing to the operator: this will not be issued, and here is why.
+  if (res.status === 409 || res.status === 503) {
+    const body = await res.json().catch(() => null) as Unsigned | null;
+    if (body?.error === 'NO_SIGNATORY') throw new ReportUnsignedError(body);
+    throw new Error(body ? JSON.stringify(body).slice(0, 200) : `Download failed (HTTP ${res.status}).`);
+  }
+
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     throw new Error(body.slice(0, 200) || `Download failed (HTTP ${res.status}).`);
