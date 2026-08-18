@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Report</title>
+  </head>
+  <body>
+    <!--
+      A SECOND entry point, separate from index.html on purpose.
+
+      The render service and the report preview both load a /print/* route, and
+      loading it through index.html booted the entire application — every page,
+      the nav, the auth context — just to draw one sheet. This entry mounts ONLY
+      the print routes (src/print.tsx), so the iframe and the headless browser
+      pull a fraction of the JavaScript. nginx serves this file for /print/*
+      (see web/nginx.conf); everything else still serves index.html.
+    -->
+    <div id="root"></div>
+    <script type="module" src="/src/print.tsx"></script>
+  </body>
+</html>
