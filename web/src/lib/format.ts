@@ -15,11 +15,26 @@ export const inr = (n: number) =>
  * arithmetic, which is where this kind of code usually goes wrong.
  */
 export const fmtDate = (iso: string | null | undefined) =>
-  iso ? new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  iso ? new Date(iso).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+
+/**
+ * The lab's clock, pinned - NOT the viewer's.
+ *
+ * toLocaleString without a timeZone renders in whatever zone the runtime is
+ * in. That is merely odd on a screen abroad, and wrong on a PRINTED REPORT:
+ * the PDF is rendered by headless Chromium in a container running UTC, so
+ * every report went out stamped 5h30m before the event. A sample collected at
+ * 01:35 pm printed as 08:05 am on the document handed to a patient.
+ *
+ * The API already sends IST-offset timestamps, so the instant was always
+ * right; only the rendering was not.
+ */
+export const IST = 'Asia/Kolkata';
 
 export const fmtDateTime = (iso: string | null | undefined) =>
   iso
     ? new Date(iso).toLocaleString('en-IN', {
+        timeZone: IST,
         day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
       })
     : '—';

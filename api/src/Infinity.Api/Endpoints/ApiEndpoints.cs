@@ -53,6 +53,11 @@ public static class ApiEndpoints
 
         reports.MapGet("/", ListReports).WithName("ListReports");
         reports.MapGet("/filters", ListFilterOptions).WithName("ListWorksheetFilters");
+        // Typeahead for the two lists that used to travel inside /filters.
+        // Same scope rule as everything else: they read the caller's own
+        // cached filter payload, so a client can only ever search its own.
+        reports.MapGet("/clients/search", SearchFilterClients).WithName("SearchFilterClients");
+        reports.MapGet("/tests/search", SearchFilterTests).WithName("SearchFilterTests");
         reports.MapGet("/{sid}", GetReport).WithName("GetReport");
         reports.MapGet("/{sid}/smart", GetSmartReport).WithName("GetSmartReport");
     }
@@ -365,52 +370,46 @@ public static class ApiEndpoints
     /// How long a filter payload is reused. These are the lab's reference
     /// lists - centres, departments, business units, the test catalogue - and
     /// they change when someone opens an admin screen, not while a
-    /// technologist works. Ten minutes is long enough to take the cost off
-    /// every page load and short enough that a new centre appears within one
-    /// tea break.
+    /// technologist works.
     /// </summary>
     private static readonly TimeSpan FilterOptionsTtl = TimeSpan.FromMinutes(10);
 
-    /// <summary>Matches what the framework would have produced: camelCase.</summary>
+    /// <summary>Matches what the framework would produce: camelCase.</summary>
     private static readonly System.Text.Json.JsonSerializerOptions WebJson =
         new(System.Text.Json.JsonSerializerDefaults.Web);
 
+    /// <summary>A typeahead answers with a screenful, not a catalogue.</summary>
+    private const int SearchLimit = 25;
+
     /*
-     * CACHED, because this was the slowest thing on every screen.
+     * ONE cached payload, three endpoints projecting from it.
      *
-     * Measured on staging before this changed: 4.8s cold and 4.0s warm, for a
-     * 349 KB payload, fetched on load by the worksheet, reporting and the
-     * order form alike. It was the single biggest contributor to a ~10s
-     * worksheet load, and none of it is per-request data.
+     * The underlying procedure returns everything in one round trip and took
+     * 4.8s for 349 KB. Rather than split it into three queries, it is fetched
+     * at most once per TTL and the searches filter the cached lists in memory:
+     * one slow query per ten minutes instead of one per page load, and a
+     * typeahead that answers without touching the database at all.
      *
-     * Keyed on the SCOPE, not the user: the payload is a function of which
-     * client codes the caller may see, so every lab user with unrestricted
-     * scope shares one entry while each client keeps its own. Keying on the
-     * user id would have been correct and nearly useless - one entry per
-     * person, all identical.
-     *
-     * A denied scope still returns empty WITHOUT consulting the cache: it is
-     * a constant, and giving it a key would let a scope change be masked by a
-     * stale hit.
+     * Keyed on SCOPE, not user - the payload is a function of which client
+     * codes the caller may see, so unrestricted staff share one entry while
+     * each client keeps its own. That is also what makes the searches safe
+     * without a scope check of their own: a client's cache entry contains
+     * only its own codes, so there is nothing else in it to find.
      */
-    private static async Task<IResult> ListFilterOptions(
+    private static async Task<WorksheetFilterOptions?> CachedFilterOptionsAsync(
         System.Security.Claims.ClaimsPrincipal principal,
         ScopeRepository scopes,
         ReportsRepository repo,
         Caching.InfinityCache cache,
         CancellationToken ct)
     {
-        if (principal.UserId() is not int userId) return Results.Unauthorized();
+        if (principal.UserId() is not int userId) return null;
 
         var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
-        if (scope.IsDenied)
-        {
-            return Results.Ok(new WorksheetFilterOptions([], [], [], []));
-        }
+        // Denied is a constant, and giving it a cache key would let a scope
+        // change be masked by a stale hit.
+        if (scope.IsDenied) return new WorksheetFilterOptions([], [], [], []);
 
-        // An unrestricted caller sees every centre, so they all share one key.
-        // A scoped caller's key is their own codes, sorted so the same set
-        // always produces the same key regardless of the order it arrived in.
         var scopeKey = scope.IsUnrestricted
             ? "all"
             : string.Join(",", scope.ClientCodes.OrderBy(c => c, StringComparer.Ordinal));
@@ -421,26 +420,112 @@ public static class ApiEndpoints
         var hit = await cache.GetAsync(key, ct).ConfigureAwait(false);
         if (hit is not null)
         {
-            // Returned as pre-serialised JSON: re-parsing it only to have the
-            // framework serialise it again is work the cache exists to avoid.
-            return Results.Content(hit, "application/json; charset=utf-8");
+            var cached = System.Text.Json.JsonSerializer
+                .Deserialize<WorksheetFilterOptions>(hit, WebJson);
+            if (cached is not null) return cached;
         }
 
         var options = await repo.GetFilterOptionsAsync(scope.ClientCodes, ct).ConfigureAwait(false);
-        // JsonSerializerDefaults.Web, NOT the default options: the default is
-        // PascalCase, and serialising here rather than letting the framework
-        // do it means nothing else applies the app's naming policy. Sending
-        // ClientCodes where the client reads clientCodes emptied every filter
-        // dropdown while still returning 200 - caught only because a probe
-        // printed the parsed value rather than the status code.
-        var json = System.Text.Json.JsonSerializer.Serialize(options, WebJson);
+        await cache.SetAsync(key, System.Text.Json.JsonSerializer.Serialize(options, WebJson),
+                             FilterOptionsTtl, ct).ConfigureAwait(false);
+        return options;
+    }
 
-        // Not awaited on the critical path... it is, deliberately: a write
-        // that fails should not be silent, and it is one round trip against a
-        // four-second query.
-        await cache.SetAsync(key, json, FilterOptionsTtl, ct).ConfigureAwait(false);
+    /*
+     * The SMALL half: departments and business units only.
+     *
+     * The client codes (3,624) and the test catalogue (1,459) used to travel
+     * here too, making this 349 KB on every page load of the worksheet,
+     * reporting and the order form. They are typeahead-searched now, so what
+     * is left is two bounded reference lists that a dropdown can hold.
+     */
+    private static async Task<IResult> ListFilterOptions(
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
+        ReportsRepository repo,
+        Caching.InfinityCache cache,
+        CancellationToken ct)
+    {
+        var o = await CachedFilterOptionsAsync(principal, scopes, repo, cache, ct).ConfigureAwait(false);
+        if (o is null) return Results.Unauthorized();
 
-        return Results.Content(json, "application/json; charset=utf-8");
+        return Results.Ok(new
+        {
+            departments = o.Departments,
+            businessUnits = o.BusinessUnits,
+            // Counts, so a screen can say "3,624 centres" without listing them,
+            // and so a caller can tell an empty scope from an unfetched one.
+            clientCodeCount = o.ClientCodes.Count,
+            testCount = o.Tests.Count,
+        });
+    }
+
+    /// <summary>Centres matching a typed fragment, within the caller's scope.</summary>
+    private static async Task<IResult> SearchFilterClients(
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
+        ReportsRepository repo,
+        Caching.InfinityCache cache,
+        CancellationToken ct,
+        string? q = null,
+        string? selected = null)
+    {
+        var o = await CachedFilterOptionsAsync(principal, scopes, repo, cache, ct).ConfigureAwait(false);
+        if (o is null) return Results.Unauthorized();
+
+        var needle = (q ?? string.Empty).Trim();
+        var rows = o.ClientCodes
+            .Where(c => needle.Length == 0
+                     || c.Code.Contains(needle, StringComparison.OrdinalIgnoreCase)
+                     || (c.Name ?? string.Empty).Contains(needle, StringComparison.OrdinalIgnoreCase))
+            .Take(SearchLimit)
+            .ToList();
+
+        /* The currently-selected code, even when it does not match the query.
+           Without this the control blanks its own value the moment someone
+           types: the selection is only a string, and its label lives in the
+           option list. */
+        if (!string.IsNullOrWhiteSpace(selected)
+            && !rows.Any(r => string.Equals(r.Code, selected, StringComparison.OrdinalIgnoreCase)))
+        {
+            var pinned = o.ClientCodes.FirstOrDefault(
+                c => string.Equals(c.Code, selected, StringComparison.OrdinalIgnoreCase));
+            if (pinned is not null) rows.Insert(0, pinned);
+        }
+
+        return Results.Ok(new { rows, total = o.ClientCodes.Count });
+    }
+
+    /// <summary>Tests matching a typed fragment. Not scoped: the catalogue is the lab's.</summary>
+    private static async Task<IResult> SearchFilterTests(
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
+        ReportsRepository repo,
+        Caching.InfinityCache cache,
+        CancellationToken ct,
+        string? q = null,
+        string? selected = null)
+    {
+        var o = await CachedFilterOptionsAsync(principal, scopes, repo, cache, ct).ConfigureAwait(false);
+        if (o is null) return Results.Unauthorized();
+
+        var needle = (q ?? string.Empty).Trim();
+        var rows = o.Tests
+            .Where(t => needle.Length == 0
+                     || t.Code.Contains(needle, StringComparison.OrdinalIgnoreCase)
+                     || (t.Name ?? string.Empty).Contains(needle, StringComparison.OrdinalIgnoreCase))
+            .Take(SearchLimit)
+            .ToList();
+
+        if (!string.IsNullOrWhiteSpace(selected)
+            && !rows.Any(r => string.Equals(r.Code, selected, StringComparison.OrdinalIgnoreCase)))
+        {
+            var pinned = o.Tests.FirstOrDefault(
+                t => string.Equals(t.Code, selected, StringComparison.OrdinalIgnoreCase));
+            if (pinned is not null) rows.Insert(0, pinned);
+        }
+
+        return Results.Ok(new { rows, total = o.Tests.Count });
     }
 
     /// <summary>

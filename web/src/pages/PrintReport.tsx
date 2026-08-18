@@ -1,7 +1,8 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
-import { fmtDateTime, plainText } from '../lib/format';
+import nobleLogo from '../assets/noble-logo.png';
+import { plainText } from '../lib/format';
 import { notesForCodes } from '../lib/reportNotes';
 import type { FullRow, TestResult } from './ReportViewer';
 
@@ -37,6 +38,26 @@ import type { FullRow, TestResult } from './ReportViewer';
  */
 
 /** Head and Profile rows are the report's own section headings, not analytes. */
+/**
+ * The stamp exactly as Telo prints it: 17/08/2026, 02:43:37 pm.
+ *
+ * Not the app's fmtDateTime, which is "17 Aug 2026, 02:43 pm" - fine on screen,
+ * but the printed report is compared side by side with the LIS's own and the
+ * two must agree character for character. Pinned to IST for the same reason
+ * fmtDateTime is: the PDF is rendered by a container running UTC.
+ */
+const fmtStamp = (iso: string | null | undefined) => {
+  if (!iso) return '\u2014';
+  const d = new Date(iso);
+  const date = d.toLocaleDateString('en-GB', {
+    timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric',
+  }).split('/').join('/');
+  const time = d.toLocaleTimeString('en-US', {
+    timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
+  }).toLowerCase();
+  return date + ', ' + time;
+};
+
 const isHeading = (t: TestResult) => t.testType === 'Head' || t.testType === 'Profile';
 
 /**
@@ -73,6 +94,24 @@ const nameOf = (t: TestResult) =>
  * is when the id was never written.
  */
 interface Group { heading: TestResult | null; items: TestResult[] }
+
+/**
+ * The heading that merely repeats the test's own name.
+ *
+ * A urine report opens with a Head row called "Complete Urine Examination"
+ * followed by PHYSICAL / CHEMICAL / MICROSCOPIC EXAMINATION. Telo prints only
+ * the three sub-sections: the first row says nothing the department band above
+ * it has not, and it costs a line on every profile.
+ *
+ * Identified by the row naming the TEST rather than a section - reportTestName
+ * is the catalogue's name for the test this row belongs to, so a heading equal
+ * to it is the root. Anything else is a real section and is kept.
+ */
+function isRootHeading(t: TestResult): boolean {
+  const own = (plainText(t.testName) || '').trim().toLowerCase();
+  const test = (plainText(t.reportTestName) || '').trim().toLowerCase();
+  return own.length > 0 && own === test;
+}
 
 function groupResults(results: TestResult[]): Group[] {
   const groups: Group[] = [];
@@ -116,6 +155,10 @@ export function PrintReport() {
   const [error, setError] = useState<string | null>(null);
 
   const pdfMode = params.get('pdf') === '1';
+  /* Frozen at mount rather than read at each use: the sheet states its own
+     print time twice, and a re-render between them would disagree with
+     itself on a document someone signs. */
+  const [printedAt] = useState(() => new Date().toISOString());
   const token = params.get('t');
 
   const [split, setSplit] = useState(params.get('split') === '1');
@@ -229,15 +272,29 @@ export function PrintReport() {
         <>
           {!pdfMode && <div className="print__letterhead">Pre-printed letterhead area</div>}
 
+          {/* Behind the text at low opacity, as on Telo's sheet. Uses the
+              same asset the top bar does, so there is one mark to change. */}
+          <img className="print__watermark" src={nobleLogo} alt="" aria-hidden="true" />
+
           {/* Two columns of label/value, as the LIS prints it. The QR sits to
               the right of both, where it survives being folded. */}
           <header className="print__head">
             <dl className="print__meta">
               <div><dt>Name</dt><dd className="print__name">{row.patientName ?? 'Unnamed patient'}</dd></div>
               <div><dt>SID</dt><dd className="mono">{row.sid}</dd></div>
-              {row.refCustomer && <div><dt>Ref. Customer</dt><dd>{plainText(row.refCustomer)}</dd></div>}
+              {/* The CODE, as Telo prints it. The centre's full name is already spelled
+                  out under "Collected at", and repeating it here cost a line the
+                  header could not spare. */}
+              {(row.clientCode || row.refCustomer) && (
+                <div><dt>Ref. Customer</dt>
+                  <dd>{plainText(row.clientCode) || plainText(row.refCustomer)}</dd></div>
+              )}
               {specimens.length > 0 && <div><dt>Specimen</dt><dd>{specimens.join(', ')}</dd></div>}
-              <div><dt>Registered</dt><dd>{fmtDateTime(row.registeredAt)}</dd></div>
+              <div><dt>Registered</dt><dd>{fmtStamp(row.registeredAt)}</dd></div>
+              {/* When this SHEET was produced, as distinct from when the result
+                  was reported. A reissued report is otherwise
+                  indistinguishable from the original. */}
+              <div><dt>Printed</dt><dd>{fmtStamp(printedAt)}</dd></div>
               {row.collectedAt?.name && (
                 <div className="print__meta--wide">
                   <dt>Collected at</dt>
@@ -260,8 +317,8 @@ export function PrintReport() {
               <div><dt>Patient Id</dt><dd className="mono">{row.pid}</dd></div>
               <div><dt>Ref. Doctor</dt><dd>{plainText(row.refDoctor) || 'SELF'}</dd></div>
               {row.passportNo && <div><dt>Passport</dt><dd className="mono">{row.passportNo}</dd></div>}
-              <div><dt>Collected</dt><dd>{fmtDateTime(row.sampleDrawn)}</dd></div>
-              <div><dt>Reported</dt><dd>{fmtDateTime(row.lastModifiedAt)}</dd></div>
+              <div><dt>Collected</dt><dd>{fmtStamp(row.sampleDrawn)}</dd></div>
+              <div><dt>Reported</dt><dd>{fmtStamp(row.lastModifiedAt)}</dd></div>
               {row.billNumber ? <div><dt>Bill</dt><dd className="mono">{row.billNumber}</dd></div> : null}
             </dl>
 
@@ -317,7 +374,7 @@ export function PrintReport() {
 
                     return (
                       <Fragment key={g.heading?.resultId ?? `g${g.items[0]?.resultId ?? di}`}>
-                        {g.heading && (
+                        {g.heading && !isRootHeading(g.heading) && (
                           <tr className={`print__section${headOff ? ' print__row--off' : ''}`}>
                             {tickable && (
                               <td className="print__tick">
@@ -356,7 +413,9 @@ export function PrintReport() {
                                     survive that. */}
                                 {t.abnormal && <span className="print__flag">H/L</span>}
                               </td>
-                              <td>{t.unit ?? '—'}</td>
+                              {/* ?? would keep an empty string, which the LIS
+                                  stores far more often than a NULL. */}
+                              <td>{plainText(t.unit) || '—'}</td>
                               <td className="print__range">{plainText(t.normalRange) || '—'}</td>
                               <td className="print__method">{plainText(t.method)}</td>
                             </tr>
@@ -383,6 +442,13 @@ export function PrintReport() {
               </table>
             </section>
           ))}
+
+          {/* Directly under the last result and ABOVE the signature, where Telo
+              puts it: it closes the RESULTS, and a reader needs to know the
+              list ended before they read who signed it. It was last in the
+              footer, which also made it the one element that would not fit and
+              spilled a finished report onto a second sheet. */}
+          {row.results.length > 0 && <p className="print__end">*** End of Report ***</p>}
 
           {row.results.length === 0 && <p className="print__error">No results have been entered for this sample.</p>}
 
@@ -420,11 +486,13 @@ export function PrintReport() {
               </p>
             )}
 
-            <p>
-              Results relate only to the sample tested. This report is not valid for medico-legal purposes.
-              Please correlate clinically.
+            <p className="print__authnote">
+              This is an electronically authenticated report. Report printed date: {fmtStamp(printedAt)}
             </p>
-            <p className="print__end">— End of report —</p>
+            <p className="print__authnote">
+              NOTE: Assay results should be correlated clinically with other clinical findings
+              and the total clinical status of the patient.
+            </p>
           </footer>
         </>
       )}

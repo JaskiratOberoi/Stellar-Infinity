@@ -830,20 +830,6 @@ export function NewOrder() {
             </div>
 
             <div className="field">
-              <label htmlFor="p-mobile">Mobile</label>
-              <input id="p-mobile" className="input mono" value={patient.mobile} inputMode="numeric"
-                     maxLength={10}
-                     onChange={(e) => setPatient({ ...patient, mobile: e.target.value.replace(/\D/g, '') })} />
-              <span className="muted" style={{ fontSize: '.7rem' }}>
-                {patient.mobile.trim() !== '' && patient.mobile.trim().length !== 10
-                  ? <b style={{ color: 'var(--danger)' }}>A mobile number is 10 digits — finish it or clear it.</b>
-                  : 'Optional · no mobile, no result history'}
-              </span>
-            </div>
-          </div>
-
-          <div className="grid2">
-            <div className="field">
               <label htmlFor="p-age-y">Age</label>
               <div className="row" style={{ gap: '.35rem' }}>
                 <input id="p-age-y" className="input mono" value={patient.ageYears} inputMode="numeric"
@@ -861,6 +847,20 @@ export function NewOrder() {
                     ? `Recorded as ${age.age} ${age.ageType === 2 ? 'month' : 'year'}${age.age === 1 ? '' : 's'}.`
                     : <b style={{ color: 'var(--danger)' }}>Not a usable age — months must be 0–11 alongside years.</b>
                   : 'Years and/or months'}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid2">
+            <div className="field">
+              <label htmlFor="p-mobile">Mobile</label>
+              <input id="p-mobile" className="input mono" value={patient.mobile} inputMode="numeric"
+                     maxLength={10}
+                     onChange={(e) => setPatient({ ...patient, mobile: e.target.value.replace(/\D/g, '') })} />
+              <span className="muted" style={{ fontSize: '.7rem' }}>
+                {patient.mobile.trim() !== '' && patient.mobile.trim().length !== 10
+                  ? <b style={{ color: 'var(--danger)' }}>A mobile number is 10 digits — finish it or clear it.</b>
+                  : 'Optional · no mobile, no result history'}
               </span>
             </div>
 

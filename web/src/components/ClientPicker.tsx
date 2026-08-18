@@ -11,7 +11,7 @@ export interface ClientOption {
 interface FiltersResponse {
   departments: unknown[];
   businessUnits: unknown[];
-  clientCodes: ClientOption[];
+  rows: ClientOption[];
 }
 
 /**
@@ -23,8 +23,8 @@ interface FiltersResponse {
 let cached: Promise<ClientOption[]> | null = null;
 
 export function loadClients(): Promise<ClientOption[]> {
-  cached ??= api.get<FiltersResponse>('/api/reports/filters')
-    .then((r) => r.clientCodes)
+  cached ??= api.get<FiltersResponse>('/api/reports/clients/search')
+    .then((r) => r.rows ?? [])
     .catch(() => {
       // Do not memoise a failure; the next mount should retry.
       cached = null;
@@ -83,6 +83,23 @@ export function ClientPicker({
     return () => { live = false; };
   }, []);
 
+  /*
+   * ONE centre in scope is not a choice - it is a fact, so it is filled in and
+   * locked rather than offered.
+   *
+   * A collection centre signing in can only ever order for itself, and asking
+   * it to pick its own name from a list of one is a step that can only be got
+   * wrong: leave it blank and the form stays dead with no hint why. Lab staff,
+   * who have many, are untouched.
+   *
+   * Guarded on `value` so this fires once, on the initial resolve, and does not
+   * fight an operator who deliberately cleared the field.
+   */
+  const singleClient = clients.length === 1 ? clients[0] : null;
+  useEffect(() => {
+    if (singleClient && value == null) onChange(singleClient.id);
+  }, [singleClient, value, onChange]);
+
   // Close when focus or a click leaves the widget, so the list is not left
   // hanging over the page after the operator moves on.
   useEffect(() => {
@@ -133,9 +150,18 @@ export function ClientPicker({
         aria-controls={listId}
         aria-label="Client"
         placeholder={selected ? label(selected) : placeholder}
-        value={open ? query : (selected ? label(selected) : '')}
-        onFocus={() => setOpen(true)}
-        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+        /* A locked picker shows its centre outright. The normal expression
+           renders the QUERY while the list is open and falls back to the
+           parent-held selection otherwise - neither is right here, because
+           there is no query to type and the display must not wait on state
+           travelling up to the form and back. */
+        value={singleClient ? label(singleClient)
+                            : (open ? query : (selected ? label(selected) : ''))}
+        onFocus={() => { if (singleClient) return; setOpen(true); }}
+        // Locked when there is only one centre: the value is already correct
+        // and there is nothing to search for.
+        readOnly={singleClient != null}
+        onChange={(e) => { if (singleClient) return; setQuery(e.target.value); setOpen(true); }}
         onKeyDown={(e) => {
           if (e.key === 'Escape') { setOpen(false); setQuery(''); }
           // One match and Enter: the common case when someone types a full code.

@@ -783,7 +783,10 @@ button, input, select { font: inherit; color: inherit; }
 
 @page {
   size: A4;
-  margin: 26mm 14mm 34mm 14mm;
+  /* 32mm, not 26: at 26 the meta block rode up into the pre-printed logo and
+     hid "DIAGNOSTIC CENTRE" under the patient name. Matches where Telo
+     starts its first line of text. */
+  margin: 32mm 14mm 34mm 14mm;
 }
 
 .print {
@@ -837,37 +840,52 @@ button, input, select { font: inherit; color: inherit; }
 .print__dept { margin-top: .9rem; }
 /* break-inside on the section keeps a one-line department off the bottom edge;
    break-after on the heading stops a heading orphaned at the foot of a page. */
+/* The department name reads as a band ACROSS the table rather than a label
+   floating above it - it names the block of results under it, and Telo centres
+   it inside the same ruled box for exactly that reason. */
 .print__dept h2 {
-  font-size: 8.5pt;
-  font-weight: 700;
-  letter-spacing: .14em;
+  font-size: 9pt;
+  font-weight: 600;
+  letter-spacing: .02em;
   text-transform: uppercase;
-  padding: .25rem 0;
-  border-bottom: .75pt solid #999;
+  text-align: center;
+  color: #1f3d7a;
+  padding: .18rem 0;
+  margin: 0;
+  border-top: .75pt solid #333;
+  border-bottom: .5pt solid #bbb;
   break-after: avoid;
 }
 
 .print__table { width: 100%; border-collapse: collapse; }
 .print__table thead { display: table-header-group; }   /* repeat on every page */
+/* Sentence case, not uppercase-with-tracking: this is a column label, and the
+   wide version cost horizontal room the ranges needed. */
 .print__table th {
-  font-size: 8pt;
+  font-size: 9pt;
+  text-transform: none;
+  letter-spacing: normal;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .08em;
-  color: #444;
+  color: #111;
   text-align: left;
-  padding: .3rem .4rem;
-  border-bottom: .5pt solid #bbb;
+  padding: .22rem .4rem;
+  border-top: .75pt solid #333;
+  border-bottom: .5pt solid #333;
 }
+/* No rule under every row. Twenty-two analytes with a line each reads as a
+   grid to be audited rather than a result to be read, and the rules were what
+   pushed a one-page report onto a second sheet. */
 .print__table td {
-  padding: .28rem .4rem;
-  border-bottom: .25pt solid #e2e2e2;
+  padding: .16rem .4rem;
   vertical-align: top;
 }
 /* A result must never be split across two pages from its own analyte name. */
 .print__table tr { break-inside: avoid; }
 
-.print__num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* LEFT, not right. A results column is read down against the reference beside
+   it, not summed like money, and right-alignment pushed each value away from
+   the range it has to be compared with. */
+.print__num { text-align: left; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .print__num--flag { font-weight: 700; }
 /* Letters, not colour: reports print on mono lasers constantly, and an
    out-of-range value flagged only in red survives none of them. */
@@ -944,7 +962,7 @@ button, input, select { font: inherit; color: inherit; }
 .print__processed { font-size: 8pt; color: #555; margin-bottom: .4rem; }
 
 .print__foot { margin-top: 1.2rem; font-size: 8pt; color: #555; }
-.print__end { margin-top: .5rem; text-align: center; letter-spacing: .18em; text-transform: uppercase; }
+.print__end { margin-top: .5rem; text-align: center; }
 .print__error { padding: 2rem 0; font-size: 10pt; }
 
 /* ---------- split by department ----------
@@ -1146,10 +1164,15 @@ button, input, select { font: inherit; color: inherit; }
   margin: 0 auto;
 }
 
+/* NAMED, like @page invoice above.
+   An unnamed @page inside @media print is not scoped to .smartprint - it is a
+   document-level rule, so it was silently overriding the CLINICAL report's
+   32mm letterhead margin with 16mm and pulling the patient block up over the
+   pre-printed logo. */
+@page smart { size: A4; margin: 16mm 15mm 16mm 15mm; }
+.smartprint { page: smart; }
 @media print {
   .smartprint { padding: 0; max-width: none; }
-  /* Its own page box: this document is not sharing a sheet with a letterhead. */
-  @page { margin: 16mm 15mm 16mm 15mm; }
 }
 
 /* ---- cover ---- */
@@ -1741,7 +1764,11 @@ tbody tr:hover { background: var(--accent-softer); }
    of figures in B2B — while the left is a form whose longest row is a name. */
 .order-grid {
   display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  /* 7/5, not 5/7. The LEFT column carries client, patient and referral - every
+     field an operator types into - while the right holds the basket and a
+     payment note. It was the narrower of the two, which squeezed the title
+     select against the name box until they overlapped. */
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
   gap: .9rem;
   align-items: start;
 }
@@ -4017,3 +4044,100 @@ tr:hover > .cell--lead .clip,
   margin: .5rem 0 0;
   text-align: center;
 }
+
+
+/* ---------- printed report: watermark and closing ----------
+   The mark sits behind the text at low opacity, as on Telo's sheet. Printed
+   with print-color-adjust so a browser's "background graphics off" default
+   cannot silently drop it from the PDF. */
+.print__watermark {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 118mm;
+  transform: translate(-50%, -50%);
+  opacity: .06;
+  z-index: 0;
+  pointer-events: none;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+/* Everything else rides above it. */
+.print__head, .print__dept, .print__foot, .print__notes { position: relative; z-index: 1; }
+
+.print__end {
+  text-align: center;
+  font-size: 9pt;
+  color: #444;
+  margin: .5rem 0 0;
+}
+
+/* The lines Telo carries under the signature: where it was processed, that the
+   report is electronically authenticated, and the clinical-correlation note. */
+.print__authnote {
+  font-size: 7.5pt;
+  color: #555;
+  margin: .15rem 0 0;
+}
+
+
+/* ---------- printed report: Telo parity ----------
+   Everything below exists to make the sheet land on ONE page where Telo's
+   does. The report was spilling onto a second sheet purely on chrome: a
+   four-line address in a half-width column, and generous row padding. */
+
+/* "Collected at" spans BOTH columns. In a half-width column the centre's
+   address wrapped to four lines and pushed the table down by roughly a
+   sixth of the page; across the full width it takes two, as Telo's does. */
+.print__meta--wide {
+  grid-column: 1 / -1;
+}
+.print__head {
+  gap: .2rem 1.2rem;
+  padding-bottom: .3rem;
+}
+.print__meta { row-gap: .05rem; }
+.print__meta dt { font-size: 8.5pt; }
+.print__meta dd { font-size: 9pt; }
+
+/* Rows at Telo's density. */
+.print__table td { padding: .1rem .4rem; line-height: 1.3; }
+.print__table th { padding: .18rem .4rem; }
+.print__section td { padding-top: .3rem; padding-bottom: .05rem; letter-spacing: .04em; }
+.print__dept h2 { margin: .35rem 0 0; }
+
+/* The closing line sits directly under the last result, as on Telo's sheet,
+   rather than being pushed to the foot of whatever page it lands on. */
+.print__end { margin: .45rem 0 .2rem; font-size: 9pt; }
+
+/* The signature block is the last thing on the sheet and must not be orphaned
+   onto a page of its own. */
+/* NOT break-inside: avoid.
+   Keeping the whole footer together sounds right and was what pushed a
+   finished report onto a second sheet: with ~140px of page left and a
+   signature block slightly taller than that, the browser moved the entire
+   block rather than letting it begin. The one thing that must not split is
+   an individual signature - a name parted from its designation - so the
+   avoid lives there instead. */
+.print__foot { padding-top: .2rem; }
+.print__sign { break-inside: avoid; }
+.print__signs { margin-bottom: .05rem; }
+.print__signs img { max-height: 34px; }
+.print__processed, .print__authnote { margin: .05rem 0 0; line-height: 1.3; }
+.print__notes { margin-top: .35rem; }
+
+
+/* The last ~20px. After the closing line moved above the signature the NOTE
+   spilled a single line onto a second sheet - the worst possible page 2. Telo
+   sets its first line of text about 20px higher than we were, so the space
+   comes from the header band rather than from squeezing the results.
+
+   Kept as one block so the next person can see WHY these numbers are what
+   they are: they buy exactly one page. */
+@page { margin: 30mm 14mm 34mm 14mm; }
+.print__head { gap: .1rem 1.2rem; padding-bottom: .2rem; margin-bottom: .1rem; }
+.print__meta { row-gap: 0; }
+.print__end { margin: .3rem 0 .15rem; }
+.print__foot { padding-top: .1rem; }
+.print__foot p { margin-top: 0; }
+.print__notes { margin-top: .25rem; }

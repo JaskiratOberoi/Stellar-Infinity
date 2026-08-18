@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { api } from '../api/client';
 import { Combobox } from './Combobox';
+import { useRemoteOptions } from './useRemoteOptions';
 
 /**
  * The sample filter set, shared by the worksheet and reporting.
@@ -124,11 +125,14 @@ const DATE_PRESETS: { label: string; days: number }[] = [
 export interface FilterOptions {
   departments: { id: number; name: string | null }[];
   businessUnits: { id: number; name: string | null }[];
-  clientCodes: { code: string; name: string | null }[];
-  tests: { code: string; name: string | null }[];
+  /* clientCodes and tests no longer travel here: 3,624 and 1,459 entries
+     made this payload 349 KB on every page load. Both are typeahead-
+     searched now; the counts are kept so a screen can say how many exist. */
+  clientCodeCount?: number;
+  testCount?: number;
 }
 
-const EMPTY_OPTIONS: FilterOptions = { departments: [], businessUnits: [], clientCodes: [], tests: [] };
+const EMPTY_OPTIONS: FilterOptions = { departments: [], businessUnits: [] };
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
@@ -287,6 +291,27 @@ export function SampleFilters({
   defaultStatusLabel?: string;
   children?: React.ReactNode;
 }) {
+  /* The two lists that no longer travel in the filter payload. Each is told
+     the current selection so the server can pin it into the results - without
+     that, choosing a centre and then typing would blank the control. */
+  const { options: clientOptions, search: searchClients } = useRemoteOptions(
+    '/api/reports/clients/search',
+    value.clientCode,
+    // Code and name as separate columns rather than one joined string: both
+    // are searchable and an operator knows one or the other.
+    useCallback((r: Record<string, unknown>) => ({
+      value: String(r.code ?? ''), label: String(r.code ?? ''),
+      hint: (r.name as string | null) ?? null,
+    }), []));
+
+  const { options: testOptions, search: searchTests } = useRemoteOptions(
+    '/api/reports/tests/search',
+    value.testCode,
+    useCallback((r: Record<string, unknown>) => ({
+      value: String(r.code ?? ''), label: String(r.code ?? ''),
+      hint: (r.name as string | null) ?? null,
+    }), []));
+
   const set = <K extends keyof SampleFilterValues>(key: K, v: SampleFilterValues[K]) =>
     onChange({ ...value, [key]: v });
 
@@ -416,7 +441,8 @@ export function SampleFilters({
               onChange={(v) => set('clientCode', v)}
               // Code and name as separate columns rather than one "AG0050A — MEHAR"
               // string: both are searchable, and an operator knows one or the other.
-              options={options.clientCodes.map((c) => ({ value: c.code, label: c.code, hint: c.name }))}
+              options={clientOptions}
+              onQueryChange={searchClients}
             />
           </label>
 
@@ -441,7 +467,8 @@ export function SampleFilters({
               value={value.testCode}
               emptyLabel="Any test"
               onChange={(v) => set('testCode', v)}
-              options={options.tests.map((t) => ({ value: t.code, label: t.code, hint: t.name }))}
+              options={testOptions}
+              onQueryChange={searchTests}
             />
           </label>
 
