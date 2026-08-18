@@ -382,7 +382,7 @@ public static class PaymentEndpoints
             // Five and a half hours wrong on a document someone files against
             // a bank statement.
             paidAt = r.SettledAt is null ? null
-                : new DateTimeOffset(r.SettledAt.Value, IstOffset),
+                : (DateTimeOffset?)new DateTimeOffset(r.SettledAt.Value, IstOffset),
             clientCode = r.ClientCode,
             clientName = r.ClientName,
         });
