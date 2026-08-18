@@ -1863,11 +1863,20 @@ fieldset.bare {
    This was .grid2 + .grid2 only. The moment the name became a plain .field on
    its own row, nothing matched between it and the row beneath - so AGE, SEX
    and MOBILE sat hard against the name input and read as labels belonging to
-   it rather than headings of their own fields. */
-.order-grid .grid2 + .grid2,
-.order-grid .field + .grid2,
-.order-grid .grid2 + .field,
-.order-grid .field + .field { margin-top: 1.1rem; }
+   it rather than headings of their own fields.
+
+   The child combinator is load-bearing. As a descendant selector, .field
+   + .field also matched the two cells INSIDE every .grid2 — so the cell on
+   the right was pushed down 1.1rem and sat lower than its partner. Sex
+   below date of birth, referring customer below ref. doctor, email below
+   mobile: a uniform 17.6px stagger down the whole form, which read as sloppy
+   alignment rather than as the spacing rule it actually was. Between ROWS is
+   the only place this margin belongs; within a row, the grid's own gap does
+   the work. */
+.order-grid fieldset > .grid2 + .grid2,
+.order-grid fieldset > .field + .grid2,
+.order-grid fieldset > .grid2 + .field,
+.order-grid fieldset > .field + .field { margin-top: 1.1rem; }
 
 /* A label sits closer to its OWN input than to the field above it - that gap
    is what says which control a label belongs to. */
@@ -4178,13 +4187,13 @@ tr:hover > .cell--lead .clip,
 /* The remove column takes only what the button needs. */
 .cart__x { width: 1%; white-space: nowrap; text-align: right; }
 
-/* Age, sex and mobile sit to their content instead of each claiming a 200px
-   track, which is what let all three share one line.
+/* The fields sit to their content instead of each claiming a 200px track,
+   which is what lets a row share one line.
 
-   align-items: START is load-bearing. The age field is taller than the other
-   two - it carries a helper line - so the row measured 103px while sex and
-   mobile were 86px, and those two were landing at the BOTTOM of it. That put
-   their labels 17px below AGE and made one row read as two. */
+   align-items: start keeps a short control from stretching to match a taller
+   neighbour. It is NOT what fixed the label stagger, though it was once
+   claimed to be: that was `.order-grid .field + .field` matching inside these
+   rows and pushing the second cell down 1.1rem. See that rule. */
 .grid2--tight {
   grid-template-columns: repeat(auto-fit, minmax(140px, max-content));
   align-items: start;
