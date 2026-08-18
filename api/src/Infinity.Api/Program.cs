@@ -42,6 +42,17 @@ builder.Services.AddSingleton<Infinity.Api.Orders.AccessionRepository>();
 builder.Services.AddSingleton<Infinity.Api.Reports.ReportExtrasRepository>();
 builder.Services.AddSingleton<Infinity.Api.Reports.ReportLink>();
 builder.Services.AddSingleton<Infinity.Api.Orders.ClientAccountRepository>();
+builder.Services.AddSingleton<Infinity.Api.Payments.PaymentRepository>();
+
+// CCAvenue. Validated at STARTUP so a half-set deployment fails the deploy
+// rather than the first customer who tries to pay. Being entirely unset is
+// legitimate and means the pay button is not offered at all.
+builder.Services
+    .AddOptions<Infinity.Api.Payments.CCAvenueOptions>()
+    .Bind(builder.Configuration.GetSection(Infinity.Api.Payments.CCAvenueOptions.SectionName))
+    .Validate(o => o.Validate().Count == 0,
+        "CCAvenue settings are incomplete - see CCAvenue__* environment variables.")
+    .ValidateOnStart();
 builder.Services.AddSingleton<Infinity.Api.Orders.BillingRepository>();
 builder.Services.AddSingleton<Infinity.Api.Orders.RateListRepository>();
 builder.Services.AddSingleton<Infinity.Api.Orders.InvoiceRepository>();
@@ -201,6 +212,16 @@ var app = builder.Build();
           + "as soon as TLS terminates in front of this API.");
     }
     app.Logger.LogInformation("authcookie.mode secure={Secure} sameSite={SameSite}", cookies.Secure, cookies.SameSite);
+
+    // Which gateway, and whether one is connected at all. Stated once at
+    // startup because "is this stack taking real money?" must not be a
+    // question anyone answers by trying it.
+    var ccav = app.Services.GetRequiredService<IOptions<Infinity.Api.Payments.CCAvenueOptions>>().Value;
+    app.Logger.LogInformation(
+        "ccavenue.mode enabled={Enabled} test={Test} redirect={Redirect}",
+        ccav.Enabled,
+        ccav.GatewayUrl.Contains("test.ccavenue.com", StringComparison.OrdinalIgnoreCase),
+        ccav.Enabled ? ccav.RedirectUrl : "(none)");
 }
 
 // Must run before anything that reads the client IP.
@@ -225,6 +246,7 @@ app.MapOrderEntryEndpoints();
 app.MapAccessionEndpoints();
 app.MapInwardEndpoints();
 app.MapClientAccountEndpoints();
+app.MapPaymentEndpoints();
 app.MapBillingEndpoints();
 app.MapRateListEndpoints();
 app.MapInvoiceEndpoints();

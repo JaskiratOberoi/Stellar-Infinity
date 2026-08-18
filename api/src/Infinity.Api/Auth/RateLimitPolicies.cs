@@ -23,6 +23,13 @@ public static class RateLimitPolicies
     public const string AutoAuth = "autoauth";
 
     /// <summary>
+    /// The CCAvenue endpoints. The callback is the only unauthenticated write
+    /// in the system — anyone who learns the URL can post to it — so it needs a
+    /// limit that does not depend on there being a session to partition by.
+    /// </summary>
+    public const string Payment = "payment";
+
+    /// <summary>
     /// Brute-force protection on /api/auth/login: 8 attempts per 15 minutes,
     /// partitioned by username + client IP (matching Telo's limits).
     ///
@@ -113,6 +120,32 @@ public static class RateLimitPolicies
                 {
                     PermitLimit = 5,
                     Window = TimeSpan.FromMinutes(15),
+                    QueueLimit = 0,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                });
+            });
+
+            // Payments. Partitioned by user when there is one and by IP when
+            // there is not, because the two endpoints under this policy differ:
+            // /checkout is authenticated, /callback cannot be — the customer
+            // returns from CCAvenue on a cross-site POST that carries no
+            // cookie.
+            //
+            // 30 a minute is far above any real use (a person pays once) and
+            // far below what it takes to grind at the callback. The callback is
+            // not a guessing oracle in the first place — a body that does not
+            // decrypt under the working key never reaches the database — so
+            // this is about load, not secrecy.
+            options.AddPolicy(Payment, http =>
+            {
+                var key = http.User.UserId()?.ToString()
+                          ?? http.Connection.RemoteIpAddress?.ToString()
+                          ?? "unknown";
+
+                return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 30,
+                    Window = TimeSpan.FromMinutes(1),
                     QueueLimit = 0,
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 });

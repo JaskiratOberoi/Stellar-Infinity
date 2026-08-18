@@ -71,6 +71,19 @@ public sealed class CsrfProtection(RequestDelegate next, IOptions<AuthCookieOpti
         // Login mints the pair; requiring one to obtain one is a deadlock.
         if (request.Path.StartsWithSegments("/api/auth/login")) return false;
 
+        // The CCAvenue callback. The customer returns from the gateway on a
+        // cross-site top-level POST, which by construction cannot carry our
+        // header — so requiring one would reject every real payment.
+        //
+        // This is not a hole. With SameSite=Strict the session cookie is not
+        // sent on that POST either, so the branch below would already exempt
+        // it; stating it explicitly means the exemption survives someone
+        // loosening SameSite later, and makes it obvious that the endpoint
+        // authenticates its MESSAGE rather than its caller. It is anonymous,
+        // and a body that does not decrypt under the working key never reaches
+        // the database — see PaymentEndpoints.
+        if (request.Path.StartsWithSegments("/api/payments/callback")) return false;
+
         // A caller presenting an explicit Authorization header is not riding a
         // cookie, so cross-site forgery does not apply to it.
         if (!string.IsNullOrEmpty(request.Headers.Authorization.ToString())) return false;
