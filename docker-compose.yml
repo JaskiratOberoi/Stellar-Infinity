@@ -29,6 +29,14 @@ services:
     image: infinity-splash
     ports:
       - "127.0.0.1:3120:80"
+    # It no longer has NO dependency on the platform: this is the only service
+    # published on infinity.genomicslab.in, and the QR on a printed report has
+    # to resolve to a public URL. nginx.conf proxies /r/, /assets/ and the
+    # token-gated /api/public/ through to the SPA, and nothing else — see the
+    # comment there. The marketing page itself still serves if web is down;
+    # only the patient's report route would 502.
+    depends_on:
+      - web
     restart: unless-stopped
 
   # ----------------------------------------------------------------- redis --
@@ -77,6 +85,20 @@ services:
       # fails if Redis is missing, instead of silently reverting to
       # per-instance rate limits and stale token revocation.
       Cache__RequireDistributed: "false"
+
+      # Where the QR on a printed report resolves.
+      #
+      # UNSET until now, which meant ReportLink.Enabled was false and NO QR was
+      # drawn on any live report — the token secret was configured, the base
+      # URL was not, and the failure is silent by design (a report without a QR
+      # is still a report). Staging has always had one.
+      #
+      # This hostname is the marketing splash; the patient's report page lives
+      # on the SPA, and the splash proxies /r/ through to it. See nginx.conf.
+      #
+      # NOT a secret. The secret is Reports__TokenSecret in api/.env, and with
+      # it unset no QR is drawn and the public route rejects everything.
+      Reports__PublicBaseUrl: "https://infinity.genomicslab.in"
 
       # ---- session cookie ----
       # The JWT is delivered as an httpOnly cookie, so script cannot read it

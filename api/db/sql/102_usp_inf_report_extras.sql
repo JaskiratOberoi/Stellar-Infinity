@@ -84,15 +84,32 @@ BEGIN
      * Capped at three. The letterhead's signature band fits three; a fourth
      * would print over the footer.
      */
-    ;WITH report_depts AS (
-        SELECT DISTINCT dept = UPPER(LTRIM(RTRIM(d.Name)))
-        FROM dbo.tbl_med_mcc_patient_test_result r
-        LEFT JOIN dbo.tbl_med_test_master m ON m.id = r.testid
-        LEFT JOIN dbo.tbl_med_department_master d ON d.id = m.DepartmentId
-        WHERE r.vailid = @v AND d.Name IS NOT NULL
-    ),
-    -- signature id -> the departments it is configured to sign for
-    dept_signers AS (
+    -- The departments this report actually contains.
+    --
+    -- A temp table rather than a CTE or a table variable, for two reasons: it
+    -- is read twice (once to decide which configured signatory is entitled to
+    -- sign, once by the fallback), and a #temp is visible inside the nested
+    -- sp_executesql scope the fallback runs in, where a @variable would not be.
+    CREATE TABLE #depts (dept NVARCHAR(200) PRIMARY KEY);
+    INSERT INTO #depts (dept)
+    SELECT DISTINCT UPPER(LTRIM(RTRIM(d.Name)))
+    FROM dbo.tbl_med_mcc_patient_test_result r
+    LEFT JOIN dbo.tbl_med_test_master m ON m.id = r.testid
+    LEFT JOIN dbo.tbl_med_department_master d ON d.id = m.DepartmentId
+    WHERE r.vailid = @v AND d.Name IS NOT NULL;
+
+    -- ord carries the print order through to the final SELECT: the fallback
+    -- path below has no DOC_TYPE to sort by, only the order it inserted in.
+    CREATE TABLE #signers (
+        ord          INT IDENTITY(1,1),
+        id           INT,
+        doctor_name  NVARCHAR(200),
+        designation  NVARCHAR(200),
+        doc_type     INT,
+        signature    VARBINARY(MAX)
+    );
+
+    ;WITH dept_signers AS (
         SELECT sig_id = d.Fist_doctor,   dept = UPPER(LTRIM(RTRIM(d.Name)))
         FROM dbo.tbl_med_department_master d WHERE d.Fist_doctor   IS NOT NULL
         UNION
@@ -112,7 +129,7 @@ BEGIN
             -- Configured against a department THIS report contains?
             signs_here  = CASE WHEN EXISTS (
                               SELECT 1 FROM dept_signers ds
-                              INNER JOIN report_depts rd ON rd.dept = ds.dept
+                              INNER JOIN #depts rd ON rd.dept = ds.dept
                               WHERE ds.sig_id = s.id)
                           THEN 1 ELSE 0 END
         FROM dbo.tbl_med_signature_master s
@@ -137,16 +154,95 @@ BEGIN
             ORDER BY signs_here DESC, doc_type, id)
         FROM eligible
     )
+    INSERT INTO #signers (id, doctor_name, designation, doc_type, signature)
     SELECT TOP 3
-        d.id,
-        d.doctor_name,
-        d.designation,
-        d.doc_type,
-        signature = s.Signature
+        d.id, d.doctor_name, d.designation, d.doc_type, s.Signature
     FROM deduped d
     INNER JOIN dbo.tbl_med_signature_master s ON s.id = d.id
     WHERE d.rn = 1
     ORDER BY d.doc_type, d.id;
+
+    /*
+     * ── THE FALLBACK, AND WHY A REPORT MUST NOT GO OUT WITHOUT ONE ─────────
+     *
+     * Not every business unit has signatories of its own. Where
+     * tbl_med_signature_master holds no usable row for the unit, everything
+     * above selects nothing and the report printed UNSIGNED.
+     *
+     * That is the one failure here a reader cannot see is a failure. A missing
+     * result is obvious; a missing signature is a sheet that looks complete
+     * with an empty space where a pathologist put their name, and it is not a
+     * report at all — it is a page of numbers nobody has taken responsibility
+     * for.
+     *
+     * The LIS does not do that. GET_PATIENT_REPORT_VAIL_ID falls back to
+     * Department_View_Sign, which carries each department's default PRIMARY
+     * (Expr1/Expr2/Expr3) and SECONDARY (Doctorname/Designation/Signature)
+     * doctor — the head-office signatories. Restricted to the departments on
+     * THIS report, so a microbiology report is signed by the microbiologist
+     * and a biochemistry one is not.
+     *
+     * Primaries before secondaries, mirroring the DOC_TYPE 1 → 2 ordering the
+     * configured path uses, so a given person lands on the same side of the QR
+     * whichever path found them. Ids are synthetic and NEGATIVE: these rows do
+     * not come from tbl_med_signature_master and must never be taken for a row
+     * that does.
+     *
+     * Ported from Telo's getDefaultSigners (db/read/signatures.ts).
+     *
+     * Wrapped in sp_executesql for the same reason the interpretation block
+     * below is: the view belongs to the LIS, and a deployment that lacks it
+     * should print an unsigned report rather than fail to render one at all.
+     */
+    IF NOT EXISTS (SELECT 1 FROM #signers)
+       AND OBJECT_ID('dbo.Department_View_Sign') IS NOT NULL
+    BEGIN
+        EXEC sp_executesql N'
+            ;WITH flat AS (
+                SELECT tier = 1,
+                       doctor_name = NULLIF(LTRIM(RTRIM(v.Expr1)), N''''),
+                       designation = NULLIF(LTRIM(RTRIM(v.Expr2)), N''''),
+                       signature   = v.Expr3
+                FROM dbo.Department_View_Sign v
+                WHERE UPPER(LTRIM(RTRIM(v.Name))) IN (SELECT dept FROM #depts)
+                UNION ALL
+                SELECT tier = 2,
+                       NULLIF(LTRIM(RTRIM(v.Doctorname)), N''''),
+                       NULLIF(LTRIM(RTRIM(v.Designation)), N''''),
+                       v.Signature
+                FROM dbo.Department_View_Sign v
+                WHERE UPPER(LTRIM(RTRIM(v.Name))) IN (SELECT dept FROM #depts)
+            ),
+            usable AS (
+                SELECT * FROM flat
+                WHERE doctor_name IS NOT NULL
+                  AND signature IS NOT NULL
+                  AND DATALENGTH(signature) > 0
+            ),
+            -- The same head-office doctor is the default for several
+            -- departments, so a three-department report would otherwise print
+            -- one signature three times.
+            ranked AS (
+                SELECT *, rn = ROW_NUMBER() OVER (
+                    PARTITION BY LOWER(REPLACE(doctor_name, N'' '', N''''))
+                    ORDER BY tier)
+                FROM usable
+            )
+            INSERT INTO #signers (id, doctor_name, designation, doc_type, signature)
+            SELECT TOP 3
+                   id = -ROW_NUMBER() OVER (ORDER BY tier, doctor_name),
+                   doctor_name, designation, doc_type = tier, signature
+            FROM ranked
+            WHERE rn = 1
+            ORDER BY tier, doctor_name;';
+    END
+
+    SELECT id, doctor_name, designation, doc_type, signature
+    FROM #signers
+    ORDER BY ord;
+
+    DROP TABLE #signers;
+    DROP TABLE #depts;
 
     /*
      * 4 ── profile-level interpretation
