@@ -4,7 +4,7 @@ import { api } from '../api/client';
 import nobleLogo from '../assets/noble-logo.png';
 import { notesForCodes } from '../lib/reportNotes';
 import {
-  ageLabel, fmtStamp, formatRange, genderLabel, splitInterp,
+  ageLabel, fmtDob, fmtStamp, formatRange, genderLabel, splitInterp,
 } from '../lib/reportFormat';
 import {
   buildSampleReport,
@@ -590,7 +590,16 @@ function PatientMetaBlock({
       <div className="lr__meta">
         <div className="lr__grid">
           <Meta label="Name" value={row.patientName ?? '—'} strong />
-          <Meta label="Age / Gender" value={`${ageLabel(row.age, row.ageUnit)} / ${genderLabel(row.sex)}`} />
+          <div className="lr__f">
+            <span className="lr__f-label">Age / Gender</span>
+            <span className="lr__f-sep">:</span>
+            <span>
+              {`${ageLabel(row.age, row.ageUnit)} / ${genderLabel(row.sex)}`}
+              {fmtDob(row.dob) && (
+                <span className="lr__cc-contact"> · DOB {fmtDob(row.dob)}</span>
+              )}
+            </span>
+          </div>
           <Meta label="SID" value={row.sid} mono strong />
           <Meta label="Patient Id" value={String(row.pid)} mono />
           {/* The CODE, not the centre's full name: the name is already spelled

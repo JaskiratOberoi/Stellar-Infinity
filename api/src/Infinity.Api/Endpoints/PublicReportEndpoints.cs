@@ -93,6 +93,7 @@ public static class PublicReportEndpoints
             row.Age, row.AgeUnit, row.SampleDrawn, row.RegisteredAt, row.LastModifiedAt,
             row.StatusCode, row.Status, row.TestNames, row.OrderNumber, row.BillNumber,
             row.ClinicalHistory, Results = results, row.RefDoctor, row.RefCustomer, row.PassportNo,
+            row.Dob,
             more.CollectedAt,
             more.ProcessedAt,
             more.Signers,

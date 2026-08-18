@@ -112,7 +112,15 @@ public sealed record CreateOrderRequest(
     /// the scalar pair otherwise, so the two cannot both apply and there is no
     /// double-receipting.
     /// </remarks>
-    IReadOnlyList<PaymentLine>? Payments = null);
+    IReadOnlyList<PaymentLine>? Payments = null,
+
+    /// <summary>
+    /// The patient's date of birth. The order form has always collected it to
+    /// derive age; it is now also stored, because the LIS keeps no birth date
+    /// of its own (see 119_table_inf_patient_dob.sql). Null leaves any date
+    /// captured on an earlier visit untouched.
+    /// </summary>
+    DateOnly? Dob = null);
 
 /// <param name="Method">Cash, UPI, Card, Cheque, NEFT — the label, not an id.</param>
 /// <param name="Ref">
@@ -272,6 +280,29 @@ public sealed class OrderWriteRepository(NobleConnectionFactory db, SqlRetry ret
     /// after a timeout would bill the patient twice. A caller that times out
     /// must check whether the order landed, not try again.
     /// </summary>
+    /// <summary>
+    /// Store (or update) a patient's date of birth in the Infinity sidecar.
+    /// </summary>
+    /// <remarks>
+    /// Called after the order is booked, once the create procedure has returned
+    /// the patient id. Deliberately separate from usp_telo_create_order — that
+    /// procedure is shared with Telo and maps to a LIS that has no birth-date
+    /// column, so the DOB is written here instead of threaded through it. The
+    /// caller treats a failure as non-fatal: the order is already committed and
+    /// a missing DOB is a blank line on a future report, not a lost order.
+    /// </remarks>
+    public Task SetPatientDobAsync(int patientId, DateOnly dob, string? actor, CancellationToken ct = default) =>
+        retry.ExecuteAsync("orders.setDob", token =>
+            db.QueryAsync("orders.setDob", async (conn, inner) =>
+            {
+                await using var cmd = db.CreateWriteCommand(conn, "dbo.usp_inf_set_patient_dob");
+                cmd.Parameters.Add("@patient_id", SqlDbType.Int).Value = patientId;
+                cmd.Parameters.Add("@dob", SqlDbType.Date).Value = dob.ToDateTime(TimeOnly.MinValue);
+                cmd.Parameters.Add("@actor", SqlDbType.NVarChar, 100).Value = (object?)actor ?? DBNull.Value;
+                await cmd.ExecuteNonQueryAsync(inner).ConfigureAwait(false);
+                return 0;
+            }, token), ct);
+
     public Task<CreateOrderResult> CreateAsync(
         int userId, CreateOrderRequest req, CancellationToken ct = default) =>
         db.QueryAsync("orders.create", async (conn, inner) =>

@@ -82,7 +82,12 @@ public sealed record WorksheetRow(
     /// <summary>Referring customer — the master row's name, else the typed one.</summary>
     string? RefCustomer = null,
     /// <summary>Passport / travel ID, absent when the LIS backfilled it with the patient id.</summary>
-    string? PassportNo = null);
+    string? PassportNo = null,
+    /// <summary>
+    /// Date of birth, from Infinity's sidecar (the LIS keeps none). Null for a
+    /// patient booked before the order form began storing it.
+    /// </summary>
+    DateOnly? Dob = null);
 
 public sealed record WorksheetPage(IReadOnlyList<WorksheetRow> Rows, int Count);
 
@@ -561,7 +566,8 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
                     Results: ParseResults(reader.Str("results_json")),
                     RefDoctor: reader.Str("ref_doctor"),
                     RefCustomer: reader.Str("ref_customer"),
-                    PassportNo: reader.Str("passport_no"));
+                    PassportNo: reader.Str("passport_no"),
+                    Dob: reader.Date("date_of_birth") is DateTime dob ? DateOnly.FromDateTime(dob) : null);
             }, token), ct).ConfigureAwait(false);
     }
 

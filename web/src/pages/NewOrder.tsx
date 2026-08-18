@@ -126,6 +126,24 @@ function ageFromDob(dayStr: string, monthStr: string, yearStr: string):
   return { years, months };
 }
 
+/**
+ * The birth date as an ISO 'YYYY-MM-DD' string, or null if the three boxes do
+ * not form a real past date. Same validation as ageFromDob — a date that
+ * rolled over or lies in the future is not one — but it returns the date
+ * itself, which is now stored (see the DOB sidecar), where ageFromDob returns
+ * only the age derived from it.
+ */
+function dobIso(dayStr: string, monthStr: string, yearStr: string): string | null {
+  const d = Number(dayStr.trim()), m = Number(monthStr.trim()), y = Number(yearStr.trim());
+  if (dayStr.trim() === '' || monthStr.trim() === '' || yearStr.trim() === '') return null;
+  if (!Number.isInteger(d) || !Number.isInteger(m) || !Number.isInteger(y)) return null;
+  if (d < 1 || d > 31 || m < 1 || m > 12 || y < 1875 || y > 2200) return null;
+  const dob = new Date(y, m - 1, d);
+  if (dob.getFullYear() !== y || dob.getMonth() !== m - 1 || dob.getDate() !== d) return null;
+  if (dob > new Date()) return null;
+  return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
 /** A referrer the operator picked, or a name they typed that does not exist yet. */
 type RefPick = { kind: 'existing'; id: number; name: string } | { kind: 'new'; name: string } | null;
 
@@ -561,6 +579,9 @@ export function NewOrder() {
         refCustomer: refCustomer?.kind === 'existing' ? refCustomer.id : null,
         newRefCustomerName: refCustomer?.kind === 'new' ? refCustomer.name : null,
         clinicalHistory: patient.clinicalHistory.trim() || null,
+        // The birth date itself, now that it is stored and not only used to
+        // derive the age above. Null when the boxes are blank or invalid.
+        dob: dobIso(patient.dobDay, patient.dobMonth, patient.dobYear),
         discountAmount: Number(discount || 0),
         // Split lines go as a TVP; the scalar pair stays empty so the
         // procedure takes the TVP path and cannot receipt the money twice.

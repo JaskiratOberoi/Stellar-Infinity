@@ -30,6 +30,19 @@ export function fmtStamp(input: string | Date | null | undefined): string {
   return stampFmt.format(d);
 }
 
+/**
+ * A stored birth date (ISO 'YYYY-MM-DD') as DD/MM/YYYY — the day-first form the
+ * rest of the report already prints its stamps in. Not run through a timezone:
+ * a date of birth is a plain calendar date, and reinterpreting it in IST could
+ * shift it by a day.
+ */
+export function fmtDob(iso: string | null | undefined): string | null {
+  const t = (iso ?? '').trim();
+  if (!t) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : null;
+}
+
 export function genderLabel(sex: string | null | undefined): string {
   if (!sex) return '—';
   const s = sex.trim();

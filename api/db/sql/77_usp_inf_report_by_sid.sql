@@ -101,10 +101,17 @@ BEGIN
              */
             CASE WHEN NULLIF(LTRIM(RTRIM(P.MRNID)), '') IS NOT NULL
                   AND LTRIM(RTRIM(P.MRNID)) <> CONVERT(VARCHAR(20), P.id)
-                 THEN LTRIM(RTRIM(P.MRNID)) END AS passport_no
+                 THEN LTRIM(RTRIM(P.MRNID)) END AS passport_no,
+            -- Date of birth, from the Infinity sidecar. The LIS keeps none; see
+            -- 119_table_inf_patient_dob.sql. NULL for any patient booked before
+            -- the order form began storing it, and the report prints without a
+            -- DOB in that case.
+            PD.dob AS date_of_birth
         FROM dbo.tbl_med_mcc_patient_samples S
         INNER JOIN dbo.tbl_med_mcc_patient_master P
             ON S.patient_id = P.id
+        LEFT JOIN dbo.inf_patient_dob PD
+            ON PD.patient_id = P.id
         LEFT JOIN dbo.tbl_med_mcc_doctors RD
             ON RD.id = P.ref_doctor
         LEFT JOIN dbo.tbl_med_mcc_customer RC
@@ -150,6 +157,7 @@ BEGIN
         H.ref_doctor,
         H.ref_customer,
         H.passport_no,
+        H.date_of_birth,
         (
             SELECT MAX(r2.updateddate)
             FROM dbo.tbl_med_mcc_patient_test_result r2

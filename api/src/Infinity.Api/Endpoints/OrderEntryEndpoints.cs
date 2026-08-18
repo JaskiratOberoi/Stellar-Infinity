@@ -470,6 +470,16 @@ public static class OrderEntryEndpoints
             return Results.BadRequest(new { error = result.Message, code = result.ErrorCode });
         }
 
+        // Capture the DOB the order form collected. After the fact and
+        // best-effort: the LIS keeps no birth date (see the sidecar in
+        // 119_table_inf_patient_dob.sql), and a failure to store it must not
+        // undo an order that is already booked.
+        if (body.Dob is DateOnly dob && result.PatientId is int pid && pid > 0)
+        {
+            try { await orders.SetPatientDobAsync(pid, dob, $"inf:{userId}", ct).ConfigureAwait(false); }
+            catch (Exception) when (!ct.IsCancellationRequested) { /* the order stands */ }
+        }
+
         // Only once the order is safely placed. Clearing earlier would lose the
         // operator's work on any failure.
         await carts.ClearAsync(userId, ct).ConfigureAwait(false);

@@ -86,6 +86,9 @@ export type FullRow = WorksheetRow & {
   refDoctor: string | null;
   refCustomer: string | null;
   passportNo: string | null;
+  /** Date of birth as ISO 'YYYY-MM-DD', from Infinity's sidecar; null when the
+   *  order predates DOB capture. */
+  dob: string | null;
   collectedAt: CollectionCentre | null;
   processedAt: ProcessingUnit | null;
   signers: ReportSigner[];
