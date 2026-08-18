@@ -246,7 +246,11 @@ function LedgerModal({ account, onClose }: { account: ClientAccount; onClose: ()
                       {e.reference && <div className="mono" style={{ fontSize: '.7rem' }}>{e.reference}</div>}
                     </td>
                     <td className="cell--meta" data-label="Posted by">
-                      <span className={`badge badge--${e.origin === 'infinity' ? 'infinity' : e.origin === 'telo' ? 'telo' : 'lis'}`}>
+                      {/* A known origin gets its own colour; anything new
+                          falls back to the neutral LIS chip rather than to no
+                          chip, so an unrecognised value is still legible. */}
+                      <span className={`badge badge--${
+                        ['infinity', 'telo', 'online'].includes(e.origin) ? e.origin : 'lis'}`}>
                         {e.origin}
                       </span>
                     </td>

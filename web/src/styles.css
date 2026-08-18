@@ -1445,6 +1445,9 @@ tbody tr:hover { background: var(--accent-softer); }
 .badge--infinity { color: var(--teal);    border-color: var(--accent-ring); background: var(--accent-soft); }
 .badge--telo     { color: var(--warn);    border-color: var(--warn-line);   background: var(--warn-soft); }
 .badge--lis      { color: var(--ink-dim); border-color: var(--line);        background: var(--neutral-soft); }
+/* Paid by the centre through the gateway - nobody in either system posted it,
+   which is why it is not the Infinity colour. */
+.badge--online   { color: var(--blue);    border-color: var(--blue-line);   background: var(--blue-soft); }
 .badge--role     { color: var(--blue);    border-color: var(--blue-line);   background: var(--blue-soft); }
 
 /* Verdicts rather than provenance. The four above name WHERE a thing came
