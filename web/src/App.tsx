@@ -106,9 +106,24 @@ const NAV: NavItem[] = [
   // The B2B half of the same worklist, as its own entry — Telo carries it in
   // the nav as "Patient Orders" and operators reach for it by name. It is the
   // accessioning queue with ?kind=b2b, not a second screen.
+  // Two entries, one label, because the phrase means different things to the
+  // two audiences and no capability separates them — the lab holds everything
+  // a client does.
+  //
+  // To the LAB it is the B2B half of the receiving queue. Telo carries it in
+  // the nav under this name and operators reach for it by name.
   {
     to: '/accessioning?kind=b2b', label: 'Patient orders', icon: 'orders',
-    cap: 'order:b2b', search: 'kind=b2b',
+    cap: 'order:accession', search: 'kind=b2b', hideForRole: 'client',
+  },
+  // To a CENTRE it is the booking form. Accessioning is the lab's receiving
+  // desk: it answers "has the lab got the tube yet", which is not a question a
+  // centre can act on, and it was showing them two permanently empty tables.
+  // The thing a centre opens Infinity to do is raise an order, so the link
+  // goes straight there.
+  {
+    to: '/orders/new', label: 'Patient orders', icon: 'orders',
+    cap: 'order:create', onlyForRole: 'client',
   },
   { to: '/catalogue', label: 'Catalogue', icon: 'orders', cap: 'order:view' },
   { to: '/accounts', label: 'Accounts', icon: 'orders', cap: 'billing:view' },
@@ -194,7 +209,9 @@ export function App() {
   if (!user) return <><EnvBanner /><Login /></>;
 
   const navItems = NAV.filter(
-    (i) => (!i.cap || can(i.cap)) && i.hideForRole !== user.role);
+    (i) => (!i.cap || can(i.cap))
+        && i.hideForRole !== user.role
+        && (!i.onlyForRole || i.onlyForRole === user.role));
 
   return (
     <div className={`shell${entering ? ' shell--hello' : ''}`}>
@@ -250,12 +267,16 @@ export function App() {
         {/* order:create, not order:view — booking is a stronger act than
             reading, and the API enforces the same distinction independently. */}
         <Route path="/orders/new" element={can('order:create') ? <NewOrder /> : <Navigate to="/" replace />} />
-        {/* Either capability: the lab reaches this as the receiving queue, a
-            client reaches the SAME screen as "Patient orders" (?kind=b2b) to
-            watch their own orders land. Gating on order:accession alone made
-            that nav entry a dead link for every client. */}
+        {/* order:accession alone. This is the LAB's receiving desk — it asks
+            whether a tube has reached the bench — and a centre has nothing to
+            do with the answer.
+
+            It briefly also accepted order:b2b, so that a client's "Patient
+            orders" link would not dead-end. That link now goes to the booking
+            form instead, which is what a centre wanted from it, so the escape
+            hatch goes with it. */}
         <Route path="/accessioning"
-               element={can('order:accession') || can('order:b2b') ? <Accessioning /> : <Navigate to="/" replace />} />
+               element={can('order:accession') ? <Accessioning /> : <Navigate to="/" replace />} />
         {/* order:view to look at the scan log; the scan box inside additionally
             needs order:accession, which the API enforces independently. */}
         <Route path="/inward" element={can('order:view') ? <Inward /> : <Navigate to="/" replace />} />

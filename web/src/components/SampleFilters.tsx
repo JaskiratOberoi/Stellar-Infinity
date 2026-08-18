@@ -276,7 +276,7 @@ export function ActiveFilterChips({
  * control that changes the list is inside one boundary.
  */
 export function SampleFilters({
-  value, options, onChange, statusOptions, defaultStatusLabel, children,
+  value, options, onChange, statusOptions, defaultStatusLabel, lockClientCode, children,
 }: {
   value: SampleFilterValues;
   options: FilterOptions;
@@ -289,6 +289,20 @@ export function SampleFilters({
    * Omit it and the empty value reads "Any status", with no default set.
    */
   defaultStatusLabel?: string;
+  /**
+   * Pin the client filter to the signed-in account's own scope.
+   *
+   * For a collection centre, whose reports are their own by definition. The
+   * control stays visible — an absent filter reads as "this page shows
+   * everything" — but it cannot be changed, because there is nothing else it
+   * could legitimately be set to.
+   *
+   * Cosmetic, and deliberately so: the API resolves the client scope from the
+   * session on every request, so a centre that edited this in the console
+   * would still get exactly its own rows back. This stops the control implying
+   * a choice that does not exist.
+   */
+  lockClientCode?: boolean;
   children?: React.ReactNode;
 }) {
   /* The two lists that no longer travel in the filter payload. Each is told
@@ -437,13 +451,22 @@ export function SampleFilters({
             <span>Client code</span>
             <Combobox
               value={value.clientCode}
-              emptyLabel="Any centre in your scope"
+              // The locked wording states the rule rather than offering a
+              // filter. "Any centre in your scope" is true for a centre too,
+              // but it reads as an invitation to widen.
+              emptyLabel={lockClientCode ? 'Your account' : 'Any centre in your scope'}
               onChange={(v) => set('clientCode', v)}
               // Code and name as separate columns rather than one "AG0050A — MEHAR"
               // string: both are searchable, and an operator knows one or the other.
               options={clientOptions}
               onQueryChange={searchClients}
+              disabled={lockClientCode}
             />
+            {lockClientCode && (
+              <span className="muted" style={{ fontSize: '.72rem' }}>
+                Reports are limited to your own account.
+              </span>
+            )}
           </label>
 
           <label className="field">

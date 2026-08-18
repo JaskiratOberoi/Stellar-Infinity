@@ -4,6 +4,7 @@ import { downloadFile, fmtDateTime } from '../lib/format';
 import { ReportViewer } from './ReportViewer';
 import { SmartReportModal } from './SmartReport';
 import { InfinityLoader } from '../components/InfinityLoader';
+import { useAuth } from '../auth/AuthContext';
 import { TestList } from '../components/TestList';
 import {
   SampleFilters, useFilterOptions, applyFilterParams,
@@ -51,6 +52,7 @@ export interface WorksheetRow {
 const REPORTABLE_STATUSES = [7, 8, 9];
 
 export function Reports() {
+  const { user } = useAuth();
   const [rows, setRows] = useState<WorksheetRow[]>([]);
   const [scope, setScope] = useState<string>('');
   const [page, setPage] = useState(1);
@@ -141,7 +143,12 @@ export function Reports() {
       {/* One filter area, the same component the worksheet uses. No status
           control: this page pins the reportable set, so offering a choice it
           would override would be a control that lies. */}
-      <SampleFilters value={filters} options={options} onChange={setFilters} />
+      {/* A centre's reports are its own by definition, so the client filter is
+          pinned rather than offered. The API resolves the scope from the
+          session on every request regardless — this stops the control implying
+          a choice that does not exist. */}
+      <SampleFilters value={filters} options={options} onChange={setFilters}
+                     lockClientCode={user?.role === 'client'} />
 
       {scope === 'none' && (
         <div className="alert alert--info" style={{ marginBottom: '.9rem' }}>

@@ -22,6 +22,15 @@ export interface NavItem {
    */
   hideForRole?: string;
   /**
+   * Show this entry to ONE role and no other.
+   *
+   * The mirror of hideForRole, and it exists for the case where two roles want
+   * the same label pointed at different screens. "Patient orders" means the
+   * receiving queue to the lab and the booking form to a centre; capabilities
+   * cannot separate them, because the lab holds everything a client does.
+   */
+  onlyForRole?: string;
+  /**
    * Query string this entry owns, WITHOUT the leading '?'.
    *
    * Set it on every entry sharing a pathname, including the plain one (as an
