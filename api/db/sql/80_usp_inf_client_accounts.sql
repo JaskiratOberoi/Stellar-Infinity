@@ -107,7 +107,19 @@ BEGIN
         d.addedby,
         -- Which system posted it, so a mixed ledger is readable during the
         -- period both platforms are live.
+        -- 'ccav:' is an ONLINE payment the client made themselves through the
+        -- portal. It read as 'lis' before, which is the fallback for anything
+        -- unrecognised — so every gateway payment looked like a clerk had
+        -- keyed it into Listec.
+        --
+        -- Note what this cannot fix: Telo does not stamp its payments at all.
+        -- usp_telo_record_mcc_payment takes an @origin, but Telo passes none,
+        -- so its rows carry a bare username and are genuinely indistinguishable
+        -- from Listec's. There are zero 'telo:%' rows in the table. Until Telo
+        -- passes @origin = 'telo:', payments made there will keep reading as
+        -- 'lis', and no change on this side can tell them apart.
         origin = CASE WHEN d.addedby LIKE 'inf:%'  THEN 'infinity'
+                      WHEN d.addedby LIKE 'ccav:%' THEN 'online'
                       WHEN d.addedby LIKE 'telo:%' THEN 'telo'
                       ELSE 'lis' END,
         d.addeddate     AS postedAt,
