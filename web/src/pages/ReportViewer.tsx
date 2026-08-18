@@ -30,6 +30,20 @@ export interface TestResult {
   profileId: number | null;
   /** The tube it came from, e.g. "WB - EDTA". */
   specimen: string | null;
+  /**
+   * The catalogue row this result was measured against.
+   *
+   * Not display data — it is what the report's structure is rebuilt from. A
+   * multi-parameter test emits an untitled "report name" Head immediately
+   * before the real coded Head its Param rows hang off, and the only thing
+   * saying those two rows are one test is this id. See buildSampleReport().
+   */
+  testId: number | null;
+  /**
+   * An interpretation held as a picture — the HBV and HCV graphs — inlined by
+   * the API as a data URI. Some tests carry ONLY this and no text.
+   */
+  interpretationImage: string | null;
 }
 
 /** Where the sample was taken — the centre a patient rings, not the lab. */

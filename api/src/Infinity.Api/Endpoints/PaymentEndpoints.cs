@@ -372,7 +372,17 @@ public static class PaymentEndpoints
             reference = r.GatewayRef,
             instrument = r.Instrument,
             card = r.Card,
-            paidAt = r.SettledAt,
+            // Stamped with its offset before it leaves.
+            //
+            // settled_at is a naive DATETIME2 holding IST wall-clock, because
+            // SYSDATETIME() runs on a SQL Server set to IST. Serialised bare it
+            // says "17:12:36" with no offset, so a browser - and the PDF
+            // renderer, whose container is UTC - reads it as UTC and then
+            // formats it to IST, printing 10:42 pm on a payment taken at 5:12.
+            // Five and a half hours wrong on a document someone files against
+            // a bank statement.
+            paidAt = r.SettledAt is null ? null
+                : new DateTimeOffset(r.SettledAt.Value, IstOffset),
             clientCode = r.ClientCode,
             clientName = r.ClientName,
         });
@@ -423,6 +433,13 @@ public static class PaymentEndpoints
             return Results.Problem("The receipt could not be produced. The payment itself is recorded.");
         }
     }
+
+    /// <summary>
+    /// Asia/Kolkata. A constant rather than a lookup: India has one zone and
+    /// has never observed daylight saving, so the offset cannot drift, and a
+    /// tz database lookup would be one more thing to be missing in a container.
+    /// </summary>
+    private static readonly TimeSpan IstOffset = TimeSpan.FromMinutes(330);
 
     /// <summary>Filename-safe, because the reference reaches a Content-Disposition header.</summary>
     private static string Sanitise(string s) =>

@@ -764,38 +764,27 @@ button, input, select { font: inherit; color: inherit; }
 }
 
 /* =========================================================
-   The printed report
+   Shared print surface
 
-   This is the PDF. The render service points headless Chromium at
-   /print/report/:sid and composites the output onto the Noble letterhead, so
-   these rules decide what the lab hands to a patient.
+   `.print` and the handful of rules under it are what the INVOICE is built
+   from (see pages/PrintInvoice.tsx). The clinical report used to share them
+   and no longer does: it lives in report.css under its own `lr__` prefix,
+   because the two are different documents on different page boxes and every
+   attempt to serve both from one set of rules ended with a tuning fix for one
+   quietly moving the other.
 
-   The page box is the letterhead's CLEAR AREA, not the paper: 26mm at the top
-   and 34mm at the foot are Noble's printed header and footer bands, and content
-   inside them prints on top of the branding. Puppeteer is told
-   preferCSSPageSize with zero margins of its own, so @page below is the single
-   authority on where ink may land.
-
-   Deliberately theme-free. Every colour here is literal rather than a token —
-   a report is a fixed document, and a technologist with dark mode on must not
-   produce a different PDF from one with it off.
+   Deliberately theme-free. Every colour here is a literal rather than a token
+   — a printed document is fixed, and someone with dark mode on must not
+   produce a different PDF from someone without it.
    ========================================================= */
-
-@page {
-  size: A4;
-  /* 32mm, not 26: at 26 the meta block rode up into the pre-printed logo and
-     hid "DIAGNOSTIC CENTRE" under the patient name. Matches where Telo
-     starts its first line of text. */
-  margin: 32mm 14mm 34mm 14mm;
-}
 
 .print {
   background: #fff;
   color: #111;
   font-size: 10.5pt;
   line-height: 1.45;
-  /* On screen this route is previewed in a normal window; the padding stands in
-     for @page so what you see is roughly what prints. */
+  /* On screen these routes are previewed in a normal window; the padding
+     stands in for @page so what you see is roughly what prints. */
   padding: 1.5rem;
   max-width: 210mm;
   margin: 0 auto;
@@ -805,62 +794,36 @@ button, input, select { font: inherit; color: inherit; }
   .print { padding: 0; max-width: none; }
 }
 
-/* Two columns of label/value with the QR beside them, as the LIS prints it.
-   The columns are equal-width so the two dt gutters line up down the page —
-   ragged label columns are what makes a demographics block look photocopied. */
+/* Two columns of label/value with a block beside them. The columns are
+   equal-width so the two dt gutters line up down the page — ragged label
+   columns are what makes a header look photocopied. */
 .print__head {
   display: grid;
   grid-template-columns: 1fr 1fr auto;
-  gap: .2rem 1.6rem;
-  padding-bottom: .6rem;
+  gap: .1rem 1.2rem;
+  padding-bottom: .2rem;
+  margin-bottom: .1rem;
   border-bottom: 1.5pt solid #111;
 }
 
-.print__meta { display: grid; gap: .1rem; align-content: start; font-size: 9pt; }
-.print__meta > div { display: flex; gap: .4rem; }
-.print__meta dt { color: #555; min-width: 5.6rem; flex: none; }
-.print__meta dt::after { content: ':'; }
-.print__meta dd { margin: 0; font-weight: 500; }
-/* "Collected at" is an address and will not sit in half a page. */
-.print__meta--wide { grid-column: 1 / -1; }
-
-.print__name { font-size: 11pt; font-weight: 700; letter-spacing: .01em; }
-
-/* Bottom-aligned with the demographics rather than floated: at the top it
-   collides with the letterhead's clear area on a short header. */
-.print__qr {
-  display: flex; flex-direction: column; align-items: center; gap: .15rem;
-  align-self: end;
-}
-.print__qr img { width: 21mm; height: 21mm; display: block; }
-.print__qr span { font-size: 6.5pt; color: #666; letter-spacing: .02em; }
-
-.print__history { margin-top: .5rem; font-size: 9pt; color: #333; }
-
-.print__dept { margin-top: .9rem; }
-/* break-inside on the section keeps a one-line department off the bottom edge;
-   break-after on the heading stops a heading orphaned at the foot of a page. */
-/* The department name reads as a band ACROSS the table rather than a label
-   floating above it - it names the block of results under it, and Telo centres
-   it inside the same ruled box for exactly that reason. */
-.print__dept h2 {
+.print__meta {
+  display: grid;
+  column-gap: .1rem;
+  row-gap: 0;
+  align-content: start;
   font-size: 9pt;
-  font-weight: 600;
-  letter-spacing: .02em;
-  text-transform: uppercase;
-  text-align: center;
-  color: #1f3d7a;
-  padding: .18rem 0;
-  margin: 0;
-  border-top: .75pt solid #333;
-  border-bottom: .5pt solid #bbb;
-  break-after: avoid;
 }
+.print__meta > div { display: flex; gap: .4rem; }
+.print__meta dt { color: #555; min-width: 5.6rem; flex: none; font-size: 8.5pt; }
+.print__meta dt::after { content: ':'; }
+.print__meta dd { margin: 0; font-weight: 500; font-size: 9pt; }
+/* An address will not sit in half a page. */
+.print__meta--wide { grid-column: 1 / -1; }
 
 .print__table { width: 100%; border-collapse: collapse; }
 .print__table thead { display: table-header-group; }   /* repeat on every page */
-/* Sentence case, not uppercase-with-tracking: this is a column label, and the
-   wide version cost horizontal room the ranges needed. */
+/* Sentence case, not uppercase-with-tracking: these are column labels, and the
+   wide version cost horizontal room the figures needed. */
 .print__table th {
   font-size: 9pt;
   text-transform: none;
@@ -868,168 +831,16 @@ button, input, select { font: inherit; color: inherit; }
   font-weight: 600;
   color: #111;
   text-align: left;
-  padding: .22rem .4rem;
+  padding: .18rem .4rem;
   border-top: .75pt solid #333;
   border-bottom: .5pt solid #333;
 }
-/* No rule under every row. Twenty-two analytes with a line each reads as a
-   grid to be audited rather than a result to be read, and the rules were what
-   pushed a one-page report onto a second sheet. */
-.print__table td {
-  padding: .16rem .4rem;
-  vertical-align: top;
-}
-/* A result must never be split across two pages from its own analyte name. */
+/* No rule under every row: twenty-two lines each with one reads as a grid to
+   be audited rather than a document to be read. */
+.print__table td { padding: .1rem .4rem; vertical-align: top; line-height: 1.3; }
 .print__table tr { break-inside: avoid; }
 
-/* LEFT, not right. A results column is read down against the reference beside
-   it, not summed like money, and right-alignment pushed each value away from
-   the range it has to be compared with. */
-.print__num { text-align: left; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.print__num--flag { font-weight: 700; }
-/* Letters, not colour: reports print on mono lasers constantly, and an
-   out-of-range value flagged only in red survives none of them. */
-.print__flag {
-  margin-left: .35rem;
-  font-size: 7.5pt;
-  font-weight: 700;
-  letter-spacing: .04em;
-}
-.print__range { font-size: 9pt; color: #333; white-space: pre-line; }
-.print__comment { font-size: 8.5pt; color: #555; margin-top: .1rem; }
-
-.print__section td {
-  font-size: 8.5pt;
-  font-weight: 700;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  padding-top: .5rem;
-  border-bottom: none;
-}
-
-.print__method { font-size: 8pt; color: #555; white-space: nowrap; }
-
-/* ---------- interpretation ----------
-   Sits under the profile it belongs to, inside the table, so it travels with
-   those numbers when the report is split by department. Boxed because it is
-   prose in the middle of a grid of figures and needs to read as a different
-   kind of thing. */
-
-.print__interp-row > td { border-bottom: none; padding: .2rem 0 .5rem; }
-.print__interp {
-  border: .5pt solid #ccc;
-  border-radius: 2pt;
-  padding: .4rem .55rem;
-  background: #fafafa;
-}
-.print__interp h3 {
-  font-size: 8pt; font-weight: 700; letter-spacing: .06em;
-  margin-bottom: .2rem;
-}
-.print__interp p { font-size: 8.5pt; line-height: 1.5; white-space: pre-line; }
-
-/* ---------- notes ---------- */
-
-.print__notes { margin-top: .9rem; break-inside: avoid; }
-.print__notes h3 {
-  font-size: 8pt; font-weight: 700; letter-spacing: .06em; margin-bottom: .25rem;
-}
-.print__notes ol { margin: 0; padding-left: 1.1rem; }
-.print__notes li { font-size: 8pt; line-height: 1.5; color: #333; margin-bottom: .15rem; }
-
-/* ---------- signatures ----------
-   Never split across a page: half a signature block is a report that looks
-   unsigned on the sheet the doctor happens to be holding. */
-
-.print__signs {
-  display: flex; justify-content: space-between; gap: 1rem;
-  margin-bottom: .8rem; break-inside: avoid;
-}
-.print__sign {
-  display: flex; flex-direction: column; gap: .1rem;
-  font-size: 8pt; color: #111; text-align: left;
-}
-/* Height-constrained, width auto: the stored images vary wildly in dimension
-   and a fixed width stretches a wide scan into a smear. */
-.print__sign img {
-  height: 12mm; width: auto; max-width: 45mm;
-  object-fit: contain; object-position: left bottom;
-  margin-bottom: .1rem;
-}
-.print__sign b { font-weight: 700; }
-.print__sign span { color: #555; font-size: 7.5pt; }
-
-.print__processed { font-size: 8pt; color: #555; margin-bottom: .4rem; }
-
-.print__foot { margin-top: 1.2rem; font-size: 8pt; color: #555; }
-.print__end { margin-top: .5rem; text-align: center; }
 .print__error { padding: 2rem 0; font-size: 10pt; }
-
-/* ---------- split by department ----------
-   One department per sheet, so a doctor reading haematology does not have to
-   find where biochemistry ended. Every section but the FIRST breaks before it —
-   `break-before` on the first would open the PDF with a blank page. */
-
-/* margin-top goes with it: the break already separates them, and the spacing
-   would push the first table of each new sheet down by a line for no reason. */
-.print--split .print__dept + .print__dept { break-before: page; margin-top: 0; }
-
-/* ---------- the letterhead band ----------
-   Only ever drawn in the preview. The PDF gets the real letterhead composited
-   underneath it by the render service, and the space is already reserved by
-   @page — so this stands in for that reserved band on screen, and nothing
-   more. Under `headless` it keeps its height and loses its markings, which is
-   what makes the preview paginate exactly like the PDF it is previewing. */
-
-.print__letterhead {
-  height: 26mm;
-  margin: -1.5rem -1.5rem .5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-bottom: 1px dashed #cbd5e1;
-  background: repeating-linear-gradient(
-    45deg, #f8fafc, #f8fafc 8px, #f1f5f9 8px, #f1f5f9 16px);
-  color: #94a3b8;
-  font-size: 8pt;
-  letter-spacing: .16em;
-  text-transform: uppercase;
-}
-.print--headless .print__letterhead {
-  background: none;
-  border-bottom-color: #e2e8f0;
-  color: transparent;
-}
-
-/* ---------- tick to include ----------
-   Preview only. `pdf=1` drops the column entirely rather than hiding it, so
-   there is no chance of a checkbox reaching paper. */
-
-.print__tickhint {
-  margin-top: .6rem;
-  font-size: 8.5pt;
-  font-style: italic;
-  color: #64748b;
-}
-
-.print__table th.print__tick,
-.print__table td.print__tick {
-  width: 1.6rem;
-  padding-right: 0;
-  text-align: left;
-}
-.print__tick input {
-  /* The row is 10.5pt type; a default checkbox towers over it. */
-  width: 13px; height: 13px; margin: 0; cursor: pointer;
-  accent-color: #0d9488;
-}
-
-/* Dimmed rather than removed, because the operator has to be able to put it
-   back. Struck through as well as faded: "will not be printed" is a stronger
-   claim than low contrast alone makes, and this is the state someone signs a
-   report off in. */
-.print__row--off > td { opacity: .4; text-decoration: line-through; }
-.print__row--off > td.print__tick { opacity: 1; text-decoration: none; }
 
 /* =========================================================
    The invoice
@@ -4069,103 +3880,6 @@ tr:hover > .cell--lead .clip,
   margin: .5rem 0 0;
   text-align: center;
 }
-
-
-/* ---------- printed report: watermark and closing ----------
-   The mark sits behind the text at low opacity, as on Telo's sheet. Printed
-   with print-color-adjust so a browser's "background graphics off" default
-   cannot silently drop it from the PDF. */
-.print__watermark {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  width: 118mm;
-  transform: translate(-50%, -50%);
-  opacity: .06;
-  z-index: 0;
-  pointer-events: none;
-  -webkit-print-color-adjust: exact;
-  print-color-adjust: exact;
-}
-/* Everything else rides above it. */
-.print__head, .print__dept, .print__foot, .print__notes { position: relative; z-index: 1; }
-
-.print__end {
-  text-align: center;
-  font-size: 9pt;
-  color: #444;
-  margin: .5rem 0 0;
-}
-
-/* The lines Telo carries under the signature: where it was processed, that the
-   report is electronically authenticated, and the clinical-correlation note. */
-.print__authnote {
-  font-size: 7.5pt;
-  color: #555;
-  margin: .15rem 0 0;
-}
-
-
-/* ---------- printed report: Telo parity ----------
-   Everything below exists to make the sheet land on ONE page where Telo's
-   does. The report was spilling onto a second sheet purely on chrome: a
-   four-line address in a half-width column, and generous row padding. */
-
-/* "Collected at" spans BOTH columns. In a half-width column the centre's
-   address wrapped to four lines and pushed the table down by roughly a
-   sixth of the page; across the full width it takes two, as Telo's does. */
-.print__meta--wide {
-  grid-column: 1 / -1;
-}
-.print__head {
-  gap: .2rem 1.2rem;
-  padding-bottom: .3rem;
-}
-.print__meta { row-gap: .05rem; }
-.print__meta dt { font-size: 8.5pt; }
-.print__meta dd { font-size: 9pt; }
-
-/* Rows at Telo's density. */
-.print__table td { padding: .1rem .4rem; line-height: 1.3; }
-.print__table th { padding: .18rem .4rem; }
-.print__section td { padding-top: .3rem; padding-bottom: .05rem; letter-spacing: .04em; }
-.print__dept h2 { margin: .35rem 0 0; }
-
-/* The closing line sits directly under the last result, as on Telo's sheet,
-   rather than being pushed to the foot of whatever page it lands on. */
-.print__end { margin: .45rem 0 .2rem; font-size: 9pt; }
-
-/* The signature block is the last thing on the sheet and must not be orphaned
-   onto a page of its own. */
-/* NOT break-inside: avoid.
-   Keeping the whole footer together sounds right and was what pushed a
-   finished report onto a second sheet: with ~140px of page left and a
-   signature block slightly taller than that, the browser moved the entire
-   block rather than letting it begin. The one thing that must not split is
-   an individual signature - a name parted from its designation - so the
-   avoid lives there instead. */
-.print__foot { padding-top: .2rem; }
-.print__sign { break-inside: avoid; }
-.print__signs { margin-bottom: .05rem; }
-.print__signs img { max-height: 34px; }
-.print__processed, .print__authnote { margin: .05rem 0 0; line-height: 1.3; }
-.print__notes { margin-top: .35rem; }
-
-
-/* The last ~20px. After the closing line moved above the signature the NOTE
-   spilled a single line onto a second sheet - the worst possible page 2. Telo
-   sets its first line of text about 20px higher than we were, so the space
-   comes from the header band rather than from squeezing the results.
-
-   Kept as one block so the next person can see WHY these numbers are what
-   they are: they buy exactly one page. */
-@page { margin: 30mm 14mm 34mm 14mm; }
-.print__head { gap: .1rem 1.2rem; padding-bottom: .2rem; margin-bottom: .1rem; }
-.print__meta { row-gap: 0; }
-.print__end { margin: .3rem 0 .15rem; }
-.print__foot { padding-top: .1rem; }
-.print__foot p { margin-top: 0; }
-.print__notes { margin-top: .25rem; }
 
 
 /* Round, and evenly padded: equal width and height with the glyph centred both

@@ -1,0 +1,441 @@
+/* =========================================================
+   The printed clinical report
+
+   This is the PDF. The render service points headless Chromium at
+   /print/report/:sid and composites the result onto the Noble letterhead.
+
+   ── WHY EVERY NUMBER HERE IS ODD ─────────────────────────────────────────
+   These rules are a literal transcription of Telo's report, which is written
+   in Tailwind utilities (components/reporting/tsh-report.tsx). Noble issues
+   the same document from both products and the two are compared side by side
+   on a desk, so "close enough" is a defect: 11px is 11px because Telo's root
+   is `text-[11px]`, 112px because its labels are `w-28`, #2b2b6b because that
+   is the literal it names, 1.375 because `leading-snug` is.
+
+   Do not tidy these into round numbers. If one needs to change it should
+   change in both products, in the same commit.
+
+   Namespaced `lr__` rather than sharing `.print` with the invoice: the invoice
+   is a different document on a different page box, and the two drifted into
+   each other's rules the last time they shared a prefix.
+
+   Deliberately theme-free. Every colour is a literal — a report is a fixed
+   document, and a technologist with dark mode on must not produce a different
+   PDF from one with it off.
+   ========================================================= */
+
+/* The page box is the letterhead's CLEAR AREA, not the paper. 26mm at the head
+   and 34mm at the foot are Noble's pre-printed bands; ink inside them lands on
+   top of the branding. Puppeteer is told preferCSSPageSize with zero margins of
+   its own, so this is the only authority on where ink may land. */
+@page {
+  size: A4 portrait;
+  margin: 26mm 14mm 34mm 14mm;
+}
+
+@media print {
+  /* The shell sets these to 100% so the app fills the window. On paper a hard
+     height is a document clipped to one sheet, and the page's own background
+     would print over the letterhead the render service composites underneath.
+     Scoped with :has so the invoice and the Smart Report — which paint their
+     own paper — are not caught by it. */
+  html:has(.lr),
+  body:has(.lr),
+  #root:has(.lr) {
+    height: auto !important;
+    background: transparent !important;
+    background-color: transparent !important;
+  }
+}
+
+.lr {
+  width: 100%;
+  max-width: 820px;
+  margin: 0 auto;
+  color: #000;
+  font-family: "Helvetica Neue", Helvetica, Arial, ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  line-height: 1.375;
+}
+
+/* On screen the route is previewed in an ordinary window, so the padding
+   stands in for the page box. The PDF render has neither. */
+.lr--screen { background: #fff; padding: 32px; }
+.lr--sheets { background: #e5e7eb; padding: 16px; }
+
+.lr__empty { padding: 16px 0; text-align: center; color: #6b7280; }
+.lr__error { padding: 32px 0; font-size: 13px; }
+
+/* ---------- the letterhead band, preview only ----------
+   The PDF gets the real letterhead composited underneath by the render
+   service, and the space for it is already reserved by @page. This stands in
+   for that reserved band on screen and does nothing else. */
+
+.lr__brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #2b2b6b;
+}
+.lr__brand img { height: 56px; width: auto; }
+
+.lr__brand--sheet { gap: 12px; margin-bottom: 12px; padding-bottom: 8px; }
+.lr__brand--sheet img { height: 40px; }
+
+/* Letterhead-paper mode: the band keeps its height and loses its markings,
+   which is what makes the preview paginate exactly like the PDF. */
+.lr__zone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #d1d5db;
+  border-radius: 2px;
+  background: rgba(249, 250, 251, 0.6);
+  margin-bottom: 16px;
+  height: 56px;
+  padding-bottom: 12px;
+}
+.lr__zone--sheet { margin-bottom: 12px; height: 40px; padding-bottom: 8px; }
+.lr__zone span {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  color: #9ca3af;
+}
+
+/* ---------- the preview's page sheets ----------
+   Screen media has no pages, so `break-before` and the reserved footer are
+   inert here. Each section is drawn as its own sheet on a grey desk instead,
+   so an operator can see where the report breaks before they download it. */
+
+.lr__sheet {
+  position: relative;
+  margin-bottom: 24px;
+  min-height: 270mm;
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 2px;
+  background: #fff;
+  padding: 8mm 10mm;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+}
+.lr__sheet-no {
+  pointer-events: none;
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  border-radius: 4px;
+  background: #f3f4f6;
+  padding: 2px 6px;
+  font-size: 9px;
+  font-weight: 500;
+  color: #6b7280;
+}
+/* The <tfoot> inside a sheet is an invisible spacer; this is the visible copy,
+   pinned to the sheet's bottom at the same inset as its padding. */
+.lr__sheet-foot { position: absolute; left: 10mm; right: 10mm; bottom: 8mm; }
+
+/* ---------- the results table ----------
+   ONE table per section. The patient block lives in <thead> so it repeats at
+   the top of every page the section spans; the footer's height is reserved by
+   an invisible <tfoot> so flowing rows can never run under it. */
+
+.lr__table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.lr__table col:nth-child(1) { width: 33%; }
+.lr__table col:nth-child(2) { width: 12%; }
+.lr__table col:nth-child(3) { width: 11%; }
+.lr__table col:nth-child(4) { width: 24%; }
+.lr__table col:nth-child(5) { width: 20%; }
+
+.lr__head-cell { padding: 0; vertical-align: top; }
+.lr__foot-cell { padding: 0; vertical-align: bottom; }
+.lr__ghost { visibility: hidden; }
+
+/* A section breaks onto its own page. Never the first — `break-before` on the
+   first section opens the PDF with a blank sheet. */
+.lr__section + .lr__section { break-before: page; }
+
+/* ---------- patient block ---------- */
+
+.lr__meta { border-bottom: 1px solid #d1d5db; padding-bottom: 4px; }
+.lr__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 40px; row-gap: 0; }
+
+.lr__f { display: flex; align-items: baseline; gap: 8px; }
+.lr__f-label { width: 112px; flex: none; color: #6b7280; }
+.lr__f-sep { color: #9ca3af; }
+.lr__f-strong { font-weight: 600; }
+.lr__f-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 11px;
+}
+
+.lr__cc {
+  margin-top: 6px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 10px;
+  line-height: 1.375;
+  color: #374151;
+}
+.lr__cc-name { font-weight: 600; }
+.lr__cc-contact { color: #4b5563; }
+
+.lr__history { margin-top: 4px; font-size: 11px; color: #4b5563; }
+.lr__history b { font-weight: 600; }
+
+/* Preview only — there is no tick box on paper to explain. */
+.lr__tickhint {
+  margin-top: 8px;
+  text-align: center;
+  font-size: 10px;
+  font-style: italic;
+  color: #6b7280;
+}
+
+/* ---------- column headers ---------- */
+
+.lr__cols { border-bottom: 1px solid #9ca3af; font-size: 12px; }
+.lr__cols th {
+  padding: 2px 12px 2px 0;
+  text-align: left;
+  font-weight: 600;
+}
+.lr__cols th:last-child { padding-right: 0; }
+
+/* ---------- department band ----------
+   A band ACROSS the table, not a label floating above it: it names the block
+   of results under it. */
+
+.lr__dept {
+  background: #f3f4f6;
+  padding: 2px 8px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  color: #2b2b6b;
+}
+
+/* ---------- headings inside the table ---------- */
+
+.lr__panel-cell { padding-top: 10px; vertical-align: top; }
+.lr__group-cell { padding-top: 2px; vertical-align: top; }
+.lr__indent { padding-left: 16px; }
+
+.lr__title { display: flex; align-items: flex-start; gap: 6px; }
+.lr__title-text { font-weight: 700; text-transform: uppercase; letter-spacing: 0.025em; }
+.lr__title-text--panel { color: #2b2b6b; }
+
+/* ---------- result rows ---------- */
+
+/* A tall row — a multi-line value like "LOW RISK FOR TRISOMIES 13, 18 AND 21",
+   or a gestational weeks table — moves to the next page whole. Half of one
+   flowing over a break reads as stray text. A heading is kept whole for the
+   same reason, and so that it is not parted from the rule above it. */
+.lr__row { vertical-align: top; break-inside: avoid; }
+.lr__panel-row,
+.lr__group-row { break-inside: avoid; }
+
+.lr__c-name { padding: 2px 12px 2px 0; }
+.lr__c-name-inner { display: flex; align-items: flex-start; gap: 6px; }
+.lr__c-name-text { font-size: 12px; font-weight: 500; }
+.lr__c-value { padding: 2px 12px 2px 0; }
+.lr__c-unit { padding: 2px 12px 2px 0; }
+.lr__c-range { padding: 2px 0; font-size: 10px; line-height: 1.25; color: #374151; }
+.lr__c-method { padding: 2px 0; font-size: 8px; line-height: 1.25; color: #4b5563; }
+
+/* Red and bold, not a letter flag: this is the mark Telo prints and the one
+   the LIS printed before it, and a report is read against the last one. */
+.lr__abnormal { font-size: 13px; font-weight: 700; color: #b91c1c; }
+
+.lr__note-row td { padding-bottom: 4px; font-size: 10px; color: #1f2937; }
+.lr__note-row b { font-weight: 700; }
+
+/* ---------- interpretation ----------
+   Boxed because it is prose in the middle of a grid of figures and has to read
+   as a different kind of thing. Inside the table, so it travels with the
+   numbers it belongs to when the report is split. */
+
+.lr__interp-cell { padding: 4px 0; }
+.lr__interp { border: 1px solid #d1d5db; padding: 8px; break-inside: avoid; }
+.lr__interp h3 { margin-bottom: 2px; font-size: 11px; font-weight: 600; }
+.lr__interp p {
+  white-space: pre-line;
+  font-size: 10.5px;
+  line-height: 1.375;
+  color: #374151;
+}
+
+.lr__interp-img { break-inside: avoid; }
+.lr__interp-img img { margin: 0 auto; height: auto; max-width: 100%; display: block; }
+
+/* ---------- notes ---------- */
+
+.lr__notes-cell { padding-top: 4px; }
+.lr__notes { break-inside: avoid; }
+.lr__notes p { margin-bottom: 2px; font-weight: 600; }
+.lr__notes ol {
+  list-style: decimal;
+  padding-left: 20px;
+  font-size: 10px;
+  line-height: 1.25;
+  color: #1f2937;
+}
+.lr__notes li + li { margin-top: 2px; }
+
+/* ---------- end of report ---------- */
+
+.lr__end {
+  padding-top: 12px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  color: #4b5563;
+}
+
+/* ---------- the footer ----------
+   Signatures around a centred QR, the way the LIS lays them out: sig · QR · sig.
+   Under the PDF this whole block is position:fixed so Chromium paints it at the
+   content-box bottom of EVERY page; the <tfoot> copy above it is invisible and
+   exists only to reserve the height. */
+
+.lr__foot-fixed { position: fixed; left: 0; right: 0; bottom: 0; }
+
+.lr__signs { display: flex; align-items: flex-end; gap: 16px; padding-top: 6px; break-inside: avoid; }
+.lr__signs-left { display: flex; flex: 1 1 0%; align-items: flex-end; justify-content: flex-start; gap: 24px; }
+.lr__signs-right { display: flex; flex: 1 1 0%; align-items: flex-end; justify-content: flex-end; gap: 24px; }
+
+.lr__sign { text-align: center; font-size: 10px; break-inside: avoid; }
+/* Height-constrained, width auto: the stored scans vary wildly in dimension
+   and a fixed width stretches a wide one into a smear. */
+.lr__sign img {
+  margin: 0 auto 2px;
+  height: 32px;
+  width: auto;
+  object-fit: contain;
+  display: block;
+}
+.lr__sign-name { font-weight: 600; line-height: 1.25; }
+.lr__sign-desig { line-height: 1.25; color: #4b5563; }
+
+.lr__qr { flex: none; text-align: center; font-size: 8px; color: #6b7280; break-inside: avoid; }
+.lr__qr img { margin: 0 auto; height: 48px; width: 48px; display: block; }
+.lr__qr p { margin-top: 2px; line-height: 1.25; }
+
+.lr__legal {
+  margin-top: 4px;
+  border-top: 1px solid #d1d5db;
+  padding-top: 4px;
+  font-size: 9px;
+  color: #6b7280;
+}
+.lr__legal b { font-weight: 600; }
+.lr__legal p + p { margin-top: 2px; }
+
+/* ---------- tick to include ----------
+   Preview only. `pdf=1` drops the boxes entirely rather than hiding them, so
+   there is no chance of one reaching paper. */
+
+.lr__tick {
+  margin-top: 3px;
+  height: 12px;
+  width: 12px;
+  flex: none;
+  cursor: pointer;
+  accent-color: #2b2b6b;
+}
+.lr__tick:disabled { cursor: not-allowed; opacity: 0.5; }
+@media print { .lr__tick, .lr__tickhint { display: none; } }
+
+/* Dimmed rather than removed, because the operator has to be able to put it
+   back. The renderer never sees this state — there an unticked row is gone. */
+.lr__off { opacity: 0.4; }
+
+/* ---------- culture & sensitivity ----------
+   A microbiology result is not a row of numbers. The organism block and the
+   antibiogram are what a clinician reads, and they read as three lists. */
+
+.lr__culture-cell { padding: 2px 0 8px; }
+.lr__culture { font-size: 12px; break-inside: avoid; }
+.lr__culture-head { margin-bottom: 8px; }
+.lr__culture-head tr { vertical-align: top; }
+.lr__culture-head td { padding: 2px 0; }
+.lr__culture-head td:nth-child(1) { padding-right: 12px; font-weight: 500; }
+.lr__culture-head td:nth-child(2) { padding-right: 8px; color: #6b7280; }
+.lr__culture-head td.lr__culture-pre { white-space: pre-line; }
+.lr__culture-head tr.lr__culture-remarks td { padding-top: 6px; padding-bottom: 0; }
+
+.lr__abx { margin-top: 12px; }
+.lr__abx-title {
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.lr__abx-title span:first-child,
+.lr__abx-title span:last-child { height: 1px; width: 32px; background: #d1d5db; }
+.lr__abx-title b {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: #2b2b6b;
+}
+.lr__abx-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.lr__abx-col {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid;
+}
+.lr__abx-cap { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 12px; }
+.lr__abx-cap span:first-child { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.025em; }
+.lr__abx-count {
+  border-radius: 9999px;
+  padding: 0 6px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.4;
+  background: rgba(255, 255, 255, 0.65);
+}
+.lr__abx-body { flex: 1 1 0%; padding: 8px 12px; }
+.lr__abx-body ul { list-style: none; margin: 0; padding: 0; }
+.lr__abx-body li { display: flex; align-items: flex-start; gap: 6px; line-height: 1.375; }
+.lr__abx-body li + li { margin-top: 4px; }
+.lr__abx-dot { margin-top: 5px; height: 4px; width: 4px; flex: none; border-radius: 9999px; }
+.lr__abx-none { padding: 2px 0; text-align: center; font-size: 11px; font-style: italic; color: #9ca3af; }
+
+/* ---------- gestational reference ranges ----------
+   A "Weeks Range" is a header line followed by one "<week> <low>-<high>" per
+   week. Set as three aligned columns so the numbers line up instead of running
+   together as ragged text. */
+
+.lr__weeks { break-inside: avoid; }
+.lr__weeks-title {
+  margin-bottom: 2px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  font-size: 9px;
+  color: #6b7280;
+}
+.lr__weeks-grid {
+  display: grid;
+  grid-template-columns: auto auto auto;
+  align-items: baseline;
+  column-gap: 6px;
+  row-gap: 1.5px;
+  font-variant-numeric: tabular-nums;
+}
+.lr__weeks-no { text-align: right; font-weight: 500; color: #6b7280; }
+.lr__weeks-lo { text-align: right; color: #1f2937; }
+.lr__weeks-hi { color: #1f2937; }
+
+.lr__pre { white-space: pre-line; }
