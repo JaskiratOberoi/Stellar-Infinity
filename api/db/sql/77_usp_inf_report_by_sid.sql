@@ -159,6 +159,15 @@ BEGIN
             SELECT
                 r.id AS result_id,
                 r.testcode AS test_code,
+                -- The catalogue id this row was measured against. Not display
+                -- data: it is the key the report's own structure is rebuilt
+                -- from. A multi-parameter test emits an untitled "report name"
+                -- Head immediately before the real coded Head its Param rows
+                -- hang off, and the two are the same test only in that they
+                -- share this id — without it the report prints the title
+                -- twice. It is also what the interpretation-image attachment
+                -- and the age-banded reference range are keyed on.
+                r.testid AS test_id,
                 r.testname AS test_name,
                 r.testtype AS test_type,
                 r.value,

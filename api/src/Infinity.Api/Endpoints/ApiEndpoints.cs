@@ -570,6 +570,7 @@ public static class ApiEndpoints
         ScopeRepository scopes,
         ReportsRepository repo,
         Infinity.Api.Reports.ReportExtrasRepository extras,
+        Infinity.Api.Reports.CatalogueDetailRepository catalogue,
         Infinity.Api.Reports.ReportLink links,
         CancellationToken ct)
     {
@@ -592,12 +593,17 @@ public static class ApiEndpoints
         try { more = await extras.GetAsync(row.Sid, ct).ConfigureAwait(false); }
         catch (Exception) when (!ct.IsCancellationRequested) { /* print it bare */ }
 
+        // The age-narrowed range and the interpretation graphs. Best-effort, in
+        // the same spirit as the extras above.
+        var results = await Infinity.Api.Reports.ReportEnrichment
+            .ApplyAsync(catalogue, row, ct).ConfigureAwait(false);
+
         return Results.Ok(new
         {
             row.Sid, row.ClientCode, row.BusinessUnit, row.Pid, row.PatientName, row.Sex,
             row.Age, row.AgeUnit, row.SampleDrawn, row.RegisteredAt, row.LastModifiedAt,
             row.StatusCode, row.Status, row.TestNames, row.OrderNumber, row.BillNumber,
-            row.ClinicalHistory, row.Results, row.RefDoctor, row.RefCustomer, row.PassportNo,
+            row.ClinicalHistory, Results = results, row.RefDoctor, row.RefCustomer, row.PassportNo,
             CollectedAt = more?.CollectedAt,
             ProcessedAt = more?.ProcessedAt,
             Signers = more?.Signers ?? [],

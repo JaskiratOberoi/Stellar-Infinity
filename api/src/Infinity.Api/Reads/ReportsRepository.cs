@@ -38,7 +38,22 @@ public sealed record TestResult(
     /// </summary>
     [property: JsonPropertyName("profileId")] int? ProfileId = null,
     /// <summary>The tube it came from, e.g. "WB - EDTA".</summary>
-    [property: JsonPropertyName("specimen")] string? Specimen = null);
+    [property: JsonPropertyName("specimen")] string? Specimen = null,
+    /// <summary>
+    /// The catalogue row this result was measured against.
+    ///
+    /// Not display data. It is what the report's structure is rebuilt from: a
+    /// multi-parameter test emits an untitled "report name" Head immediately
+    /// before the real coded Head its Param rows hang off, and the only thing
+    /// saying those two rows are one test is this id. It is also the key for
+    /// the age-banded reference range and for the interpretation image.
+    /// </summary>
+    [property: JsonPropertyName("testId")] int? TestId = null,
+    /// <summary>
+    /// An interpretation held as a picture — the HBV and HCV graphs — inlined
+    /// as a data URI. Some tests carry ONLY this and no interpretation text.
+    /// </summary>
+    [property: JsonPropertyName("interpretationImage")] string? InterpretationImage = null);
 
 public sealed record WorksheetRow(
     string Sid,
@@ -577,7 +592,8 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
                     Method: GetString(el, "method"),
                     Interpretation: GetString(el, "interpretation"),
                     ProfileId: GetNullableInt(el, "profile_id"),
-                    Specimen: GetString(el, "specimen")));
+                    Specimen: GetString(el, "specimen"),
+                    TestId: GetNullableInt(el, "test_id")));
             }
 
             // Restore DOCUMENT order.

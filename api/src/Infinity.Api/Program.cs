@@ -40,6 +40,7 @@ builder.Services.AddSingleton<Infinity.Api.Orders.CartStore>();
 builder.Services.AddSingleton<Infinity.Api.Orders.OrderWriteRepository>();
 builder.Services.AddSingleton<Infinity.Api.Orders.AccessionRepository>();
 builder.Services.AddSingleton<Infinity.Api.Reports.ReportExtrasRepository>();
+builder.Services.AddSingleton<Infinity.Api.Reports.CatalogueDetailRepository>();
 builder.Services.AddSingleton<Infinity.Api.Reports.ReportLink>();
 builder.Services.AddSingleton<Infinity.Api.Orders.ClientAccountRepository>();
 builder.Services.AddSingleton<Infinity.Api.Payments.PaymentRepository>();
