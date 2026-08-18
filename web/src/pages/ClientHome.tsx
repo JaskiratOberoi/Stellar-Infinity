@@ -53,6 +53,9 @@ export function ClientHome() {
   const [account, setAccount] = useState<AccountRow | null>(null);
   const [ledger, setLedger] = useState<LedgerRow[]>([]);
   const [loading, setLoading] = useState(true);
+  // Pre-filled with what is owed, because that is the amount a centre almost
+  // always means. Editable, because part-payment is normal.
+  const [payAmount, setPayAmount] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -70,6 +73,7 @@ export function ClientHome() {
         // debit side is every test ever ordered — thousands of rows that would
         // bury it.
         setLedger((l.rows ?? []).filter((r) => r.direction === 'credit'));
+        if (mine.owed > 0) setPayAmount(String(Math.round(mine.owed)));
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load your account.');
@@ -95,7 +99,7 @@ export function ClientHome() {
   const owes = (account?.owed ?? 0) > 0;
 
   return (
-    <div className="page">
+    <div className="page clienthome-page">
       <div className="page__head">
         <div>
           <h1 className="page__title">
@@ -120,67 +124,121 @@ export function ClientHome() {
         </div>
       ) : (
         <div className="clienthome">
-          <section className={`card clienthome__balance${owes ? ' clienthome__balance--owing' : ''}`}>
-            <p className="clienthome__label">Account balance</p>
-            <p className="clienthome__amount">{inr(account.owed || account.balance)}</p>
-            <p className="clienthome__note">
-              {owes
-                ? 'Outstanding — payable to Noble'
-                : 'In credit — advance balance with Noble'}
-            </p>
+          {/* Left: what the account IS. Right: what to do about it.
 
-            <div className="clienthome__split">
-              <div>
-                <p className="clienthome__label">Total paid</p>
-                <p className="clienthome__sub">{inr(account.totalDeposited)}</p>
-              </div>
-              <div>
-                <p className="clienthome__label">Reports</p>
-                <p className="clienthome__sub">
-                  <Link to="/reports">Open reporting →</Link>
-                </p>
-              </div>
-            </div>
-          </section>
-
-          <section className="card">
-            <div className="row" style={{ alignItems: 'baseline', gap: '.6rem' }}>
-              <h2 className="clienthome__title">Recent payments</h2>
-              <Link to="/accounts" className="muted" style={{ marginLeft: 'auto', fontSize: '.78rem' }}>
-                Full account →
-              </Link>
-            </div>
-
-            {ledger.length === 0 ? (
-              <p className="muted" style={{ fontSize: '.82rem', marginTop: '.6rem' }}>
-                No payments recorded yet.
+              Two columns rather than one long scroll, because the balance and
+              the payment belong side by side - a centre reading what it owes
+              is one glance from acting on it. Collapses to a single column
+              below 900px, balance first. */}
+          <div className="clienthome__main">
+            <section className={`card clienthome__balance${owes ? ' clienthome__balance--owing' : ''}`}>
+              <p className="clienthome__label">Account balance</p>
+              <p className="clienthome__amount">{inr(account.owed || account.balance)}</p>
+              <p className="clienthome__note">
+                {owes
+                  ? 'Outstanding — payable to Noble'
+                  : 'In credit — advance balance with Noble'}
               </p>
-            ) : (
-              <ul className="clienthome__pay">
-                {ledger.map((r) => (
-                  <li key={r.id}>
-                    <span>
-                      {r.occurredAt ? fmtDateTime(r.occurredAt) : '—'}
-                      {r.note && <span className="muted"> · {r.note}</span>}
-                    </span>
-                    <b>{inr(r.amount)}</b>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+  
+              <div className="clienthome__split">
+                <div>
+                  <p className="clienthome__label">Total paid</p>
+                  <p className="clienthome__sub">{inr(account.totalDeposited)}</p>
+                </div>
+                <div>
+                  <p className="clienthome__label">Reports</p>
+                  <p className="clienthome__sub">
+                    <Link to="/reports">Open reporting →</Link>
+                  </p>
+                </div>
+              </div>
+            </section>
+  
+            <section className="card">
+              <div className="row" style={{ alignItems: 'baseline', gap: '.6rem' }}>
+                <h2 className="clienthome__title">Recent payments</h2>
+                <Link to="/accounts" className="muted" style={{ marginLeft: 'auto', fontSize: '.78rem' }}>
+                  Full account →
+                </Link>
+              </div>
+  
+              {ledger.length === 0 ? (
+                <p className="muted" style={{ fontSize: '.82rem', marginTop: '.6rem' }}>
+                  No payments recorded yet.
+                </p>
+              ) : (
+                <ul className="clienthome__pay">
+                  {ledger.map((r) => (
+                    <li key={r.id}>
+                      <span>
+                        {r.occurredAt ? fmtDateTime(r.occurredAt) : '—'}
+                        {r.note && <span className="muted"> · {r.note}</span>}
+                      </span>
+                      <b>{inr(r.amount)}</b>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
 
-          <section className="card">
-            <h2 className="clienthome__title">Settling your account</h2>
-            <p className="muted" style={{ fontSize: '.82rem', marginTop: '.4rem' }}>
-              {owes
-                ? `${inr(account.owed)} is outstanding. Payments are settled with the lab
-                   directly and appear here once recorded.`
-                : `Your account is settled. Anything paid now is held as advance credit.`}
-            </p>
-            {/* No pay button until a verified gateway exists — see the file
-                remarks. Saying how to pay beats a control that cannot. */}
-          </section>
+          <div className="clienthome__side">
+            {/* Pay Noble online.
+  
+                Shown even though the gateway is not connected yet: a centre needs
+                to know online payment is coming and where it will be. The button
+                is disabled and SAYS why - a live-looking control that silently
+                does nothing is worse than an honest one.
+  
+                It will not become live by editing this file. Crediting a wallet
+                needs a CCAvenue response decrypted and matched server-side
+                against an intent minted before the customer left - see
+                111_table_inf_payment_intent.sql. The legacy razor_update.asmx
+                credits from caller-supplied values with no verification at all;
+                the intent record exists so that shape is never repeated. */}
+            <section className="card">
+              <h2 className="clienthome__title">Pay Noble online</h2>
+              <p className="muted" style={{ fontSize: '.78rem', margin: '.25rem 0 .8rem' }}>
+                Instant, secure settlement to your account
+              </p>
+  
+              <label className="field">
+                <span>Amount to pay</span>
+                <input
+                  className="input mono"
+                  inputMode="numeric"
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value.replace(/[^0-9]/g, ''))}
+                  aria-label="Amount to pay"
+                />
+              </label>
+  
+              <p className="muted" style={{ fontSize: '.76rem', margin: '.5rem 0 .7rem' }}>
+                {owes
+                  ? inr(account.owed) + ' is currently outstanding.'
+                  : 'Your account is settled — anything paid now is held as advance credit.'}
+              </p>
+  
+              <button className="btn btn--primary" disabled style={{ width: '100%' }}>
+                Pay securely
+              </button>
+              <p className="clienthome__pending">
+                Online payments are being set up — please check back shortly.
+              </p>
+            </section>
+  
+            <section className="card">
+              <h2 className="clienthome__title">Settling your account</h2>
+              <p className="muted" style={{ fontSize: '.82rem', marginTop: '.4rem' }}>
+                {owes
+                  ? `${inr(account.owed)} is outstanding. Payments are settled with the lab
+                     directly and appear here once recorded.`
+                  : `Your account is settled. Anything paid now is held as advance credit.`}
+              </p>
+              {/* No pay button until a verified gateway exists — see the file
+                  remarks. Saying how to pay beats a control that cannot. */}
+            </section>
+          </div>
         </div>
       )}
     </div>

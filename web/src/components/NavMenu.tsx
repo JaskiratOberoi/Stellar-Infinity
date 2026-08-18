@@ -13,6 +13,15 @@ export interface NavItem {
   /** Exact match, for the index route that would otherwise match everything. */
   end?: boolean;
   /**
+   * Hide this entry from ONE role, even when it holds the capability.
+   *
+   * For entries a role can legitimately reach but should not be pointed at: a
+   * client holds order:view and could open the Orders list, but every order a
+   * centre raises is B2B and already has its own entry, so the generic one is
+   * a second door onto the same room.
+   */
+  hideForRole?: string;
+  /**
    * Query string this entry owns, WITHOUT the leading '?'.
    *
    * Set it on every entry sharing a pathname, including the plain one (as an

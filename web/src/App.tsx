@@ -82,7 +82,10 @@ function EnterVeil({ done }: { done: () => void }) {
  */
 const NAV: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
-  { to: '/orders', label: 'Orders', icon: 'orders', cap: 'order:view' },
+  // Hidden from clients: every order a centre raises is B2B and 'Patient
+  // orders' is already that list. The ROUTE stays open - this is navigation,
+  // not access.
+  { to: '/orders', label: 'Orders', icon: 'orders', cap: 'order:view', hideForRole: 'client' },
   // "New order" is NOT here any more — it is the floating button, mounted in
   // the shell below. It is the most repeated action in the building and it was
   // sitting third in a row of thirteen tabs, level with Rates and Branding. See
@@ -190,7 +193,8 @@ export function App() {
   // route, the shell shows a login form instead of dereferencing null.
   if (!user) return <><EnvBanner /><Login /></>;
 
-  const navItems = NAV.filter((i) => !i.cap || can(i.cap));
+  const navItems = NAV.filter(
+    (i) => (!i.cap || can(i.cap)) && i.hideForRole !== user.role);
 
   return (
     <div className={`shell${entering ? ' shell--hello' : ''}`}>

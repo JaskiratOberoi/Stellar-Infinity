@@ -3952,7 +3952,30 @@ tr:hover > .cell--lead .clip,
    come through", so the balance is the largest thing on the page and the rest
    is one column under it. See pages/ClientHome.tsx. */
 
-.clienthome { display: grid; gap: .9rem; max-width: 760px; }
+/* Centred, and the page HEAD centres with it.
+   Constraining only the card grid left the title and Refresh spanning the full
+   viewport while the cards stopped short, so the two disagreed about where the
+   page ended. One container holds both. */
+.clienthome-page { max-width: 1100px; margin-inline: auto; }
+
+/* Two columns: the account on the left, acting on it on the right. The left
+   column is the wider one because the payments list carries dates and
+   references, while the right holds one short form. */
+.clienthome {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  align-items: start;
+  gap: .9rem;
+  width: 100%;
+}
+.clienthome__main, .clienthome__side { display: grid; gap: .9rem; align-content: start; }
+
+/* One column on a narrow screen, balance first - source order already puts it
+   there, so nothing needs reordering. */
+@media (max-width: 900px) {
+  .clienthome { grid-template-columns: minmax(0, 1fr); }
+  .clienthome-page { max-width: 760px; }
+}
 
 .clienthome__balance { border-left: 3px solid var(--teal); }
 .clienthome__balance--owing { border-left-color: var(--danger); }
@@ -3987,3 +4010,10 @@ tr:hover > .cell--lead .clip,
 }
 .clienthome__pay li:last-child { border-bottom: 0; }
 .clienthome__pay li b { margin-left: auto; }
+
+.clienthome__pending {
+  font-size: .74rem;
+  color: var(--warn, #b45309);
+  margin: .5rem 0 0;
+  text-align: center;
+}

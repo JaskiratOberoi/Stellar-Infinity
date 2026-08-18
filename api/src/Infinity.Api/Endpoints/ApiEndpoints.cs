@@ -361,10 +361,43 @@ public static class ApiEndpoints
     /// client-code list can never name a centre whose samples the caller could
     /// not open anyway.
     /// </summary>
+    /// <summary>
+    /// How long a filter payload is reused. These are the lab's reference
+    /// lists - centres, departments, business units, the test catalogue - and
+    /// they change when someone opens an admin screen, not while a
+    /// technologist works. Ten minutes is long enough to take the cost off
+    /// every page load and short enough that a new centre appears within one
+    /// tea break.
+    /// </summary>
+    private static readonly TimeSpan FilterOptionsTtl = TimeSpan.FromMinutes(10);
+
+    /// <summary>Matches what the framework would have produced: camelCase.</summary>
+    private static readonly System.Text.Json.JsonSerializerOptions WebJson =
+        new(System.Text.Json.JsonSerializerDefaults.Web);
+
+    /*
+     * CACHED, because this was the slowest thing on every screen.
+     *
+     * Measured on staging before this changed: 4.8s cold and 4.0s warm, for a
+     * 349 KB payload, fetched on load by the worksheet, reporting and the
+     * order form alike. It was the single biggest contributor to a ~10s
+     * worksheet load, and none of it is per-request data.
+     *
+     * Keyed on the SCOPE, not the user: the payload is a function of which
+     * client codes the caller may see, so every lab user with unrestricted
+     * scope shares one entry while each client keeps its own. Keying on the
+     * user id would have been correct and nearly useless - one entry per
+     * person, all identical.
+     *
+     * A denied scope still returns empty WITHOUT consulting the cache: it is
+     * a constant, and giving it a key would let a scope change be masked by a
+     * stale hit.
+     */
     private static async Task<IResult> ListFilterOptions(
         System.Security.Claims.ClaimsPrincipal principal,
         ScopeRepository scopes,
         ReportsRepository repo,
+        Caching.InfinityCache cache,
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
@@ -375,7 +408,39 @@ public static class ApiEndpoints
             return Results.Ok(new WorksheetFilterOptions([], [], [], []));
         }
 
-        return Results.Ok(await repo.GetFilterOptionsAsync(scope.ClientCodes, ct).ConfigureAwait(false));
+        // An unrestricted caller sees every centre, so they all share one key.
+        // A scoped caller's key is their own codes, sorted so the same set
+        // always produces the same key regardless of the order it arrived in.
+        var scopeKey = scope.IsUnrestricted
+            ? "all"
+            : string.Join(",", scope.ClientCodes.OrderBy(c => c, StringComparer.Ordinal));
+        var key = "inf:filters:" + Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(scopeKey)))[..16];
+
+        var hit = await cache.GetAsync(key, ct).ConfigureAwait(false);
+        if (hit is not null)
+        {
+            // Returned as pre-serialised JSON: re-parsing it only to have the
+            // framework serialise it again is work the cache exists to avoid.
+            return Results.Content(hit, "application/json; charset=utf-8");
+        }
+
+        var options = await repo.GetFilterOptionsAsync(scope.ClientCodes, ct).ConfigureAwait(false);
+        // JsonSerializerDefaults.Web, NOT the default options: the default is
+        // PascalCase, and serialising here rather than letting the framework
+        // do it means nothing else applies the app's naming policy. Sending
+        // ClientCodes where the client reads clientCodes emptied every filter
+        // dropdown while still returning 200 - caught only because a probe
+        // printed the parsed value rather than the status code.
+        var json = System.Text.Json.JsonSerializer.Serialize(options, WebJson);
+
+        // Not awaited on the critical path... it is, deliberately: a write
+        // that fails should not be silent, and it is one round trip against a
+        // four-second query.
+        await cache.SetAsync(key, json, FilterOptionsTtl, ct).ConfigureAwait(false);
+
+        return Results.Content(json, "application/json; charset=utf-8");
     }
 
     /// <summary>
