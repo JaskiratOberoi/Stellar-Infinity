@@ -85,14 +85,14 @@ public static class CCAvenueCrypto
     /// <summary>
     /// CCAvenue's payload looks like a query string and is NOT one.
     ///
-    /// Their kits build it by plain concatenation and read it by splitting on
-    /// '&amp;' and '=', with no escaping in either direction. So a redirect_url
-    /// travels as literal "https://host/path" — percent-encoding it, as this
-    /// once did, means their parser reads back "https%3A%2F%2Fhost%2Fpath" and
-    /// treats that as the address to send the customer to.
+    /// Their kits build it by concatenation and read it by splitting on '&amp;'
+    /// and '=', and the two official kits DISAGREE about escaping: the Java one
+    /// sends values raw, the PHP one urlencodes them. Both are accepted, so the
+    /// server evidently tolerates either. We send raw, matching the Java kit —
+    /// the safer of the two to imitate, since a value that needs no escaping is
+    /// unambiguous under both readings.
     ///
-    /// We therefore match their format exactly rather than the format it
-    /// resembles. The cost is that a value can carry neither '&amp;' nor '=';
+    /// The cost is that a value can carry neither '&amp;' nor '=';
     /// <see cref="BuildPairs"/> refuses those instead of emitting a payload
     /// that would silently reparse into different fields.
     ///
@@ -125,11 +125,24 @@ public static class CCAvenueCrypto
     /// this is a programming error, and throwing beats shipping a payload that
     /// reparses into fields nobody intended.
     /// </exception>
-    public static string BuildPairs(IEnumerable<KeyValuePair<string, string>> pairs) =>
-        string.Join('&', pairs.Select(p =>
+    public static string BuildPairs(IEnumerable<KeyValuePair<string, string>> pairs)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var p in pairs)
         {
             if (p.Value.Contains('&') || p.Value.Contains('='))
                 throw new ArgumentException($"CCAvenue parameter '{p.Key}' cannot contain '&' or '='.", nameof(pairs));
-            return $"{p.Key}={p.Value}";
-        }));
+
+            // TRAILING ampersand, on every pair including the last.
+            //
+            // Not a stray. Both of CCAvenue's official kits build the payload by
+            // appending "name=value&" in a loop, so what their server is fed
+            // always ends in a separator. The two kits disagree about whether to
+            // urlencode the values — the Java one does not, the PHP one does —
+            // but they agree on this, which makes it the part their parser is
+            // most likely to depend on. string.Join would omit it.
+            sb.Append(p.Key).Append('=').Append(p.Value).Append('&');
+        }
+        return sb.ToString();
+    }
 }
