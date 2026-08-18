@@ -14,11 +14,18 @@
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Script,
-    [string]$EnvFile = "$PSScriptRoot/../.env",
-    [string]$SqlDir  = "$PSScriptRoot/sql"
+    [string]$EnvFile,
+    [string]$SqlDir
 )
 
 $ErrorActionPreference = 'Stop'
+
+# Resolved in the BODY, not as a param default. $PSScriptRoot is empty in a
+# default when the script is invoked by a forward-slash path from a POSIX
+# shell, which silently produced "/../.env" and a confusing not-found.
+$here = Split-Path -Parent $MyInvocation.MyCommand.Path
+if (-not $EnvFile) { $EnvFile = Join-Path $here '..\.env' }
+if (-not $SqlDir)  { $SqlDir  = Join-Path $here 'sql' }
 
 if (-not (Test-Path $EnvFile)) { throw "No env file at $EnvFile." }
 

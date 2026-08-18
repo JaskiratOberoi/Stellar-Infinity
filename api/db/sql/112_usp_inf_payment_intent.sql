@@ -46,7 +46,13 @@ BEGIN
 
     -- The client must exist. Minting an intent against a stray code would give
     -- a callback something to settle against an account that is not there.
-    IF NOT EXISTS (SELECT 1 FROM dbo.tbl_med_mcc_unit_master WHERE mcccode = @mcc)
+    --
+    -- `id`, not `mcccode`. tbl_med_mcc_unit_master has no mcccode column at
+    -- all — the name belongs to tbl_med_mcc_account_master, where it is the
+    -- FOREIGN key back to this id. usp_telo_record_mcc_payment resolves the
+    -- client the same way, and the two must agree or an intent could be minted
+    -- for a client the credit then fails to find.
+    IF NOT EXISTS (SELECT 1 FROM dbo.tbl_med_mcc_unit_master WHERE id = @mcc)
     BEGIN
         SELECT ok = 0, error_code = 'NO_CLIENT', message = 'Unknown client code.';
         RETURN;
@@ -155,10 +161,20 @@ BEGIN
         -- the same transaction as the latch.
         IF @finalStatus = 'success'
         BEGIN
+            -- A local, because T-SQL will not accept an expression as a
+            -- procedure parameter value - `@amount = CAST(...)` is a syntax
+            -- error, not a conversion.
+            --
+            -- The cast itself is deliberate: the wallet is kept in whole rupees
+            -- (currentbalance is an INT) and /checkout only ever mints whole
+            -- amounts, so this is exact - but a narrowing on a money value
+            -- should be visible in the source rather than left to the engine.
+            DECLARE @creditAmount INT = CAST(@expected AS INT);
+
             EXEC dbo.usp_telo_record_mcc_payment
                  @userId      = @createdBy,
                  @mcc         = @mcc,
-                 @amount      = @expected,      -- OUR figure, never the response
+                 @amount      = @creditAmount,  -- OUR figure, never the response
                  @mode        = @paymentMode,
                  @depositDate = NULL,
                  @chequeNo    = @gatewayRef,    -- the CCAvenue tracking id
