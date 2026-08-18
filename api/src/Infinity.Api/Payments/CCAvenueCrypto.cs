@@ -83,11 +83,21 @@ public static class CCAvenueCrypto
     }
 
     /// <summary>
-    /// CCAvenue speaks form-urlencoded pairs inside the encrypted blob. Its own
-    /// kits split on '&amp;' and '=' with no unescaping, which loses any value
-    /// containing either character; we unescape, and we keep the FIRST binding
-    /// of a repeated key so that a response appending a second `order_status`
-    /// cannot overwrite the first.
+    /// CCAvenue's payload looks like a query string and is NOT one.
+    ///
+    /// Their kits build it by plain concatenation and read it by splitting on
+    /// '&amp;' and '=', with no escaping in either direction. So a redirect_url
+    /// travels as literal "https://host/path" — percent-encoding it, as this
+    /// once did, means their parser reads back "https%3A%2F%2Fhost%2Fpath" and
+    /// treats that as the address to send the customer to.
+    ///
+    /// We therefore match their format exactly rather than the format it
+    /// resembles. The cost is that a value can carry neither '&amp;' nor '=';
+    /// <see cref="BuildPairs"/> refuses those instead of emitting a payload
+    /// that would silently reparse into different fields.
+    ///
+    /// The FIRST binding of a repeated key wins, so a response that appends a
+    /// second order_status cannot overwrite the first.
     /// </summary>
     public static Dictionary<string, string> ParsePairs(string body)
     {
@@ -96,14 +106,30 @@ public static class CCAvenueCrypto
         {
             var i = pair.IndexOf('=');
             if (i <= 0) continue;
-            var k = Uri.UnescapeDataString(pair[..i]).Trim();
-            var v = Uri.UnescapeDataString(pair[(i + 1)..]).Trim();
+            // No unescaping: the sender did not escape. Running UnescapeDataString
+            // over a raw value would corrupt any '%' in, say, a failure message.
+            var k = pair[..i].Trim();
+            var v = pair[(i + 1)..].Trim();
             if (k.Length > 0) map.TryAdd(k, v);
         }
         return map;
     }
 
-    /// <summary>Build the request blob. Values are escaped for the same reason.</summary>
+    /// <summary>
+    /// Build the request blob in CCAvenue's own format — see
+    /// <see cref="ParsePairs"/> for why it is not a query string.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// A value containing '&amp;' or '=' cannot be represented. Every value we
+    /// send is one we control — our order reference, our URLs, an amount — so
+    /// this is a programming error, and throwing beats shipping a payload that
+    /// reparses into fields nobody intended.
+    /// </exception>
     public static string BuildPairs(IEnumerable<KeyValuePair<string, string>> pairs) =>
-        string.Join('&', pairs.Select(p => $"{Uri.EscapeDataString(p.Key)}={Uri.EscapeDataString(p.Value)}"));
+        string.Join('&', pairs.Select(p =>
+        {
+            if (p.Value.Contains('&') || p.Value.Contains('='))
+                throw new ArgumentException($"CCAvenue parameter '{p.Key}' cannot contain '&' or '='.", nameof(pairs));
+            return $"{p.Key}={p.Value}";
+        }));
 }

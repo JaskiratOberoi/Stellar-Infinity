@@ -129,9 +129,15 @@ public static class PaymentEndpoints
             new("merchant_param1", body.Mcc.ToString(CultureInfo.InvariantCulture)),
         ]);
 
+        // The plaintext is logged deliberately. It carries no secret — merchant
+        // id, our order reference, an amount and our own URLs — and when the
+        // gateway rejects a request it is the only way to see what it was
+        // actually sent. CCAvenue's errors name a field ("Working is empty")
+        // without echoing what arrived, so without this the diagnosis is
+        // guesswork. The access code and working key are NOT in it.
         logs.CreateLogger("Payments").LogInformation(
-            "payment.intent ref={Ref} mcc={Mcc} amount={Amount} user={User}",
-            orderRef, body.Mcc, body.Amount, userId);
+            "payment.intent ref={Ref} mcc={Mcc} amount={Amount} user={User} request={Request}",
+            orderRef, body.Mcc, body.Amount, userId, plain);
 
         return Results.Ok(new
         {
