@@ -73,6 +73,22 @@ import '../report.css';
  * come back into this route — so a stable id is both simpler and safer than a
  * path that changes meaning if the tree is rebuilt differently.
  */
+/**
+ * Is this MRNID a REAL passport or aadhaar, worth printing under that label?
+ *
+ * A passport is alphanumeric (it has a letter); an aadhaar is exactly twelve
+ * digits. Everything else the LIS keeps in this column is not one: the own
+ * patient-id the order form backfills when nothing was entered, and a stray
+ * few short numeric ids that resemble another patient's. The API already drops
+ * the own-id case; this drops the rest, so a "Passport / Aadhaar" line only
+ * ever appears when there is genuinely one to show.
+ */
+function genuineTravelId(v: string | null | undefined): boolean {
+  const t = (v ?? '').trim();
+  if (!t) return false;
+  return /[A-Za-z]/.test(t) || /^\d{12}$/.test(t);
+}
+
 function parseExcluded(raw: string | null): Set<number> {
   if (!raw) return new Set();
   return new Set(
@@ -583,9 +599,6 @@ function PatientMetaBlock({
           <Meta label="Ref. Customer" value={row.clientCode ?? '—'} />
           <Meta label="Ref. Doctor" value={row.refDoctor ?? 'Self'} />
           {specimens.length > 0 && <Meta label="Specimen" value={specimens.join(', ')} />}
-          {/* Omitted rather than blanked when the order carried none — the same
-              convention as Specimen above and Bill No. below. */}
-          {row.passportNo && <Meta label="Passport No." value={row.passportNo} mono />}
           <Meta label="Collected" value={fmtStamp(row.sampleDrawn)} />
           <Meta label="Registered" value={fmtStamp(row.registeredAt)} />
           <Meta label="Reported" value={fmtStamp(row.lastModifiedAt)} />
@@ -593,6 +606,18 @@ function PatientMetaBlock({
               reported. A reissued report is otherwise indistinguishable from
               the original. */}
           <Meta label="Printed" value={fmtStamp(printedAt)} />
+          {/* Passport / Aadhaar, placed here so it flows into the right column
+              directly under "Reported". Shown only for a GENUINE id — see
+              genuineTravelId. The LIS stores this in MRNID, which for the vast
+              majority of patients is the own patient-id backfilled by the order
+              form (never a passport) or, for a stray few, another patient-id-
+              like number; printing either under a "Passport" label would be
+              wrong, so the guard keeps the row hidden until a real passport or
+              aadhaar is entered. Omitted rather than blanked, like Specimen and
+              Bill No. */}
+          {genuineTravelId(row.passportNo) && (
+            <Meta label="Passport / Aadhaar" value={row.passportNo!.trim()} mono />
+          )}
           {row.billNumber && <Meta label="Bill No." value={row.billNumber} mono />}
         </div>
 
