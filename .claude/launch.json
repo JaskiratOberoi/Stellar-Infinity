@@ -5,7 +5,11 @@
       "name": "infinity-web",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "web", "--", "--port", "5199", "--strictPort"],
-      "port": 5199
+      "port": 5199,
+      "env": {
+        "//": "Vite proxies /api here. Default is 127.0.0.1:8099 (a locally-run API); this machine has no .NET SDK, so point at the live stack's nginx instead. NOT staging (3122): its session cookie is Secure=True and a browser on plain-HTTP localhost silently refuses to store it, so sign-in appears to fail while the server logs success.",
+        "INFINITY_API_URL": "http://127.0.0.1:3121"
+      }
     }
   ]
 }

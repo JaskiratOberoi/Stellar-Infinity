@@ -68,9 +68,12 @@ builder.Services.AddSingleton<Infinity.Api.Audit.AuditRepository>();
 // ---- worksheet -----------------------------------------------------------
 builder.Services.AddSingleton<Infinity.Api.Worksheet.WorksheetRepository>();
 builder.Services.AddSingleton<Infinity.Api.Worksheet.ResultWriteRepository>();
+builder.Services.AddSingleton<Infinity.Api.Worksheet.PatientEditRepository>();
 builder.Services.AddSingleton<Infinity.Api.Worksheet.AutoAuthRepository>();
 builder.Services.AddSingleton<Infinity.Api.Worksheet.AutoAuthGate>();
+builder.Services.AddSingleton<Infinity.Api.Worksheet.AttachmentRepository>();
 builder.Services.AddSingleton<Infinity.Api.Worksheet.ResultHistoryRepository>();
+builder.Services.AddSingleton<Infinity.Api.Worksheet.InwardRepository>();
 
 // ---- instruments ---------------------------------------------------------
 builder.Services.AddSingleton<Infinity.Api.Instruments.InstrumentRepository>();
@@ -220,6 +223,7 @@ app.MapWorksheetEndpoints();
 app.MapInstrumentEndpoints();
 app.MapOrderEntryEndpoints();
 app.MapAccessionEndpoints();
+app.MapInwardEndpoints();
 app.MapClientAccountEndpoints();
 app.MapBillingEndpoints();
 app.MapRateListEndpoints();

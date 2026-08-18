@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   worksheetApi,
   type ResultEdit,
@@ -6,8 +6,100 @@ import {
   type WorksheetSampleResponse,
 } from '../api/client';
 import { fmtDateTime, plainText } from '../lib/format';
+import { AttachClip, Attachments, RowAttachments, useAttachments } from '../components/Attachments';
+import { SpellChecked, SpellCheckUndo } from '../components/SpellChecked';
 import { WorksheetHistory } from './WorksheetHistory';
+import { PatientInfoForm } from '../components/PatientInfoForm';
 import { InfinityLoader } from '../components/InfinityLoader';
+
+/**
+ * One labelled field in the sample identity block.
+ *
+ * A dt/dd pair rather than two divs: this is a description list in the literal
+ * sense, and it gives a screen reader the label-value relationship for free.
+ */
+function Meta({ label, value, mono }: { label: string; value?: string | null; mono?: boolean }) {
+  return (
+    <div className="smeta__item">
+      <dt>{label}</dt>
+      <dd className={mono ? 'mono' : undefined} title={value ?? undefined}>
+        {value ? value : <span className="muted">—</span>}
+      </dd>
+    </div>
+  );
+}
+
+const fmtOrDash = (d?: string | null) => (d ? fmtDateTime(d) : null);
+
+/**
+ * The long-form result editor — Listec's per-row "Desc".
+ *
+ * Some results are prose, not a number: a histopathology description, a culture
+ * report, an impression. They live in the same `value` column as everything
+ * else, and the grid's single-line input is unusable for them — you cannot
+ * proofread a paragraph through a 200px window.
+ *
+ * Two things it does that the legacy version does not. It edits the DRAFT
+ * rather than writing straight to the database, so the text goes out through
+ * the ordinary save with its reason and its audit row instead of a side channel
+ * with its own Save button. And it commits on close rather than needing a
+ * separate save first — the legacy modal's Save is a distinct action from the
+ * grid's, and text typed into it and then dismissed is simply lost.
+ */
+function DescEditor({ title, value, readOnly, onChange, onClose }: {
+  title: string;
+  value: string;
+  readOnly: boolean;
+  onChange: (v: string) => void;
+  onClose: () => void;
+}) {
+  const [text, setText] = useState(value);
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => { ref.current?.focus(); }, []);
+
+  const commit = () => {
+    if (!readOnly && text !== value) onChange(text);
+    onClose();
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Escape discards, matching every other dismissal in the app. Ctrl/Cmd+
+      // Enter commits without reaching for the mouse, which is what anyone
+      // typing a long report will want.
+      if (e.key === 'Escape') { e.stopPropagation(); onClose(); }
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); commit(); }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  });
+
+  return (
+    <div className="modal-backdrop" onClick={commit}>
+      <div className="modal modal--wide" onClick={(e) => e.stopPropagation()}
+           role="dialog" aria-modal="true" aria-label={`Long-form result for ${title}`}>
+        <h2 className="modal__title">{title}</h2>
+        <p className="muted" style={{ fontSize: '.78rem', marginTop: '.2rem' }}>
+          {readOnly
+            ? 'This sample is locked, so the text is shown for reading only.'
+            : 'Saved with the rest of the worksheet — close this and use Save on the grid.'}
+        </p>
+        <textarea
+          ref={ref}
+          className="input descedit"
+          readOnly={readOnly}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        <div className="modal__actions">
+          <button className="btn btn--ghost" onClick={onClose}>Discard</button>
+          <button className="btn" disabled={readOnly} onClick={commit}>Keep text</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /** A row the operator has touched but not yet saved. */
 interface Draft {
@@ -116,6 +208,15 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
   const [showHistory, setShowHistory] = useState(false);
   const [reopening, setReopening] = useState(false);
   const [reopenReason, setReopenReason] = useState('');
+  const [editingPatient, setEditingPatient] = useState(false);
+  /** Which analyte has the long-form editor open. One at a time. */
+  const [descRow, setDescRow] = useState<number | null>(null);
+
+  // Shared by the panel at the foot and by every row's clip, so an upload from
+  // either place refreshes both. See useAttachments.
+  const attachments = useAttachments(sid);
+  /** Which analyte has its attachment drawer open. One at a time. */
+  const [openAttach, setOpenAttach] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -320,24 +421,58 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
             {/* ---- header ---- */}
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <h2 className="modal__title">{header.patientName ?? 'Unnamed patient'}</h2>
-                <p className="muted" style={{ fontSize: '.8rem', marginTop: '.15rem' }}>
-                  SID <b className="mono">{header.sid}</b>
-                  {header.clientCode && ` · ${header.clientCode}`}
-                  {header.sex && ` · ${header.sex}`}
-                  {header.age != null && ` · ${header.age} ${header.ageUnit ?? ''}`}
-                  {header.registeredAt && ` · registered ${fmtDateTime(header.registeredAt)}`}
-                </p>
+                {/* Salutation joined to the name, as Listec prints it. */}
+                <h2 className="modal__title">
+                  {[header.title, header.patientName].filter(Boolean).join(' ') || 'Unnamed patient'}
+                </h2>
               </div>
               <div className="row" style={{ gap: '.4rem' }}>
                 <span className={`badge badge--${header.statusCode === 7 ? 'infinity' : 'lis'}`}>
                   {header.status ?? '—'}
                 </span>
+                {perms?.canEditPatient && (
+                  <button className="btn btn--ghost btn--sm" onClick={() => setEditingPatient(true)}>
+                    Edit patient info
+                  </button>
+                )}
                 <button className="btn btn--ghost btn--sm" onClick={() => setShowHistory(true)}>
                   History
                 </button>
               </div>
             </div>
+
+            {/*
+              The identity block, at parity with Listec's worksheet header.
+
+              Everything here was previously one run-on subtitle line, which is
+              readable for four fields and unreadable for eleven. It is the block
+              an operator checks before committing a result — right tube, right
+              patient, right centre — so it is laid out as labelled pairs that
+              can be scanned down a column rather than parsed left to right.
+
+              Empty fields are kept rather than dropped: a blank "Referring
+              Doctor" is information (nobody was recorded), and a grid whose rows
+              move depending on what happens to be filled in is harder to scan
+              than one that always looks the same.
+            */}
+            <dl className="smeta">
+              <Meta label="Reg No" value={header.pid ? String(header.pid) : null} mono />
+              <Meta label="Vail Id" value={header.sid} mono />
+              <Meta
+                label="Age and Sex"
+                value={[
+                  header.age != null ? `${header.age} ${header.ageUnit ?? ''}`.trim() : null,
+                  header.sex,
+                ].filter(Boolean).join('  ') || null}
+              />
+              <Meta label="Collection Centre" value={header.clientCode} />
+              <Meta label="Referring Doctor" value={header.referringDoctor} />
+              <Meta label="Referring Customer" value={header.referringCustomer} />
+              <Meta label="Sample type" value={header.sampleType} />
+              <Meta label="Sample Drawn" value={fmtOrDash(header.sampleDrawn)} />
+              <Meta label="Registered" value={fmtOrDash(header.registeredAt)} />
+              <Meta label="Report Date" value={fmtOrDash(header.lastModifiedAt)} />
+            </dl>
 
             {/* ---- state banners ---- */}
             {header.isRejected && (
@@ -440,11 +575,27 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                     const pos = positionOf(r, value);
                     const touched = drafts[r.resultId] !== undefined;
                     const willSign = willAutoAuthorize.some((x) => x.resultId === r.resultId);
+                    const label = plainText(r.testName) || r.testCode || '—';
+                    const clipped = attachments.countFor(r.resultId);
+                    const drawerOpen = openAttach === r.resultId;
 
                     return (
-                      <tr key={r.resultId} className={touched ? 'worksheet-grid__touched' : undefined}>
+                      <Fragment key={r.resultId}>
+                      <tr className={touched ? 'worksheet-grid__touched' : undefined}>
                         <td className="cell--lead">
-                          {plainText(r.testName) || r.testCode || '—'}
+                          <span className="cell--lead__name">
+                            {label}
+                            {/* Beside the name rather than in a column of its
+                                own: most analytes never carry a document, and a
+                                seventh column of empty clips down a forty-line
+                                CBC costs width on every row to serve a few. */}
+                            <AttachClip
+                              count={clipped}
+                              open={drawerOpen}
+                              testName={label}
+                              onToggle={() => setOpenAttach(drawerOpen ? null : r.resultId)}
+                            />
+                          </span>
                           {r.enteredBy && (
                             <div className="muted" style={{ fontSize: '.68rem' }}>
                               last updated {fmtDateTime(r.updatedAt)}
@@ -478,6 +629,23 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                               />
                               {pos === 'high' && <span className="flag flag--high" title="Above reference range">H</span>}
                               {pos === 'low' && <span className="flag flag--low" title="Below reference range">L</span>}
+                              {/* Descriptive results — histopathology, cytology,
+                                  culture — are prose in the same `value` column
+                                  a numeric result uses, and a 200px single-line
+                                  input cannot be written or proofread in. Listec
+                                  solves it with a per-row "Desc" link opening a
+                                  1000x400 editor; this is that, writing into the
+                                  same draft so it saves and audits by the
+                                  ordinary path rather than a side channel. */}
+                              <button
+                                type="button"
+                                className="btn btn--ghost btn--xs descbtn"
+                                title={`Write ${plainText(r.testName) || 'this result'} as free text`}
+                                aria-label={`Open the long-form editor for ${plainText(r.testName) || 'this result'}`}
+                                onClick={() => setDescRow(r.resultId)}
+                              >
+                                {value.length > 40 || value.includes('\n') ? 'Desc •' : 'Desc'}
+                              </button>
                             </div>
                           )}
                         </td>
@@ -496,12 +664,15 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                         <RangeCell text={plainText(r.normalRange) || (r.rangeLow != null ? `${r.rangeLow} – ${r.rangeHigh}` : '—')} />
 
                         <td className="cell--body" data-label="Comment">
-                          <input
+                          {/* Autocorrected. A comment is prose that a doctor
+                              reads — unlike the value beside it, which is the
+                              measurement and is never touched. See SpellChecked. */}
+                          <SpellChecked
                             className="input input--sm"
                             disabled={readOnly}
                             value={commentsOf(r)}
                             placeholder="—"
-                            onChange={(e) => setDraft(r, { comments: e.target.value })}
+                            onChange={(next) => setDraft(r, { comments: next })}
                           />
                         </td>
 
@@ -532,6 +703,21 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                           )}
                         </td>
                       </tr>
+
+                      {drawerOpen && (
+                        <tr className="worksheet-grid__attach">
+                          <td colSpan={6}>
+                            <RowAttachments
+                              sid={sid}
+                              resultId={r.resultId}
+                              testName={label}
+                              canEdit={!readOnly}
+                              state={attachments}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     );
                   })}
 
@@ -546,16 +732,18 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
               </table>
             </div>
 
+            <Attachments sid={sid} canEdit={!readOnly} state={attachments} />
+
             {/* ---- sample-level fields ---- */}
             <div className="field">
               <label htmlFor="ws-sample-comments">Sample comment</label>
-              <input
+              <SpellChecked
                 id="ws-sample-comments"
                 className="input"
                 disabled={readOnly}
                 value={sampleComments}
                 placeholder="Visible on the report"
-                onChange={(e) => setSampleComments(e.target.value)}
+                onChange={setSampleComments}
               />
               {/* Worth stating: in the legacy LIS, saving any sample comment
                   forced the status to 10 (Pending), silently discarding the
@@ -603,7 +791,42 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
         )}
 
         {showHistory && <WorksheetHistory sid={sid} onClose={() => setShowHistory(false)} />}
+
+        {descRow !== null && (() => {
+          const r = rows.find((x) => x.resultId === descRow);
+          if (!r) return null;
+          return (
+            <DescEditor
+              title={plainText(r.testName) || r.testCode || 'Result'}
+              value={valueOf(r)}
+              readOnly={readOnly}
+              onChange={(v) => setDraft(r, { value: v })}
+              onClose={() => setDescRow(null)}
+            />
+          );
+        })()}
+
+        {editingPatient && header && (
+          <PatientInfoForm
+            sid={sid}
+            header={header}
+            onClose={() => setEditingPatient(false)}
+            onSaved={() => {
+              setEditingPatient(false);
+              // Reload rather than patching the header locally: the procedure
+              // decides what actually changed, and the identity block has to
+              // agree with the database, not with what the form posted.
+              void load();
+              setNotice('Patient info updated.');
+            }}
+          />
+        )}
       </div>
+
+      {/* One per screen, however many fields corrected. It portals to the body,
+          so where it sits in this tree does not matter — only that it is
+          mounted while the worksheet is open. */}
+      <SpellCheckUndo />
     </div>
   );
 }

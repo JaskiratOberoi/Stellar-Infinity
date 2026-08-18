@@ -74,6 +74,28 @@ internal static class SqlReaderExtensions
         return r.IsDBNull(i) ? null : r.GetValue(i)?.ToString();
     }
 
+    /// <summary>
+    /// Like <see cref="Str"/>, but returns null for a column the result set does
+    /// not have rather than throwing.
+    ///
+    /// For columns added to a procedure in the same change as the code that
+    /// reads them. The API image and the SQL scripts deploy separately, so for
+    /// the window between them the procedure in the database is the OLD one —
+    /// and <c>GetOrdinal</c> raises IndexOutOfRangeException, which on a screen
+    /// like the worksheet means every operator gets a 500 instead of a header
+    /// missing four fields. Reach for this only for genuinely new columns;
+    /// using it everywhere would turn a renamed column into silent data loss.
+    /// </summary>
+    public static string? StrOpt(this SqlDataReader r, string column)
+    {
+        for (var i = 0; i < r.FieldCount; i++)
+        {
+            if (!string.Equals(r.GetName(i), column, StringComparison.OrdinalIgnoreCase)) continue;
+            return r.IsDBNull(i) ? null : r.GetValue(i)?.ToString();
+        }
+        return null;
+    }
+
     public static DateTime? Date(this SqlDataReader r, string column)
     {
         var i = r.GetOrdinal(column);

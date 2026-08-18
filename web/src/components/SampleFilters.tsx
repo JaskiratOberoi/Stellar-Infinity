@@ -316,7 +316,7 @@ export function SampleFilters({
           fieldset/legend rather than a div and a heading: this IS a group of
           form controls, and the grouping then reaches assistive technology for
           free instead of being purely visual. */}
-      <fieldset className="fgroup">
+      <fieldset className="fgroup fgroup--find">
         <legend>Find a sample</legend>
         <div className="fgroup__grid fgroup__grid--find">
           <label className="field">
@@ -339,7 +339,7 @@ export function SampleFilters({
         </div>
       </fieldset>
 
-      <fieldset className="fgroup">
+      <fieldset className="fgroup fgroup--when">
         <legend>When</legend>
         <div className="fgroup__grid fgroup__grid--when">
           <label className="field">
@@ -387,7 +387,7 @@ export function SampleFilters({
         </div>
       </fieldset>
 
-      <fieldset className="fgroup">
+      <fieldset className="fgroup fgroup--narrow">
         <legend>Narrow to</legend>
         <div className="fgroup__grid fgroup__grid--narrow">
           {statusOptions && (

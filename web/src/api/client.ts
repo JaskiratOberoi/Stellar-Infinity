@@ -213,6 +213,8 @@ export interface AdminUserRow {
   infinityRole: string | null;
   effectiveRole: string;
   sessionVersion: number;
+  /** Walk-in ordering granted to this user individually. */
+  walkInGranted: boolean;
 }
 
 export interface AdminUserPage {
@@ -268,6 +270,12 @@ export interface WorksheetSampleHeader {
   isEditable: boolean;
   needsReopen: boolean;
   isRejected: boolean;
+  /** Salutation (Mr/Mrs/…), stored apart from the name. */
+  title: string | null;
+  referringDoctor: string | null;
+  referringCustomer: string | null;
+  /** Specimen, e.g. "WB - EDTA". */
+  sampleType: string | null;
 }
 
 export interface WorksheetResultRow {
@@ -320,6 +328,28 @@ export interface WorksheetPermissions {
   canAuthorize: boolean;
   canReopen: boolean;
   canReject: boolean;
+  /** Demographics and referral, not results — see patient:edit. */
+  canEditPatient: boolean;
+}
+
+/**
+ * The "Edit patient info" payload. Referrer ids use 0 for "no master row",
+ * which pairs with a hand-typed name in the matching Other field.
+ */
+export interface UpdatePatientBody {
+  title: string | null;
+  name: string;
+  age: number | null;
+  ageType: number | null;
+  gender: number | null;
+  refDoctor: number | null;
+  refDoctorOther: string | null;
+  refCustomer: number | null;
+  refCustomerOther: string | null;
+  mobile: string | null;
+  email: string | null;
+  sampleTime: string | null;
+  clinicalHistory: string | null;
 }
 
 export interface WorksheetSampleResponse {
@@ -463,6 +493,17 @@ export const worksheetApi = {
   getSample: (sid: string) =>
     api.get<WorksheetSampleResponse>(`/api/worksheet/${encodeURIComponent(sid)}`),
 
+  /**
+   * Correct the patient behind a sample.
+   *
+   * Null means "leave this column alone" and '' means "clear it" — the same
+   * convention saveResults uses, and load-bearing here because the form posts
+   * every field on every save.
+   */
+  updatePatient: (sid: string, body: UpdatePatientBody) =>
+    api.put<{ ok: boolean; changed: number }>(
+      `/api/worksheet/${encodeURIComponent(sid)}/patient`, body),
+
   saveResults: (
     sid: string,
     edits: ResultEdit[],
@@ -556,6 +597,20 @@ export const adminApi = {
   setActive: (userId: number, enabled: boolean) =>
     api.put<void>(`/api/admin/users/${userId}/active`, { enabled }),
   setRole: (userId: number, role: string) => api.put<void>(`/api/admin/users/${userId}/role`, { role }),
+  /**
+   * Grant or revoke walk-in ordering for ONE account.
+   *
+   * A client is B2B-only by default: every order it raises is billed to its
+   * account and settled later. This is the exception the lab makes for a
+   * centre that also takes walk-in patients over its own counter.
+   *
+   * The capability is named by the caller but the server will only accept
+   * one it whitelists - this is not a general capability-granting API.
+   */
+  setWalkIn: (userId: number, granted: boolean) =>
+    api.put<{ ok: boolean; message?: string }>(
+      `/api/admin/users/${userId}/capability-grant`,
+      { capability: 'order:b2c', granted }),
   resetPassword: (userId: number, password: string) =>
     api.put<void>(`/api/admin/users/${userId}/password`, { password }),
 };
@@ -733,6 +788,95 @@ export const orderTubesApi = {
     api.get<{ tubes: OrderTube[] }>(`/api/accessioning/tubes/${patientId}`),
 };
 
+/* ---- inward / sample transit tracking ---- */
+
+export interface InwardRow {
+  id: number;
+  /** Per-unit, per-day running number — the operators read it as today's tally. */
+  slno: number | null;
+  sid: string | null;
+  scannedAt: string | null;
+  scannedBy: string | null;
+  bunit: string | null;
+  receivedOne: string | null;
+  receivedOneAt: string | null;
+  receivedTwo: string | null;
+  receivedTwoAt: string | null;
+  receivedThree: string | null;
+  receivedThreeAt: string | null;
+  patientId: number | null;
+  patientName: string | null;
+  /** "M" | "F", or null when unknown — never defaulted (the legacy showed 'F'). */
+  sex: string | null;
+  clientCode: string | null;
+  tests: string | null;
+  sampleStatus: number | null;
+}
+
+export interface InwardListResponse {
+  rows: InwardRow[];
+  count: number;
+  total: number;
+  /** True when `total` exceeds the row cap — the grid is a prefix, not the set. */
+  capped: boolean;
+  from: string;
+  to: string;
+}
+
+export interface InwardScanResponse {
+  /** new_leg | checkpoint_1 | checkpoint_2 | checkpoint_3 | already_full */
+  outcome: string;
+  /** The vial has no workorder. The scan is still logged — chain of custody. */
+  noWorkorder: boolean;
+  slno: number | null;
+  patientName: string | null;
+  sex: string | null;
+  sampleStatus: number | null;
+  tests: string | null;
+  oldBusinessUnit: string | null;
+  businessUnit: string | null;
+  /** Head-office scan of a sent sample also registers it — via the existing
+   *  accession path, so the outcome of that step travels separately. */
+  accession: {
+    triggered: boolean;
+    ok: boolean;
+    registered: number;
+    message: string | null;
+  };
+}
+
+export interface InwardFilters {
+  from?: string;
+  to?: string;
+  /** Exact SID. When present the server IGNORES the dates. */
+  sid?: string;
+  clientId?: number | null;
+}
+
+function inwardParams(f: InwardFilters): URLSearchParams {
+  const p = new URLSearchParams();
+  if (f.from) p.set('from', f.from);
+  if (f.to) p.set('to', f.to);
+  if (f.sid?.trim()) p.set('sid', f.sid.trim());
+  if (f.clientId != null) p.set('clientId', String(f.clientId));
+  return p;
+}
+
+export const inwardApi = {
+  list: (f: InwardFilters) =>
+    api.get<InwardListResponse>(`/api/inward/?${inwardParams(f)}`),
+
+  scan: (vailid: string) =>
+    api.post<InwardScanResponse>('/api/inward/scan', { vailid }),
+
+  /** Same-origin, cookie-authenticated GET — usable with downloadFile(). */
+  csvHref: (f: InwardFilters) => {
+    const p = inwardParams(f);
+    p.set('format', 'csv');
+    return `/api/inward/?${p}`;
+  },
+};
+
 /* ---- client accounts, ledger, billing ---- */
 
 export interface ClientAccount {
@@ -833,4 +977,70 @@ export const rateListApi = {
       '/api/rate-lists/', { name }),
   setRate: (id: number, testId: number, price: number) =>
     api.put<{ ok: boolean }>(`/api/rate-lists/${id}/rates/${testId}`, { price }),
+};
+
+/* ---- worksheet attachments ---- */
+
+export interface AttachmentRow {
+  id: number;
+  resultId: number | null;
+  testName: string | null;
+  testCode: string | null;
+  fileType: string | null;
+  sizeBytes: number;
+  uploadedBy: string | null;
+  uploadedAt: string | null;
+}
+
+export interface AttachmentList {
+  rows: AttachmentRow[];
+  count: number;
+  maxBytes: number;
+  canAttach: boolean;
+  canRemove: boolean;
+}
+
+export const attachmentApi = {
+  list: (sid: string) =>
+    api.get<AttachmentList>(`/api/worksheet/${encodeURIComponent(sid)}/attachments`),
+
+  /**
+   * Multipart, so the browser streams the file rather than this code turning it
+   * into a base64 string a third larger than the original.
+   *
+   * Content-Type is deliberately NOT set: fetch must generate it itself so the
+   * multipart boundary matches the body. The CSRF header still goes on, because
+   * this is a cookie-authenticated write like any other.
+   */
+  upload: async (sid: string, file: File, resultId?: number | null) => {
+    const body = new FormData();
+    body.append('file', file);
+    if (resultId != null) body.append('resultId', String(resultId));
+
+    const headers = new Headers();
+    const csrf = readCookie(CSRF_COOKIE);
+    if (csrf) headers.set(CSRF_HEADER, csrf);
+
+    const res = await fetch(`/api/worksheet/${encodeURIComponent(sid)}/attachments`, {
+      method: 'POST',
+      body,
+      headers,
+      credentials: 'include',
+    });
+
+    if (!res.ok) {
+      const problem = await res.json().catch(() => null) as { error?: string; detail?: string } | null;
+      throw new ApiError(res.status, problem?.error ?? problem?.detail ?? `Upload failed (${res.status})`);
+    }
+    return (await res.json()) as { id: number };
+  },
+
+  remove: (sid: string, id: number) =>
+    request<{ removed: number }>(`/api/worksheet/${encodeURIComponent(sid)}/attachments/${id}`, {
+      method: 'DELETE',
+    }),
+
+  /** Same-origin and cookie-authenticated, so it can be used as an href. */
+  href: (sid: string, id: number) =>
+    `/api/worksheet/${encodeURIComponent(sid)}/attachments/${id}`,
 };

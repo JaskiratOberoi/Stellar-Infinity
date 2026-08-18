@@ -22,12 +22,25 @@ public static class RateListEndpoints
     {
         var g = app.MapGroup("/api/rate-lists").RequireAuthorization();
 
+        // READS are rate:manage, not billing:view.
+        //
+        // billing:view is held by the CLIENT role — a collection centre needs
+        // it for their own ledger and invoices — and rate lists carry no client
+        // scope of their own (see the remark above). The two together meant any
+        // of the ~3,300 active client logins could enumerate all 112 rate lists
+        // and read another region's negotiated prices: measured on staging,
+        // a Delhi centre reading BIJNOR's list line by line, MRP and rate.
+        //
+        // rate:manage is held by super_admin and admin only. Nobody legitimate
+        // loses anything: lab_manager holds neither capability, so Rates was
+        // never theirs, and viewer — the catch-all for unrecognised LIS user
+        // types — has no business reading commercial terms either.
         g.MapGet("/", ListRateLists)
-         .RequireCapability(Capabilities.BillingView)
+         .RequireCapability(Capabilities.RateManage)
          .WithName("ListRateLists");
 
         g.MapGet("/{id:int}/items", ListItems)
-         .RequireCapability(Capabilities.BillingView)
+         .RequireCapability(Capabilities.RateManage)
          .WithName("ListRateListItems");
 
         g.MapPost("/", CreateRateList)

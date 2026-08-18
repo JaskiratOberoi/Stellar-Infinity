@@ -60,7 +60,16 @@ public sealed class WorksheetRepository(NobleConnectionFactory db, SqlRetry retr
                     SignatoryDesignation: reader.Str("signatory_designation"),
                     IsEditable: reader.Bit("is_editable"),
                     NeedsReopen: reader.Bit("needs_reopen"),
-                    IsRejected: reader.Bit("is_rejected"));
+                    IsRejected: reader.Bit("is_rejected"),
+                    // StrOpt, not Str: these four are new in the same change as
+                    // the procedure that returns them, and the API image and the
+                    // SQL deploy separately. Str would throw for the whole
+                    // worksheet in the window where the old procedure is still
+                    // in the database.
+                    Title: reader.StrOpt("title"),
+                    ReferringDoctor: reader.StrOpt("ref_doctor"),
+                    ReferringCustomer: reader.StrOpt("ref_customer"),
+                    SampleType: reader.StrOpt("sample_type"));
 
                 // ---- 2. analyte rows ----
                 var rows = new List<WorksheetResultRow>();

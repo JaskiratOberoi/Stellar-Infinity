@@ -38,6 +38,15 @@ public sealed record AdminUserDetail(
     int SessionVersion,
     /// <summary>Legacy per-usertype bits from the LIS, read-only context for the admin.</summary>
     LisSecurityBits LisSecurity,
+    /// <summary>
+    /// Capabilities granted to THIS USER individually, on top of their role.
+    ///
+    /// Separate from EffectiveCapabilities on purpose: that set cannot answer
+    /// "is the walk-in toggle on", because an admin holds order:b2c from their
+    /// role and a client only ever holds it as a grant. The panel needs the
+    /// grant, not the effect.
+    /// </summary>
+    IReadOnlyList<string> CapabilityGrants,
     IReadOnlyList<MappedClientCode> ClientCodes,
     IReadOnlyList<OwnCentre> OwnCentres);
 

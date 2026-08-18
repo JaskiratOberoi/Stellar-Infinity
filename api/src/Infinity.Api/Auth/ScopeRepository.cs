@@ -102,17 +102,49 @@ public sealed class ScopeRepository(
     /// Safe because this governs visibility only; ordering and billing still go
     /// through <see cref="GetScopeAsync"/>.
     /// </summary>
+    /*
+     * ── FRANCHISE ROLL-UP ──────────────────────────────────────────────────
+     * The final UNION adds a parent centre's sub-franchises, so a parent login
+     * sees its children's samples and reports. Decided by the lab (D13); the
+     * money already worked this way, since sub-franchise charges post to the
+     * PARENT's account with the child's code in the ledger description.
+     *
+     * ONE level deep, deliberately, and the data says that is enough rather
+     * than being a simplification: the only three-deep chain in production is
+     * PB0008 -> PB0008B -> PB0008A, and PB0008A is ALSO mapped directly to
+     * PB0008. The mapping table writes its transitive edges out explicitly, so
+     * a recursive CTE would return the same rows while making a cycle in
+     * hand-maintained data able to hang the query.
+     *
+     * The join is one-directional on purpose. A CHILD login must not inherit
+     * its parent's scope, and must not reach a sibling — only the parent looks
+     * down. Four children legitimately have two parents (PB0008A, PB0027A and
+     * the two UK0022 labs, shared with HR0349), and both of those parents do
+     * see them; that is what the lab's own mapping says.
+     */
     public Task<IReadOnlyList<int>> GetReportScopeAsync(int userId, CancellationToken ct = default) =>
         Cached($"inf:reportscope:{userId}", Query(userId, """
-            SELECT DISTINCT m.mcc_code
-            FROM dbo.tbl_med_user_sales_mcc_mapping m
-            WHERE m.user_id = @uid AND m.mcc_code IS NOT NULL
+            WITH own AS (
+                SELECT DISTINCT m.mcc_code AS id
+                FROM dbo.tbl_med_user_sales_mcc_mapping m
+                WHERE m.user_id = @uid AND m.mcc_code IS NOT NULL
+                UNION
+                SELECT u.PCC_Id FROM dbo.tbl_med_user_master u
+                WHERE u.id = @uid AND u.PCC_Id IS NOT NULL AND u.PCC_Id > 0
+                UNION
+                SELECT u.sub_pcc_id FROM dbo.tbl_med_user_master u
+                WHERE u.id = @uid AND u.sub_pcc_id IS NOT NULL AND u.sub_pcc_id > 0
+            )
+            SELECT id FROM own
             UNION
-            SELECT u.PCC_Id FROM dbo.tbl_med_user_master u
-            WHERE u.id = @uid AND u.PCC_Id IS NOT NULL AND u.PCC_Id > 0
-            UNION
-            SELECT u.sub_pcc_id FROM dbo.tbl_med_user_master u
-            WHERE u.id = @uid AND u.sub_pcc_id IS NOT NULL AND u.sub_pcc_id > 0;
+            SELECT f.sub_franchise_code
+            FROM dbo.tbl_med_mcc_unit_franchise_mapping f
+            JOIN own o ON o.id = f.mcc_code
+            WHERE f.sub_franchise_code IS NOT NULL
+              AND f.sub_franchise_code > 0
+              -- A row mapping a centre to itself would be harmless here but is
+              -- excluded so the intent stays legible: this UNION adds CHILDREN.
+              AND f.sub_franchise_code <> f.mcc_code;
             """), ct);
 
     /// <summary>

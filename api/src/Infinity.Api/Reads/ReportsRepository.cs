@@ -21,7 +21,11 @@ public sealed record TestResult(
     [property: JsonPropertyName("authorized")] bool Authorized,
     [property: JsonPropertyName("comments")] string? Comments,
     [property: JsonPropertyName("departmentName")] string? DepartmentName,
-    /// <summary>The catalogue's display name, which the result row does not always carry.</summary>
+    /// <summary>
+    /// The catalogue's display name, for a row that carries none of its own.
+    /// It is the TEST's name, shared by every row under that test, so it must
+    /// not be printed in preference to <see cref="TestName"/>.
+    /// </summary>
     [property: JsonPropertyName("reportTestName")] string? ReportTestName = null,
     /// <summary>How it was measured — CLIA, ELISA. A printed report names its method.</summary>
     [property: JsonPropertyName("method")] string? Method = null,

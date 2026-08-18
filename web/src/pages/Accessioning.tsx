@@ -3,7 +3,7 @@ import {
   accessionApi, orderTubesApi,
   type OrderChannel, type OrderTube, type PendingAccession, type PendingRegistration,
 } from '../api/client';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { fmtDateTime, inr, plainText } from '../lib/format';
 import { Pager } from '../components/Pager';
 import { InfinityLoader } from '../components/InfinityLoader';
@@ -159,8 +159,16 @@ export function Accessioning() {
             Nothing here is on the worksheet yet — this is what puts it there
           </p>
         </div>
-        <button className="btn btn--ghost btn--sm" style={{ marginLeft: 'auto' }}
-                onClick={() => void load()}>Refresh</button>
+        <div className="row" style={{ marginLeft: 'auto', gap: '.5rem' }}>
+          {/* The transit scan desk. Lives here rather than in the top bar —
+              the bar is at its width limit (see the NAV note in App.tsx) and
+              this is the same physical desk: vials arrive, get scanned, get
+              registered. Gated like the API gates the scan itself. */}
+          {can('order:accession') && (
+            <Link className="btn btn--ghost btn--sm" to="/inward">Inward scans</Link>
+          )}
+          <button className="btn btn--ghost btn--sm" onClick={() => void load()}>Refresh</button>
+        </div>
       </div>
 
       {error && <div className="alert alert--error" style={{ marginBottom: '.8rem' }}>{error}</div>}
@@ -192,8 +200,16 @@ export function Accessioning() {
 
             {/* Resets to page 1: filtering while on page 3 of the unfiltered
                 queue lands on a page the narrower result may not have. */}
+            {/* Walk-in is hidden from accounts that cannot raise a walk-in
+                order. For a collection centre every order is a client order,
+                so "All / Walk-in / Client" is three buttons describing one
+                thing — and the two they cannot use imply a queue they are
+                simply not seeing. */}
             <div className="seg" role="group" aria-label="Filter by channel">
-              {([[null, 'All'], ['b2c', 'Walk-in'], ['b2b', 'Client']] as const).map(([k, label]) => (
+              {(can('order:b2c')
+                ? ([[null, 'All'], ['b2c', 'Walk-in'], ['b2b', 'Client']] as const)
+                : ([[null, 'All'], ['b2b', 'Client']] as const)
+              ).map(([k, label]) => (
                 <button
                   key={label}
                   className={`seg__btn${kind === k ? ' is-on' : ''}`}

@@ -87,7 +87,18 @@ public sealed record WorksheetSampleHeader(
     bool IsEditable,
     /// <summary>True when only a reopen (result:reopen) can make it editable again.</summary>
     bool NeedsReopen,
-    bool IsRejected);
+    bool IsRejected,
+    // The four fields Listec's worksheet header carries that this one did not.
+    // Defaulted so the positional constructor keeps compiling for any caller
+    // that builds a header without them.
+    /// <summary>Salutation (Mr/Mrs/…), stored apart from the name.</summary>
+    string? Title = null,
+    /// <summary>Master row's name, or the free-text fallback when unmatched.</summary>
+    string? ReferringDoctor = null,
+    /// <summary>Master row's name, or the free-text fallback when unmatched.</summary>
+    string? ReferringCustomer = null,
+    /// <summary>Specimen, e.g. "WB - EDTA".</summary>
+    string? SampleType = null);
 
 /// <summary>A rule that will auto-authorize part of this sample, shown up front.</summary>
 public sealed record AutoAuthRuleInForce(
@@ -132,6 +143,29 @@ public sealed record SaveResultsOutcome(
     int? StatusAfter);
 
 public sealed record ReopenRequest(string Reason);
+
+/// <summary>
+/// The worksheet's "Edit patient info" form.
+///
+/// Null means "leave alone" and empty string means "clear it", all the way down
+/// to the procedure — see PatientInfoEdit. Name is the one field that may not
+/// be cleared, and the endpoint rejects a blank one rather than letting the
+/// convention erase it.
+/// </summary>
+public sealed record UpdatePatientRequest(
+    string? Title,
+    string? Name,
+    int? Age,
+    int? AgeType,
+    int? Gender,
+    int? RefDoctor,
+    string? RefDoctorOther,
+    int? RefCustomer,
+    string? RefCustomerOther,
+    string? Mobile,
+    string? Email,
+    DateTime? SampleTime,
+    string? ClinicalHistory);
 
 public sealed record ResultAuditRow(
     long Id,

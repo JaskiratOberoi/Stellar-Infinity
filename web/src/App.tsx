@@ -6,9 +6,11 @@ import { SignInDraw } from './components/SignInDraw';
 import { NobleMark } from './components/NobleMark';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
+import { ClientHome } from './pages/ClientHome';
 import { Orders } from './pages/Orders';
 import { NewOrder } from './pages/NewOrder';
 import { Accessioning } from './pages/Accessioning';
+import { Inward } from './pages/Inward';
 import { Catalogue } from './pages/Catalogue';
 import { ClientAccounts } from './pages/ClientAccounts';
 import { RateLists } from './pages/RateLists';
@@ -87,7 +89,17 @@ const NAV: NavItem[] = [
   // NewOrderFab.
   // These two share a pathname, so both declare the query they own — otherwise
   // NavLink lights them together. See NavItem.search.
-  { to: '/accessioning', label: 'Accessioning', icon: 'orders', cap: 'order:view', search: '' },
+  // order:accession, not order:view — clients hold order:view (they place
+  // orders), and this is the LAB's receiving queue. A collection centre was
+  // being shown a tab that always returned nothing: correctly scoped, but a
+  // lab screen wearing a client's badge.
+  { to: '/accessioning', label: 'Accessioning', icon: 'orders', cap: 'order:accession', search: '' },
+  // Inward (the transit scan desk, /inward) is deliberately NOT in this bar.
+  // The bar is at its width limit: thirteen entries were 61px over the viewport
+  // at 1905 until the Branding/Jarvis label trims, and a fourteenth pill
+  // (~85px) would put the horizontal scrollbar back for every role that sees
+  // the full row. It is reached from the Accessioning page header instead —
+  // the same desk, one click, and the scanning roles all hold order:view.
   // The B2B half of the same worklist, as its own entry — Telo carries it in
   // the nav as "Patient Orders" and operators reach for it by name. It is the
   // accessioning queue with ?kind=b2b, not a second screen.
@@ -97,7 +109,10 @@ const NAV: NavItem[] = [
   },
   { to: '/catalogue', label: 'Catalogue', icon: 'orders', cap: 'order:view' },
   { to: '/accounts', label: 'Accounts', icon: 'orders', cap: 'billing:view' },
-  { to: '/rate-lists', label: 'Rates', icon: 'orders', cap: 'billing:view' },
+  // rate:manage, not billing:view — clients hold billing:view for their own
+  // ledger, and this screen lists every rate list in the lab. See the remark in
+  // RateListEndpoints.
+  { to: '/rate-lists', label: 'Rates', icon: 'orders', cap: 'rate:manage' },
   { to: '/worksheet', label: 'Worksheet', icon: 'worksheet', cap: 'result:enter' },
   { to: '/reports', label: 'Reporting', icon: 'reporting', cap: 'report:view' },
   { to: '/instruments', label: 'Instruments', icon: 'instruments', cap: 'result:enter' },
@@ -220,17 +235,31 @@ export function App() {
       </header>
 
       <Routes>
-        <Route path="/" element={<Dashboard />} />
+        {/* A centre gets its OWN landing page. The lab Dashboard is gated on
+            analytics:view, which the client role does not hold, so a client
+            landing there was shown a permission error where Telo shows them
+            their balance and payments. Keyed on the capability rather than on
+            the role name, so anyone without analytics gets something useful
+            rather than an explanation of what they lack. */}
+        <Route path="/" element={can('analytics:view') ? <Dashboard /> : <ClientHome />} />
         <Route path="/orders" element={can('order:view') ? <Orders /> : <Navigate to="/" replace />} />
         {/* order:create, not order:view — booking is a stronger act than
             reading, and the API enforces the same distinction independently. */}
         <Route path="/orders/new" element={can('order:create') ? <NewOrder /> : <Navigate to="/" replace />} />
-        <Route path="/accessioning" element={can('order:view') ? <Accessioning /> : <Navigate to="/" replace />} />
+        {/* Either capability: the lab reaches this as the receiving queue, a
+            client reaches the SAME screen as "Patient orders" (?kind=b2b) to
+            watch their own orders land. Gating on order:accession alone made
+            that nav entry a dead link for every client. */}
+        <Route path="/accessioning"
+               element={can('order:accession') || can('order:b2b') ? <Accessioning /> : <Navigate to="/" replace />} />
+        {/* order:view to look at the scan log; the scan box inside additionally
+            needs order:accession, which the API enforces independently. */}
+        <Route path="/inward" element={can('order:view') ? <Inward /> : <Navigate to="/" replace />} />
         <Route path="/catalogue" element={can('order:view') ? <Catalogue /> : <Navigate to="/" replace />} />
         <Route path="/accounts" element={can('billing:view') ? <ClientAccounts /> : <Navigate to="/" replace />} />
         {/* billing:view to look; rate:manage is checked inside for every edit,
             and independently by the API on each write. */}
-        <Route path="/rate-lists" element={can('billing:view') ? <RateLists /> : <Navigate to="/" replace />} />
+        <Route path="/rate-lists" element={can('rate:manage') ? <RateLists /> : <Navigate to="/" replace />} />
         <Route path="/worksheet" element={can('result:enter') ? <Worksheet /> : <Navigate to="/" replace />} />
         <Route path="/reports" element={can('report:view') ? <Reports /> : <Navigate to="/" replace />} />
         <Route path="/instruments" element={can('result:enter') ? <Instruments /> : <Navigate to="/" replace />} />

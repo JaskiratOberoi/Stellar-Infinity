@@ -144,7 +144,13 @@ public sealed class ReportLockRepository(
 
                 await using var wallet = NobleConnectionFactory.CreateCommand(conn,
                     """
-                    SELECT a.currentbalance, u.creditlimit, u.PerminentUnlock
+                    SELECT a.currentbalance, u.creditlimit, u.PerminentUnlock,
+                           temp_unlock = (
+                               SELECT TOP 1 l.expire_unlock
+                               FROM dbo.tbl_med_mcc_lockunlock l
+                               WHERE l.mcc_code = u.id
+                                 AND l.expire_unlock > GETDATE()
+                               ORDER BY l.expire_unlock DESC)
                     FROM dbo.tbl_med_mcc_unit_master u
                     LEFT JOIN dbo.tbl_med_mcc_account_master a ON a.mcccode = u.id
                     WHERE UPPER(u.MCCUnitCode) = @code;
@@ -155,6 +161,26 @@ public sealed class ReportLockRepository(
                 if (!await w.ReadAsync(inner).ConfigureAwait(false)) return ReportLock.Unlocked;
 
                 if (!w.IsDBNull(2) && Convert.ToBoolean(w.GetValue(2))) return ReportLock.Unlocked;
+
+                /*
+                 * The TEMPORARY unlock, which Infinity did not previously read.
+                 *
+                 * LockUnlock_MCC.aspx lets the lab release one client for N
+                 * hours — "pay tomorrow, send today". It is used constantly: 65
+                 * clients held a live unlock at the moment this was written,
+                 * several granted that morning, including centres owing lakhs.
+                 * Ignoring the table meant Infinity kept refusing reports the
+                 * lab had explicitly released, and the operator's only clue was
+                 * a 423 that named a balance they had already waived.
+                 *
+                 * Read as an EXPIRY rather than a flag: `number_of_hours` is
+                 * decoration, `expire_unlock` is the fact, and letting SQL
+                 * compare it to GETDATE() keeps the decision on the database's
+                 * clock rather than the API container's. TOP 1 by latest expiry
+                 * because the table is append-only — re-unlocking a client adds
+                 * a row rather than updating one, so the newest wins.
+                 */
+                if (!w.IsDBNull(3)) return ReportLock.Unlocked;
 
                 var balance = w.IsDBNull(0) ? 0m : Convert.ToDecimal(w.GetValue(0));
                 var limit = w.IsDBNull(1) ? 0m : Convert.ToDecimal(w.GetValue(1));

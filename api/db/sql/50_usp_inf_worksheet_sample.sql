@@ -112,13 +112,31 @@ BEGIN
         -- which leaves a rejected sample freely editable.
         CAST(CASE WHEN s.sample_status IN (3, 7, 8, 9) THEN 0 ELSE 1 END AS BIT) AS is_editable,
         CAST(CASE WHEN s.sample_status IN (7, 8, 9)    THEN 1 ELSE 0 END AS BIT) AS needs_reopen,
-        CAST(CASE WHEN s.sample_status = 3             THEN 1 ELSE 0 END AS BIT) AS is_rejected
+        CAST(CASE WHEN s.sample_status = 3             THEN 1 ELSE 0 END AS BIT) AS is_rejected,
+
+        -- The remaining four fields Listec's own worksheet header prints, so an
+        -- operator checking the tube against the screen sees the same set in
+        -- either system.
+        p.initial                       AS title,
+        -- Both referral fields are "a master row, or free text when nothing
+        -- matched". Listec reads the joined name and falls back to the _other
+        -- column when it comes back empty, so NULLIF is needed for a master row
+        -- whose name is blank rather than NULL — COALESCE alone would stop at
+        -- the empty string and hide a perfectly good free-text value.
+        COALESCE(NULLIF(LTRIM(RTRIM(doc.doctor_name)), ''),
+                 NULLIF(LTRIM(RTRIM(p.ref_doctor_other)), ''))   AS ref_doctor,
+        COALESCE(NULLIF(LTRIM(RTRIM(cust.customer_name)), ''),
+                 NULLIF(LTRIM(RTRIM(p.ref_customer_other)), '')) AS ref_customer,
+        sm.Sampletype                   AS sample_type
     FROM dbo.tbl_med_mcc_patient_samples s
     JOIN dbo.tbl_med_mcc_patient_master  p ON p.id = s.patient_id
     JOIN dbo.tbl_med_mcc_unit_master     u ON u.id = p.mcc_code
     LEFT JOIN dbo.tbl_med_mcc_patient_samples_status_master st ON st.id = s.sample_status
     LEFT JOIN dbo.tbl_med_user_master    auth_user ON auth_user.id = s.authorised_by
     LEFT JOIN dbo.tbl_med_signature_master sig ON sig.id = s.signature_id
+    LEFT JOIN dbo.tbl_med_mcc_doctors    doc  ON doc.id  = p.ref_doctor
+    LEFT JOIN dbo.tbl_med_mcc_customer   cust ON cust.id = p.ref_customer
+    LEFT JOIN dbo.tbl_med_sample_master  sm   ON sm.id   = s.sampleid
     WHERE s.id = @sample_id;
 
     -- ---- 2. analyte rows ------------------------------------------------

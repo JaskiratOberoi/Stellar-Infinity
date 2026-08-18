@@ -170,6 +170,31 @@ public sealed class AccessionRepository(NobleConnectionFactory db, SqlRetry retr
     /// current user, which is a different question and would have shown the
     /// operator whatever happened to be in their own basket.
     /// </summary>
+    /// <summary>
+    /// The LIS client code that owns a patient, for scope checks.
+    ///
+    /// A plain read against the patient row rather than a procedure: the only
+    /// question is "whose patient is this", and the answer must come from the
+    /// database rather than from whatever the caller asserted. Used by the
+    /// tubes route, which previously answered for any patient id at all.
+    /// </summary>
+    public Task<string?> PatientClientCodeAsync(int patientId, CancellationToken ct = default) =>
+        retry.ExecuteAsync("accession.patientOwner", token =>
+            db.QueryAsync("accession.patientOwner", async (conn, inner) =>
+            {
+                await using var cmd = NobleConnectionFactory.CreateCommand(conn,
+                    """
+                    SELECT TOP 1 u.MCCUnitCode
+                    FROM dbo.tbl_med_mcc_patient_master p
+                    JOIN dbo.tbl_med_mcc_unit_master u ON u.id = p.mcc_code
+                    WHERE p.id = @pid;
+                    """);
+                cmd.Parameters.Add("@pid", SqlDbType.Int).Value = patientId;
+
+                var v = await cmd.ExecuteScalarAsync(inner).ConfigureAwait(false);
+                return v is null or DBNull ? null : Convert.ToString(v);
+            }, token), ct);
+
     public Task<IReadOnlyList<OrderTube>> OrderTubesAsync(int patientId, CancellationToken ct = default) =>
         retry.ExecuteAsync("accession.tubes", token =>
             db.QueryAsync("accession.tubes", async (conn, inner) =>

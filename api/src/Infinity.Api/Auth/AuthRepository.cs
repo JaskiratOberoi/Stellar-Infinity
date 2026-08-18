@@ -74,6 +74,33 @@ public sealed class AuthRepository(
     /// is the specific defect that made revocation unreliable at more than one
     /// instance.
     /// </summary>
+    /// <summary>
+    /// Capabilities granted to this ONE user on top of their role.
+    ///
+    /// Read at token mint, not per request: capabilities live in the token, so
+    /// this is the only moment they can be assembled. That is also why
+    /// usp_inf_admin_set_capability_grant bumps the session version - without
+    /// the bump a REVOKE would sit unenforced until the token expired.
+    ///
+    /// Deliberately NOT cached. The set is tiny and read once per sign-in, and
+    /// a stale cache here would mean serving a capability the lab has already
+    /// withdrawn.
+    /// </summary>
+    public Task<IReadOnlyList<string>> GrantedCapabilitiesAsync(int userId, CancellationToken ct = default) =>
+        retry.ExecuteAsync("auth.capabilityGrants", token =>
+            db.QueryAsync("auth.capabilityGrants", async (conn, inner) =>
+            {
+                await using var cmd = NobleConnectionFactory.CreateCommand(conn,
+                    "SELECT capability FROM dbo.inf_user_capability_grant WHERE user_id = @uid");
+                cmd.Parameters.Add("@uid", SqlDbType.Int).Value = userId;
+                cmd.CommandTimeout = 5;
+
+                var list = new List<string>();
+                await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);
+                while (await r.ReadAsync(inner).ConfigureAwait(false)) list.Add(r.GetString(0));
+                return (IReadOnlyList<string>)list;
+            }, token), ct);
+
     public async Task<int> GetSessionVersionAsync(int userId, int fallback, CancellationToken ct = default)
     {
         var key = $"sv:{userId}";

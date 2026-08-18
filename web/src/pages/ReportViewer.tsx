@@ -16,7 +16,11 @@ export interface TestResult {
   authorized: boolean;
   comments: string | null;
   departmentName: string | null;
-  /** The catalogue's display name, which the result row does not always carry. */
+  /**
+   * The catalogue's display name, for a row that carries none of its own. It is
+   * the TEST's name, shared by every row under that test — see nameOf() in
+   * PrintReport.tsx before printing it.
+   */
   reportTestName: string | null;
   /** How it was measured — CLIA, ELISA. A printed report names its method. */
   method: string | null;

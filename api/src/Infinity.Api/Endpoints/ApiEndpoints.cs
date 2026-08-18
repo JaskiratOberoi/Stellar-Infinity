@@ -486,18 +486,45 @@ public static class ApiEndpoints
 
     private static async Task<IResult> GetSampleHeader(
         string sid,
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
         SampleHeaderRepository repo,
         CancellationToken ct)
     {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+
         if (string.IsNullOrWhiteSpace(sid) || sid.Length > 50)
         {
             return Results.BadRequest(new { error = "A SID of 1-50 characters is required." });
         }
 
+        var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
+        if (scope.IsDenied) return Results.NotFound();
+
         var header = await repo.GetAsync(sid, ct).ConfigureAwait(false);
+        if (header is null) return Results.NotFound();
+
+        /*
+         * The scope check the comment below used to promise and never had.
+         *
+         * This route was gated on patient:view alone, which the CLIENT role
+         * holds - so any collection centre could read any patient's name, sex,
+         * age, owning centre and status by asking for the SID. Found by
+         * sweeping every route with a client token (G40), not by reading the
+         * code, which is why the sweep exists.
+         *
+         * Compared against the code the DATABASE returned, never one supplied
+         * by the caller.
+         */
+        if (!scope.IsUnrestricted
+            && !scope.ClientCodes.Contains(header.ClientCode?.Trim() ?? string.Empty,
+                                          StringComparer.OrdinalIgnoreCase))
+        {
+            return Results.NotFound();
+        }
 
         // 404 rather than an empty 200: a missing SID and an out-of-scope SID
-        // should be indistinguishable to the caller once scoping lands.
-        return header is null ? Results.NotFound() : Results.Ok(header);
+        // are indistinguishable to the caller.
+        return Results.Ok(header);
     }
 }

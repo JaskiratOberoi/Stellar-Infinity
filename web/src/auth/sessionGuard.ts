@@ -62,6 +62,42 @@ const IDLE_TICK_MS = 5_000;
 
 const tabId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
+/**
+ * True on the report print routes, which are documents rather than sessions.
+ *
+ * These rules describe a PERSON at a workstation — a tab they opened, a
+ * keyboard they stopped touching. A print route is neither. It is loaded three
+ * ways, and none of them is somebody working:
+ *
+ *   - by headless Chromium in the render sidecar, which photographs it to make
+ *     the PDF. Its browser profile is empty, so the tab registry is empty, so
+ *     the startup check below read a perfectly good session as one left behind
+ *     by a crash and signed it out — and the page it was about to photograph
+ *     became the login form. That is what made every PDF download hang for
+ *     forty-five seconds and then fail.
+ *   - inside the preview iframe, where counting it as a second tab would let a
+ *     modal left open hold a finished session alive.
+ *   - from the QR on a patient's printed copy, which carries a token and has no
+ *     session at all.
+ *
+ * So a print page neither registers itself nor judges anyone else's session. It
+ * renders one report and is thrown away.
+ *
+ * The narrow cost: a session abandoned by a crash stays usable at a print URL
+ * until any other page is opened, which is when the check below runs and ends
+ * it. Reaching that report means already being at the machine AND knowing a
+ * SID, and it is still stricter than having no tab registry at all.
+ *
+ * `/print/report` and not `/print`: the invoice sheet lives under the same
+ * prefix but no renderer ever loads it — an operator opens it and prints it
+ * themselves. That is a person at a workstation, and the rules below are for
+ * them. ReportPdfEndpoints and PublicReportEndpoints are the only things that
+ * hand a URL to the sidecar, and every one of them is a report.
+ */
+function isRenderSurface(): boolean {
+  return typeof window !== 'undefined' && window.location.pathname.startsWith('/print/report/');
+}
+
 function readTabs(): Record<string, number> {
   try {
     const raw = localStorage.getItem(TABS_KEY);
@@ -105,6 +141,8 @@ export function lastActivity(): number {
  */
 export function isOrphanedSession(hasToken: boolean): boolean {
   if (!hasToken) return false;
+  // A document, not a session. See isRenderSurface.
+  if (isRenderSurface()) return false;
 
   const now = Date.now();
   const alive = Object.keys(livingTabs(readTabs(), now)).length > 0;
@@ -136,6 +174,11 @@ export function startSessionGuard(opts: {
   onLastTabClosing: () => void;
 }): () => void {
   const { onIdleExpired, onIdleWarning, onIdleCleared, onLastTabClosing } = opts;
+
+  // A print page holds no session open and ends nobody's shift: it does not
+  // register as a tab, and it has no idle clock because there is no one at it.
+  // See isRenderSurface.
+  if (isRenderSurface()) return () => { /* nothing was started */ };
 
   const beat = () => {
     const now = Date.now();

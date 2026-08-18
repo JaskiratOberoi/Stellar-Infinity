@@ -170,8 +170,12 @@ BEGIN
                 r.updateddate AS updated_at,
                 d.Code AS department_code,
                 d.Name AS department_name,
-                -- The catalogue's own display name for the printed report,
-                -- which is not always the name the result row was written with.
+                -- The catalogue's display name, for a row that carries none of
+                -- its own. NOT the name to print in preference to r.testname:
+                -- this join is on r.testid, and a profile's heading, its
+                -- sub-headings and every analyte beneath them all share one
+                -- testid — so this column holds the same string for all of
+                -- them. See nameOf() in PrintReport.tsx.
                 m.ReportTestname AS report_test_name,
                 m.Method AS method,
                 -- NVARCHAR(MAX): Interpretation is a text/ntext column on the

@@ -84,13 +84,39 @@ public static class AccessionEndpoints
     }
 
     /// <summary>The tubes one order needs, for the barcode form.</summary>
+    /*
+     * Which tubes an order needs.
+     *
+     * Scoped, which it was not: the handler checked only that SOMEONE was
+     * logged in and then answered for any patient id, so a collection centre
+     * could read another centre's test names and the SID already issued
+     * against them. Found by the G40 route sweep with a client token.
+     *
+     * The patient's OWNING centre decides, read from the database rather than
+     * taken from the caller.
+     */
     private static async Task<IResult> OrderTubes(
         int patientId,
         System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
         AccessionRepository repo,
         CancellationToken ct)
     {
-        if (principal.UserId() is null) return Results.Unauthorized();
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+
+        var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
+        if (scope.IsDenied) return Results.NotFound();
+
+        if (!scope.IsUnrestricted)
+        {
+            var owner = await repo.PatientClientCodeAsync(patientId, ct).ConfigureAwait(false);
+            if (owner is null
+                || !scope.ClientCodes.Contains(owner.Trim(), StringComparer.OrdinalIgnoreCase))
+            {
+                return Results.NotFound();
+            }
+        }
+
         return Results.Ok(new { tubes = await repo.OrderTubesAsync(patientId, ct).ConfigureAwait(false) });
     }
 

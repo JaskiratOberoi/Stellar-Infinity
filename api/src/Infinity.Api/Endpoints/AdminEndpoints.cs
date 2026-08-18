@@ -27,6 +27,8 @@ public static class AdminEndpoints
         admin.MapPut("/users/{userId:int}/lis-access", SetLisAccess).WithName("SetLisAccess");
         admin.MapPut("/users/{userId:int}/active", SetActive).WithName("SetActive");
         admin.MapPut("/users/{userId:int}/role", SetRole).WithName("SetRole");
+        admin.MapPut("/users/{userId:int}/capability-grant", SetCapabilityGrant)
+             .WithName("SetCapabilityGrant");
         admin.MapPut("/users/{userId:int}/password", ResetPassword).WithName("ResetPassword");
 
         admin.MapGet("/roles", () => Results.Ok(
@@ -228,6 +230,39 @@ public static class AdminEndpoints
 
         var result = await repo.SetActiveAsync(userId, request.Enabled, actor, ct).ConfigureAwait(false);
         return result.Ok ? Results.NoContent() : MapFailure(result);
+    }
+
+    public sealed record CapabilityGrantRequest(string Capability, bool Granted);
+
+    /// <summary>
+    /// Grant or revoke ONE per-user capability - today, walk-in ordering for a
+    /// collection centre that the lab has chosen to allow.
+    ///
+    /// The grantable set is enforced twice below this: the procedure names it,
+    /// and the table's CHECK constraint is the backstop. Neither trusts this
+    /// endpoint, which is the point - a per-user grant path that accepted any
+    /// capability string would be a way to hand out user:manage.
+    ///
+    /// The procedure bumps the target's session version, so a revoke takes
+    /// effect on their next request rather than when their token expires.
+    /// </summary>
+    private static async Task<IResult> SetCapabilityGrant(
+        int userId,
+        CapabilityGrantRequest body,
+        System.Security.Claims.ClaimsPrincipal principal,
+        AdminRepository repo,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int actor) return Results.Unauthorized();
+        if (string.IsNullOrWhiteSpace(body?.Capability))
+            return Results.BadRequest(new { error = "A capability is required." });
+
+        var r = await repo.SetCapabilityGrantAsync(
+            userId, body.Capability.Trim(), body.Granted, actor, ct).ConfigureAwait(false);
+
+        return r.Ok
+            ? Results.Ok(new { ok = true, message = r.Message })
+            : Results.BadRequest(new { error = r.Message, code = r.ErrorCode });
     }
 
     private static async Task<IResult> SetRole(

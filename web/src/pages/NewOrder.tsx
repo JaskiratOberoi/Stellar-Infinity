@@ -141,7 +141,20 @@ const startingPayments = (b2b: boolean) =>
 export function NewOrder() {
   const { can, user } = useAuth();
   const mayB2b = can('order:b2b');
-  const mayB2c = can('order:b2c') || can('order:create');
+  /*
+   * The capability alone — NOT `|| can('order:create')`.
+   *
+   * That fallback handed the walk-in channel to every client login, because a
+   * collection centre holds order:create (they raise orders) but deliberately
+   * not order:b2c. And walk-in is the channel that prices the basket at the
+   * CLIENT'S OWN RATE rather than MRP — so a centre could book its own patients
+   * at cost, which is the lab's counter price, not theirs. B2B is their
+   * channel: the patient pays them MRP, they owe the lab the rate separately.
+   *
+   * Nobody legitimate loses it: order:b2c is held by super_admin, admin and
+   * lab_manager, and no other role holds order:create either.
+   */
+  const mayB2c = can('order:b2c');
 
   /*
    * Always starts B2C, then corrects.
@@ -1295,7 +1308,29 @@ export function NewOrder() {
           )}
           </div>
 
-          {/* ---- 4. payment ---- */}
+          {/* ---- 4. payment ----
+
+               B2B collects nothing here. A client order is settled later, in
+               bulk, against the centre's wallet, so there is no money to take
+               at the counter and no discount to type: the bill states what is
+               owed and the ledger does the rest. The whole step becomes a line
+               saying so, rather than a disabled control that reads as
+               something someone forgot to fill in.
+
+               The server strips these fields for B2B whatever is posted (see
+               PlaceOrder) — hiding them is the courtesy, not the control. */}
+          {isB2b ? (
+            <div className="card order-step">
+              <div className="order-step__head">
+                <span className="order-step__num order-step__num--on">4</span>
+                <h2 className="order-step__title">Payment</h2>
+              </div>
+              <p className="muted" style={{ fontSize: '.82rem', margin: 0 }}>
+                Nothing is collected on a client order. The bill records what is
+                owed, and it is settled later against the centre's account.
+              </p>
+            </div>
+          ) : (
           <div className={`card order-step${cart.items.length > 0 ? '' : ' order-step--off'}`}>
             <div className="order-step__head">
               <span className={`order-step__num${cart.items.length > 0 ? ' order-step__num--on' : ''}`}>4</span>
@@ -1448,6 +1483,7 @@ export function NewOrder() {
               </>
             )}
           </div>
+          )}
 
       </div>{/* right column */}
 

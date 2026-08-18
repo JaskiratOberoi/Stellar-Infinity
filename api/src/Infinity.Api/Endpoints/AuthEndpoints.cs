@@ -135,7 +135,13 @@ public static class AuthEndpoints
             return Unauthorized();
         }
 
-        var user = ToAuthenticatedUser(row);
+        // Per-user grants sit ON TOP of the role - today, walk-in ordering for
+        // a client account the lab has chosen to allow. Assembled here because
+        // capabilities are baked into the token and this is the only moment
+        // they exist; the grant procedure bumps the session version so a
+        // revoke cannot outlive it.
+        var grants = await authRepo.GrantedCapabilitiesAsync(row.UserId, ct).ConfigureAwait(false);
+        var user = ToAuthenticatedUser(row, grants);
         var (token, expiresAt) = jwt.Issue(user, row.SessionVersion);
 
         logger.LogInformation("auth.login.success userId={UserId} role={Role} managedBy={ManagedBy}",
@@ -176,10 +182,16 @@ public static class AuthEndpoints
         });
     }
 
-    internal static AuthenticatedUser ToAuthenticatedUser(AuthRow row)
+    internal static AuthenticatedUser ToAuthenticatedUser(
+        AuthRow row, IReadOnlyList<string>? extraGrants = null)
     {
         var role = InfinityRoles.Resolve(row.InfinityRole, row.UsertypeId);
-        var caps = InfinityRoles.CapabilitiesFor(role);
+        // Union, never replacement: a grant ADDS to what the role gives and
+        // can never remove anything.
+        var caps = extraGrants is { Count: > 0 }
+            ? InfinityRoles.CapabilitiesFor(role).Concat(extraGrants)
+                           .Distinct(StringComparer.Ordinal).ToArray()
+            : InfinityRoles.CapabilitiesFor(role).ToArray();
 
         var displayName = string.Join(' ', new[] { row.FirstName, row.LastName }
             .Where(s => !string.IsNullOrWhiteSpace(s))).Trim();
@@ -192,7 +204,7 @@ public static class AuthEndpoints
             DisplayName: string.IsNullOrEmpty(displayName) ? null : displayName,
             Email: row.Email,
             Role: role,
-            Capabilities: caps.ToArray(),
+            Capabilities: caps,
             UsertypeId: row.UsertypeId,
             UsertypeName: row.UsertypeName,
             ManagedBy: managedBy,

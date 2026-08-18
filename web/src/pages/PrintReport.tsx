@@ -39,9 +39,28 @@ import type { FullRow, TestResult } from './ReportViewer';
 /** Head and Profile rows are the report's own section headings, not analytes. */
 const isHeading = (t: TestResult) => t.testType === 'Head' || t.testType === 'Profile';
 
-/** The catalogue's display name wins; the result row's name is the fallback. */
+/**
+ * The row's OWN name wins. The catalogue name is a last resort.
+ *
+ * It used to be the other way round, on the reasoning that the catalogue holds
+ * the nicer printed name. The catalogue lookup is keyed on `testid`, and every
+ * row of a test — its heading, its sub-headings, and each analyte under them —
+ * carries the SAME testid. So a profile printed one name over and over: the
+ * urine report's Volume, Colour, pH and Specific Gravity all read "Complete
+ * Urine Examination".
+ *
+ * Across the last 85,460 result rows the catalogue's report name matches the
+ * row's own name on 29,814 of 29,814 `Test` rows — the single-analyte case,
+ * where the LIS has already written the report name into the row, which is why
+ * this looked right for so long — and on almost nothing else: 238 of 40,068
+ * `Param` rows, 5,918 of 10,524 `Head` rows, 0 of 5,054 `Profile` rows. It was
+ * printing the wrong name on 58% of the lines and adding nothing on the rest.
+ *
+ * Kept as the fallback rather than dropped, for a row that carries no name of
+ * its own. There are none in recent data; there is no cost to catching one.
+ */
 const nameOf = (t: TestResult) =>
-  plainText(t.reportTestName) || plainText(t.testName) || t.testCode || '—';
+  plainText(t.testName) || plainText(t.reportTestName) || t.testCode || '—';
 
 /**
  * A heading and the analytes it introduces.

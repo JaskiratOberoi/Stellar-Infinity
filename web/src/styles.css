@@ -560,6 +560,36 @@ button, input, select { font: inherit; color: inherit; }
 .alert--error { color: var(--danger); border-color: var(--danger-line); background: var(--danger-soft); }
 .alert--ok    { color: var(--teal);   border-color: var(--accent-ring);  background: var(--accent-soft); }
 .alert--info  { color: var(--ink-dim); border-color: var(--line);        background: var(--accent-softer); }
+.alert--warn  { color: var(--warn);   border-color: var(--warn-line);    background: var(--warn-soft); }
+
+/* ---------- inward scan desk ----------
+   Built for a barcode gun: one oversized input that keeps focus, feedback that
+   belongs to THIS scan only. The legacy page's sole feedback was a button
+   caption that stuck on "No Workorder!" until a full reload. */
+
+.scanbox {
+  display: flex;
+  align-items: flex-end;
+  gap: .8rem;
+  flex-wrap: wrap;
+  margin-bottom: .8rem;
+}
+
+/* Big on purpose: the operator is standing at a bench reading it from arm's
+   length between trigger pulls. */
+.scanbox__input { font-size: 1.05rem; letter-spacing: .04em; }
+
+.scan-verdict { margin-bottom: .8rem; }
+
+.scan-verdict__tests {
+  font-size: .75rem;
+  max-width: 60ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scan-verdict__warn { color: var(--warn); }
 
 /* ---------- app shell ---------- */
 
@@ -2363,6 +2393,161 @@ select.preview__layout { width: 11.25rem; flex: none; }
 .modal__title { font-size: 1.1rem; font-weight: 400; letter-spacing: .03em; }
 .modal__actions { display: flex; gap: .6rem; justify-content: flex-end; margin-top: .3rem; }
 
+/*
+ * Sample identity block in the worksheet modal — Listec's worksheet header,
+ * which is eleven labelled fields, not the four this used to run together in a
+ * single subtitle sentence.
+ *
+ * The block answers one question, and it is worth naming because it decides the
+ * whole layout: is this the right tube for the right patient? So it is built to
+ * be SCANNED, not read. Ten equal facts with no hierarchy is a wall; the fix is
+ * not to rank them but to make the labels genuinely recede so the values form
+ * one clean column of answers.
+ *
+ * ── LABEL ABOVE VALUE, NOT BESIDE IT ──────────────────────────────────────
+ * This was a fixed 8.5rem label gutter with the value beside it, reasoning that
+ * a hard gutter lines the values up down each column. It does, but it buys that
+ * alignment at a heavy price: "Reg No" and "Referring Customer" are the same
+ * gutter, so the short labels leave a visible gulf between a word and the value
+ * it belongs to, and proximity — the strongest grouping cue there is — ends up
+ * arguing that the label belongs to the value on its LEFT.
+ *
+ * Stacked, each pair is unmistakably one unit, the values still align down a
+ * column, the label can be small without being cramped, and the tracks pack at
+ * 11rem instead of 19 — four across where three fitted, with no ragged last
+ * row of one lonely field.
+ *
+ * auto-fit rather than a fixed column count: the modal is `modal--wide` on a
+ * desktop but the same component has to survive a laptop and a tablet, and a
+ * hard `repeat(2, 1fr)` would either waste half the width at 1600px or force a
+ * horizontal scroll at 900. Listec's own header is a rigid two-column table and
+ * is unreadable on anything narrow.
+ */
+.smeta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  /* Tight within a pair, generous between them — the row gap is what stops
+     four columns of small text reading as a paragraph. */
+  gap: .95rem 1.75rem;
+  /* No margin: .modal is a flex column with a 1rem gap and owns the rhythm.
+     A margin here was adding to that gap rather than replacing it. */
+  margin: 0;
+  padding: .95rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  /* The faintest teal in the palette, not a neutral grey. This previously
+     asked for --surface-2, which this project has never defined, and fell
+     through to a flat rgba grey that belonged to no theme and sat oddly
+     against the glass surfaces either side of it. */
+  background: var(--accent-softer);
+}
+
+.smeta__item { display: flex; flex-direction: column; gap: .15rem; min-width: 0; }
+
+/*
+ * The labels are signposts, not content.
+ *
+ * They previously asked for --muted, which does not exist in this project and
+ * carried no fallback — so the declaration was invalid at computed-value time,
+ * the colour INHERITED, and every label rendered at full ink strength. Ten
+ * labels shouting as loudly as their values is what made the block read as a
+ * flat slab. --ink-dim is the token this project actually uses for secondary
+ * text, and it is theme-aware in both directions.
+ */
+.smeta dt {
+  font-size: .625rem;
+  font-weight: 500;
+  letter-spacing: .085em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  /* Uppercase at this size needs the extra tracking above to stay legible, and
+     the tracking needs this to not look loose against the value beneath. */
+  line-height: 1.3;
+}
+
+/* Long referral names and specimen strings truncate rather than wrap: a wrapped
+   value pushes its row out of step with the column beside it and the block
+   stops being scannable. The full text stays available on hover. */
+.smeta dd {
+  margin: 0;
+  min-width: 0;
+  font-size: .84rem;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * An unrecorded field is absence, not a value — and it is still readable.
+ *
+ * The block deliberately keeps empty fields: a blank Referring Doctor is
+ * information, and a grid whose rows move depending on what is filled in is
+ * harder to scan than one that always looks the same. The first pass dimmed
+ * these dashes further so the eye would skip them, which took placeholder text
+ * to 2.1:1 — below the legibility floor for something that is meant to be read
+ * as "nobody was recorded".
+ *
+ * It also was not buying anything. The dashes used to compete because every
+ * label and value in the block rendered at full ink strength; now the real
+ * values sit at 15.5:1 against 4.75:1 for the labels and the dashes, and that
+ * step is what separates a fact from the absence of one. No extra dimming
+ * needed, so `.muted` is left to do its own job.
+ */
+
+/*
+ * The patient-info edit form.
+ *
+ * A twelve-column track rather than a fixed set of equal columns, because the
+ * fields genuinely differ in the width they need: a title is three characters,
+ * an age is two, a name is forty, and giving them all the same box either
+ * wastes most of the row or truncates the one field that matters. The spans
+ * below say how wide each field is in units of that track.
+ */
+/* The long-form result editor. Tall enough for a histopathology report to be
+   read as a whole rather than scrolled a line at a time, but capped against the
+   viewport so it never outgrows a laptop screen. */
+.descedit {
+  width: 100%;
+  min-height: 22rem;
+  max-height: 55vh;
+  resize: vertical;
+  margin-top: .6rem;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+/* Sits inside the result cell beside the input, so it has to stay small enough
+   not to steal width from the value itself. */
+.btn--xs { padding: .1rem .35rem; font-size: .68rem; line-height: 1.4; }
+.descbtn { flex: 0 0 auto; opacity: .65; }
+.descbtn:hover, .descbtn:focus-visible { opacity: 1; }
+
+.pgrid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: .7rem .8rem;
+  margin-top: .8rem;
+}
+
+.pgrid .field { display: flex; flex-direction: column; gap: .25rem; min-width: 0; }
+.pgrid label { font-size: .74rem; letter-spacing: .02em; color: var(--muted); }
+
+.field--narrow { grid-column: span 2; }
+.field--half   { grid-column: span 6; }
+.field--wide   { grid-column: span 6; }
+.field--full   { grid-column: span 12; }
+
+/* One column below the width where a twelve-track grid stops being honest —
+   at that point every field is full width and the spans would only produce
+   boxes too narrow to type into. */
+@media (max-width: 720px) {
+  .pgrid { grid-template-columns: 1fr; }
+  .field--narrow, .field--half, .field--wide, .field--full { grid-column: 1; }
+}
+
 /* definition-list grid for record detail: label column sized to content,
    value column takes the rest, wrapping to one pair per row on narrow screens */
 .kv {
@@ -3702,3 +3887,103 @@ th.cell--pick, td.cell--pick { width: 1%; padding-right: .2rem; }
   background: var(--accent-soft);
   color: var(--ink);
 }
+
+.attachments__hint { font-size: .7rem; margin-top: .4rem; }
+
+/* A button that reads as part of the sentence it sits in. The drop zone's
+   "…or choose a file" should be one line of prose, not prose next to a box. */
+.linkish {
+  background: none; border: 0; padding: 0;
+  font: inherit; color: var(--teal); font-weight: 600;
+  text-decoration: underline; text-underline-offset: 2px;
+  cursor: pointer;
+}
+.linkish:disabled { color: var(--ink-dim); cursor: default; text-decoration: none; }
+
+/* ---------- per-analyte attachments ----------
+   The clip beside a test name, and the drawer it opens. Sample-level documents
+   stay in the panel below the grid; this is for the ones that belong to a
+   single parameter. See components/Attachments.tsx. */
+
+.cell--lead__name { display: inline-flex; align-items: center; gap: .3rem; }
+
+.clip {
+  display: inline-flex; align-items: center; gap: .12rem;
+  padding: .1rem .2rem; border: 0; border-radius: 5px;
+  background: none; color: var(--ink-dim);
+  cursor: pointer; line-height: 1;
+  /* Faint until it matters: on a row with no document this is a standing
+     offer, not information. It comes forward on hover, on keyboard focus, and
+     permanently once the row actually carries something. */
+  opacity: .35;
+  transition: opacity .12s, color .12s, background .12s;
+}
+.clip svg { width: 13px; height: 13px; }
+.clip__n { font-size: .62rem; font-weight: 700; }
+
+tr:hover > .cell--lead .clip,
+.clip:focus-visible { opacity: 1; color: var(--teal); }
+.clip:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
+.clip:hover { background: var(--accent-soft); color: var(--teal); opacity: 1; }
+
+.clip--has { opacity: 1; color: var(--teal); }
+.clip--open { opacity: 1; color: var(--teal); background: var(--accent-soft); }
+
+.worksheet-grid__attach > td {
+  padding: 0 .5rem .5rem;
+  background: var(--accent-softer);
+}
+.rowattach {
+  padding: .55rem .65rem;
+  border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--teal);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.rowattach__title {
+  font-size: .72rem; color: var(--ink-dim);
+  margin-bottom: .35rem;
+}
+.rowattach .attachments__list { margin-top: 0; }
+.rowattach .attachments__drop { margin-top: .4rem; }
+
+/* ---------- the client's own landing page ----------
+   A collection centre's two questions are "what do I owe" and "did my reports
+   come through", so the balance is the largest thing on the page and the rest
+   is one column under it. See pages/ClientHome.tsx. */
+
+.clienthome { display: grid; gap: .9rem; max-width: 760px; }
+
+.clienthome__balance { border-left: 3px solid var(--teal); }
+.clienthome__balance--owing { border-left-color: var(--danger); }
+
+.clienthome__label {
+  font-size: .66rem; font-weight: 600; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--ink-dim); margin: 0;
+}
+.clienthome__amount {
+  font-size: 2.4rem; font-weight: 600; line-height: 1.1;
+  margin: .2rem 0 .1rem; color: var(--teal);
+}
+.clienthome__balance--owing .clienthome__amount { color: var(--danger); }
+.clienthome__note { font-size: .78rem; color: var(--ink-dim); margin: 0; }
+.clienthome__sub { font-size: 1rem; font-weight: 600; margin: .15rem 0 0; }
+
+.clienthome__split {
+  display: flex; gap: 2.4rem; flex-wrap: wrap;
+  margin-top: .9rem; padding-top: .8rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+.clienthome__title {
+  font-size: .8rem; font-weight: 600; letter-spacing: .04em; margin: 0;
+}
+
+.clienthome__pay { list-style: none; margin: .6rem 0 0; padding: 0; }
+.clienthome__pay li {
+  display: flex; align-items: baseline; gap: .8rem;
+  padding: .45rem 0; font-size: .82rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+.clienthome__pay li:last-child { border-bottom: 0; }
+.clienthome__pay li b { margin-left: auto; }

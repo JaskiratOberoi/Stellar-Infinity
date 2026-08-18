@@ -111,6 +111,7 @@ export function AdminUsers() {
                 <th>Infinity role</th>
                 <th>Infinity login</th>
                 <th>LIS access</th>
+                <th title="Walk-in ordering, for a client account that also takes its own patients">Walk-in</th>
                 <th />
               </tr>
             </thead>
@@ -169,6 +170,33 @@ export function AdminUsers() {
                         />
                       ) : (
                         <span className="muted">—</span>
+                      )}
+                    </td>
+
+                    {/* Walk-in ordering.
+
+                        Only meaningful for a CLIENT: every other role already
+                        holds order:b2c from its role, so a toggle there would
+                        promise a change it cannot make. Shown as a dash for
+                        them rather than an inert switch. */}
+                    <td className="cell--meta" data-label="Walk-in">
+                      {r.effectiveRole === 'client' ? (
+                        <div className="row">
+                          <button
+                            className={`toggle ${r.walkInGranted ? 'toggle--on' : ''}`}
+                            disabled={busy}
+                            title="Allow this centre to raise walk-in orders priced at its own rate. Off by default: client orders are billed to the account and settled later."
+                            onClick={() =>
+                              act(r.userId, async () => { await adminApi.setWalkIn(r.userId, !r.walkInGranted); },
+                                `Walk-in ordering ${r.walkInGranted ? 'removed from' : 'enabled for'} ${r.username}. They must sign in again.`)
+                            }
+                          />
+                          <span className="muted" style={{ fontSize: '.72rem' }}>
+                            {r.walkInGranted ? 'allowed' : 'B2B only'}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="muted" title="Walk-in is part of this role already">—</span>
                       )}
                     </td>
 

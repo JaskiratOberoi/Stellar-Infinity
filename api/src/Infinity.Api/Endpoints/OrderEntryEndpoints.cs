@@ -216,7 +216,16 @@ public static class OrderEntryEndpoints
             // out and resolution falls straight through to MRP. Quoting the
             // rate here and billing MRP there is how a preview stops matching
             // the bill it produced.
-            var charge = b2b ? mrp : clientRate;
+            // B2B now bills the CLIENT RATE, not MRP. The procedure changed
+            // with it (@priceAtClientRate), and the two must move together: a
+            // preview quoting one number while the bill writes the other is how
+            // an operator ends up defending a total they never saw.
+            //
+            // MRP survives on the line as its own field, and margin with it,
+            // because that is the centre's own commercial view - what it will
+            // charge its patient - and it is the reason B2B has a margin column
+            // at all.
+            var charge = clientRate;
 
             return new
             {
@@ -226,9 +235,10 @@ public static class OrderEntryEndpoints
                 name = p?.Name ?? i.Name,
                 mrp,
                 rate = charge,
-                // What the centre owes the lab for this line. Only meaningful
-                // in B2B, where the patient's money and the lab's are
-                // different numbers; null in B2C, where they are the same one.
+                // What the centre owes the lab. Now the SAME number as 
+                // in B2B, since the bill is the client rate - kept as its own
+                // field so the UI need not know that, and so the day the two
+                // diverge again nothing silently reads one as the other.
                 clientCost = b2b ? clientRate : null,
                 // The centre's margin on this line, and null rather than zero
                 // when either side is unknown — a missing price is not a
@@ -238,9 +248,9 @@ public static class OrderEntryEndpoints
                 // all. Surfaced per line so the operator sees WHICH item is
                 // unpriced rather than only that the total looks wrong.
                 //
-                // In B2B the line bills at MRP regardless of which client tier
-                // matched, so the source describes where the CLIENT'S COST came
-                // from, not where the charge did.
+                // In B2B the line now bills at the client rate, so the source
+                // describes where the CHARGE came from as well as the cost -
+                // they are the same tier.
                 rateSource = p?.RateSource ?? "none",
             };
         }).ToArray();
@@ -413,7 +423,43 @@ public static class OrderEntryEndpoints
         // at MRP, and honouring a posted value would let any order:create holder
         // pick the price without holding the channel capability that authorises
         // it.
-        var placed = body with { BillAtMrp = channel == B2b, Channel = channel };
+        /*
+         * B2B TAKES NO MONEY AT THE COUNTER.
+         *
+         * A client order is settled later, in bulk, against the centre's
+         * wallet — so nothing is collected while the order is being raised and
+         * the bill must simply state what is owed. Measured before this
+         * changed: real B2B bills carried real-time receipts (bill 30266 paid
+         * in full across two receipts, 30042 half-paid), which is money
+         * recorded at a counter where none changed hands.
+         *
+         * Stripped SERVER-SIDE rather than by hiding the inputs, because the
+         * fields travel in the request body and a hidden control is a
+         * suggestion, not a rule. The UI hides them too; this is what makes it
+         * true.
+         *
+         * Discount goes the same way: a reduction on a B2B bill is a
+         * negotiation against the rate list, not something typed per order.
+         *
+         * NOT touched here: the PRICE the bill is written at. That is decided
+         * inside dbo.usp_telo_create_order by its @billAtMrp flag, which is
+         * ALSO what tags the order B2B in telo_order_kind — so the two cannot
+         * be separated from this side. See the note on CreateOrderRequest.
+         */
+        var placed = channel == B2b
+            ? body with
+            {
+                BillAtMrp = true,
+                Channel = channel,
+                DiscountAmount = 0,
+                PaymentType = null,
+                PayMode = null,
+                ReceiptAmount = 0,
+                PaymentRef = null,
+                Payments = [],
+                GoldCard = false,
+            }
+            : body with { BillAtMrp = false, Channel = channel };
 
         var result = await orders.CreateAsync(userId, placed, ct).ConfigureAwait(false);
 

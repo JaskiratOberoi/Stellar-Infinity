@@ -308,6 +308,11 @@ public sealed class OrderWriteRepository(NobleConnectionFactory db, SqlRetry ret
             cmd.Parameters.Add("@payMode", SqlDbType.Int).Value = (object?)req.PayMode ?? DBNull.Value;
             cmd.Parameters.Add("@receiptAmount", SqlDbType.Int).Value = req.ReceiptAmount;
             cmd.Parameters.Add("@billAtMrp", SqlDbType.Bit).Value = req.BillAtMrp;
+            // A B2B order is TAGGED at MRP but PRICED at the client rate: the
+            // centre is billed what it owes the lab, not what its patient pays
+            // it. Sent for B2B only, so a walk-in keeps resolving exactly as
+            // before. See 108_alter_telo_create_order_client_rate.sql.
+            cmd.Parameters.Add("@priceAtClientRate", SqlDbType.Bit).Value = req.BillAtMrp;
             AddVarChar(cmd, "@paymentRef", 100, req.PaymentRef);
 
             // Gold Card. Sent as 0 for a B2B order even if the caller set it —

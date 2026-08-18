@@ -50,7 +50,7 @@ public static class InfinityRoles
                 Capabilities.UserManage,
                 Capabilities.OrderCreate, Capabilities.OrderView, Capabilities.OrderAccession,
                 Capabilities.OrderB2c, Capabilities.OrderB2b,
-                Capabilities.PatientCreate, Capabilities.PatientView,
+                Capabilities.PatientCreate, Capabilities.PatientView, Capabilities.PatientEdit,
                 Capabilities.ResultEnter, Capabilities.ResultAuthorize,
                 Capabilities.ResultAmend, Capabilities.ResultReopen, Capabilities.SampleReject,
                 Capabilities.AutoAuthManage,
@@ -63,7 +63,7 @@ public static class InfinityRoles
             [Admin] = Caps(
                 Capabilities.OrderCreate, Capabilities.OrderView, Capabilities.OrderAccession,
                 Capabilities.OrderB2c, Capabilities.OrderB2b,
-                Capabilities.PatientCreate, Capabilities.PatientView,
+                Capabilities.PatientCreate, Capabilities.PatientView, Capabilities.PatientEdit,
                 Capabilities.ResultEnter, Capabilities.ResultAuthorize,
                 Capabilities.ResultAmend, Capabilities.ResultReopen, Capabilities.SampleReject,
                 Capabilities.AutoAuthManage,
@@ -76,7 +76,7 @@ public static class InfinityRoles
             [LabManager] = Caps(
                 Capabilities.OrderCreate, Capabilities.OrderView, Capabilities.OrderAccession,
                 Capabilities.OrderB2c, Capabilities.OrderB2b,
-                Capabilities.PatientCreate, Capabilities.PatientView,
+                Capabilities.PatientCreate, Capabilities.PatientView, Capabilities.PatientEdit,
                 Capabilities.ResultEnter, Capabilities.ResultAuthorize,
                 Capabilities.ResultAmend, Capabilities.SampleReject,
                 Capabilities.ReportView, Capabilities.ReportRelease,
@@ -112,6 +112,11 @@ public static class InfinityRoles
             // priced at its own rate list AND keep the patient's money, which is
             // not a transaction the lab has agreed to. Telo maps LIS client
             // accounts to b2b_billing for the same reason.
+            // Registering a patient, yes; editing one afterwards, no. A centre
+            // raises the order and then the sample is the lab's to report on, so
+            // a demographic change made from outside — an age that reselects the
+            // reference range, a name that has already gone out on a report —
+            // stays with lab staff. PatientEdit is deliberately absent here.
             [Client] = Caps(
                 Capabilities.OrderCreate, Capabilities.OrderView,
                 Capabilities.OrderB2b,
@@ -247,6 +252,20 @@ public static class Capabilities
 
     /// <summary>The legacy Reject_Sample flag, which was never reachable in its UI.</summary>
     public const string SampleReject = "sample:reject";
+
+    /// <summary>
+    /// Correcting a registered patient's demographics and referral — the legacy
+    /// GetEditPatientInfo(user, "Edit") flag behind Listec's "Edit Patient Info"
+    /// button.
+    ///
+    /// Separate from <see cref="PatientCreate"/>, and deliberately NOT given to
+    /// Technician. Creating a patient adds a row; editing one silently changes
+    /// what every already-printed report for that patient says the patient's
+    /// name, age and referrer were. Age in particular selects the reference
+    /// range a result is flagged against, so a demographic edit can change
+    /// whether a value reads as normal. That is a supervisor's call.
+    /// </summary>
+    public const string PatientEdit = "patient:edit";
 
     /// <summary>
     /// Turning auto-authorization on or off for a test, profile or department.

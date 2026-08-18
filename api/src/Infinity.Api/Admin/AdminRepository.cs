@@ -20,7 +20,16 @@ public sealed record AdminUserRow(
     bool? InfinityLisAccess,
     string? InfinityRole,
     string EffectiveRole,
-    int SessionVersion);
+    int SessionVersion,
+    /// <summary>
+    /// Walk-in ordering granted to this user individually (order:b2c).
+    ///
+    /// A client account is B2B-only by default; the lab turns this on for the
+    /// few centres that take walk-in patients. Reported as the GRANT, not as
+    /// the effective capability, because a lab role holds order:b2c anyway and
+    /// the panel must show a toggle, not a coincidence.
+    /// </summary>
+    bool WalkInGranted);
 
 public sealed record AdminUserPage(IReadOnlyList<AdminUserRow> Users, int TotalCount);
 
@@ -60,6 +69,7 @@ public sealed class AdminRepository(NobleConnectionFactory db)
 
             var rows = new List<AdminUserRow>();
             var total = 0;
+            var walkIn = new HashSet<int>();
 
             while (await reader.ReadAsync(inner).ConfigureAwait(false))
             {
@@ -83,9 +93,39 @@ public sealed class AdminRepository(NobleConnectionFactory db)
                     // stored — most users have no explicit row and the derived
                     // role is the one that matters.
                     EffectiveRole: InfinityRoles.Resolve(explicitRole, usertypeId),
-                    SessionVersion: reader.GetOrdinalInt32("session_version") ?? 0));
+                    SessionVersion: reader.GetOrdinalInt32("session_version") ?? 0,
+                    // Filled in after the reader closes; see below.
+                    WalkInGranted: false));
 
                 total = reader.GetOrdinalInt32("total_count") ?? total;
+            }
+
+            await reader.CloseAsync().ConfigureAwait(false);
+
+            /* Which of THESE users hold a walk-in grant.
+             *
+             * One query for the page rather than one per row, and only for
+             * the ids actually listed: the grant table is small but the user
+             * list is not, and a per-row lookup on a 50-row page would be 50
+             * round trips to render one column.
+             *
+             * The id list is built from INTEGERS already read out of the
+             * database, not from anything a caller sent, so the interpolation
+             * carries nothing a parameter would protect. */
+            if (rows.Count > 0)
+            {
+                var ids = string.Join(",", rows.Select(r => r.UserId));
+                await using var g = new SqlCommand(
+                    "SELECT user_id FROM dbo.inf_user_capability_grant " +
+                    "WHERE capability = 'order:b2c' AND user_id IN (" + ids + ")", conn);
+                await using var gr = await g.ExecuteReaderAsync(inner).ConfigureAwait(false);
+                while (await gr.ReadAsync(inner).ConfigureAwait(false)) walkIn.Add(gr.GetInt32(0));
+            }
+
+            for (var i = 0; i < rows.Count; i++)
+            {
+                if (walkIn.Contains(rows[i].UserId))
+                    rows[i] = rows[i] with { WalkInGranted = true };
             }
 
             return new AdminUserPage(rows, total);
@@ -194,13 +234,52 @@ public sealed class AdminRepository(NobleConnectionFactory db)
                     r.GetOrdinalString("source") ?? ""));
             }
 
+            // One extra round trip on a single-user admin screen, rather than a
+            // fourth result set in procedure 61 — the procedure is shared and
+            // this keeps the change to Infinity's own side.
+            var grants = await CapabilityGrantsAsync(userId, conn, inner).ConfigureAwait(false);
+
             return new AdminUserDetail(
                 head.UserId, head.Username, head.FirstName, head.LastName, head.Email,
                 head.UsertypeId, head.UsertypeName, head.PccId, head.SubPccId, head.BusinessUnitId,
                 head.LisIsActive, head.ManagedBy, head.InfinityActive, head.InfinityLisAccess,
                 explicitRole, effectiveRole,
-                InfinityRoles.CapabilitiesFor(effectiveRole).OrderBy(c => c, StringComparer.Ordinal).ToArray(),
-                head.SessionVersion, head.Lis, codes, own);
+                // The role's capabilities UNION anything granted to this user
+                // individually, so the panel shows what the person actually
+                // has rather than what their role alone would give.
+                InfinityRoles.CapabilitiesFor(effectiveRole).Concat(grants)
+                             .Distinct(StringComparer.Ordinal)
+                             .OrderBy(c => c, StringComparer.Ordinal).ToArray(),
+                head.SessionVersion, head.Lis, grants, codes, own);
+        }, ct);
+
+    /// <summary>Per-user capability grants. See dbo.inf_user_capability_grant.</summary>
+    private static async Task<IReadOnlyList<string>> CapabilityGrantsAsync(
+        int userId, SqlConnection conn, CancellationToken ct)
+    {
+        await using var cmd = new SqlCommand(
+            "SELECT capability FROM dbo.inf_user_capability_grant WHERE user_id = @uid", conn);
+        cmd.Parameters.Add("@uid", SqlDbType.Int).Value = userId;
+        var list = new List<string>();
+        await using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        while (await r.ReadAsync(ct).ConfigureAwait(false)) list.Add(r.GetString(0));
+        return list;
+    }
+
+    /// <summary>
+    /// Grant or revoke ONE capability for ONE user. The grantable set is a
+    /// CHECK constraint on the table, not a value this layer chooses.
+    /// </summary>
+    public Task<SpResult> SetCapabilityGrantAsync(
+        int userId, string capability, bool granted, int actor, CancellationToken ct = default) =>
+        db.QueryAsync("admin.setCapabilityGrant", async (conn, inner) =>
+        {
+            await using var cmd = db.CreateWriteCommand(conn, "dbo.usp_inf_admin_set_capability_grant");
+            cmd.Parameters.Add("@userId", SqlDbType.Int).Value = userId;
+            cmd.Parameters.Add("@capability", SqlDbType.VarChar, 40).Value = capability;
+            cmd.Parameters.Add("@granted", SqlDbType.Bit).Value = granted;
+            cmd.Parameters.Add("@actor", SqlDbType.Int).Value = actor;
+            return await ReadSpResultAsync(cmd, inner).ConfigureAwait(false);
         }, ct);
 
     public Task<Paged<ClientCodeOption>> SearchClientCodesAsync(
