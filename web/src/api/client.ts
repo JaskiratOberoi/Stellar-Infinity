@@ -895,6 +895,17 @@ export interface ClientAccount {
   owed: number;
   totalDeposited: number;
   lastUpdatedAt: string | null;
+  /**
+   * The credit the lab granted, stored by the LIS as a NEGATIVE allowance:
+   * -2500 means "may owe up to 2,500". Zero means no allowance at all.
+   */
+  creditLimit: number;
+  /** The master switch: reports released however much is owed. */
+  unlocked: boolean;
+  /** A time-boxed release granted in the legacy LIS, still running. */
+  tempUnlocked: boolean;
+  /** Whether this client's reports are actually being withheld right now. */
+  reportsLocked: boolean;
 }
 
 export interface LedgerEntry {
@@ -950,6 +961,19 @@ export const accountsApi = {
   pay: (mcc: number, body: { amount: number; mode: number; chequeNo?: string | null; reason?: string | null }) =>
     api.post<{ ok: boolean; newBalance: number | null; message: string | null }>(
       `/api/accounts/${mcc}/payments`, body),
+  /**
+   * Grant or revoke the master unlock — release this client's reports however
+   * much they owe, or put them back under the balance rule.
+   *
+   * Writes the LIS's own flag, so the release applies in Telo and the legacy
+   * LIS too. A reason is required to grant; revoking needs none.
+   */
+  setUnlock: (mcc: number, body: { unlocked: boolean; reason?: string | null }) =>
+    api.post<{
+      clientCode: string | null; clientName: string | null;
+      unlocked: boolean; wasUnlocked: boolean; changed: boolean;
+      balance: number; creditLimit: number; note: string;
+    }>(`/api/accounts/${mcc}/unlock`, body),
 };
 
 export const billingApi = {

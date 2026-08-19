@@ -21,7 +21,22 @@ public sealed record ClientAccount(
     decimal Balance,
     decimal Owed,
     decimal TotalDeposited,
-    DateTimeOffset? LastUpdatedAt);
+    DateTimeOffset? LastUpdatedAt,
+    /// <summary>The LIS allowance, stored NEGATIVE: -2500 = may owe up to 2,500.</summary>
+    decimal CreditLimit = 0,
+    /// <summary>The master switch — reports released however much is owed.</summary>
+    bool Unlocked = false,
+    /// <summary>A time-boxed release granted in the legacy LIS, still running.</summary>
+    bool TempUnlocked = false,
+    /// <summary>Whether reports are actually being withheld right now.</summary>
+    bool ReportsLocked = false);
+
+/// <param name="Changed">False when the flag already stood that way.</param>
+public sealed record UnlockResult(
+    bool Ok, string? ErrorCode, string? Message,
+    string? ClientCode, string? ClientName,
+    bool Unlocked, bool WasUnlocked, bool Changed,
+    decimal Balance, decimal CreditLimit);
 
 /// <param name="Direction">debit (an order consumed credit) | credit (a payment came in)</param>
 /// <param name="Origin">infinity | telo | lis — which system posted it.</param>
@@ -86,7 +101,11 @@ public sealed class ClientAccountRepository(NobleConnectionFactory db, SqlRetry 
                         Balance: r.Dec("balance"),
                         Owed: r.Dec("owed"),
                         TotalDeposited: r.Dec("totalDeposited"),
-                        LastUpdatedAt: Domain.NobleTime.ToIst(r.Date("lastUpdatedAt"))));
+                        LastUpdatedAt: Domain.NobleTime.ToIst(r.Date("lastUpdatedAt")),
+                        CreditLimit: r.Dec("creditLimit"),
+                        Unlocked: r.Bool("unlocked"),
+                        TempUnlocked: r.Bool("tempUnlocked"),
+                        ReportsLocked: r.Bool("reportsLocked")));
                 }
 
                 return new Paged<ClientAccount>(rows, total, p, size);
@@ -127,6 +146,47 @@ public sealed class ClientAccountRepository(NobleConnectionFactory db, SqlRetry 
 
                 return new Paged<LedgerEntry>(rows, total, p, size);
             }, token), ct);
+
+    /// <summary>
+    /// Grant or revoke the master unlock for one client.
+    /// </summary>
+    /// <remarks>
+    /// Writes the LIS's own PerminentUnlock bit, so a client released here is
+    /// released in Telo and the legacy LIS too — see the header of
+    /// 120_client_report_unlock.sql on why that is deliberate rather than a
+    /// leak. Not retried: it is a deliberate, audited act, and replaying it
+    /// after a timeout would write a second audit row for one decision.
+    /// </remarks>
+    public Task<UnlockResult> SetUnlockAsync(
+        int mcc, bool unlocked, string? reason,
+        int actorUserId, string? actorUsername, CancellationToken ct = default) =>
+        db.QueryAsync("accounts.setUnlock", async (conn, inner) =>
+        {
+            await using var cmd = db.CreateWriteCommand(conn, "dbo.usp_inf_set_client_unlock");
+            cmd.Parameters.Add("@mcc", SqlDbType.Int).Value = mcc;
+            cmd.Parameters.Add("@unlocked", SqlDbType.Bit).Value = unlocked;
+            cmd.Parameters.Add("@reason", SqlDbType.NVarChar, 400).Value =
+                string.IsNullOrWhiteSpace(reason) ? DBNull.Value : reason.Trim();
+            cmd.Parameters.Add("@actor_user_id", SqlDbType.Int).Value = actorUserId;
+            cmd.Parameters.Add("@actor_username", SqlDbType.NVarChar, 100).Value =
+                (object?)actorUsername ?? DBNull.Value;
+
+            await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);
+            if (!await r.ReadAsync(inner).ConfigureAwait(false))
+                return new UnlockResult(false, "NO_RESULT", "The database returned nothing.",
+                                        null, null, false, false, false, 0, 0);
+
+            var ok = r.Bool("ok");
+            if (!ok)
+                return new UnlockResult(false, r.Str("error_code"), r.Str("message"),
+                                        null, null, false, false, false, 0, 0);
+
+            return new UnlockResult(
+                true, null, null,
+                r.Str("client_code"), r.Str("client_name"),
+                r.Bool("unlocked"), r.Bool("was_unlocked"), r.Bool("changed"),
+                r.Dec("balance"), r.Dec("credit_limit"));
+        }, ct);
 
     /// <summary>
     /// Record a payment from a client against their account.

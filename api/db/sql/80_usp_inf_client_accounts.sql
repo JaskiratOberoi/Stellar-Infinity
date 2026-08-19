@@ -49,7 +49,20 @@ BEGIN
             isActive        = CAST(CASE WHEN ISNULL(u.IsActive, 0) = 1 THEN 1 ELSE 0 END AS BIT),
             balance         = ISNULL(a.currentbalance, 0),
             totalDeposited  = ISNULL(a.totaldeposited, 0),
-            lastUpdatedAt   = a.lastupdateddate
+            lastUpdatedAt   = a.lastupdateddate,
+            -- The credit the lab granted this client, stored by the LIS as a
+            -- NEGATIVE allowance: -2500 means "may owe up to 2,500". Only a
+            -- negative value is an allowance; NULL, zero and positive all mean
+            -- none, which is how the LIS reads it too.
+            creditLimit     = ISNULL(u.creditlimit, 0),
+            -- The master switch. Set, and this client's reports are released
+            -- however much they owe — see 120_client_report_unlock.sql.
+            unlocked        = CAST(CASE WHEN ISNULL(u.PerminentUnlock, 0) = 1 THEN 1 ELSE 0 END AS BIT),
+            -- A time-boxed release granted in the legacy LIS, still running.
+            tempUnlocked    = CAST(CASE WHEN EXISTS (
+                                  SELECT 1 FROM dbo.tbl_med_mcc_lockunlock l
+                                  WHERE l.mcc_code = u.id AND l.expire_unlock > GETDATE())
+                              THEN 1 ELSE 0 END AS BIT)
         FROM dbo.tbl_med_mcc_unit_master u
         LEFT JOIN dbo.tbl_med_mcc_account_master a ON a.mcccode = u.id
         WHERE u.MCCUnitCode IS NOT NULL AND LTRIM(RTRIM(u.MCCUnitCode)) <> ''
@@ -61,10 +74,18 @@ BEGIN
     )
     SELECT
         mccId, clientCode, clientName, isActive, totalDeposited, lastUpdatedAt,
+        creditLimit, unlocked, tempUnlocked,
         -- Raw, for anyone reconciling against the LIS.
         balance,
         -- And the same number the way a person reads it: positive = they owe us.
         owed = -balance,
+        -- Are this client's reports actually being withheld right now? The same
+        -- rule ReportLockRepository applies per SID, answered here for the whole
+        -- list so an operator can see who is held without opening a report.
+        reportsLocked = CAST(CASE
+            WHEN unlocked = 1 OR tempUnlocked = 1 THEN 0
+            WHEN balance < CASE WHEN creditLimit < 0 THEN creditLimit ELSE 0 END THEN 1
+            ELSE 0 END AS BIT),
         COUNT(*) OVER() AS total_count
     FROM acct
     WHERE @only_owing = 0 OR balance < 0

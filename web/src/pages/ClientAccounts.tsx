@@ -32,6 +32,7 @@ export function ClientAccounts() {
 
   const [ledgerFor, setLedgerFor] = useState<ClientAccount | null>(null);
   const [payFor, setPayFor] = useState<ClientAccount | null>(null);
+  const [unlockFor, setUnlockFor] = useState<ClientAccount | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -98,6 +99,7 @@ export function ClientAccounts() {
                 <th style={{ textAlign: 'right' }}>Owed</th>
                 <th style={{ textAlign: 'right' }}>Deposited</th>
                 <th>Last movement</th>
+                <th>Reports</th>
                 <th />
               </tr>
             </thead>
@@ -129,10 +131,40 @@ export function ClientAccounts() {
                     {fmtDateTime(a.lastUpdatedAt)}
                   </td>
 
+                  {/* Whether results actually go out for this client, and why.
+                      The balance column says what they owe; this says what that
+                      is currently costing them, which is the question an
+                      operator on the phone is being asked. */}
+                  <td className="cell--meta" data-label="Reports" style={{ fontSize: '.74rem' }}>
+                    {a.unlocked ? (
+                      <span style={{ color: 'var(--warn)', fontWeight: 600 }}>Released</span>
+                    ) : a.tempUnlocked ? (
+                      <span style={{ color: 'var(--warn)' }}>Released (temporary)</span>
+                    ) : a.reportsLocked ? (
+                      <span style={{ color: 'var(--danger)', fontWeight: 600 }}>Held</span>
+                    ) : (
+                      <span className="muted">Going out</span>
+                    )}
+                    {a.creditLimit < 0 && (
+                      <div className="muted" style={{ fontSize: '.68rem' }}>
+                        limit {inr(-a.creditLimit)}
+                      </div>
+                    )}
+                  </td>
+
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button className="btn btn--ghost btn--sm" onClick={() => setLedgerFor(a)}>
                       Ledger
                     </button>
+                    {can('report:release') && (
+                      <button className="btn btn--ghost btn--sm" style={{ marginLeft: '.4rem' }}
+                              onClick={() => setUnlockFor(a)}
+                              title={a.unlocked
+                                ? 'Put this client back under the balance rule'
+                                : 'Release this client’s reports regardless of balance'}>
+                        {a.unlocked ? 'Re-lock' : 'Release'}
+                      </button>
+                    )}
                     {can('payment:capture') && (
                       <button className="btn btn--primary btn--sm" style={{ marginLeft: '.4rem' }}
                               onClick={() => setPayFor(a)}>
@@ -145,7 +177,7 @@ export function ClientAccounts() {
 
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="muted" style={{ textAlign: 'center', padding: '2rem' }}>
+                  <td colSpan={6} className="muted" style={{ textAlign: 'center', padding: '2rem' }}>
                     {onlyOwing ? 'No client owes anything here.' : 'No accounts match.'}
                   </td>
                 </tr>
@@ -159,6 +191,14 @@ export function ClientAccounts() {
       )}
 
       {ledgerFor && <LedgerModal account={ledgerFor} onClose={() => setLedgerFor(null)} />}
+
+      {unlockFor && (
+        <UnlockModal
+          account={unlockFor}
+          onClose={() => setUnlockFor(null)}
+          onDone={(msg) => { setUnlockFor(null); setNotice(msg); void load(); }}
+        />
+      )}
 
       {payFor && (
         <PaymentModal
@@ -377,6 +417,112 @@ function PaymentModal({
           <button className="btn btn--ghost" disabled={busy} onClick={onClose}>Cancel</button>
           <button className="btn btn--primary" disabled={!valid || busy} onClick={() => void submit()}>
             {busy ? 'Recording…' : `Record ${valid ? inr(value) : 'payment'}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Release a client's reports against the money rule — or put them back.
+ *
+ * This is the one control on this screen that lets results leave the building
+ * unpaid, so it says plainly what it is about to do, shows the debt it is
+ * overriding, and will not grant without a reason. Revoking asks for none:
+ * putting a client back under the rule is the default state, not a decision
+ * that needs defending.
+ *
+ * It writes the LIS's own flag, so the release also applies in Telo and the
+ * legacy LIS — said in the dialog, because someone clicking here is entitled to
+ * know the blast radius.
+ */
+function UnlockModal({
+  account, onClose, onDone,
+}: {
+  account: ClientAccount;
+  onClose: () => void;
+  onDone: (message: string) => void;
+}) {
+  const granting = !account.unlocked;
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busy) onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose, busy]);
+
+  const valid = !granting || reason.trim().length > 0;
+
+  async function submit() {
+    if (!valid) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await accountsApi.setUnlock(account.mccId, {
+        unlocked: granting,
+        reason: reason.trim() || null,
+      });
+      onDone(
+        r.changed
+          ? `${r.clientCode} — reports ${granting ? 'released' : 'back under the balance rule'}. ${r.note}`
+          : `${r.clientCode} was already ${granting ? 'released' : 'locked'}; nothing changed.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'That did not go through.');
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={() => { if (!busy) onClose(); }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}
+           role="dialog" aria-modal="true"
+           aria-label={granting ? 'Release reports' : 'Re-lock reports'}>
+        <h2 className="modal__title">
+          {granting ? 'Release reports' : 'Back under the balance rule'} ·{' '}
+          <span className="mono">{account.clientCode}</span>
+        </h2>
+
+        <p className="muted" style={{ fontSize: '.8rem' }}>
+          {account.owed > 0
+            ? <>Currently owes <b style={{ color: 'var(--danger)' }}>{inr(account.owed)}</b></>
+            : 'Currently square or in credit'}
+          {account.creditLimit < 0 && <> · allowed up to {inr(-account.creditLimit)}</>}
+        </p>
+
+        {error && <div className="alert alert--error">{error}</div>}
+
+        {granting ? (
+          <>
+            <p style={{ fontSize: '.82rem', lineHeight: 1.6 }}>
+              Their reports will go out however much they owe, until someone puts this back.
+            </p>
+            <div className="field">
+              <label htmlFor="unlock-reason">Why (kept on record)</label>
+              <input id="unlock-reason" className="input" autoFocus
+                     placeholder="e.g. Director approved — settles monthly"
+                     value={reason} onChange={(e) => setReason(e.target.value)} maxLength={400} />
+            </div>
+          </>
+        ) : (
+          <p style={{ fontSize: '.82rem', lineHeight: 1.6 }}>
+            Their reports will be held again whenever the balance sits below the allowance.
+          </p>
+        )}
+
+        <p className="muted" style={{ fontSize: '.72rem', lineHeight: 1.6 }}>
+          This sets the LIS's own release flag, so it applies in Telo and the legacy LIS too — not
+          only here. Reports already opened may take up to a minute to catch up.
+        </p>
+
+        <div className="modal__actions">
+          <button className="btn btn--ghost" disabled={busy} onClick={onClose}>Cancel</button>
+          <button className={granting ? 'btn btn--primary' : 'btn btn--ghost'}
+                  disabled={!valid || busy} onClick={() => void submit()}>
+            {busy ? 'Saving…' : granting ? 'Release reports' : 'Re-lock'}
           </button>
         </div>
       </div>
