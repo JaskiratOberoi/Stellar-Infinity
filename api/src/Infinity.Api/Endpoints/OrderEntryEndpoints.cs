@@ -203,10 +203,22 @@ public static class OrderEntryEndpoints
 
         var groups = await orders.PreviewSampleGroupsAsync(cart.Items, ct).ConfigureAwait(false);
 
-        // One catalogue read priced for this client, then matched against the
-        // cart — rather than a rate lookup per item, which would be one round
-        // trip per line.
-        var priced = await catalog.SearchAsync(mcc, null, null, 1, 1000, ct).ConfigureAwait(false);
+        /*
+         * One catalogue read priced for this client — but for THESE ITEMS, not
+         * for the first page of everything.
+         *
+         * It used to ask for page 1 at size 1000 and match the cart against
+         * whatever came back. The catalogue is over 2,000 active items and the
+         * procedure caps a page at 1,000, so every item sorting past the middle
+         * of the alphabet came back unpriced: the basket showed "no MRP" and
+         * "NO PRICE" for a test that had both a rate and an MRP on record, and
+         * the order could not be placed at all. Roughly half the catalogue was
+         * unorderable, and nothing about it looked like a bug — it looked like
+         * missing rates.
+         */
+        var priced = await catalog
+            .SearchAsync(mcc, null, null, 1, 1000, ct, cart.Items)
+            .ConfigureAwait(false);
         var byKey = priced.Rows.ToDictionary(r => (r.Kind, r.Id));
 
         var lines = cart.Items.Select(i =>

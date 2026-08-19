@@ -37,13 +37,46 @@ public sealed record CatalogItem(
 /// </summary>
 public sealed class CatalogRepository(NobleConnectionFactory db, SqlRetry retry)
 {
+    /// <param name="items">
+    /// Price exactly these, ignoring search and paging. The order preview needs
+    /// the price of what is in a basket, and reading a PAGE of the catalogue and
+    /// matching against it silently missed anything past the page — see the
+    /// remarks on @items in 78_usp_inf_catalog_search.sql. Null or empty is the
+    /// ordinary browse.
+    /// </param>
+    /// <summary>
+    /// dbo.TeloTestList, reused: it already describes (id, kind) for this
+    /// catalogue. itemKind 0 test, 1 profile, 2 master — the same mapping
+    /// OrderWriteRepository.AddTestListTvp writes, and the procedure reads.
+    /// </summary>
+    private static void AddItemsTvp(
+        SqlCommand cmd, string name, IReadOnlyList<Orders.CartItem>? items)
+    {
+        var t = new DataTable();
+        t.Columns.Add("testMasterId", typeof(int));
+        t.Columns.Add("itemKind", typeof(byte));
+        t.Columns.Add("code", typeof(string));
+        t.Columns.Add("name", typeof(string));
+
+        foreach (var i in items ?? [])
+        {
+            byte kind = i.Kind switch { "master" => 2, "profile" => 1, _ => 0 };
+            t.Rows.Add(i.Id, kind, i.Code ?? string.Empty, i.Name ?? string.Empty);
+        }
+
+        var param = cmd.Parameters.AddWithValue(name, t);
+        param.SqlDbType = SqlDbType.Structured;
+        param.TypeName = "dbo.TeloTestList";
+    }
+
     public Task<Paged<CatalogItem>> SearchAsync(
         int? mcc,
         string? search,
         string? kind,
         int page,
         int pageSize,
-        CancellationToken ct = default) =>
+        CancellationToken ct = default,
+        IReadOnlyList<Orders.CartItem>? items = null) =>
         retry.ExecuteAsync("catalog.search", token =>
             db.QueryAsync("catalog.search", async (conn, inner) =>
             {
@@ -61,6 +94,7 @@ public sealed class CatalogRepository(NobleConnectionFactory db, SqlRetry retry)
                     kind is "test" or "profile" or "master" ? kind : DBNull.Value;
                 cmd.Parameters.Add("@page", SqlDbType.Int).Value = p;
                 cmd.Parameters.Add("@page_size", SqlDbType.Int).Value = size;
+                AddItemsTvp(cmd, "@items", items);
 
                 await using var r = await cmd.ExecuteReaderAsync(CommandBehavior.SingleResult, inner)
                     .ConfigureAwait(false);

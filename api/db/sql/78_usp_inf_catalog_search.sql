@@ -46,7 +46,26 @@ CREATE OR ALTER PROCEDURE dbo.usp_inf_catalog_search
     -- 'test' | 'profile' | 'master'. NULL returns all three.
     @kind      VARCHAR(10)   = NULL,
     @page      INT           = 1,
-    @page_size INT           = 100
+    @page_size INT           = 100,
+    /*
+     * Price EXACTLY these items, ignoring search and paging.
+     *
+     * The order preview needs prices for the handful of things in a basket, and
+     * used to get them by reading the first page of the catalogue and matching
+     * against it. The catalogue is 2,006 active items and a page is capped at
+     * 1,000, so anything sorting past the halfway mark came back unpriced and
+     * its order could not be placed at all.
+     *
+     * Handled HERE, in the one procedure that knows the pricing waterfall,
+     * rather than in a second procedure of its own: special rate, then rate
+     * list, then MRP is a rule the preview and the catalogue must never
+     * disagree about, and two copies of it eventually would.
+     *
+     * Reuses dbo.TeloTestList because it already carries (id, kind) for exactly
+     * this catalogue. Empty — the default — leaves every existing caller
+     * behaving as it did.
+     */
+    @items     dbo.TeloTestList READONLY
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -58,6 +77,15 @@ BEGIN
              WHEN @page_size > 1000 THEN 1000
              ELSE @page_size END;
     DECLARE @offset INT = (@pageSafe - 1) * @size;
+
+    -- A basket is small and must come back WHOLE: paging it would reintroduce
+    -- the very truncation this parameter exists to remove.
+    DECLARE @itemCount INT = (SELECT COUNT(*) FROM @items);
+    IF @itemCount > 0
+    BEGIN
+        SET @offset = 0;
+        SET @size = CASE WHEN @itemCount > 1000 THEN 1000 ELSE @itemCount END;
+    END
 
     -- The client's assigned rate list. NULL means they have none, in which case
     -- special rates still apply and everything else falls through to MRP.
@@ -93,6 +121,19 @@ BEGIN
         FROM cat c
         LEFT JOIN dbo.tbl_med_department_master d ON d.id = c.department_id
         WHERE (@kind IS NULL OR c.kind = @kind)
+          -- itemKind: 0 test, 1 profile, 2 master — the mapping the order TVP
+          -- already uses (see AddTestListTvp).
+          AND (
+                @itemCount = 0
+                OR EXISTS (
+                    SELECT 1 FROM @items i
+                    WHERE i.testMasterId = c.id
+                      AND c.kind = CASE i.itemKind
+                                       WHEN 2 THEN N'master'
+                                       WHEN 1 THEN N'profile'
+                                       ELSE N'test'
+                                   END)
+              )
           AND (
                 @search IS NULL OR LTRIM(RTRIM(@search)) = ''
                 OR c.name LIKE '%' + @search + '%'
