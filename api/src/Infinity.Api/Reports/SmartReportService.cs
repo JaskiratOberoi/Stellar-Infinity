@@ -34,6 +34,8 @@ public sealed record SmartReport(
     int? Age,
     string? AgeUnit,
     string? ClientCode,
+    /// <summary>Who referred the sample — printed on the welcome letter.</summary>
+    string? RefDoctor,
     DateTimeOffset? SampleDrawn,
     DateTimeOffset? ReportedAt,
     int TotalAnalytes,
@@ -172,6 +174,7 @@ public sealed class SmartReportService(SmartMeta meta)
             Age: row.Age,
             AgeUnit: row.AgeUnit,
             ClientCode: row.ClientCode,
+            RefDoctor: row.RefDoctor,
             SampleDrawn: row.SampleDrawn,
             ReportedAt: row.LastModifiedAt,
             TotalAnalytes: total,
