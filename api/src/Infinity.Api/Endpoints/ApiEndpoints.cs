@@ -653,6 +653,9 @@ public static class ApiEndpoints
         ReportsRepository repo,
         Reports.SmartReportService smart,
         Reports.SmartReportAccessRepository smartAccess,
+        Reports.ReportExtrasRepository extras,
+        Reports.ReportLink links,
+        ILoggerFactory loggers,
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
@@ -672,7 +675,15 @@ public static class ApiEndpoints
         if (!await smartAccess.SidHasSmartReportAsync(sid, ct).ConfigureAwait(false))
             return Results.NotFound();
 
-        return Results.Ok(smart.Build(row));
+        // The booklet is signed too. It is a lab document a patient keeps, and
+        // "never render a report without a sign" does not stop being true
+        // because the reader is not a doctor. Same gate as the clinical sheet.
+        var signoff = await Reports.ReportSignoff
+            .RequireAsync(extras, row.Sid, loggers, ct).ConfigureAwait(false);
+        if (signoff.Refusal is not null) return signoff.Refusal;
+
+        return Results.Ok(smart.Build(
+            row, signoff.Extras!, links.QrDataUrl(row.Sid), DateTimeOffset.UtcNow));
     }
 
     private static async Task<IResult> GetSampleHeader(
