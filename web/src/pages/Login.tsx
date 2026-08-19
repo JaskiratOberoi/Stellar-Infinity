@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { Mark } from '../components/Mark';
 import { ThemeToggle } from '../theme/ThemeToggle';
@@ -27,6 +28,7 @@ const IMPLODE_MS = 520;
 
 export function Login() {
   const { signInDeferred, signedOutReason } = useAuth();
+  const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -52,7 +54,33 @@ export function Login() {
       const commit = await signInDeferred(username.trim(), password);
       const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       setLeaving(true);
-      window.setTimeout(commit, still ? 30 : IMPLODE_MS);
+      window.setTimeout(() => {
+        /*
+         * Land on the dashboard, every time.
+         *
+         * Signing in did not used to navigate at all: the shell simply mounted
+         * at whatever URL happened to be in the bar. That is fine when someone
+         * opens the app fresh, and wrong every other time — a session that
+         * expired on /worksheet put them back on /worksheet, and a stale tab
+         * reopened days later dropped them into a screen they had forgotten
+         * they were on. The first thing after signing in should be the day's
+         * shape, not wherever the last session happened to end.
+         *
+         * BEFORE commit, not after: commit sets the user, which mounts the
+         * shell. Navigating first means it mounts already on the dashboard
+         * rather than mounting the old page, fetching its data, and throwing
+         * that away a tick later.
+         *
+         * replace, so the URL that forced the login is not left behind for the
+         * back button to return to.
+         *
+         * "/" is the dashboard for anyone who can see analytics, and the client
+         * home for accounts that cannot — the right landing place for both. See
+         * the route table in App.tsx.
+         */
+        navigate('/', { replace: true });
+        commit();
+      }, still ? 30 : IMPLODE_MS);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign-in failed.');
       setBusy(false);
