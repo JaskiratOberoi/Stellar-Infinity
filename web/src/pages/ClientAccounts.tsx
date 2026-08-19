@@ -23,7 +23,16 @@ export function ClientAccounts() {
   const [total, setTotal] = useState(0);
   const [pageOwed, setPageOwed] = useState(0);
   const [search, setSearch] = useState('');
-  const [onlyOwing, setOnlyOwing] = useState(true);
+  /*
+   * Off by default: the screen opens on every account, not just the debtors.
+   *
+   * It defaulted on, which reads as a working list for the lab chasing money —
+   * and lands a CLIENT account, who has exactly one account and usually owes
+   * nothing, on "No client owes anything here" with an empty table and no clue
+   * that a filter is doing it. Opening on everything and letting the operator
+   * narrow is the way round that cannot show an empty screen for a full set.
+   */
+  const [onlyOwing, setOnlyOwing] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
   const [loading, setLoading] = useState(true);
