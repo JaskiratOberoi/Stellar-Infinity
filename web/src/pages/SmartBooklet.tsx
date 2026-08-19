@@ -1363,16 +1363,32 @@ function Cover({ data }: { data: SmartBookletData }) {
           over the illustration, behind the content, with a scrim for legibility. */}
       {coverPhoto && (
         <>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={coverPhoto}
-            alt=""
+          {/*
+            A BACKGROUND, not an <img> — and that is a file-size decision, not a
+            styling one.
+
+            Telo paints this with `<img style="object-fit: cover">`. Chromium
+            then has to resample it to the printed box (the page works out 1752px
+            tall against a 1754px image — two pixels), and a resampled image is
+            decoded and re-embedded RAW: 3.5 MB for this one picture, which took
+            the booklet to 7.8 MB and left an operator watching "Preparing…"
+            while it crawled down the tunnel.
+
+            The same picture as a background-size: cover layer is passed through
+            as the JPEG it already is — 240 KB, pixel-identical on the page. The
+            difference is entirely in how Chromium's PDF writer treats the two.
+          */}
+          <div
+            aria-hidden
             style={{
               position: 'absolute',
               inset: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
+              backgroundImage: `url(${coverPhoto})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat',
+              WebkitPrintColorAdjust: 'exact',
+              printColorAdjust: 'exact',
             }}
           />
           <div
