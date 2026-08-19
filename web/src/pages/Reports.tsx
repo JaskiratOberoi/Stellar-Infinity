@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, csrfHeader } from '../api/client';
 import { downloadFile, fmtDateTime } from '../lib/format';
 import { ReportViewer } from './ReportViewer';
@@ -73,6 +73,17 @@ export function Reports() {
   // The merge basket. Keyed by SID and deliberately NOT cleared when the page
   // changes: picking three reports on page 1 and two on page 3 has to give five.
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  /*
+   * Group a patient's samples together, as the worksheet already does.
+   *
+   * A patient arriving once commonly leaves four tubes, and this list is
+   * newest-first — so their samples sit together by luck of timing and apart
+   * the moment anything else is registered between them. Grouping states the
+   * relationship instead of leaving it to be noticed.
+   */
+  const [groupByPid, setGroupByPid] = useState(true);
+  /** The PID whose complete report is being prepared, so only its own row spins. */
+  const [pidBusy, setPidBusy] = useState<number | null>(null);
   const [withGraphs, setWithGraphs] = useState(true);
   const [merging, setMerging] = useState(false);
   const [mergeError, setMergeError] = useState<string | null>(null);
@@ -88,6 +99,87 @@ export function Reports() {
       if (!next.delete(sid)) next.add(sid);
       return next;
     });
+
+  /**
+   * Samples collected under one patient, in the order the list already has.
+   *
+   * Deliberately the same shape and the same rule as the worksheet's grouping:
+   * order WITHIN a group and the order OF groups both follow the original list,
+   * which is newest-registered first. Sorting by PID would scramble the
+   * chronology the list is read in.
+   */
+  const grouped = useMemo(() => {
+    if (!groupByPid) return rows.map((r) => ({ pid: r.pid, rows: [r] }));
+
+    const order: number[] = [];
+    const byPid = new Map<number, WorksheetRow[]>();
+    for (const r of rows) {
+      // A row with no PID cannot be grouped with anything; give each its own
+      // bucket rather than collecting unrelated samples under a shared 0.
+      const key = r.pid || -(order.length + 1);
+      if (!byPid.has(key)) { byPid.set(key, []); order.push(key); }
+      byPid.get(key)!.push(r);
+    }
+    return order.map((pid) => ({ pid, rows: byPid.get(pid)! }));
+  }, [rows, groupByPid]);
+
+  /** Flattened rows carrying what the table needs to band and bracket a group. */
+  const tableRows = useMemo(() => {
+    const out: {
+      row: WorksheetRow; band: 0 | 1; indexInGroup: number;
+      groupSize: number; isGroupStart: boolean; isGroupEnd: boolean;
+    }[] = [];
+    let rowIndex = 0;
+    grouped.forEach((g, groupIndex) => {
+      g.rows.forEach((row, i) => {
+        out.push({
+          row,
+          // Grouped: one band per PATIENT, so a person's tubes share a shade.
+          // Ungrouped: ordinary zebra striping.
+          band: (groupByPid ? groupIndex % 2 : rowIndex % 2) as 0 | 1,
+          indexInGroup: i,
+          groupSize: g.rows.length,
+          isGroupStart: i === 0,
+          isGroupEnd: i === g.rows.length - 1,
+        });
+        rowIndex += 1;
+      });
+    });
+    return out;
+  }, [grouped, groupByPid]);
+
+  const multiSamplePatients = grouped.filter((g) => g.rows.length > 1).length;
+
+  /**
+   * Every report this patient has ON THIS PAGE, as one merged PDF.
+   *
+   * The LIS does this from a click on the PID, and this is the same gesture.
+   * It reuses the bulk route rather than adding a by-patient one, which means
+   * each SID goes through the identical gates — scope, the balance lock, the
+   * signatory check — and one that fails is reported as skipped instead of
+   * failing the rest.
+   *
+   * SCOPED TO WHAT IS LISTED, deliberately. The patient's other samples may sit
+   * outside the current date window or filters, and quietly widening the
+   * download beyond what the operator can see would hand them a document they
+   * did not ask for and cannot check.
+   */
+  const downloadPatient = async (pid: number, sids: string[]) => {
+    setPidBusy(pid);
+    setMergeError(null);
+    try {
+      await downloadFile('/api/reports/pdf/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...csrfHeader() },
+        body: JSON.stringify({ sids, withGraph: withGraphs }),
+        fallbackName: `Reports_PID_${pid}.pdf`,
+      });
+    } catch (e) {
+      setMergeError(e instanceof Error ? e.message : 'The download failed.');
+    } finally {
+      setPidBusy(null);
+    }
+  };
 
   const downloadMerged = async () => {
     setMerging(true);
@@ -157,7 +249,19 @@ export function Reports() {
           session on every request regardless — this stops the control implying
           a choice that does not exist. */}
       <SampleFilters value={filters} options={options} onChange={setFilters}
-                     lockClientCode={user?.role === 'client'} />
+                     lockClientCode={user?.role === 'client'}>
+        {/* Same control, same wording and same default as the worksheet — the
+            two lists are read by the same people and should not disagree about
+            what grouping is called or whether it is on. */}
+        <label className="row" style={{ gap: '.4rem', fontSize: '.8rem', cursor: 'pointer' }}
+               title={multiSamplePatients > 0
+                 ? `${multiSamplePatients} patient${multiSamplePatients === 1 ? '' : 's'} with more than one sample.`
+                 : 'Keeps a patient’s samples together.'}>
+          <input type="checkbox" checked={groupByPid}
+                 onChange={(e) => setGroupByPid(e.target.checked)} />
+          Group by patient
+        </label>
+      </SampleFilters>
 
       {scope === 'none' && (
         <div className="alert alert--info" style={{ marginBottom: '.9rem' }}>
@@ -217,6 +321,7 @@ export function Reports() {
                     />
                   </th>
                   <th>SID</th>
+                  <th>PID</th>
                   <th>Patient</th>
                   <th>Client</th>
                   <th>Tests</th>
@@ -226,8 +331,18 @@ export function Reports() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr key={r.sid} style={{ cursor: 'pointer' }} onClick={() => setOpenSid(r.sid)}>
+                {tableRows.map(({ row: r, band, indexInGroup: i, groupSize, isGroupStart, isGroupEnd }) => (
+                  <tr
+                    key={r.sid}
+                    className={[
+                      `band-${band}`,
+                      groupByPid && groupSize > 1 ? 'pid-group' : '',
+                      groupByPid && groupSize > 1 && isGroupStart ? 'pid-group--first' : '',
+                      groupByPid && groupSize > 1 && isGroupEnd ? 'pid-group--last' : '',
+                    ].filter(Boolean).join(' ')}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => setOpenSid(r.sid)}
+                  >
                     {/* Picking a report is not opening it, so the click stops
                         here rather than bubbling to the row. */}
                     <td className="cell--pick" data-label="Select" onClick={(e) => e.stopPropagation()}>
@@ -239,6 +354,37 @@ export function Reports() {
                       />
                     </td>
                     <td className="mono cell--lead"><b>{r.sid}</b></td>
+                    {/* The PID, and the whole patient's report behind it.
+                        Repeated on every row when ungrouped; shown once at the
+                        top of a group when grouped, because restating it down a
+                        bracketed block is noise. */}
+                    <td className="mono cell--meta" data-label="PID"
+                        onClick={(e) => e.stopPropagation()}>
+                      {(!groupByPid || i === 0) && r.pid ? (
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--sm"
+                          disabled={pidBusy !== null}
+                          title={
+                            groupSize > 1
+                              ? `Download all ${groupSize} of this patient's reports on this page as one PDF`
+                              : "Download this patient's report"
+                          }
+                          onClick={() => void downloadPatient(
+                            r.pid,
+                            (grouped.find((g) => g.rows.some((x) => x.sid === r.sid))?.rows ?? [r])
+                              .map((x) => x.sid),
+                          )}
+                        >
+                          {pidBusy === r.pid ? 'Preparing…' : r.pid}
+                          {groupSize > 1 && pidBusy !== r.pid && (
+                            <span className="muted" style={{ marginLeft: '.35rem' }}>×{groupSize}</span>
+                          )}
+                        </button>
+                      ) : (
+                        <span className="muted">{!r.pid ? '—' : ''}</span>
+                      )}
+                    </td>
                     <td className="cell--head">
                       {r.patientName ?? <span className="muted">—</span>}
                       <div className="muted" style={{ fontSize: '.72rem' }}>

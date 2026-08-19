@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '../api/client';
-import { fmtDateTime } from '../lib/format';
+import { api, csrfHeader } from '../api/client';
+import { downloadFile, fmtDateTime } from '../lib/format';
+import { useAuth } from '../auth/AuthContext';
 import { StatusBadge, type WorksheetRow } from './Reports';
 import { WorksheetEntry } from './WorksheetEntry';
 import { Pager } from '../components/Pager';
@@ -102,6 +103,15 @@ export function Worksheet() {
   const [rows, setRows] = useState<WorksheetRow[]>([]);
   const [scope, setScope] = useState('');
   const [groupByPid, setGroupByPid] = useState(true);
+  /** The PID whose reports are being prepared, so only its own row spins. */
+  const [pidBusy, setPidBusy] = useState<number | null>(null);
+  const [pidError, setPidError] = useState<string | null>(null);
+  /*
+   * Downloading a report is not this screen's job, and not every technologist
+   * holds it — the worksheet is gated on result:enter. Without report:view the
+   * PID stays the plain text it has always been.
+   */
+  const { can } = useAuth();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
   const [total, setTotal] = useState(0);
@@ -186,6 +196,36 @@ export function Worksheet() {
    * original list, which is newest-registered first. Sorting by PID instead
    * would scramble the chronology a technologist works down.
    */
+  /**
+   * Every report this patient has ON THIS PAGE, as one merged PDF.
+   *
+   * The same gesture the LIS offers from a click on the PID, and the same route
+   * the reporting screen uses — so each SID passes the identical gates (scope,
+   * the balance lock, the signatory check) and one that cannot be released is
+   * reported as skipped rather than failing the rest.
+   *
+   * Worth knowing on THIS screen in particular: the worksheet lists samples
+   * that are still being worked, and a sample with no authorised result has no
+   * report to give. Those are skipped by the route, so a patient mid-run comes
+   * back with the reports that exist and nothing for the ones that do not.
+   */
+  const downloadPatient = async (pid: number, sids: string[]) => {
+    setPidBusy(pid);
+    setPidError(null);
+    try {
+      await downloadFile('/api/reports/pdf/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...csrfHeader() },
+        body: JSON.stringify({ sids }),
+        fallbackName: `Reports_PID_${pid}.pdf`,
+      });
+    } catch (e) {
+      setPidError(e instanceof Error ? e.message : 'The download failed.');
+    } finally {
+      setPidBusy(null);
+    }
+  };
+
   const grouped = useMemo(() => {
     if (!groupByPid) return visible.map((r) => ({ pid: r.pid, rows: [r] }));
 
@@ -309,6 +349,7 @@ export function Worksheet() {
       )}
 
       {error && <div className="alert alert--error" style={{ marginBottom: '.9rem' }}>{error}</div>}
+      {pidError && <div className="alert alert--error" style={{ marginBottom: '.9rem' }}>{pidError}</div>}
 
       {loading ? (
         <div className="center"><InfinityLoader /><span className="muted">Loading worklist…</span></div>
@@ -352,8 +393,27 @@ export function Worksheet() {
                           down, because the <thead> is off-screen there. */}
                       <td className="mono cell--lead"><b>{r.sid}</b></td>
 
-                      <td className="mono muted cell--meta" data-label="PID" style={{ fontSize: '.78rem' }}>
-                        {r.pid || '—'}
+                      <td className="mono muted cell--meta" data-label="PID" style={{ fontSize: '.78rem' }}
+                          onClick={(e) => { if (can('report:view')) e.stopPropagation(); }}>
+                        {r.pid && can('report:view') ? (
+                          <button
+                            type="button"
+                            className="btn btn--ghost btn--sm"
+                            disabled={pidBusy !== null}
+                            title={groupSize > 1
+                              ? `Download this patient's ${groupSize} reports on this page as one PDF`
+                              : "Download this patient's report"}
+                            onClick={() => void downloadPatient(
+                              r.pid,
+                              (grouped.find((g) => g.rows.some((x) => x.sid === r.sid))?.rows ?? [r])
+                                .map((x) => x.sid),
+                            )}
+                          >
+                            {pidBusy === r.pid ? 'Preparing…' : r.pid}
+                          </button>
+                        ) : (
+                          r.pid || '—'
+                        )}
                         {/* Only the first row of a multi-sample patient carries
                             the count, so the repetition reads as one patient
                             rather than as duplicate rows. */}
