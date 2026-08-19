@@ -59,11 +59,17 @@ public static class ReportPdfEndpoints
         ReportLockRepository locks,
         ReportExtrasRepository extras,
         ILoggerFactory loggers,
+        SmartReportAccessRepository smartAccess,
         RenderClient render,
         CancellationToken ct)
     {
         var (ok, fail) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct).ConfigureAwait(false);
         if (!ok) return fail!;
+
+        // Sold, not given. Same 404 as the data route behind it — see
+        // SmartReportAccessRepository.
+        if (!await smartAccess.SidHasSmartReportAsync(sid, ct).ConfigureAwait(false))
+            return Results.NotFound();
 
         try
         {

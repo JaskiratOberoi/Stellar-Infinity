@@ -233,6 +233,7 @@ public static class ApiEndpoints
         System.Security.Claims.ClaimsPrincipal principal,
         ScopeRepository scopes,
         ReportsRepository repo,
+        Reports.SmartReportAccessRepository smartAccess,
         CancellationToken ct,
         string? from = null,
         string? to = null,
@@ -299,9 +300,31 @@ public static class ApiEndpoints
             scope.ClientCodes, fromDate, toDate, patient, sid, statuses, filters,
             page, pageSize, snapshot, ct).ConfigureAwait(false);
 
+        // Which of these patients actually bought the Smart Report. One indexed
+        // query for the whole page, so the list can draw that button only where
+        // it means something rather than offering everyone a thing most of them
+        // have not paid for. Best-effort: if the lookup fails the button simply
+        // does not appear, which is the safe direction — the routes behind it
+        // enforce the same rule anyway.
+        var smartPids = new HashSet<int>();
+        try
+        {
+            smartPids = await smartAccess
+                .PidsWithSmartReportAsync(result.Rows.Select(r => r.Pid).ToArray(), ct)
+                .ConfigureAwait(false);
+        }
+        catch (Exception) when (!ct.IsCancellationRequested) { /* no button */ }
+
         return Results.Ok(new
         {
-            rows = result.Rows,
+            rows = result.Rows.Select(r => new
+            {
+                r.Sid, r.ClientCode, r.BusinessUnit, r.Pid, r.PatientName, r.Sex,
+                r.Age, r.AgeUnit, r.SampleDrawn, r.RegisteredAt, r.LastModifiedAt,
+                r.StatusCode, r.Status, r.TestNames, r.OrderNumber, r.BillNumber,
+                r.ClinicalHistory,
+                SmartReport = smartPids.Contains(r.Pid),
+            }),
             // count is this page; total is the whole filtered set. Both are
             // sent because conflating them is what made the list look truncated.
             count = result.Rows.Count,
@@ -629,6 +652,7 @@ public static class ApiEndpoints
         ScopeRepository scopes,
         ReportsRepository repo,
         Reports.SmartReportService smart,
+        Reports.SmartReportAccessRepository smartAccess,
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
@@ -639,6 +663,14 @@ public static class ApiEndpoints
 
         var row = await repo.GetBySidAsync(scope.ClientCodes, sid, ct).ConfigureAwait(false);
         if (row is null) return Results.NotFound();
+
+        // The paid gate. 404, not 403: whether a particular patient bought a
+        // ₹99 extra is not something this route should confirm to someone who
+        // did not, and "no such thing here" is the honest answer for a report
+        // that was never purchased. The hidden button on the list is courtesy;
+        // this is the rule.
+        if (!await smartAccess.SidHasSmartReportAsync(sid, ct).ConfigureAwait(false))
+            return Results.NotFound();
 
         return Results.Ok(smart.Build(row));
     }

@@ -29,6 +29,15 @@ export interface WorksheetRow {
   orderNumber: string | null;
   billNumber: string | null;
   clinicalHistory: string | null;
+  /**
+   * Did this patient's order include the paid Smart Report (SMART-RPT)?
+   *
+   * The Smart Report is a ₹99 extra, not something every report has. The
+   * button is drawn only where this is true; the routes that serve it check
+   * the same thing server-side, because a hidden control is a courtesy and a
+   * URL is not.
+   */
+  smartReport?: boolean;
 }
 
 /**
@@ -290,9 +299,16 @@ export function Reports() {
           // the right source and costs nothing.
           patientName={rows.find((r) => r.sid === openSid)?.patientName ?? null}
           onClose={() => setOpenSid(null)}
-          // Swap one modal for the other rather than stacking them — two
-          // dialogs deep, Escape closes the wrong one.
-          onSmart={(s) => { setOpenSid(null); setSmartSid(s); }}
+          // Offered ONLY where the patient bought it. Passing undefined is what
+          // hides the button — see ReportViewer, which omits the control when
+          // it has no handler.
+          onSmart={
+            rows.find((r) => r.sid === openSid)?.smartReport
+              // Swap one modal for the other rather than stacking them — two
+              // dialogs deep, Escape closes the wrong one.
+              ? (s) => { setOpenSid(null); setSmartSid(s); }
+              : undefined
+          }
         />
       )}
       {smartSid && <SmartReportModal sid={smartSid} onClose={() => setSmartSid(null)} />}
