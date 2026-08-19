@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   api, cartApi, catalogApi, PAYMENT_MODES,
   type Cart, type CatalogItem, type OrderChannel, type OrderPreview, type PlacedOrder,
+  type CustomTest,
 } from '../api/client';
 import { inr, plainText } from '../lib/format';
 import { InfinityLoader } from '../components/InfinityLoader';
@@ -258,6 +259,29 @@ export function NewOrder() {
   const [refs, setRefs] = useState<{ doctors: Referrer[]; customers: Referrer[] }>(
     { doctors: [], customers: [] });
   const [refDoctor, setRefDoctor] = useState<RefPick>(null);
+
+  /*
+   * Extras the lab bills but never performs — the Smart Report is the one that
+   * matters here, because buying it is what entitles this patient to the
+   * booklet at all (see SmartReportAccessRepository). Offered per client, so
+   * the list is reloaded whenever the client changes, and the chosen ids ride
+   * on the order as ids and quantities only: the PRICE is the server's.
+   */
+  const [customTests, setCustomTests] = useState<CustomTest[]>([]);
+  const [customPicked, setCustomPicked] = useState<Record<number, number>>({});
+
+  useEffect(() => {
+    if (cart.mcc == null) { setCustomTests([]); setCustomPicked({}); return; }
+    let live = true;
+    cartApi.customTests(cart.mcc)
+      .then((t) => { if (live) setCustomTests(t); })
+      // A centre with none configured simply sees no extras; it must never
+      // stand between an operator and booking the tests.
+      .catch(() => { if (live) setCustomTests([]); });
+    // Anything ticked belonged to the previous client's price list.
+    setCustomPicked({});
+    return () => { live = false; };
+  }, [cart.mcc]);
   const [refCustomer, setRefCustomer] = useState<RefPick>(null);
   useEffect(() => {
     let live = true;
@@ -582,6 +606,11 @@ export function NewOrder() {
         // The birth date itself, now that it is stored and not only used to
         // derive the age above. Null when the boxes are blank or invalid.
         dob: dobIso(patient.dobDay, patient.dobMonth, patient.dobYear),
+        // Ids and quantities only — the server re-prices these against the
+        // client's own catalogue, so nothing here decides what is charged.
+        customLines: Object.entries(customPicked)
+          .map(([id, qty]) => ({ customTestId: Number(id), qty }))
+          .filter((l) => l.customTestId > 0 && l.qty > 0),
         discountAmount: Number(discount || 0),
         // Split lines go as a TVP; the scalar pair stays empty so the
         // procedure takes the TVP path and cannot receipt the money twice.
@@ -1188,6 +1217,45 @@ export function NewOrder() {
                 </ul>
               )}
             </div>
+
+          {/* ---- extras: billed by the lab, not performed by it ---- */}
+          {customTests.length > 0 && (
+            <div style={{ marginTop: '.9rem' }}>
+              <div className="muted" style={{ fontSize: '.76rem', marginBottom: '.35rem' }}>
+                Extras
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.5rem' }}>
+                {customTests.map((t) => {
+                  const on = (customPicked[t.id] ?? 0) > 0;
+                  return (
+                    <label
+                      key={t.id}
+                      className={`chip${on ? ' chip--on' : ''}`}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '.45rem',
+                        border: '1px solid var(--line)', borderRadius: '999px',
+                        padding: '.35rem .7rem', cursor: 'pointer',
+                        background: on ? 'var(--accent-soft)' : 'transparent',
+                      }}
+                      title={`${t.name} — billed at ${inr(t.mrp)}, not performed in the lab`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={(e) => setCustomPicked((prev) => {
+                          const next = { ...prev };
+                          if (e.target.checked) next[t.id] = 1; else delete next[t.id];
+                          return next;
+                        })}
+                      />
+                      <span style={{ fontSize: '.8rem', fontWeight: 600 }}>{t.name}</span>
+                      <span className="muted" style={{ fontSize: '.74rem' }}>{inr(t.mrp)}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* ---- the selected tests, at the prices that will bill ---- */}
           {cart.items.length > 0 && preview && (

@@ -710,6 +710,17 @@ export const catalogApi = {
   },
 };
 
+/** A thing the lab bills for but never performs (dbo.telo_custom_test). */
+export interface CustomTest {
+  id: number;
+  code: string;
+  name: string;
+  /** Rupees per unit, as the server prices it. Never posted back. */
+  mrp: number;
+  requiresMrd: boolean;
+  allowQty: boolean;
+}
+
 export const cartApi = {
   get: () => api.get<Cart>('/api/orders/cart/'),
   setClient: (mcc: number) => api.post<Cart>('/api/orders/cart/client', { mcc }),
@@ -722,6 +733,13 @@ export const cartApi = {
   preview: (channel: OrderChannel = 'b2c') =>
     api.post<OrderPreview>(`/api/orders/preview?channel=${channel}`),
   place: (body: unknown) => api.post<PlacedOrder>('/api/orders/', body),
+  /**
+   * The extras this client can be charged for but the lab does not perform —
+   * the Smart Report among them. Priced by the server; the order only ever
+   * sends back an id and a quantity.
+   */
+  customTests: (mcc: number) =>
+    api.get<CustomTest[]>(`/api/orders/custom-tests?mcc=${mcc}`),
   /**
    * Is this barcode already on a tube? Advisory — the create procedure is what
    * actually enforces uniqueness, and a race still ends in a clean rejection.

@@ -120,7 +120,19 @@ public sealed record CreateOrderRequest(
     /// of its own (see 119_table_inf_patient_dob.sql). Null leaves any date
     /// captured on an earlier visit untouched.
     /// </summary>
-    DateOnly? Dob = null);
+    DateOnly? Dob = null,
+
+    /// <summary>
+    /// Lines the lab BILLS but never performs — the Smart Report is one. Each
+    /// produces a billing line and a telo_custom_test_order row, and no LIS
+    /// test or sample. Empty for an ordinary order.
+    /// </summary>
+    IReadOnlyList<CustomLine>? CustomLines = null,
+    /// <summary>The operator's MRD free text, snapshotted on each custom line.</summary>
+    string? MrdText = null);
+
+/// <param name="CustomTestId">dbo.telo_custom_test.id — the price is re-resolved from it server-side.</param>
+public sealed record CustomLine(int CustomTestId, int Qty);
 
 /// <param name="Method">Cash, UPI, Card, Cheque, NEFT — the label, not an id.</param>
 /// <param name="Ref">
@@ -192,6 +204,45 @@ public sealed class OrderWriteRepository(NobleConnectionFactory db, SqlRetry ret
     /// rows — so an all-blank TVP would suppress the scalar path and record
     /// nothing at all.
     /// </remarks>
+    /// <summary>
+    /// dbo.TeloCustomLine. The code, name and unit price come from the resolved
+    /// catalogue row, NEVER from the request — the browser posts an id and a
+    /// quantity and nothing else that reaches a bill.
+    /// </summary>
+    private static void AddCustomLineTvp(
+        SqlCommand cmd, string name, IReadOnlyList<(CustomTest Test, int Qty)> lines)
+    {
+        var t = new System.Data.DataTable();
+        t.Columns.Add("customTestId", typeof(int));
+        t.Columns.Add("code", typeof(string));
+        t.Columns.Add("name", typeof(string));
+        t.Columns.Add("unitAmount", typeof(int));
+        t.Columns.Add("qty", typeof(int));
+        t.Columns.Add("requiresMrd", typeof(bool));
+
+        // Repeats of one test are coalesced, summing quantity: the form adds a
+        // single line per test, so a duplicate is a tampered or replayed post
+        // and must not bill twice.
+        var byId = new Dictionary<int, (CustomTest Test, int Qty)>();
+        foreach (var (test, qty) in lines)
+        {
+            var q = Math.Max(1, qty);
+            byId[test.Id] = byId.TryGetValue(test.Id, out var prev)
+                ? (test, prev.Qty + q)
+                : (test, q);
+        }
+
+        foreach (var (test, qty) in byId.Values)
+        {
+            t.Rows.Add(test.Id, test.Code, test.Name, test.Mrp,
+                       test.AllowQty ? qty : 1, test.RequiresMrd);
+        }
+
+        var param = cmd.Parameters.AddWithValue(name, t);
+        param.SqlDbType = SqlDbType.Structured;
+        param.TypeName = "dbo.TeloCustomLine";
+    }
+
     private static void AddPaymentTvp(SqlCommand cmd, string name, IReadOnlyList<PaymentLine> lines)
     {
         var t = new System.Data.DataTable();
@@ -303,8 +354,15 @@ public sealed class OrderWriteRepository(NobleConnectionFactory db, SqlRetry ret
                 return 0;
             }, token), ct);
 
+    /// <param name="customLines">
+    /// Already RESOLVED against the catalogue by the caller, which is what
+    /// makes the price trustworthy — the request only ever carried an id and a
+    /// quantity. See CustomTestRepository.ResolveAsync.
+    /// </param>
     public Task<CreateOrderResult> CreateAsync(
-        int userId, CreateOrderRequest req, CancellationToken ct = default) =>
+        int userId, CreateOrderRequest req,
+        IReadOnlyList<(CustomTest Test, int Qty)>? customLines = null,
+        CancellationToken ct = default) =>
         db.QueryAsync("orders.create", async (conn, inner) =>
         {
             await using var cmd = db.CreateWriteCommand(conn, "dbo.usp_telo_create_order");
@@ -319,6 +377,12 @@ public sealed class OrderWriteRepository(NobleConnectionFactory db, SqlRetry ret
             AddSidTvp(cmd, "@sids", req.SampleSids ?? []);
             AddTestListTvp(cmd, "@items", req.Items);
             AddPaymentTvp(cmd, "@payments", req.Payments ?? []);
+            // The procedure has always taken these — Telo has billed custom
+            // lines through them since it was written — Infinity simply never
+            // sent any. Empty for an ordinary order, which is how it behaved
+            // before this and how it still behaves.
+            AddCustomLineTvp(cmd, "@customLines", customLines ?? []);
+            AddVarChar(cmd, "@mrdText", 200, req.MrdText);
 
             cmd.Parameters.Add("@patientId", SqlDbType.Int).Value = req.PatientId ?? 0;
             AddNVarChar(cmd, "@name", 200, req.Name);

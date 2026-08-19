@@ -40,6 +40,11 @@ public static class OrderEntryEndpoints
         // Barcode collision feedback for the order form's Sample ID panel.
         entry.MapGet("/sid-taken", GetSidTaken).WithName("GetOrderSidTaken");
 
+        // The extras a client may be charged for but the lab never performs —
+        // the Smart Report among them. Read-only and scoped, so a centre only
+        // ever sees what is offered to it.
+        entry.MapGet("/custom-tests", GetCustomTests).WithName("GetOrderCustomTests");
+
         entry.MapPost("/preview", PreviewOrder).WithName("PreviewOrder");
         entry.MapPost("/", PlaceOrder).WithName("PlaceOrder");
     }
@@ -385,6 +390,26 @@ public static class OrderEntryEndpoints
     // ---- placement ---------------------------------------------------------
 
     /// <summary>
+    /// The custom tests offered to one client — billed by the lab, not carried
+    /// out by it. The Smart Report (SMART-RPT) is the network-wide one.
+    /// </summary>
+    private static async Task<IResult> GetCustomTests(
+        int mcc,
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
+        CustomTestRepository repo,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+        // Same scope rule as pricing the catalogue: what a client is offered,
+        // and at what price, is not another client's to read.
+        if (!await InScopeAsync(scopes, userId, mcc, ct).ConfigureAwait(false))
+            return Results.NotFound();
+
+        return Results.Ok(await repo.ForMccAsync(mcc, ct).ConfigureAwait(false));
+    }
+
+    /// <summary>
     /// Place the order. This is the real write: a patient, a bill, a bill
     /// number, samples, and optionally a receipt and a ledger posting.
     /// </summary>
@@ -394,6 +419,7 @@ public static class OrderEntryEndpoints
         ScopeRepository scopes,
         CartStore carts,
         OrderWriteRepository orders,
+        CustomTestRepository customTests,
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
@@ -461,7 +487,27 @@ public static class OrderEntryEndpoints
             }
             : body with { BillAtMrp = false, Channel = channel };
 
-        var result = await orders.CreateAsync(userId, placed, ct).ConfigureAwait(false);
+        /*
+         * Custom lines are re-priced HERE, from the catalogue, for the client
+         * this order belongs to.
+         *
+         * The request carries an id and a quantity and nothing else that can
+         * reach a bill: a posted price would let the caller decide what the
+         * patient is charged, and a posted client would let one centre bill
+         * another's private test. An id that does not resolve is dropped rather
+         * than failing the order — the tests the patient actually came for
+         * matter more than an extra the form should not have offered.
+         */
+        var resolved = new List<(CustomTest Test, int Qty)>();
+        foreach (var line in placed.CustomLines ?? [])
+        {
+            var test = await customTests
+                .ResolveAsync(line.CustomTestId, body.Mcc, ct)
+                .ConfigureAwait(false);
+            if (test is not null) resolved.Add((test, line.Qty));
+        }
+
+        var result = await orders.CreateAsync(userId, placed, resolved, ct).ConfigureAwait(false);
 
         if (!result.Ok)
         {
