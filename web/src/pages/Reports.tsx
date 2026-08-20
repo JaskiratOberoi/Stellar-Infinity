@@ -440,10 +440,19 @@ export function Reports() {
                       <button className="btn btn--ghost btn--sm" onClick={(e) => { e.stopPropagation(); setOpenSid(r.sid); }}>
                         View
                       </button>
-                      <button className="btn btn--primary btn--sm"
-                              onClick={(e) => { e.stopPropagation(); setSmartSid(r.sid); }}>
-                        Smart
-                      </button>
+                      {/* Only where the patient BOUGHT it. The Smart Report is
+                          a paid extra and the API refuses a SID without the
+                          purchase — a button that always renders is a button
+                          that sometimes answers 404, which is exactly what an
+                          operator reported. The modal's own Smart control is
+                          gated the same way below; the server check remains the
+                          enforcement either way. */}
+                      {r.smartReport && (
+                        <button className="btn btn--primary btn--sm"
+                                onClick={(e) => { e.stopPropagation(); setSmartSid(r.sid); }}>
+                          Smart
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

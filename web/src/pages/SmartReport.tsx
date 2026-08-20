@@ -78,7 +78,17 @@ export function SmartReportModal({ sid, onClose }: { sid: string; onClose: () =>
     api
       .get<SmartReportData>(`/api/reports/${encodeURIComponent(sid)}/smart`)
       .then((r) => { if (live) setData(r); })
-      .catch((e) => { if (live) setError(e instanceof Error ? e.message : 'Could not build the smart report.'); })
+      .catch((e) => {
+        if (!live) return;
+        // The route answers 404 for a patient whose order did not include the
+        // paid Smart Report. The button is hidden for those rows, so reaching
+        // this means the list is stale — say what the refusal MEANS rather
+        // than parroting the status line an operator cannot act on.
+        const msg = e instanceof Error ? e.message : '';
+        setError(/\(404\)/.test(msg)
+          ? 'This patient’s order doesn’t include the Smart Report, so there is no summary to show. It is a paid extra chosen at booking.'
+          : (msg || 'Could not build the smart report.'));
+      })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, [sid]);
