@@ -67,10 +67,14 @@ public sealed class ResultWriteRepository(NobleConnectionFactory db, ILogger<Res
             cmd.Parameters.Add("@can_amend", SqlDbType.Bit).Value = canAmend;
             cmd.Parameters.Add("@can_authorize", SqlDbType.Bit).Value = canAuthorize;
 
+            // TextOrClear, not Truncate: for these two an empty string is the
+            // operator CLEARING the box, and clearing the comment is how a
+            // held (Pending) sample is released — folding '' into NULL here
+            // would make every hold permanent.
             cmd.Parameters.Add("@sample_comments", SqlDbType.VarChar, SampleTextMax).Value =
-                Truncate(request.SampleComments, SampleTextMax);
+                TextOrClear(request.SampleComments, SampleTextMax);
             cmd.Parameters.Add("@sample_clinical_history", SqlDbType.VarChar, SampleTextMax).Value =
-                Truncate(request.SampleClinicalHistory, SampleTextMax);
+                TextOrClear(request.SampleClinicalHistory, SampleTextMax);
 
             try
             {
@@ -179,6 +183,16 @@ public sealed class ResultWriteRepository(NobleConnectionFactory db, ILogger<Res
 
     private static object Truncate(string? s, int max) =>
         string.IsNullOrWhiteSpace(s) ? DBNull.Value : s.Length <= max ? s : s[..max];
+
+    /// <summary>
+    /// NULL means "not touched this save"; anything else is the new content,
+    /// where whitespace-only is a deliberate clear and becomes ''. The SP's
+    /// COALESCE keeps the old value only for DBNull.
+    /// </summary>
+    private static object TextOrClear(string? s, int max) =>
+        s is null ? DBNull.Value
+        : string.IsNullOrWhiteSpace(s) ? string.Empty
+        : s.Length <= max ? s : s[..max];
 
     private static string? Trim(string? s, int max) =>
         string.IsNullOrWhiteSpace(s) ? null : s.Length <= max ? s : s[..max];

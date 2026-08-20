@@ -347,6 +347,14 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
       if (outcome.autoAuthorized > 0) {
         bits.push(`${outcome.autoAuthorized} auto-authorised`);
       }
+      // The hold changing state is the headline, not a side effect — an
+      // operator who just authorised a panel needs to see WHY it reads
+      // Pending, and one who cleared the comment needs to see the release.
+      if (outcome.statusAfter === 10 && outcome.statusBefore !== 10) {
+        bits.push('sample held as Pending (sample comment)');
+      } else if (outcome.statusBefore === 10 && outcome.statusAfter !== 10) {
+        bits.push('hold released');
+      }
       setNotice(bits.join(' · '));
 
       await load();
@@ -742,14 +750,14 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                 className="input"
                 disabled={readOnly}
                 value={sampleComments}
-                placeholder="Visible on the report"
+                placeholder='e.g. "On Hold" — holds the sample as Pending'
                 onChange={setSampleComments}
               />
-              {/* Worth stating: in the legacy LIS, saving any sample comment
-                  forced the status to 10 (Pending), silently discarding the
-                  transition it had just computed. */}
+              {/* The box is the hold lever, as it is in the LIS: any comment
+                  here — "On Hold", "Test Not Performed", a pending reason —
+                  pins the sample at Pending until it is cleared. */}
               <span className="muted" style={{ fontSize: '.7rem' }}>
-                Saving a comment does not change the sample status.
+                A comment holds the sample as Pending — clear it and save to release.
               </span>
             </div>
 

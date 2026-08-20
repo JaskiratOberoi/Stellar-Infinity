@@ -20,11 +20,19 @@ GO
  *    catch that writes the exception text into a label. A failure part-way
  *    leaves the sample half-saved. Here: one transaction, XACT_ABORT ON.
  *
- * 2. COMMENTS CLOBBER STATUS. UpdateComments (:1957-1958) sets sample_status to
- *    10 (Pending) whenever a sample comment is non-empty, and is called
- *    unconditionally right after the status computation — silently discarding
- *    the 4/5/6/7 transition just calculated. Here, comments and status are
- *    independent: saving a comment never changes status.
+ * 2. COMMENTS PIN STATUS — DELIBERATELY. UpdateComments (:1957-1958) sets
+ *    sample_status to 10 (Pending) whenever a sample comment is non-empty,
+ *    called unconditionally right after the status computation and silently
+ *    discarding the 4/5/6/7 transition just calculated. This first read as a
+ *    defect and was left out — until the lab explained it is how a sample is
+ *    put ON HOLD: "Pending", "On Hold", "Test Not Performed" in the big
+ *    comment box are instructions to the bench, and the status following the
+ *    box is the feature. So the rule is kept, with the rough edges filed off:
+ *    the pin is applied once, AFTER the recompute, inside the same
+ *    transaction; the status change lands in the audit like any other; and
+ *    clearing the comment and saving releases the sample to whatever its
+ *    results actually warrant — which is how the legacy releases one too,
+ *    since its recompute runs before UpdateComments on every save.
  *
  * 3. PERMISSION ENFORCED BY DISABLING A CHECKBOX. The legacy checks
  *    tbl_med_mcc_user_security_auth only to set chkAuth.Enabled; the save
@@ -451,7 +459,11 @@ BEGIN
            OR w.new_abnormal <> w.old_abnormal
            OR (w.req_auth IS NOT NULL AND w.req_auth <> w.old_auth);
 
-        -- --- sample-level free text, WITHOUT touching status --------------
+        -- --- sample-level free text ---------------------------------------
+        -- An empty string is a deliberate CLEAR and flows through COALESCE
+        -- as one; only NULL means "not touched this save". The hold that a
+        -- non-empty comment implies is applied after the recompute below —
+        -- see note 2 in the header.
         IF @sample_comments IS NOT NULL OR @sample_clinical_history IS NOT NULL
         BEGIN
             UPDATE dbo.tbl_med_mcc_patient_samples
@@ -482,6 +494,21 @@ BEGIN
                 WHEN @authed = @total AND @filled = @total THEN 7    -- Authorized
                 ELSE 6                                          -- Partially Authorized
             END;
+
+        -- The hold. A non-empty sample comment pins the sample at 10
+        -- (Pending) no matter what the counts just said — mirroring the
+        -- legacy UpdateComments, which the lab drives by writing "On Hold" /
+        -- "Test Not Performed" / "Pending" into the big comment box. Read
+        -- back from the row rather than trusting @sample_comments, so a save
+        -- that leaves an existing comment untouched (@sample_comments NULL)
+        -- keeps the hold, and one that just cleared it releases.
+        DECLARE @held VARCHAR(500);
+        SELECT @held = Sample_Comments
+        FROM dbo.tbl_med_mcc_patient_samples
+        WHERE id = @sample_id;
+
+        IF LTRIM(RTRIM(ISNULL(@held, ''))) <> ''
+            SET @status_after = 10;    -- Pending
 
         IF @status_after <> @status_before
         BEGIN
