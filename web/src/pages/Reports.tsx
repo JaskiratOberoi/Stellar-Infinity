@@ -81,7 +81,16 @@ export function Reports() {
    * the moment anything else is registered between them. Grouping states the
    * relationship instead of leaving it to be noticed.
    */
-  const [groupByPid, setGroupByPid] = useState(true);
+  /*
+   * Grouping is not a setting.
+   *
+   * A patient's samples belong together on a reporting screen — the whole point
+   * of the list is to release a person's results — and a toggle that can take
+   * that apart only invites someone to work from a view where four tubes of one
+   * patient read as four unrelated people. The worksheet offers the choice
+   * because a technologist sometimes works a bench in registration order; this
+   * screen has no such case.
+   */
   /** The PID whose complete report is being prepared, so only its own row spins. */
   const [pidBusy, setPidBusy] = useState<number | null>(null);
   const [withGraphs, setWithGraphs] = useState(true);
@@ -109,7 +118,6 @@ export function Reports() {
    * chronology the list is read in.
    */
   const grouped = useMemo(() => {
-    if (!groupByPid) return rows.map((r) => ({ pid: r.pid, rows: [r] }));
 
     const order: number[] = [];
     const byPid = new Map<number, WorksheetRow[]>();
@@ -121,7 +129,7 @@ export function Reports() {
       byPid.get(key)!.push(r);
     }
     return order.map((pid) => ({ pid, rows: byPid.get(pid)! }));
-  }, [rows, groupByPid]);
+  }, [rows]);
 
   /** Flattened rows carrying what the table needs to band and bracket a group. */
   const tableRows = useMemo(() => {
@@ -136,7 +144,10 @@ export function Reports() {
           row,
           // Grouped: one band per PATIENT, so a person's tubes share a shade.
           // Ungrouped: ordinary zebra striping.
-          band: (groupByPid ? groupIndex % 2 : rowIndex % 2) as 0 | 1,
+          // One band per PATIENT, so a person's tubes share a shade and the
+          // next patient flips. The band IS the group boundary, which reads far
+          // better down a dense list than a hairline rule.
+          band: (groupIndex % 2) as 0 | 1,
           indexInGroup: i,
           groupSize: g.rows.length,
           isGroupStart: i === 0,
@@ -146,7 +157,7 @@ export function Reports() {
       });
     });
     return out;
-  }, [grouped, groupByPid]);
+  }, [grouped]);
 
   const multiSamplePatients = grouped.filter((g) => g.rows.length > 1).length;
 
@@ -235,6 +246,10 @@ export function Reports() {
           <h1 className="page__title">Reporting</h1>
           <p className="page__sub">
             {rows.length} sample{rows.length === 1 ? '' : 's'}
+            {/* Grouping is always on, so the count of samples alone no longer
+                describes the list: it is worth saying how many of those rows
+                are the same person, which is what the brackets are showing. */}
+            {multiSamplePatients > 0 && ` · ${multiSamplePatients} patient${multiSamplePatients === 1 ? '' : 's'} with more than one sample`}
             {scope && ` · ${scope === 'all' ? 'all centres' : scope}`}
           </p>
         </div>
@@ -249,19 +264,7 @@ export function Reports() {
           session on every request regardless — this stops the control implying
           a choice that does not exist. */}
       <SampleFilters value={filters} options={options} onChange={setFilters}
-                     lockClientCode={user?.role === 'client'}>
-        {/* Same control, same wording and same default as the worksheet — the
-            two lists are read by the same people and should not disagree about
-            what grouping is called or whether it is on. */}
-        <label className="row" style={{ gap: '.4rem', fontSize: '.8rem', cursor: 'pointer' }}
-               title={multiSamplePatients > 0
-                 ? `${multiSamplePatients} patient${multiSamplePatients === 1 ? '' : 's'} with more than one sample.`
-                 : 'Keeps a patient’s samples together.'}>
-          <input type="checkbox" checked={groupByPid}
-                 onChange={(e) => setGroupByPid(e.target.checked)} />
-          Group by patient
-        </label>
-      </SampleFilters>
+                     lockClientCode={user?.role === 'client'} />
 
       {scope === 'none' && (
         <div className="alert alert--info" style={{ marginBottom: '.9rem' }}>
@@ -320,8 +323,8 @@ export function Reports() {
                       onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((r) => r.sid)) : new Set())}
                     />
                   </th>
-                  <th>SID</th>
                   <th>PID</th>
+                  <th>SID</th>
                   <th>Patient</th>
                   <th>Client</th>
                   <th>Tests</th>
@@ -336,9 +339,9 @@ export function Reports() {
                     key={r.sid}
                     className={[
                       `band-${band}`,
-                      groupByPid && groupSize > 1 ? 'pid-group' : '',
-                      groupByPid && groupSize > 1 && isGroupStart ? 'pid-group--first' : '',
-                      groupByPid && groupSize > 1 && isGroupEnd ? 'pid-group--last' : '',
+                      groupSize > 1 ? 'pid-group' : '',
+                      groupSize > 1 && isGroupStart ? 'pid-group--first' : '',
+                      groupSize > 1 && isGroupEnd ? 'pid-group--last' : '',
                     ].filter(Boolean).join(' ')}
                     style={{ cursor: 'pointer' }}
                     onClick={() => setOpenSid(r.sid)}
@@ -353,14 +356,14 @@ export function Reports() {
                         onChange={() => toggle(r.sid)}
                       />
                     </td>
-                    <td className="mono cell--lead"><b>{r.sid}</b></td>
-                    {/* The PID, and the whole patient's report behind it.
-                        Repeated on every row when ungrouped; shown once at the
-                        top of a group when grouped, because restating it down a
-                        bracketed block is noise. */}
-                    <td className="mono cell--meta" data-label="PID"
-                        onClick={(e) => e.stopPropagation()}>
-                      {(!groupByPid || i === 0) && r.pid ? (
+                    {/* The PID leads the row: it is what identifies the person
+                        the block belongs to, and the samples under it are that
+                        person's. Written once at the top of the group — repeating
+                        it down a bracketed block is noise — with the whole
+                        patient's report behind it. */}
+                    <td className="mono cell--lead" data-label="PID"
+                        onClick={(e) => { if (i === 0) e.stopPropagation(); }}>
+                      {i === 0 && r.pid ? (
                         <button
                           type="button"
                           className="btn btn--ghost btn--sm"
@@ -376,20 +379,36 @@ export function Reports() {
                               .map((x) => x.sid),
                           )}
                         >
-                          {pidBusy === r.pid ? 'Preparing…' : r.pid}
+                          <b>{pidBusy === r.pid ? 'Preparing…' : r.pid}</b>
                           {groupSize > 1 && pidBusy !== r.pid && (
-                            <span className="muted" style={{ marginLeft: '.35rem' }}>×{groupSize}</span>
+                            <span className="badge badge--role" style={{ marginLeft: '.4rem' }}>
+                              {groupSize} samples
+                            </span>
                           )}
                         </button>
                       ) : (
-                        <span className="muted">{!r.pid ? '—' : ''}</span>
+                        // Inside a group the column is left empty on purpose:
+                        // the bracket and the shared band already say whose
+                        // sample this is, and a repeated id competes with the
+                        // SID for the eye.
+                        <span className="muted">{!r.pid && i === 0 ? '—' : ''}</span>
                       )}
                     </td>
+                    <td className="mono cell--meta" data-label="SID">{r.sid}</td>
                     <td className="cell--head">
-                      {r.patientName ?? <span className="muted">—</span>}
-                      <div className="muted" style={{ fontSize: '.72rem' }}>
-                        {[r.sex, r.age != null ? `${r.age}${r.ageUnit?.[0] ?? ''}` : null].filter(Boolean).join(' · ')}
-                      </div>
+                      {/* Repeating the name on every sample of the same patient
+                          is noise; the grouping already says it. Same treatment
+                          the worksheet gives it. */}
+                      {i > 0 ? (
+                        <span className="muted" style={{ fontSize: '.76rem' }}>↳ same patient</span>
+                      ) : (
+                        <>
+                          {r.patientName ?? <span className="muted">—</span>}
+                          <div className="muted" style={{ fontSize: '.72rem' }}>
+                            {[r.sex, r.age != null ? `${r.age}${r.ageUnit?.[0] ?? ''}` : null].filter(Boolean).join(' · ')}
+                          </div>
+                        </>
+                      )}
                     </td>
                     <td className="muted cell--meta" data-label="Client">{r.clientCode ?? '—'}</td>
                     <td className="cell--body" data-label="Tests">
