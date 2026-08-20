@@ -364,9 +364,16 @@ export function Reports() {
                     <td className="mono cell--lead" data-label="PID"
                         onClick={(e) => { if (i === 0) e.stopPropagation(); }}>
                       {i === 0 && r.pid ? (
+                        /* A LINK, not a button. The ghost-button pill wrapped
+                           the id and its badge onto two lines and swallowed the
+                           column — the row read as a blob of chrome around a
+                           number. The id itself is the control: mono like the
+                           SID beside it, a download glyph to say it does
+                           something, and the sample count as a plain suffix
+                           rather than a badge fighting for the same line. */
                         <button
                           type="button"
-                          className="btn btn--ghost btn--sm"
+                          className="pidlink"
                           disabled={pidBusy !== null}
                           title={
                             groupSize > 1
@@ -379,11 +386,20 @@ export function Reports() {
                               .map((x) => x.sid),
                           )}
                         >
-                          <b>{pidBusy === r.pid ? 'Preparing…' : r.pid}</b>
-                          {groupSize > 1 && pidBusy !== r.pid && (
-                            <span className="badge badge--role" style={{ marginLeft: '.4rem' }}>
-                              {groupSize} samples
-                            </span>
+                          {pidBusy === r.pid ? (
+                            <span className="muted">Preparing…</span>
+                          ) : (
+                            <>
+                              <b>{r.pid}</b>
+                              <svg className="pidlink__dl" viewBox="0 0 16 16" aria-hidden="true">
+                                <path d="M8 2v8m0 0 3-3m-3 3L5 7M3 13h10" fill="none"
+                                      stroke="currentColor" strokeWidth="1.6"
+                                      strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                              {groupSize > 1 && (
+                                <span className="pidlink__n">×{groupSize}</span>
+                              )}
+                            </>
                           )}
                         </button>
                       ) : (

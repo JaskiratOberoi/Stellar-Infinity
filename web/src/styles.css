@@ -3067,6 +3067,42 @@ tbody tr.band-1 > td { background: var(--band); }
 tbody tr.band-0:hover > td,
 tbody tr.band-1:hover > td { background: var(--accent-ring); }
 
+/* ---------- the PID as a control ----------
+   The reporting list leads with the PID, and clicking it downloads the whole
+   patient. Styled as the id itself rather than as a button: a pill around a
+   mono number read as chrome, wrapped to two lines with its badge, and made
+   every grouped row half again as tall. This is one line, always. */
+.pidlink {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .1rem .3rem;
+  margin: -.1rem -.3rem;      /* the hit area grows; the layout does not */
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;        /* the id, the glyph and the count stay one line */
+  transition: background .12s, color .12s;
+}
+.pidlink:hover:not(:disabled) { background: var(--accent-soft); color: var(--teal); }
+.pidlink:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
+.pidlink:disabled { cursor: default; opacity: .6; }
+
+/* The glyph whispers until the row is hovered — the column shows ids, not a
+   stack of icons, but the affordance is there the moment you look at one. */
+.pidlink__dl { width: 13px; height: 13px; opacity: .35; flex: none; }
+.pidlink:hover:not(:disabled) .pidlink__dl { opacity: 1; }
+
+.pidlink__n {
+  font-size: .72rem;
+  font-weight: 600;
+  color: var(--ink-dim);
+}
+
 /* ---------- checkboxes ---------- */
 
 /* Styled with appearance:none on the REAL input rather than a hidden input
