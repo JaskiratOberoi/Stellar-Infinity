@@ -166,6 +166,41 @@ button, input, select { font: inherit; color: inherit; }
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 
+/* ---------- the login wordmark, unfolded ----------
+   The INFINITY letters as individual controls, dressed to read as ONE
+   wordmark first and eight buttons only under the pointer. The lit letter
+   lifts and takes the mark's gradient; its word appears on the line below
+   (.login__unfold), whose height is fixed so the form never shifts. */
+
+.login__brand { display: flex; align-items: center; gap: .7rem; user-select: none; }
+.login__brand svg { height: 30px; width: auto; flex: none; }
+
+.login__letters { display: inline-flex; }
+
+.login__letter {
+  border: 0; background: none; padding: .1rem .13rem; margin: 0;
+  font-family: inherit; font-size: 1.05rem; font-weight: 300;
+  letter-spacing: 0; line-height: 1;
+  color: var(--ink-dim); opacity: .75;
+  cursor: default;
+  transition: opacity .25s, transform .25s cubic-bezier(.34, 1.56, .64, 1);
+}
+.login__letter.is-lit {
+  opacity: 1;
+  font-weight: 400;
+  transform: translateY(-2px);
+  background: linear-gradient(92deg, var(--cyan), var(--teal) 45%, var(--blue));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+
+.login__unfold {
+  margin: -.4rem 0 0;
+  min-height: 2.1em;
+  font-size: .68rem; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ink-dim);
+  line-height: 1.5;
+}
+
 /* ---------- theme toggle ---------- */
 
 .theme-toggle {
@@ -199,7 +234,13 @@ button, input, select { font: inherit; color: inherit; }
    periods (26/32/38s) so the composition never visibly repeats. Transforms
    only — compositor work, no layout or paint — and the global
    prefers-reduced-motion rule at the bottom of this file freezes them. */
-.login__sky { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.login__sky {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  /* Pointer parallax — the vars are set from React on the root. `translate`
+     rather than transform, so the leaving animation's transform is free. */
+  translate: calc(var(--px, 0) * 26px) calc(var(--py, 0) * 26px);
+  transition: translate .3s ease-out;
+}
 
 /* Orb colours get their OWN tokens rather than reusing the UI washes. The
    first attempt reused --accent-ring/--blue-soft (alpha .06–.14), and a 70px
@@ -245,6 +286,10 @@ button, input, select { font: inherit; color: inherit; }
 @keyframes orb-c { from { transform: translate(0, 0) scale(.96); }  to { transform: translate(6vmax, -7vmax) scale(1.1); } }
 
 .login__card {
+  /* The counter-lean to the sky's parallax: a few pixels the other way is
+     what makes the orbs read as BEHIND the glass. */
+  translate: calc(var(--px, 0) * -7px) calc(var(--py, 0) * -7px);
+  transition: translate .3s ease-out;
   width: min(400px, 100%);
   background: var(--surface-glass);
   backdrop-filter: blur(14px);

@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent, type PointerEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { Mark } from '../components/Mark';
@@ -26,6 +26,25 @@ function greeting(): { title: string; sub: string } {
     the drawing of the symbol to the shell's veil at exactly that moment. */
 const IMPLODE_MS = 520;
 
+/**
+ * The name, unfolded — one word per letter, so the wordmark itself can answer
+ * "what does INFINITY stand for". The strip below cycles through them and a
+ * hover pins one; between the two, someone waiting on their password manager
+ * reads the whole thing without being made to.
+ */
+const ACRONYM = [
+  ['I', 'Integrated'],
+  ['N', 'Network'],
+  ['F', 'For'],
+  ['I', 'Intelligent'],
+  ['N', 'Noble'],
+  ['I', 'Informatics'],
+  ['T', 'Testing &'],
+  ['Y', 'analYtics'],
+] as const;
+
+const FULL_FORM = 'Integrated Network For Intelligent Noble Informatics, Testing & analYtics';
+
 export function Login() {
   const { signInDeferred, signedOutReason } = useAuth();
   const navigate = useNavigate();
@@ -38,6 +57,38 @@ export function Login() {
   const [leaving, setLeaving] = useState(false);
 
   const greet = useMemo(greeting, []);
+
+  // Checked once — a preference toggled mid-login can wait for the next mount.
+  const still = useMemo(
+    () => window.matchMedia('(prefers-reduced-motion: reduce)').matches, []);
+
+  /*
+   * The living wordmark. `held` is a letter pinned by hover or tap; `beat`
+   * walks the letters on its own so the expansion reads itself out to someone
+   * who never touches anything. Reduced motion shows the whole line at once
+   * instead — a ticker is exactly the motion they asked to be spared.
+   */
+  const [beat, setBeat] = useState(0);
+  const [held, setHeld] = useState<number | null>(null);
+  useEffect(() => {
+    if (still || held !== null || leaving) return;
+    const t = window.setInterval(() => setBeat((i) => (i + 1) % ACRONYM.length), 1700);
+    return () => window.clearInterval(t);
+  }, [still, held, leaving]);
+  const lit = held ?? beat;
+
+  /*
+   * Pointer parallax: the sky leans toward the pointer, the card ever so
+   * slightly away, so the page has depth without a single layout pass — both
+   * read the two custom properties set here, and translate is its own
+   * property, so the card's implode animation on transform is untouched.
+   */
+  const onSkyMove = (e: PointerEvent<HTMLDivElement>) => {
+    if (still) return;
+    const el = e.currentTarget;
+    el.style.setProperty('--px', (e.clientX / window.innerWidth - 0.5).toFixed(3));
+    el.style.setProperty('--py', (e.clientY / window.innerHeight - 0.5).toFixed(3));
+  };
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -90,7 +141,7 @@ export function Login() {
   }
 
   return (
-    <div className={`login${leaving ? ' login--leaving' : ''}`}>
+    <div className={`login${leaving ? ' login--leaving' : ''}`} onPointerMove={onSkyMove}>
       {/* The living background: three slow-drifting aurora orbs behind the
           card. Pure CSS transforms (GPU-composited, no layout work) and the
           global prefers-reduced-motion rule freezes them for anyone who has
@@ -111,7 +162,32 @@ export function Login() {
       {leaving && <span className="login__spark" aria-hidden="true" />}
 
       <form className="login__card" onSubmit={onSubmit}>
-        <Mark />
+        {/* The wordmark, letter by letter, wearing its own expansion. The
+            symbol keeps drawing itself from Mark; the letters become the
+            interactive part. aria-label carries the whole phrase so a screen
+            reader gets it in one piece instead of eight. */}
+        <div className="login__brand" role="img" aria-label={`INFINITY — ${FULL_FORM}`}>
+          <Mark withText={false} />
+          <span className="login__letters" aria-hidden="true">
+            {ACRONYM.map(([letter], i) => (
+              <button
+                key={i}
+                type="button"
+                tabIndex={-1}
+                className={`login__letter${i === lit ? ' is-lit' : ''}`}
+                onPointerEnter={() => setHeld(i)}
+                onPointerLeave={() => setHeld(null)}
+                onClick={() => setBeat(i)}
+              >
+                {letter}
+              </button>
+            ))}
+          </span>
+        </div>
+        {/* Fixed height, so the word changing never nudges the form fields. */}
+        <p className="login__unfold" aria-hidden="true">
+          {still ? FULL_FORM : ACRONYM[lit][1]}
+        </p>
 
         <div>
           <h1 className="login__title">{greet.title}</h1>
