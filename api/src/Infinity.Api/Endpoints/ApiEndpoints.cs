@@ -475,7 +475,15 @@ public static class ApiEndpoints
         return Results.Ok(new
         {
             departments = o.Departments,
-            businessUnits = o.BusinessUnits,
+            // A client account's reports are pinned to its own client code, so
+            // a business-unit filter can only ever narrow an already-narrowed
+            // set — and the unit list is the lab's internal geography (Agra,
+            // Amroha, Dehradun…), which is not a client's to browse. Emptied
+            // HERE rather than only hidden in the UI, because the filter panel
+            // is not the only way to read this response.
+            businessUnits = principal.Role() == InfinityRoles.Client
+                ? Array.Empty<LookupItem>()
+                : o.BusinessUnits,
             // Counts, so a screen can say "3,624 centres" without listing them,
             // and so a caller can tell an empty scope from an unfetched one.
             clientCodeCount = o.ClientCodes.Count,

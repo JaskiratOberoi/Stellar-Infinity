@@ -495,17 +495,24 @@ export function SampleFilters({
             />
           </label>
 
-          <label className="field">
-            <span>Business unit</span>
-            <Combobox
-              value={value.businessUnitId === '' ? '' : String(value.businessUnitId)}
-              emptyLabel="Any unit"
-              onChange={(v) => set('businessUnitId', v === '' ? '' : Number(v))}
-              options={options.businessUnits.map((b) => ({
-                value: String(b.id), label: b.name ?? `Unit ${b.id}`,
-              }))}
-            />
-          </label>
+          {/* Not for a client account. Their reports are pinned to their own
+              client code, so a unit filter can only narrow a set that is
+              already theirs — and the options are the lab's internal geography.
+              The API empties the list for them too; hiding the control is what
+              stops the panel offering an empty dropdown. */}
+          {!lockClientCode && (
+            <label className="field">
+              <span>Business unit</span>
+              <Combobox
+                value={value.businessUnitId === '' ? '' : String(value.businessUnitId)}
+                emptyLabel="Any unit"
+                onChange={(v) => set('businessUnitId', v === '' ? '' : Number(v))}
+                options={options.businessUnits.map((b) => ({
+                  value: String(b.id), label: b.name ?? `Unit ${b.id}`,
+                }))}
+              />
+            </label>
+          )}
         </div>
       </fieldset>
 
