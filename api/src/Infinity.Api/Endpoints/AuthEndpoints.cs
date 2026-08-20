@@ -29,8 +29,10 @@ public static class AuthEndpoints
     /// The JWT is stateless, so this cannot invalidate the token itself — the
     /// browser discarding it is what ends the session. What this DOES do is
     /// drop server-side state the session had earned, which the browser cannot
-    /// clear on its own: today that is the Jarvis unlock grant, so signing out
-    /// and back in re-locks auto-authorisation rather than silently resuming it.
+    /// clear on its own: the Jarvis unlock grant, so signing out and back in
+    /// re-locks auto-authorisation rather than silently resuming it — and the
+    /// order cart, so the next session starts with an empty form instead of
+    /// the shopping of a session that chose to end.
     ///
     /// Best-effort by design. A logout that fails must still let the client
     /// discard its token, so this never returns an error the UI would act on.
@@ -38,6 +40,7 @@ public static class AuthEndpoints
     private static async Task<IResult> Logout(
         ClaimsPrincipal principal,
         Infinity.Api.Worksheet.AutoAuthGate jarvis,
+        Orders.CartStore carts,
         Microsoft.Extensions.Options.IOptions<AuthCookieOptions> cookieOptions,
         HttpContext http,
         ILoggerFactory loggerFactory,
@@ -55,6 +58,14 @@ public static class AuthEndpoints
             catch (Exception ex)
             {
                 loggerFactory.CreateLogger("Logout").LogWarning(ex, "logout.revoke.failed userId={UserId}", uid);
+            }
+            try
+            {
+                await carts.ClearAsync(uid, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                loggerFactory.CreateLogger("Logout").LogWarning(ex, "logout.cart.failed userId={UserId}", uid);
             }
         }
 
@@ -76,6 +87,7 @@ public static class AuthEndpoints
         Microsoft.Extensions.Options.IOptions<AuthCookieOptions> cookieOptions,
         Audit.AuditRepository audit,
         Caching.DistributedRateLimiter limiter,
+        Orders.CartStore carts,
         ILoggerFactory loggerFactory,
         HttpContext http,
         CancellationToken ct)
@@ -140,6 +152,14 @@ public static class AuthEndpoints
         // capabilities are baked into the token and this is the only moment
         // they exist; the grant procedure bumps the session version so a
         // revoke cannot outlive it.
+        // A NEW session starts with an empty order form. Logout clears the
+        // cart too, but sessions also end by expiry or a closed browser, and
+        // this is the one gate every fresh session passes through — without
+        // it, a basket abandoned days ago greets every login. Best-effort:
+        // an unreachable Redis must not block a sign-in.
+        try { await carts.ClearAsync(row.UserId, ct).ConfigureAwait(false); }
+        catch (Exception ex) { logger.LogWarning(ex, "login.cart.clear.failed userId={UserId}", row.UserId); }
+
         var grants = await authRepo.GrantedCapabilitiesAsync(row.UserId, ct).ConfigureAwait(false);
         var user = ToAuthenticatedUser(row, grants);
         var (token, expiresAt) = jwt.Issue(user, row.SessionVersion);
