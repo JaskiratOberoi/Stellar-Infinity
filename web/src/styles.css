@@ -3161,6 +3161,41 @@ tbody tr.band-1:hover > td { background: var(--accent-ring); }
   color: var(--ink-dim);
 }
 
+/* The per-PID download menu. Portalled to the body and FIXED-positioned by
+   PidReportButton — .table-wrap's overflow-x:auto makes the table a clipping
+   context, and an absolute panel would be sheared off for the bottom rows.
+   z-index above the sticky topbar (10) and beside the modal tier. */
+.pidmenu {
+  position: fixed;
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: .3rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-modal);
+}
+.pidmenu button {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .45rem .7rem;
+  border: 0;
+  background: none;
+  border-radius: 7px;
+  font-size: .8rem;
+  font-family: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+  text-align: left;
+}
+.pidmenu button:hover { background: var(--accent-soft); color: var(--teal); }
+.pidmenu button:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
+.pidmenu button svg { width: 15px; height: 15px; flex: none; opacity: .7; }
+
 /* ---------- checkboxes ---------- */
 
 /* Styled with appearance:none on the REAL input rather than a hidden input

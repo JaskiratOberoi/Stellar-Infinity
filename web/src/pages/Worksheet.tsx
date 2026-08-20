@@ -10,7 +10,7 @@ import {
   SampleFilters, ActiveFilterChips, useFilterOptions, applyFilterParams,
   initialFilters, type SampleFilterValues,
 } from '../components/SampleFilters';
-import { LetterheadToggle, useLetterhead } from '../components/LetterheadToggle';
+import { PidReportButton } from '../components/PidReportButton';
 import { TestList } from '../components/TestList';
 
 /**
@@ -104,7 +104,6 @@ export function Worksheet() {
   const [rows, setRows] = useState<WorksheetRow[]>([]);
   const [scope, setScope] = useState('');
   const [groupByPid, setGroupByPid] = useState(true);
-  const [letterhead, setLetterhead] = useLetterhead();
   /** The PID whose reports are being prepared, so only its own row spins. */
   const [pidBusy, setPidBusy] = useState<number | null>(null);
   const [pidError, setPidError] = useState<string | null>(null);
@@ -211,7 +210,7 @@ export function Worksheet() {
    * report to give. Those are skipped by the route, so a patient mid-run comes
    * back with the reports that exist and nothing for the ones that do not.
    */
-  const downloadPatient = async (pid: number, sids: string[]) => {
+  const downloadPatient = async (pid: number, sids: string[], letterhead: boolean) => {
     setPidBusy(pid);
     setPidError(null);
     try {
@@ -343,7 +342,6 @@ export function Worksheet() {
                  onChange={(e) => setGroupByPid(e.target.checked)} />
           Group by patient
         </label>
-        <LetterheadToggle value={letterhead} onChange={setLetterhead} />
       </SampleFilters>
 
       {scope === 'none' && (
@@ -405,32 +403,20 @@ export function Worksheet() {
                              ghost-button pill it replaces wrapped onto two
                              lines and swallowed the column there, and did the
                              same here on a phone. One control, one look. */
-                          <button
-                            type="button"
-                            className="pidlink"
+                          <PidReportButton
+                            pid={r.pid}
+                            busy={pidBusy === r.pid}
                             disabled={pidBusy !== null}
                             title={groupSize > 1
                               ? `Download this patient's ${groupSize} reports on this page as one PDF`
                               : "Download this patient's report"}
-                            onClick={() => void downloadPatient(
+                            onDownload={(lh) => void downloadPatient(
                               r.pid,
                               (grouped.find((g) => g.rows.some((x) => x.sid === r.sid))?.rows ?? [r])
                                 .map((x) => x.sid),
+                              lh,
                             )}
-                          >
-                            {pidBusy === r.pid ? (
-                              <span className="muted">Preparing…</span>
-                            ) : (
-                              <>
-                                <b>{r.pid}</b>
-                                <svg className="pidlink__dl" viewBox="0 0 16 16" aria-hidden="true">
-                                  <path d="M8 2v8m0 0 3-3m-3 3L5 7M3 13h10" fill="none"
-                                        stroke="currentColor" strokeWidth="1.6"
-                                        strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                              </>
-                            )}
-                          </button>
+                          />
                         ) : (
                           r.pid || '—'
                         )}

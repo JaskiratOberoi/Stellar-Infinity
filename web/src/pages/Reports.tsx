@@ -11,6 +11,7 @@ import {
   initialFilters, type SampleFilterValues,
 } from '../components/SampleFilters';
 import { LetterheadToggle, useLetterhead } from '../components/LetterheadToggle';
+import { PidReportButton } from '../components/PidReportButton';
 
 export interface WorksheetRow {
   sid: string;
@@ -177,7 +178,7 @@ export function Reports() {
    * download beyond what the operator can see would hand them a document they
    * did not ask for and cannot check.
    */
-  const downloadPatient = async (pid: number, sids: string[]) => {
+  const downloadPatient = async (pid: number, sids: string[], letterhead: boolean) => {
     setPidBusy(pid);
     setMergeError(null);
     try {
@@ -186,6 +187,7 @@ export function Reports() {
         headers: { 'Content-Type': 'application/json', ...csrfHeader() },
         // Always department-per-sheet: the complete report mirrors the LIS's
         // PID report, where one department never shares a page with the next.
+        // The letterhead answer is per download — see PidReportButton.
         body: JSON.stringify({ sids, withGraph: withGraphs, splitDept: true, headless: !letterhead }),
         fallbackName: `Reports_PID_${pid}.pdf`,
       });
@@ -268,9 +270,7 @@ export function Reports() {
           session on every request regardless — this stops the control implying
           a choice that does not exist. */}
       <SampleFilters value={filters} options={options} onChange={setFilters}
-                     lockClientCode={user?.role === 'client'}>
-        <LetterheadToggle value={letterhead} onChange={setLetterhead} />
-      </SampleFilters>
+                     lockClientCode={user?.role === 'client'} />
 
       {scope === 'none' && (
         <div className="alert alert--info" style={{ marginBottom: '.9rem' }}>
@@ -300,6 +300,11 @@ export function Reports() {
                        onChange={(e) => setWithGraphs(e.target.checked)} />
                 Include graphs
               </label>
+
+              {/* Merged batches keep the remembered preference — a batch is
+                  one print run on one kind of paper. PID downloads ask per
+                  click instead: see PidReportButton. */}
+              <LetterheadToggle value={letterhead} onChange={setLetterhead} disabled={merging} />
 
               <button className="btn btn--ghost btn--sm" disabled={merging}
                       onClick={() => setSelected(new Set())}>
@@ -377,37 +382,23 @@ export function Reports() {
                            SID beside it, a download glyph to say it does
                            something, and the sample count as a plain suffix
                            rather than a badge fighting for the same line. */
-                        <button
-                          type="button"
-                          className="pidlink"
+                        <PidReportButton
+                          pid={r.pid}
+                          busy={pidBusy === r.pid}
                           disabled={pidBusy !== null}
+                          count={groupSize}
                           title={
                             groupSize > 1
                               ? `Download all ${groupSize} of this patient's reports on this page as one PDF`
                               : "Download this patient's report"
                           }
-                          onClick={() => void downloadPatient(
+                          onDownload={(lh) => void downloadPatient(
                             r.pid,
                             (grouped.find((g) => g.rows.some((x) => x.sid === r.sid))?.rows ?? [r])
                               .map((x) => x.sid),
+                            lh,
                           )}
-                        >
-                          {pidBusy === r.pid ? (
-                            <span className="muted">Preparing…</span>
-                          ) : (
-                            <>
-                              <b>{r.pid}</b>
-                              <svg className="pidlink__dl" viewBox="0 0 16 16" aria-hidden="true">
-                                <path d="M8 2v8m0 0 3-3m-3 3L5 7M3 13h10" fill="none"
-                                      stroke="currentColor" strokeWidth="1.6"
-                                      strokeLinecap="round" strokeLinejoin="round" />
-                              </svg>
-                              {groupSize > 1 && (
-                                <span className="pidlink__n">×{groupSize}</span>
-                              )}
-                            </>
-                          )}
-                        </button>
+                        />
                       ) : (
                         // Inside a group the column is left TRULY empty — null,
                         // not an empty span — so the card layout's :empty rule
