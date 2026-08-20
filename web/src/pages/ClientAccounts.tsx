@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   accountsApi, PAYMENT_MODES,
   type ClientAccount, type LedgerEntry,
@@ -40,6 +40,16 @@ export function ClientAccounts() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const [ledgerFor, setLedgerFor] = useState<ClientAccount | null>(null);
+  /*
+   * Opened FOR the visitor, once. When the whole unfiltered set is a single
+   * account — a client signed into their own books — the list is a one-row
+   * table whose only affordance is the Ledger button, so the ledger IS the
+   * page and the click is a toll. It opens itself on arrival instead.
+   *
+   * A ref, not state: closing the modal must land on the list behind it, not
+   * re-trigger the open — an effect keyed on the row set would trap them.
+   */
+  const autoOpened = useRef(false);
   const [payFor, setPayFor] = useState<ClientAccount | null>(null);
   const [unlockFor, setUnlockFor] = useState<ClientAccount | null>(null);
 
@@ -51,6 +61,14 @@ export function ClientAccounts() {
       setRows(r.rows);
       setTotal(r.total);
       setPageOwed(r.pageOwed);
+      // Only the pristine first load counts: a search or filter that happens
+      // to narrow to one row is the operator working the list, not a
+      // single-account visitor.
+      if (!autoOpened.current && !search.trim() && !onlyOwing && page === 1
+          && r.total === 1 && r.rows.length === 1) {
+        autoOpened.current = true;
+        setLedgerFor(r.rows[0]);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load accounts.');
     } finally {
