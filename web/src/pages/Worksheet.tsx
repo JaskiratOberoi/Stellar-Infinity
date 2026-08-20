@@ -396,9 +396,13 @@ export function Worksheet() {
                       <td className="mono muted cell--meta" data-label="PID" style={{ fontSize: '.78rem' }}
                           onClick={(e) => { if (can('report:view')) e.stopPropagation(); }}>
                         {r.pid && can('report:view') ? (
+                          /* The same pidlink the reporting list uses — the
+                             ghost-button pill it replaces wrapped onto two
+                             lines and swallowed the column there, and did the
+                             same here on a phone. One control, one look. */
                           <button
                             type="button"
-                            className="btn btn--ghost btn--sm"
+                            className="pidlink"
                             disabled={pidBusy !== null}
                             title={groupSize > 1
                               ? `Download this patient's ${groupSize} reports on this page as one PDF`
@@ -409,7 +413,18 @@ export function Worksheet() {
                                 .map((x) => x.sid),
                             )}
                           >
-                            {pidBusy === r.pid ? 'Preparing…' : r.pid}
+                            {pidBusy === r.pid ? (
+                              <span className="muted">Preparing…</span>
+                            ) : (
+                              <>
+                                <b>{r.pid}</b>
+                                <svg className="pidlink__dl" viewBox="0 0 16 16" aria-hidden="true">
+                                  <path d="M8 2v8m0 0 3-3m-3 3L5 7M3 13h10" fill="none"
+                                        stroke="currentColor" strokeWidth="1.6"
+                                        strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              </>
+                            )}
                           </button>
                         ) : (
                           r.pid || '—'

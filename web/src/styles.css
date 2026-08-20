@@ -3338,6 +3338,24 @@ td.cell--value [aria-label] { font-size: .8em; vertical-align: .12em; }
      subtitle. */
   .table-wrap--cards td.cell--lead .muted { font-weight: 400; }
 
+  /* The headline IS the card's identity, so it never wears a label — the
+     reporting list's PID lead carries data-label for the table, and on a card
+     the generic ::before rule was printing "PID" into the 1rem headline where
+     the absolutely-positioned tick then overlapped it: "PI☐86040". */
+  /* [data-label] repeated in the selector: the generic labelled-cell rule
+     sits LATER in this file at equal specificity and would win the cascade —
+     the attribute bumps this one above it. */
+  .table-wrap--cards td.cell--lead[data-label]::before { content: none; }
+
+  /* An EMPTY headline (the follow-on rows of a grouped patient) collapses
+     instead of holding a 1rem-tall blank first line above "same patient". */
+  .table-wrap--cards td.cell--lead:empty { display: none; }
+
+  /* The pidlink's negative hit-area margins exist to grow the target without
+     moving the table layout; on a card they pull its box into the check
+     gutter by a pixel. The card has room — pad outward instead. */
+  .table-wrap--cards .pidlink { margin: 0; padding: .1rem .3rem .1rem 0; }
+
   /* The badge, switch or amount that belongs on the headline rather than in a
      list below it — the thing being scanned for. */
   .table-wrap--cards td.cell--tag {
@@ -3693,6 +3711,14 @@ th.cell--pick, td.cell--pick { width: 1%; padding-right: .2rem; }
   }
   .table-wrap--cards td.cell--pick {
     position: absolute;
+    /* auto placement on BOTH axes, overriding the generic grid-column: 1/-1.
+       An absolutely-positioned grid item with a definite column resolves its
+       left against the GRID AREA — which starts after the card's 2.7rem check
+       gutter — so the box landed on top of the headline it was meant to sit
+       beside. With both axes auto the containing block is the card itself,
+       and .95rem means .95rem from its edge. */
+    grid-column: auto;
+    grid-row: auto;
     left: .95rem;
     top: 1rem;
     width: auto;

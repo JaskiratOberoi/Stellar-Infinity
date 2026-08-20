@@ -403,11 +403,11 @@ export function Reports() {
                           )}
                         </button>
                       ) : (
-                        // Inside a group the column is left empty on purpose:
-                        // the bracket and the shared band already say whose
-                        // sample this is, and a repeated id competes with the
-                        // SID for the eye.
-                        <span className="muted">{!r.pid && i === 0 ? '—' : ''}</span>
+                        // Inside a group the column is left TRULY empty — null,
+                        // not an empty span — so the card layout's :empty rule
+                        // can collapse it on a phone. The bracket and the shared
+                        // band already say whose sample this is.
+                        !r.pid && i === 0 ? <span className="muted">—</span> : null
                       )}
                     </td>
                     <td className="mono cell--meta" data-label="SID">{r.sid}</td>
