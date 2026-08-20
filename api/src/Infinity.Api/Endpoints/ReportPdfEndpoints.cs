@@ -104,7 +104,7 @@ public static class ReportPdfEndpoints
     /// it unchecked would be theirs to compose — this keeps the only thing that
     /// can appear there to digits and commas.
     /// </remarks>
-    private static string PrintQuery(bool? split, string? exclude)
+    private static string PrintQuery(bool? split, string? exclude, bool splitDept = false)
     {
         var ids = (exclude ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -116,7 +116,8 @@ public static class ReportPdfEndpoints
             .ToArray();
 
         var q = "?pdf=1";
-        if (split == true) q += "&split=1";
+        if (splitDept) q += "&split=dept";
+        else if (split == true) q += "&split=1";
         if (ids.Length > 0) q += "&exclude=" + string.Join(",", ids);
         return q;
     }
@@ -317,7 +318,7 @@ public static class ReportPdfEndpoints
                 // rather than quietly adopting the preview's new default, which
                 // would change what an existing batch download looks like
                 // without anyone asking for it.
-                Url: $"/print/report/{Uri.EscapeDataString(sid)}{PrintQuery(body!.Split, null)}",
+                Url: $"/print/report/{Uri.EscapeDataString(sid)}{PrintQuery(body!.Split, null, body.SplitDept == true)}",
                 Attachments: await CollectGraphsAsync(graphs, sid, body.WithGraph, ct).ConfigureAwait(false),
                 Headless: body.Headless));
         }
@@ -403,6 +404,16 @@ public static class ReportPdfEndpoints
     /// One department per sheet. Defaults off so a batch download keeps the
     /// layout it has always had; no caller sends it yet.
     /// </param>
+    /// <param name="SplitDept">
+    /// One DEPARTMENT per sheet — the complete-report layout. The PID download
+    /// always sends it: the LIS's own PID report separates departments, and a
+    /// combined document that runs them together reads as one giant sample.
+    /// </param>
+    /// <param name="Headless">
+    /// Skip the letterhead artwork, for pre-printed stationery — the same
+    /// choice the LIS offers as its "Without Header" button.
+    /// </param>
     public sealed record BulkPdfRequest(
-        IReadOnlyList<string>? Sids, bool WithGraph = true, bool? Headless = null, bool? Split = null);
+        IReadOnlyList<string>? Sids, bool WithGraph = true, bool? Headless = null, bool? Split = null,
+        bool? SplitDept = null);
 }

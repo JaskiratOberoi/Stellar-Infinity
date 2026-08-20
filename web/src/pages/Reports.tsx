@@ -10,6 +10,7 @@ import {
   SampleFilters, useFilterOptions, applyFilterParams,
   initialFilters, type SampleFilterValues,
 } from '../components/SampleFilters';
+import { LetterheadToggle, useLetterhead } from '../components/LetterheadToggle';
 
 export interface WorksheetRow {
   sid: string;
@@ -94,6 +95,7 @@ export function Reports() {
   /** The PID whose complete report is being prepared, so only its own row spins. */
   const [pidBusy, setPidBusy] = useState<number | null>(null);
   const [withGraphs, setWithGraphs] = useState(true);
+  const [letterhead, setLetterhead] = useLetterhead();
   const [merging, setMerging] = useState(false);
   const [mergeError, setMergeError] = useState<string | null>(null);
 
@@ -182,7 +184,9 @@ export function Reports() {
       await downloadFile('/api/reports/pdf/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...csrfHeader() },
-        body: JSON.stringify({ sids, withGraph: withGraphs }),
+        // Always department-per-sheet: the complete report mirrors the LIS's
+        // PID report, where one department never shares a page with the next.
+        body: JSON.stringify({ sids, withGraph: withGraphs, splitDept: true, headless: !letterhead }),
         fallbackName: `Reports_PID_${pid}.pdf`,
       });
     } catch (e) {
@@ -199,7 +203,7 @@ export function Reports() {
       await downloadFile('/api/reports/pdf/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...csrfHeader() },
-        body: JSON.stringify({ sids: [...selected], withGraph: withGraphs }),
+        body: JSON.stringify({ sids: [...selected], withGraph: withGraphs, headless: !letterhead }),
         fallbackName: 'Reports.pdf',
       });
     } catch (e) {
@@ -264,7 +268,9 @@ export function Reports() {
           session on every request regardless — this stops the control implying
           a choice that does not exist. */}
       <SampleFilters value={filters} options={options} onChange={setFilters}
-                     lockClientCode={user?.role === 'client'} />
+                     lockClientCode={user?.role === 'client'}>
+        <LetterheadToggle value={letterhead} onChange={setLetterhead} />
+      </SampleFilters>
 
       {scope === 'none' && (
         <div className="alert alert--info" style={{ marginBottom: '.9rem' }}>

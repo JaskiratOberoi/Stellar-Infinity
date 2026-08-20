@@ -10,6 +10,7 @@ import {
   SampleFilters, ActiveFilterChips, useFilterOptions, applyFilterParams,
   initialFilters, type SampleFilterValues,
 } from '../components/SampleFilters';
+import { LetterheadToggle, useLetterhead } from '../components/LetterheadToggle';
 import { TestList } from '../components/TestList';
 
 /**
@@ -103,6 +104,7 @@ export function Worksheet() {
   const [rows, setRows] = useState<WorksheetRow[]>([]);
   const [scope, setScope] = useState('');
   const [groupByPid, setGroupByPid] = useState(true);
+  const [letterhead, setLetterhead] = useLetterhead();
   /** The PID whose reports are being prepared, so only its own row spins. */
   const [pidBusy, setPidBusy] = useState<number | null>(null);
   const [pidError, setPidError] = useState<string | null>(null);
@@ -216,7 +218,9 @@ export function Worksheet() {
       await downloadFile('/api/reports/pdf/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...csrfHeader() },
-        body: JSON.stringify({ sids }),
+        // Department-per-sheet and the letterhead choice, same as Reporting —
+        // one PID download, one shape, whichever page it started from.
+        body: JSON.stringify({ sids, splitDept: true, headless: !letterhead }),
         fallbackName: `Reports_PID_${pid}.pdf`,
       });
     } catch (e) {
@@ -339,6 +343,7 @@ export function Worksheet() {
                  onChange={(e) => setGroupByPid(e.target.checked)} />
           Group by patient
         </label>
+        <LetterheadToggle value={letterhead} onChange={setLetterhead} />
       </SampleFilters>
 
       {scope === 'none' && (

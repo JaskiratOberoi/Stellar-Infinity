@@ -55,6 +55,11 @@ import '../report.css';
  *               band is blanked but keeps its space, so the preview paginates
  *               exactly like the PDF. Ignored under ?pdf=1, where the render
  *               service drops the background itself.
+ * `?split=dept` a DEPARTMENT per page — the complete-report layout, matching
+ *               the LIS's PID report where Haematology ends before
+ *               Biochemistry begins. Sections within a department flow
+ *               together; a department taller than a page paginates with the
+ *               patient block repeating, exactly like the continuous layout.
  * `?split=1`    a section per page. On screen that is drawn as separate sheets
  *               on a grey desk, because screen media has no page breaks to see.
  * `?t=…`        the patient's own copy, opened from the QR. No session, so the
@@ -113,6 +118,9 @@ export function PrintReport() {
   const [printedAt] = useState(() => new Date().toISOString());
 
   const [split, setSplit] = useState(params.get('split') === '1');
+  // Not state: nothing toggles it after load — it exists for the render
+  // service, which bakes it into the print URL.
+  const splitDept = params.get('split') === 'dept';
   const [headless, setHeadless] = useState(params.get('headless') === '1');
   const [excluded, setExcluded] = useState<Set<number>>(() => parseExcluded(params.get('exclude')));
 
@@ -309,6 +317,19 @@ export function PrintReport() {
     return out;
   }, [report, interactive, excluded]);
 
+  /* Sections re-joined into whole departments, for ?split=dept. Built from
+     sections rather than from report.departments directly so the exclusion
+     filtering and section ordering stay in exactly one place. */
+  const deptGroups = useMemo(() => {
+    const out: { deptName: string; entries: Entry[] }[] = [];
+    for (const sec of sections) {
+      const run = out[out.length - 1];
+      if (run && run.deptName === sec.deptName) run.entries.push(...sec.entries);
+      else out.push({ deptName: sec.deptName, entries: [...sec.entries] });
+    }
+    return out;
+  }, [sections]);
+
   /* ---- render ------------------------------------------------------------ */
 
   const profileInterpretations = row?.profileInterpretations;
@@ -377,7 +398,11 @@ export function PrintReport() {
     </tfoot>
   );
 
-  const sectionTable = (sec: Section, last: boolean) => (
+  /* One self-contained table: patient block in the thead (so it repeats on
+     every printed page the table spans), one department band, the entries.
+     The section sheets and the department sheets are the same table at two
+     grains. */
+  const blockTable = (deptName: string, entries: Entry[], last: boolean) => (
     <table className="lr__table">
       <ReportColgroup />
       <thead>
@@ -397,13 +422,16 @@ export function PrintReport() {
       {tfoot}
       <tbody>
         <tr>
-          <td colSpan={5} className="lr__dept">{sec.deptName}</td>
+          <td colSpan={5} className="lr__dept">{deptName}</td>
         </tr>
-        {sec.entries.map(renderItem)}
+        {entries.map(renderItem)}
         {last && <EndOfReport />}
       </tbody>
     </table>
   );
+
+  const sectionTable = (sec: Section, last: boolean) =>
+    blockTable(sec.deptName, sec.entries, last);
 
   const shell = pdfMode ? 'lr' : previewSheets ? 'lr lr--sheets' : 'lr lr--screen';
 
@@ -431,6 +459,14 @@ export function PrintReport() {
 
           {sections.length === 0 ? (
             <p className="lr__empty">No results available for this sample.</p>
+          ) : splitDept ? (
+            /* The complete-report layout: each department is its own run of
+               pages, none ever sharing a sheet with the next. */
+            deptGroups.map((g, gi) => (
+              <div key={gi} className="lr__section">
+                {blockTable(g.deptName, g.entries, gi === deptGroups.length - 1)}
+              </div>
+            ))
           ) : split ? (
             sections.map((sec, si) => {
               const table = sectionTable(sec, si === sections.length - 1);
