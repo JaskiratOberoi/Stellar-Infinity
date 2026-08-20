@@ -12,18 +12,34 @@
       to dark on hydration — the flash-of-wrong-theme. Telo gets this for free
       from next-themes' injected script; here it is explicit.
 
-      Default is light, matching Telo's deliberate "explicit default + manual
-      toggle" rather than following the OS preference.
+      The default follows the lab's clock — 7am-7pm IST light, night dark —
+      unless a habit has pinned a mode or a recent toggle is holding until the
+      next boundary. Mirrors theme.ts, which owns the full story; this copy
+      exists only so the FIRST paint lands on the right side.
     -->
     <script>
       (function () {
         try {
-          var stored = localStorage.getItem('infinity-theme');
-          var dark = stored === 'dark';
+          var dark;
+          var mode = localStorage.getItem('infinity-theme-mode');
+          if (mode === 'dark' || mode === 'light') {
+            dark = mode === 'dark';
+          } else {
+            var hold = null;
+            try { hold = JSON.parse(localStorage.getItem('infinity-theme-hold') || 'null'); } catch (e2) {}
+            if (hold && typeof hold.until === 'number' && hold.until > Date.now()
+                && (hold.theme === 'dark' || hold.theme === 'light')) {
+              dark = hold.theme === 'dark';
+            } else {
+              var d = new Date();
+              var ist = (d.getUTCHours() * 60 + d.getUTCMinutes() + 330) % 1440;
+              dark = !(ist >= 420 && ist < 1140);
+            }
+          }
           if (dark) document.documentElement.classList.add('dark');
           document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
         } catch (e) {
-          /* storage blocked — light default is already correct */
+          /* storage blocked — the clockless light default is already correct */
         }
       })();
     </script>

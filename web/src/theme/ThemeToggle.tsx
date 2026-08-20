@@ -10,7 +10,14 @@ export function ThemeToggle() {
 
   // Read from the DOM rather than storage: the pre-paint script in index.html
   // is the source of truth and may have applied a default we never stored.
-  useEffect(() => setTheme(currentTheme()), []);
+  // Then KEEP listening — the IST clock can flip the document at 7am/7pm with
+  // nobody clicking anything, and a sun icon on a dark page reads as broken.
+  useEffect(() => {
+    const sync = () => setTheme(currentTheme());
+    sync();
+    window.addEventListener('infinity-theme', sync);
+    return () => window.removeEventListener('infinity-theme', sync);
+  }, []);
 
   const isDark = theme === 'dark';
   const label = isDark ? 'Switch to light theme' : 'Switch to dark theme';
