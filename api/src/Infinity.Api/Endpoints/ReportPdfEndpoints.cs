@@ -229,7 +229,10 @@ public static class ReportPdfEndpoints
         }
     }
 
-    /// <summary>Several reports as one merged PDF, in the order given.</summary>
+    /// <summary>
+    /// Several reports as one merged PDF, in the LIS's own order — NOT the
+    /// order they were sent in. See the note on the reordering below.
+    /// </summary>
     private static async Task<IResult> PostBulkPdf(
         BulkPdfRequest body,
         System.Security.Claims.ClaimsPrincipal principal,
@@ -259,6 +262,21 @@ public static class ReportPdfEndpoints
         // held up by the twentieth.
         var included = new List<RenderClient.ReportRequest>();
         var skipped = new List<object>();
+
+        /*
+         * The merged document comes out in the LIS's own order, not the order
+         * the screen happened to send.
+         *
+         * A patient's complete report is read against the one the LIS prints,
+         * and that is ordered by result id ascending — see OrderAsLisAsync. The
+         * reporting list is newest-first, so sending its order straight through
+         * produced the reports back to front.
+         *
+         * Applied to every merge rather than only to the per-patient one: a
+         * stack of reports reads chronologically whatever selected it, and
+         * "whichever order the UI iterated in" is not an order anyone chose.
+         */
+        sids = (await repo.OrderAsLisAsync(sids, ct).ConfigureAwait(false)).ToList();
 
         foreach (var sid in sids)
         {

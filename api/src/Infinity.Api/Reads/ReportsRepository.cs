@@ -571,6 +571,72 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
             }, token), ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Put a set of SIDs into the order the LIS prints them in.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A merged report has to come out in the LIS's sequence, because the same
+    /// patient's reports are read side by side with the ones the LIS produced.
+    /// GET_PATIENT_REPORT_PAT_ID — the procedure behind the LIS's own complete
+    /// report — ends in <c>ORDER BY tbl_med_mcc_patient_test_result.id asc</c>,
+    /// so the LIS orders a patient's whole report by the identity of the RESULT
+    /// ROWS: oldest work first, regardless of when a sample was registered.
+    /// </para>
+    /// <para>
+    /// A sample is therefore placed by its EARLIEST result id, which is where
+    /// that sample's block begins in the LIS's own listing. Ordering by
+    /// registration time instead is close but not the same — a sample
+    /// registered later can be resulted first — and the reporting list is
+    /// newest-first, which is the reverse of what the LIS prints.
+    /// </para>
+    /// <para>
+    /// A SID with no results yet has no place in that sequence; those keep
+    /// their given order and follow at the end rather than being dropped.
+    /// </para>
+    /// </remarks>
+    public async Task<IReadOnlyList<string>> OrderAsLisAsync(
+        IReadOnlyList<string> sids, CancellationToken ct = default)
+    {
+        if (sids.Count <= 1) return sids;
+
+        var seq = await retry.ExecuteAsync("reports.lisOrder", token =>
+            db.QueryAsync("reports.lisOrder", async (conn, inner) =>
+            {
+                var names = string.Join(",", sids.Select((_, i) => "@s" + i.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+                await using var cmd = NobleConnectionFactory.CreateCommand(conn, $"""
+                    SELECT vailid, seq = MIN(id)
+                    FROM dbo.tbl_med_mcc_patient_test_result
+                    WHERE vailid IN ({names})
+                    GROUP BY vailid;
+                    """);
+                for (var i = 0; i < sids.Count; i++)
+                {
+                    cmd.Parameters.Add("@s" + i.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                                       SqlDbType.NVarChar, 50).Value = sids[i];
+                }
+
+                var map = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+                await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);
+                while (await r.ReadAsync(inner).ConfigureAwait(false))
+                {
+                    var v = r.Str("vailid");
+                    if (v is null || await r.IsDBNullAsync(1, inner).ConfigureAwait(false)) continue;
+                    map[v.Trim()] = Convert.ToInt64(r.GetValue(1));
+                }
+                return map;
+            }, token), ct).ConfigureAwait(false);
+
+        // Ordered by the LIS sequence; anything with no results keeps its given
+        // position relative to the others and follows behind.
+        return sids
+            .Select((sid, i) => (sid, i, has: seq.TryGetValue(sid.Trim(), out var v), v))
+            .OrderBy(x => x.has ? 0 : 1)
+            .ThenBy(x => x.has ? x.v : x.i)
+            .Select(x => x.sid)
+            .ToList();
+    }
+
     private static IReadOnlyList<TestResult> ParseResults(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return [];
