@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   accountsApi, PAYMENT_MODES,
@@ -41,16 +41,6 @@ export function ClientAccounts() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const [ledgerFor, setLedgerFor] = useState<ClientAccount | null>(null);
-  /*
-   * Opened FOR the visitor, once. When the whole unfiltered set is a single
-   * account — a client signed into their own books — the list is a one-row
-   * table whose only affordance is the Ledger button, so the ledger IS the
-   * page and the click is a toll. It opens itself on arrival instead.
-   *
-   * A ref, not state: closing the modal must land on the list behind it, not
-   * re-trigger the open — an effect keyed on the row set would trap them.
-   */
-  const autoOpened = useRef(false);
   const [payFor, setPayFor] = useState<ClientAccount | null>(null);
   const [unlockFor, setUnlockFor] = useState<ClientAccount | null>(null);
 
@@ -62,14 +52,6 @@ export function ClientAccounts() {
       setRows(r.rows);
       setTotal(r.total);
       setPageOwed(r.pageOwed);
-      // Only the pristine first load counts: a search or filter that happens
-      // to narrow to one row is the operator working the list, not a
-      // single-account visitor.
-      if (!autoOpened.current && !search.trim() && !onlyOwing && page === 1
-          && r.total === 1 && r.rows.length === 1) {
-        autoOpened.current = true;
-        setLedgerFor(r.rows[0]);
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load accounts.');
     } finally {
@@ -83,6 +65,92 @@ export function ClientAccounts() {
   }, [load]);
 
   useEffect(() => { setPage(1); }, [search, onlyOwing, pageSize]);
+
+  /*
+   * A client whose scope holds ONE tagged code is not browsing a list — the
+   * account IS their page, so it renders as one: balance and report standing
+   * in the header, the ledger inline, Sales one click away. No modal, no
+   * one-row table whose only affordance is a button. Derived, not stored:
+   * the pristine unfiltered set having exactly one row is the whole test, and
+   * an operator whose search narrows to one row never qualifies because the
+   * single view has no search box to narrow with.
+   *
+   * Accounts holding several codes keep the Telo shape — the list, the
+   * ledger dialog, Sales links per row.
+   */
+  const single = !search.trim() && !onlyOwing && page === 1
+    && total === 1 && rows.length === 1 ? rows[0] : null;
+
+  if (loading && rows.length === 0 && !error) {
+    return (
+      <div className="page">
+        <div className="center"><InfinityLoader /><span className="muted">Loading accounts…</span></div>
+      </div>
+    );
+  }
+
+  if (single) {
+    return (
+      <div className="page">
+        <div className="page__head">
+          <div>
+            <h1 className="page__title">
+              <span className="mono">{single.clientCode}</span>
+              <span className="muted" style={{ fontWeight: 400 }}> · {single.clientName ?? ''}</span>
+            </h1>
+            <p className="page__sub">
+              {single.owed > 0
+                ? <>Currently owes <b style={{ color: 'var(--danger)' }}>{inr(single.owed)}</b></>
+                : single.owed < 0
+                  ? <>In credit by <b>{inr(-single.owed)}</b></>
+                  : 'Square'}
+              {' · reports '}
+              {single.unlocked ? 'released'
+                : single.tempUnlocked ? 'released (temporary)'
+                : single.reportsLocked ? <b style={{ color: 'var(--danger)' }}>held</b>
+                : 'going out'}
+              {single.creditLimit < 0 && <> · allowed up to {inr(-single.creditLimit)}</>}
+            </p>
+          </div>
+          <div className="row" style={{ marginLeft: 'auto', flexWrap: 'wrap' }}>
+            <Link to={`/accounts/${single.mccId}/sales`} className="btn btn--ghost btn--sm">
+              Sales →
+            </Link>
+            {can('report:release') && (
+              <button className="btn btn--ghost btn--sm" onClick={() => setUnlockFor(single)}>
+                {single.unlocked ? 'Re-lock' : 'Release'}
+              </button>
+            )}
+            {can('payment:capture') && (
+              <button className="btn btn--primary btn--sm" onClick={() => setPayFor(single)}>
+                Record payment
+              </button>
+            )}
+          </div>
+        </div>
+
+        {error && <div className="alert alert--error" style={{ marginBottom: '.8rem' }}>{error}</div>}
+        {notice && <div className="alert alert--ok" style={{ marginBottom: '.8rem' }}>{notice}</div>}
+
+        <LedgerPanel mccId={single.mccId} />
+
+        {unlockFor && (
+          <UnlockModal
+            account={unlockFor}
+            onClose={() => setUnlockFor(null)}
+            onDone={(msg) => { setUnlockFor(null); setNotice(msg); void load(); }}
+          />
+        )}
+        {payFor && (
+          <PaymentModal
+            account={payFor}
+            onClose={() => setPayFor(null)}
+            onDone={async (msg) => { setPayFor(null); setNotice(msg); await load(); }}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="page">
@@ -242,8 +310,13 @@ export function ClientAccounts() {
   );
 }
 
-/** The movements behind one client's balance. */
-function LedgerModal({ account, onClose }: { account: ClientAccount; onClose: () => void }) {
+/**
+ * The movements behind one client's balance — the table alone, so the ledger
+ * dialog (multi-account operators) and the single-account page can render
+ * exactly the same rows. `viewport` caps the height for the dialog; the page
+ * lets it run.
+ */
+function LedgerPanel({ mccId, viewport }: { mccId: number; viewport?: boolean }) {
   const [rows, setRows] = useState<LedgerEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -253,13 +326,80 @@ function LedgerModal({ account, onClose }: { account: ClientAccount; onClose: ()
   useEffect(() => {
     let live = true;
     setLoading(true);
-    accountsApi.ledger(account.mccId, page, pageSize)
+    accountsApi.ledger(mccId, page, pageSize)
       .then((r) => { if (live) { setRows(r.rows); setTotal(r.total); } })
       .catch(() => { if (live) setRows([]); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, [account.mccId, page]);
+  }, [mccId, page]);
 
+  if (loading) {
+    return <div className="center" style={{ minHeight: 140 }}><InfinityLoader /></div>;
+  }
+
+  return (
+    <div className="table-wrap table-wrap--cards"
+         style={viewport ? { maxHeight: '52vh', overflowY: 'auto' } : undefined}>
+      <table>
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Movement</th>
+            <th style={{ textAlign: 'right' }}>Amount</th>
+            <th>Note</th>
+            <th>Posted by</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((e) => (
+            <tr key={e.id}>
+              <td className="muted cell--meta" data-label="When" style={{ fontSize: '.76rem', whiteSpace: 'nowrap' }}>
+                {fmtDateTime(e.occurredAt)}
+              </td>
+              <td className="cell--tag">
+                {/* An order consuming credit vs money arriving. Coloured
+                    only for the debit, which is the one that increases
+                    what they owe. */}
+                <span className={`badge badge--lis-status ${e.direction === 'credit' ? 'status--green' : 'status--amber'}`}>
+                  {e.direction === 'credit' ? 'payment in' : 'order'}
+                </span>
+              </td>
+              <td className="mono cell--lead" style={{ textAlign: 'right', fontWeight: 600 }}>
+                {inr(e.amount)}
+              </td>
+              <td className="muted cell--body" data-label="Note" style={{ fontSize: '.76rem' }}>
+                {e.note ?? '—'}
+                {e.reference && <div className="mono" style={{ fontSize: '.7rem' }}>{e.reference}</div>}
+              </td>
+              <td className="cell--meta" data-label="Posted by">
+                {/* A known origin gets its own colour; anything new
+                    falls back to the neutral LIS chip rather than to no
+                    chip, so an unrecognised value is still legible. */}
+                <span className={`badge badge--${
+                  ['infinity', 'telo', 'online'].includes(e.origin) ? e.origin : 'lis'}`}>
+                  {e.origin}
+                </span>
+              </td>
+            </tr>
+          ))}
+
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={5} className="muted" style={{ textAlign: 'center', padding: '2rem' }}>
+                No movements recorded.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+
+      <Pager page={page} pageSize={pageSize} total={total} noun="movement" onPage={setPage} />
+    </div>
+  );
+}
+
+/** The ledger as a dialog, for the multi-account list. */
+function LedgerModal({ account, onClose }: { account: ClientAccount; onClose: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -291,66 +431,7 @@ function LedgerModal({ account, onClose }: { account: ClientAccount; onClose: ()
           </Link>
         </div>
 
-        {loading ? (
-          <div className="center" style={{ minHeight: 140 }}><InfinityLoader /></div>
-        ) : (
-          <div className="table-wrap table-wrap--cards" style={{ maxHeight: '52vh', overflowY: 'auto' }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>When</th>
-                  <th>Movement</th>
-                  <th style={{ textAlign: 'right' }}>Amount</th>
-                  <th>Note</th>
-                  <th>Posted by</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((e) => (
-                  <tr key={e.id}>
-                    <td className="muted cell--meta" data-label="When" style={{ fontSize: '.76rem', whiteSpace: 'nowrap' }}>
-                      {fmtDateTime(e.occurredAt)}
-                    </td>
-                    <td className="cell--tag">
-                      {/* An order consuming credit vs money arriving. Coloured
-                          only for the debit, which is the one that increases
-                          what they owe. */}
-                      <span className={`badge badge--lis-status ${e.direction === 'credit' ? 'status--green' : 'status--amber'}`}>
-                        {e.direction === 'credit' ? 'payment in' : 'order'}
-                      </span>
-                    </td>
-                    <td className="mono cell--lead" style={{ textAlign: 'right', fontWeight: 600 }}>
-                      {inr(e.amount)}
-                    </td>
-                    <td className="muted cell--body" data-label="Note" style={{ fontSize: '.76rem' }}>
-                      {e.note ?? '—'}
-                      {e.reference && <div className="mono" style={{ fontSize: '.7rem' }}>{e.reference}</div>}
-                    </td>
-                    <td className="cell--meta" data-label="Posted by">
-                      {/* A known origin gets its own colour; anything new
-                          falls back to the neutral LIS chip rather than to no
-                          chip, so an unrecognised value is still legible. */}
-                      <span className={`badge badge--${
-                        ['infinity', 'telo', 'online'].includes(e.origin) ? e.origin : 'lis'}`}>
-                        {e.origin}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-
-                {rows.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="muted" style={{ textAlign: 'center', padding: '2rem' }}>
-                      No movements recorded.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-
-            <Pager page={page} pageSize={pageSize} total={total} noun="movement" onPage={setPage} />
-          </div>
-        )}
+        <LedgerPanel mccId={account.mccId} viewport />
 
         <div className="modal__actions">
           <button className="btn btn--ghost" onClick={onClose}>Close</button>

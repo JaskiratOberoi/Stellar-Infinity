@@ -14,6 +14,7 @@ import { Inward } from './pages/Inward';
 import { Catalogue } from './pages/Catalogue';
 import { ClientAccounts } from './pages/ClientAccounts';
 import { ClientSales } from './pages/ClientSales';
+import { SalesHome } from './pages/SalesHome';
 import { RateLists } from './pages/RateLists';
 import { Reports } from './pages/Reports';
 import { Worksheet } from './pages/Worksheet';
@@ -148,6 +149,9 @@ const NAV: NavEntry[] = [
     items: [
       { to: '/catalogue', label: 'Catalogue', icon: 'orders', cap: 'order:view' },
       { to: '/accounts', label: 'Accounts', icon: 'orders', cap: 'billing:view' },
+      // Sales data is per client; /sales resolves WHOSE — a single-account
+      // visitor lands directly on their own, anyone else picks. See SalesHome.
+      { to: '/sales', label: 'Sales', icon: 'orders', cap: 'billing:view' },
       // rate:manage, not billing:view — clients hold billing:view for their
       // own ledger, and this screen lists every rate list in the lab. See the
       // remark in RateListEndpoints.
@@ -340,6 +344,7 @@ export function App() {
             itemised lines want a page, and a reconciliation wants a URL it
             can come back to. Same gate as the list it grew from. */}
         <Route path="/accounts/:mcc/sales" element={can('billing:view') ? <ClientSales /> : <Navigate to="/" replace />} />
+        <Route path="/sales" element={can('billing:view') ? <SalesHome /> : <Navigate to="/" replace />} />
         {/* billing:view to look; rate:manage is checked inside for every edit,
             and independently by the API on each write. */}
         <Route path="/rate-lists" element={can('rate:manage') ? <RateLists /> : <Navigate to="/" replace />} />
