@@ -30,7 +30,9 @@ public sealed record SaleLine(
 public sealed record SalesTotals(int SampleCount, decimal SaleAmount, int LineCount);
 
 public sealed record SalesPage(
-    IReadOnlyList<SaleLine> Rows, bool HasMore, int Page, int PageSize, SalesTotals Totals);
+    IReadOnlyList<SaleLine> Rows, bool HasMore, int Page, int PageSize, SalesTotals Totals,
+    /// <summary>Who this is — carried so a deep-linked page can title itself.</summary>
+    string? ClientCode, string? ClientName);
 
 /// <summary>
 /// The Sales Data screen's numbers for one client — itemised billable test
@@ -112,6 +114,9 @@ public sealed class SalesRepository(NobleConnectionFactory db, SqlRetry retry)
               AND t.amount_checked = 1
               AND t.updateddate >= CAST(@from AS DATE)
               AND t.updateddate <  DATEADD(day, 1, CAST(@to AS DATE))) AS lineCount;
+
+        SELECT code = LTRIM(RTRIM(MCCUnitCode)), name = LTRIM(RTRIM(MCCUnitName))
+        FROM dbo.tbl_med_mcc_unit_master WHERE id = @mcc;
         """;
 
     /// <summary>Lines + totals for one client in an IST-calendar-day window.</summary>
@@ -161,9 +166,17 @@ public sealed class SalesRepository(NobleConnectionFactory db, SqlRetry retry)
                         LineCount: r.NullableInt("lineCount") ?? 0);
                 }
 
+                string? code = null, name = null;
+                if (await r.NextResultAsync(inner).ConfigureAwait(false)
+                    && await r.ReadAsync(inner).ConfigureAwait(false))
+                {
+                    code = r.Str("code");
+                    name = r.Str("name");
+                }
+
                 var hasMore = rows.Count > size;
                 if (hasMore) rows.RemoveAt(rows.Count - 1);
-                return new SalesPage(rows, hasMore, p, size, totals);
+                return new SalesPage(rows, hasMore, p, size, totals, code, name);
             }, token), ct).ConfigureAwait(false);
     }
 }

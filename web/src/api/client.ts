@@ -989,6 +989,9 @@ export interface SalesResponse {
   page: number;
   pageSize: number;
   totals: { sampleCount: number; saleAmount: number; lineCount: number };
+  /** Who this is — so a deep-linked sales page can title itself. */
+  clientCode: string | null;
+  clientName: string | null;
   from: string;
   to: string;
 }

@@ -13,6 +13,7 @@ import { Accessioning } from './pages/Accessioning';
 import { Inward } from './pages/Inward';
 import { Catalogue } from './pages/Catalogue';
 import { ClientAccounts } from './pages/ClientAccounts';
+import { ClientSales } from './pages/ClientSales';
 import { RateLists } from './pages/RateLists';
 import { Reports } from './pages/Reports';
 import { Worksheet } from './pages/Worksheet';
@@ -298,6 +299,10 @@ export function App() {
         <Route path="/inward" element={can('order:view') ? <Inward /> : <Navigate to="/" replace />} />
         <Route path="/catalogue" element={can('order:view') ? <Catalogue /> : <Navigate to="/" replace />} />
         <Route path="/accounts" element={can('billing:view') ? <ClientAccounts /> : <Navigate to="/" replace />} />
+        {/* Sales grew out of a tab on the account modal — nine columns of
+            itemised lines want a page, and a reconciliation wants a URL it
+            can come back to. Same gate as the list it grew from. */}
+        <Route path="/accounts/:mcc/sales" element={can('billing:view') ? <ClientSales /> : <Navigate to="/" replace />} />
         {/* billing:view to look; rate:manage is checked inside for every edit,
             and independently by the API on each write. */}
         <Route path="/rate-lists" element={can('rate:manage') ? <RateLists /> : <Navigate to="/" replace />} />

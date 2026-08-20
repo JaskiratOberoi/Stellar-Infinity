@@ -133,6 +133,8 @@ public static class ClientAccountEndpoints
             page = r.Page,
             pageSize = r.PageSize,
             totals = r.Totals,
+            clientCode = r.ClientCode,
+            clientName = r.ClientName,
             from = f,
             to = t,
         });
