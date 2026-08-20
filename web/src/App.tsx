@@ -24,7 +24,9 @@ import { InvoiceConfigPage } from './pages/InvoiceConfig';
 import { ThemeToggle } from './theme/ThemeToggle';
 import { InfinityLoader } from './components/InfinityLoader';
 import { IdleWarning } from './components/IdleWarning';
-import { NavMenu, navItemActive, type NavItem } from './components/NavMenu';
+import {
+  NavMenu, NavDropdown, navItemActive, isNavGroup, type NavItem, type NavEntry,
+} from './components/NavMenu';
 import { PrintReport } from './pages/PrintReport';
 import { PublicReport } from './pages/PublicReport';
 import { NewOrderFab } from './components/NewOrderFab';
@@ -83,73 +85,97 @@ function EnterVeil({ done }: { done: () => void }) {
  * `cap` hides an entry the user cannot use, but that is cosmetic: the API
  * enforces every capability independently on its own routes.
  */
-const NAV: NavItem[] = [
+/*
+ * Five heads instead of thirteen pills. Twelve screens as sibling tabs was
+ * the LIS sidebar flattened into a row, and the row was losing: at laptop
+ * widths the shed ladder in styles.css was stripping the bar of marks and
+ * names just to keep every tab on screen. So the bar borrows the LIS's own
+ * answer — a handful of headings that open over their screens (NavDropdown) —
+ * and the entries that stay top-level are the ones that are destinations in
+ * themselves.
+ *
+ * A group is DISPLAY ONLY. Capabilities and roles gate item by item exactly
+ * as before, and the shell below flattens a group that filters down to a
+ * single survivor.
+ */
+const NAV: NavEntry[] = [
   { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
-  // Hidden from clients: every order a centre raises is B2B and 'Patient
-  // orders' is already that list. The ROUTE stays open - this is navigation,
-  // not access.
-  { to: '/orders', label: 'Orders', icon: 'orders', cap: 'order:view', hideForRole: 'client' },
-  // "New order" is NOT here any more — it is the floating button, mounted in
-  // the shell below. It is the most repeated action in the building and it was
-  // sitting third in a row of thirteen tabs, level with Rates and Branding. See
+  // "New order" is NOT in the bar — it is the floating button, mounted in the
+  // shell below. It is the most repeated action in the building. See
   // NewOrderFab.
-  // These two share a pathname, so both declare the query they own — otherwise
-  // NavLink lights them together. See NavItem.search.
-  // order:accession, not order:view — clients hold order:view (they place
-  // orders), and this is the LAB's receiving queue. A collection centre was
-  // being shown a tab that always returned nothing: correctly scoped, but a
-  // lab screen wearing a client's badge.
-  { to: '/accessioning', label: 'Accessioning', icon: 'orders', cap: 'order:accession', search: '' },
-  // Inward (the transit scan desk, /inward) is deliberately NOT in this bar.
-  // The bar is at its width limit: thirteen entries were 61px over the viewport
-  // at 1905 until the Branding/Jarvis label trims, and a fourteenth pill
-  // (~85px) would put the horizontal scrollbar back for every role that sees
-  // the full row. It is reached from the Accessioning page header instead —
-  // the same desk, one click, and the scanning roles all hold order:view.
-  // The B2B half of the same worklist, as its own entry — Telo carries it in
-  // the nav as "Patient Orders" and operators reach for it by name. It is the
-  // accessioning queue with ?kind=b2b, not a second screen.
-  // Two entries, one label, because the phrase means different things to the
-  // two audiences and no capability separates them — the lab holds everything
-  // a client does.
-  //
-  // To the LAB it is the B2B half of the receiving queue. Telo carries it in
-  // the nav under this name and operators reach for it by name.
   {
-    to: '/accessioning?kind=b2b', label: 'Patient orders', icon: 'orders',
-    cap: 'order:accession', search: 'kind=b2b', hideForRole: 'client',
+    label: 'Orders',
+    items: [
+      // Hidden from clients: every order a centre raises is B2B and 'Patient
+      // orders' is already that list. The ROUTE stays open - this is
+      // navigation, not access.
+      { to: '/orders', label: 'Orders', icon: 'orders', cap: 'order:view', hideForRole: 'client' },
+      // These two share a pathname, so both declare the query they own —
+      // otherwise NavLink lights them together. See NavItem.search.
+      // order:accession, not order:view — clients hold order:view (they place
+      // orders), and this is the LAB's receiving queue. A collection centre
+      // was being shown a tab that always returned nothing: correctly scoped,
+      // but a lab screen wearing a client's badge.
+      { to: '/accessioning', label: 'Accessioning', icon: 'orders', cap: 'order:accession', search: '' },
+      // Two entries, one label, because the phrase means different things to
+      // the two audiences and no capability separates them — the lab holds
+      // everything a client does.
+      //
+      // To the LAB it is the B2B half of the receiving queue. Telo carries it
+      // in the nav under this name and operators reach for it by name.
+      {
+        to: '/accessioning?kind=b2b', label: 'Patient orders', icon: 'orders',
+        cap: 'order:accession', search: 'kind=b2b', hideForRole: 'client',
+      },
+      // To a CENTRE it is the booking form. Accessioning is the lab's
+      // receiving desk: it answers "has the lab got the tube yet", which is
+      // not a question a centre can act on. The thing a centre opens Infinity
+      // to do is raise an order, so the link goes straight there.
+      {
+        to: '/orders/new', label: 'Patient orders', icon: 'orders',
+        cap: 'order:create', onlyForRole: 'client',
+      },
+      // The transit scan desk. It was kept OUT of the flat bar because a
+      // fourteenth pill put a horizontal scrollbar on every full-width role;
+      // a line inside a menu costs no width, so the desk gets its door back.
+      // The route from the Accessioning page header stays — same desk, both
+      // ways in.
+      { to: '/inward', label: 'Inward', icon: 'orders', cap: 'order:accession' },
+    ],
   },
-  // To a CENTRE it is the booking form. Accessioning is the lab's receiving
-  // desk: it answers "has the lab got the tube yet", which is not a question a
-  // centre can act on, and it was showing them two permanently empty tables.
-  // The thing a centre opens Infinity to do is raise an order, so the link
-  // goes straight there.
   {
-    to: '/orders/new', label: 'Patient orders', icon: 'orders',
-    cap: 'order:create', onlyForRole: 'client',
+    label: 'Billing',
+    items: [
+      { to: '/catalogue', label: 'Catalogue', icon: 'orders', cap: 'order:view' },
+      { to: '/accounts', label: 'Accounts', icon: 'orders', cap: 'billing:view' },
+      // rate:manage, not billing:view — clients hold billing:view for their
+      // own ledger, and this screen lists every rate list in the lab. See the
+      // remark in RateListEndpoints.
+      { to: '/rate-lists', label: 'Rates', icon: 'orders', cap: 'rate:manage' },
+    ],
   },
-  { to: '/catalogue', label: 'Catalogue', icon: 'orders', cap: 'order:view' },
-  { to: '/accounts', label: 'Accounts', icon: 'orders', cap: 'billing:view' },
-  // rate:manage, not billing:view — clients hold billing:view for their own
-  // ledger, and this screen lists every rate list in the lab. See the remark in
-  // RateListEndpoints.
-  { to: '/rate-lists', label: 'Rates', icon: 'orders', cap: 'rate:manage' },
-  { to: '/worksheet', label: 'Worksheet', icon: 'worksheet', cap: 'result:enter' },
-  { to: '/reports', label: 'Reporting', icon: 'reporting', cap: 'report:view' },
-  { to: '/instruments', label: 'Instruments', icon: 'instruments', cap: 'result:enter' },
-  // "Jarvis" alone: the parenthetical was the widest thing in the bar by a
-  // distance, and the page's own heading already reads
-  // "Jarvis · auto-authorisation".
-  { to: '/settings/auto-auth', label: 'Jarvis', icon: 'jarvis', cap: 'autoauth:manage' },
-  { to: '/admin/users', label: 'Users', icon: 'users', cap: 'user:manage' },
-  // Same capability as Users, and next to it: this edits a document clients
-  // receive, and Telo gates its own copy of this screen the same way.
-  // "Branding", not "Invoice branding": with thirteen entries the bar was
-  // 61px wider than the viewport at 1905, which put a horizontal scrollbar on
-  // the document — and that scrollbar's 15px was the last thing keeping the
-  // order form from fitting one screen. The page heading says "Invoice
-  // branding" in full.
-  { to: '/admin/invoice', label: 'Branding', icon: 'orders', cap: 'user:manage' },
+  {
+    label: 'Lab',
+    items: [
+      { to: '/worksheet', label: 'Worksheet', icon: 'worksheet', cap: 'result:enter' },
+      { to: '/reports', label: 'Reporting', icon: 'reporting', cap: 'report:view' },
+      { to: '/instruments', label: 'Instruments', icon: 'instruments', cap: 'result:enter' },
+      // "Jarvis" alone: the page's own heading already reads
+      // "Jarvis · auto-authorisation". With the bench rather than with Admin
+      // because what it governs is result sign-off.
+      { to: '/settings/auto-auth', label: 'Jarvis', icon: 'jarvis', cap: 'autoauth:manage' },
+    ],
+  },
+  {
+    label: 'Admin',
+    items: [
+      { to: '/admin/users', label: 'Users', icon: 'users', cap: 'user:manage' },
+      // Same capability as Users, and next to it: this edits a document
+      // clients receive, and Telo gates its own copy of this screen the same
+      // way. The page heading says "Invoice branding" in full.
+      { to: '/admin/invoice', label: 'Branding', icon: 'orders', cap: 'user:manage' },
+    ],
+  },
 ];
 
 export function App() {
@@ -225,10 +251,19 @@ export function App() {
   // route, the shell shows a login form instead of dereferencing null.
   if (!user) return <><EnvBanner /><Login /></>;
 
-  const navItems = NAV.filter(
-    (i) => (!i.cap || can(i.cap))
-        && i.hideForRole !== user.role
-        && (!i.onlyForRole || i.onlyForRole === user.role));
+  // Gate item by item, then let the structure react: a group whose survivors
+  // number one flattens to that entry, an emptied group vanishes. The phone
+  // sheet takes the flat leaves — see NavMenu for why it stays a flat grid.
+  const visible = (i: NavItem) =>
+    (!i.cap || can(i.cap))
+      && i.hideForRole !== user.role
+      && (!i.onlyForRole || i.onlyForRole === user.role);
+  const navEntries: NavEntry[] = NAV.flatMap((e): NavEntry[] => {
+    if (!isNavGroup(e)) return visible(e) ? [e] : [];
+    const items = e.items.filter(visible);
+    return items.length === 0 ? [] : items.length === 1 ? [items[0]] : [{ ...e, items }];
+  });
+  const navItems = navEntries.flatMap((e) => (isNavGroup(e) ? e.items : [e]));
 
   return (
     <div className={`shell${entering ? ' shell--hello' : ''}`}>
@@ -240,18 +275,20 @@ export function App() {
         <NobleMark />
 
         <nav className="topbar__nav">
-          {navItems.map((i) => (
+          {navEntries.map((e) => (isNavGroup(e) ? (
+            <NavDropdown key={e.label} group={e} loc={loc} />
+          ) : (
             <NavLink
-              key={i.to} to={i.to} end={i.end}
+              key={e.to} to={e.to} end={e.end}
               // Entries that own a query decide their own active state; the
               // rest keep NavLink's, which ignores the query — see NavItem.
               className={({ isActive }) =>
-                (i.search === undefined ? isActive : navItemActive(i, loc.pathname, loc.search))
+                (e.search === undefined ? isActive : navItemActive(e, loc.pathname, loc.search))
                   ? 'active' : undefined}
             >
-              {i.label}
+              {e.label}
             </NavLink>
-          ))}
+          )))}
         </nav>
 
         {/* The title carries who is signed in for the widths where the bar has
@@ -262,7 +299,7 @@ export function App() {
           <button className="btn btn--ghost btn--sm" onClick={signOut}>Sign out</button>
         </div>
 
-        {/* Replaces both of the above below 1080px — see NavMenu. */}
+        {/* Replaces both of the above below 850px — see NavMenu. */}
         <NavMenu
           items={navItems}
           name={user.displayName ?? user.username}

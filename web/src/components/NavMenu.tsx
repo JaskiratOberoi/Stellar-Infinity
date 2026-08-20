@@ -49,6 +49,23 @@ export interface NavItem {
 }
 
 /**
+ * A heading in the bar that opens over its screens, the way the LIS folds its
+ * own sidebar. Display only: capabilities gate the items INSIDE it, never the
+ * group itself, and App flattens a group whose survivors number one — a
+ * client sees "Patient orders", not an "Orders" menu holding a single line.
+ */
+export interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+export type NavEntry = NavItem | NavGroup;
+
+export function isNavGroup(e: NavEntry): e is NavGroup {
+  return 'items' in e;
+}
+
+/**
  * Whether an entry is the one currently open, query included.
  *
  * Shared by the bar and the sheet so the two cannot disagree about which entry
@@ -157,14 +174,16 @@ function BurgerIcon({ open }: { open: boolean }) {
 /**
  * The navigation below the bar's last shed rung.
  *
- * Above 1080px every link sits in the bar. Below it there is no honest way to
- * keep seven of them there: the previous answer gave the nav its own row and
- * let it scroll sideways, which on a phone meant Instruments, Jarvis and Users
- * were off the right edge with nothing to say they existed. A link you cannot
- * discover is a link you do not have.
+ * Above 850px every head sits in the bar (see NavDropdown). Below it there is
+ * no honest way to keep even five of them there: the answer before the sheet
+ * gave the nav its own row and let it scroll sideways, which on a phone meant
+ * the tail of the bar was off the right edge with nothing to say it existed.
+ * A link you cannot discover is a link you do not have. And hover — the thing
+ * the heads open on — is not a gesture a phone has.
  *
  * So below that width the nav collapses to one control and opens as a full
- * screen. Two columns rather than a list: seven items in one column runs past
+ * screen, FLAT: every screen is a tile, because on a phone a group would only
+ * be a second thing to open before the thing you came for. Two columns rather than a list: seven items in one column runs past
  * the fold on a short phone, and the point of the sheet is that everything is
  * visible at once.
  *
@@ -173,7 +192,7 @@ function BurgerIcon({ open }: { open: boolean }) {
  * somewhere with room for them.
  */
 /** The width at which the bar gives up its inline nav. Mirrors styles.css. */
-const COMPACT = '(max-width: 1080px)';
+const COMPACT = '(max-width: 850px)';
 
 /**
  * Whether the menu control is the navigation right now.
@@ -316,5 +335,91 @@ export function NavMenu({
         document.body,
       )}
     </>
+  );
+}
+
+/**
+ * One heading of the bar, and the popover under it.
+ *
+ * Opens on hover because that is what a pointer expects of a menu bar — but
+ * hover is a claim only a mouse can make, so it ALSO opens on click (touch
+ * laptops) and holds itself open while focus is anywhere inside. The 140ms
+ * grace on the way out is for the diagonal: a pointer travelling from the
+ * button down into the panel grazes the neighbouring heading's airspace, and
+ * without the grace the menu it left would close under it mid-journey.
+ *
+ * The heading itself goes nowhere. It lights up when one of its screens is
+ * open, so the bar still answers "where am I" with every panel shut.
+ */
+export function NavDropdown({ group, loc }: {
+  group: NavGroup;
+  loc: { pathname: string; search: string };
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const closeTimer = useRef<number>();
+
+  const enter = () => { window.clearTimeout(closeTimer.current); setOpen(true); };
+  const leave = () => {
+    window.clearTimeout(closeTimer.current);
+    closeTimer.current = window.setTimeout(() => setOpen(false), 140);
+  };
+  useEffect(() => () => window.clearTimeout(closeTimer.current), []);
+
+  // Navigation closes the panel — including navigation this panel did not
+  // cause, like the browser's back button.
+  useEffect(() => { setOpen(false); }, [loc.pathname, loc.search]);
+
+  const active = group.items.some((i) => navItemActive(i, loc.pathname, loc.search));
+
+  return (
+    <div
+      className="navdrop"
+      ref={rootRef}
+      onMouseEnter={enter}
+      onMouseLeave={leave}
+      // Tabbing out of the panel is leaving it as surely as mousing out.
+      onBlur={(e) => {
+        if (!rootRef.current?.contains(e.relatedTarget as Node | null)) setOpen(false);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && open) {
+          e.stopPropagation();
+          setOpen(false);
+          btnRef.current?.focus();
+        }
+      }}
+    >
+      <button
+        ref={btnRef}
+        type="button"
+        className={`navdrop__btn${active ? ' active' : ''}`}
+        aria-expanded={open}
+        aria-haspopup="true"
+        onClick={() => setOpen((v) => !v)}
+      >
+        {group.label}
+        <svg className="navdrop__caret" viewBox="0 0 12 12" aria-hidden="true" fill="none"
+             stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m2.5 4.5 3.5 3.5 3.5-3.5" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="navdrop__panel">
+          {group.items.map((i) => (
+            <NavLink
+              key={i.to} to={i.to} end={i.end}
+              className={navItemActive(i, loc.pathname, loc.search) ? 'active' : undefined}
+              onClick={() => setOpen(false)}
+            >
+              <NavIcon name={i.icon} />
+              <span>{i.label}</span>
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

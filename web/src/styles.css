@@ -641,7 +641,10 @@ button, input, select { font: inherit; color: inherit; }
 
 .topbar__nav { display: flex; gap: .3rem; margin-left: auto; }
 
-.topbar__nav a {
+/* Direct children only: the popover panels ALSO live inside the nav, and
+   this rule reaching their links would dress every menu line as a pill.
+   .navdrop__btn rides along so a head is indistinguishable from a pill. */
+.topbar__nav > a, .navdrop__btn {
   padding: .45rem .9rem; border-radius: 999px;
   text-decoration: none; color: var(--ink-dim);
   font-size: .78rem; letter-spacing: .1em; text-transform: uppercase;
@@ -651,8 +654,66 @@ button, input, select { font: inherit; color: inherit; }
      see the shed ladder below. */
   white-space: nowrap;
 }
-.topbar__nav a:hover { color: var(--ink); background: var(--accent-soft); }
-.topbar__nav a.active { color: var(--teal); background: var(--accent-soft); }
+.topbar__nav > a:hover, .navdrop__btn:hover { color: var(--ink); background: var(--accent-soft); }
+.topbar__nav > a.active, .navdrop__btn.active { color: var(--teal); background: var(--accent-soft); }
+
+/* ---------- the nav heads' popovers ----------
+   Geometry only — NavDropdown in NavMenu.tsx owns when they open and close.
+   The button is a pill like its NavLink siblings (it shares their rules
+   above) plus a caret; the panel hangs from it. */
+.navdrop { position: relative; flex: none; }
+
+.navdrop__btn {
+  border: 0; background: none; cursor: pointer;
+  font-family: inherit;
+  display: inline-flex; align-items: center; gap: .3rem;
+}
+.navdrop__btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
+
+.navdrop__caret { width: 11px; height: 11px; opacity: .55; transition: transform .15s; flex: none; }
+.navdrop__btn[aria-expanded="true"] .navdrop__caret { transform: rotate(180deg); }
+
+.navdrop__panel {
+  position: absolute; top: calc(100% + .4rem); left: -.2rem;
+  min-width: 200px; padding: .35rem;
+  z-index: 30;
+  display: flex; flex-direction: column; gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow-modal);
+  animation: navdrop-in .16s ease-out both;
+}
+
+/* The last head sits nearest the user block; its panel opens leftward so it
+   cannot push past the viewport's right edge. */
+.topbar__nav > .navdrop:last-child .navdrop__panel { left: auto; right: -.2rem; }
+
+/* An invisible bridge over the gap between button and panel, so a pointer
+   travelling straight down never technically leaves. The 140ms grace in the
+   component covers the diagonal; this covers the direct path for free. */
+.navdrop__panel::before {
+  content: ''; position: absolute; left: 0; right: 0; top: -.45rem; height: .45rem;
+}
+
+@keyframes navdrop-in {
+  from { opacity: 0; translate: 0 -4px; }
+  to   { opacity: 1; translate: 0 0; }
+}
+
+.navdrop__panel a {
+  display: flex; align-items: center; gap: .55rem;
+  padding: .5rem .65rem;
+  border-radius: 9px;
+  text-decoration: none;
+  color: var(--ink-dim);
+  font-size: .82rem;
+  white-space: nowrap;
+}
+.navdrop__panel a:hover { background: var(--accent-soft); color: var(--ink); }
+.navdrop__panel a.active { color: var(--teal); background: var(--accent-soft); }
+.navdrop__panel a:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
+.navdrop__panel a svg { width: 17px; height: 17px; flex: none; opacity: .8; }
 
 .topbar__user {
   display: flex; align-items: center; gap: .8rem;
@@ -701,58 +762,55 @@ button, input, select { font: inherit; color: inherit; }
 
 /* ---------- the top bar's shed ladder ----------
 
-   Measured, not guessed. A super_admin — the only role that sees all seven
-   links — needs 1324px to sit on one line:
+   Measured, not guessed — and remeasured when the thirteen pills folded into
+   five heads (NAV in App.tsx). A super_admin — the widest bar — needs about
+   1157px to sit on one line:
 
-     Infinity mark 176 + Noble mark 90 + nav 703 + user 238
+     Infinity mark 182 + Noble mark 109 + nav 511 + user 238
      + three 24px gaps + 45px of padding
 
-   The single reflow rule used to be at 640px, which left a ~680px band where
-   the bar was over-constrained and nothing was allowed to give. With nowrap
-   above, that band would now overflow the viewport instead of wrapping, so the
-   two have to arrive together.
+   Each rung fires ABOVE what the rung before it needs, so no width is ever
+   left in a state that does not fit:
 
-   Each rung fires ABOVE what the rung before it needs, so no width is ever left
-   in a state that does not fit. Measured, with the widest realistic name:
+     > 1160  everything                               needs ~1157
+     ≤1160  tighten the gap and the pill padding      needs ~1074
+     ≤1075  drop the Noble mark                       needs ~953
+     ≤955   drop the name and role                    needs ~848
+     ≤850   nav collapses to the menu control + sheet
 
-     > 1400  everything                               needs 1395
-     ≤1400  tighten the gap and the pill padding      needs 1338
-     ≤1345  drop the Noble mark                       needs 1234
-     ≤1240  drop the name and role                    needs 1058
-     ≤1080  nav takes its own full-width row
+   The margins are thin because the bar is genuinely full. That is safe only
+   because the name ellipsises rather than overflowing — it is the give in
+   the system, and the numbers above are where it would START to trim, not
+   where anything breaks.
 
-   The margins between a rung and the next one's need are thin (5–20px) because
-   the bar is genuinely full. That is safe only because the name ellipsises
-   rather than overflowing — it is the give in the system, and the numbers above
-   are the point at which it would START to trim, not the point at which
-   anything breaks.
+   Tuned for the worst case, so a role with fewer heads sheds a little
+   earlier than it strictly must. The grouping bought the whole ladder about
+   290px: a laptop at 1366 — a width that used to cost the bar its Noble mark
+   and the signed-in name — now shows everything. */
 
-   Tuned for the worst case, so a role with fewer links sheds a little earlier
-   than it strictly must. The alternative is measuring fit in JavaScript, which
-   is a lot of machinery for a header. */
-
-@media (max-width: 1400px) {
+@media (max-width: 1160px) {
   .topbar { gap: .8rem; padding-left: 1.1rem; padding-right: 1.1rem; }
-  .topbar__nav a { padding: .45rem .7rem; letter-spacing: .08em; }
+  .topbar__nav > a, .navdrop__btn { padding: .45rem .7rem; letter-spacing: .08em; }
 }
 
 /* The lab's identity is the more expendable of the two: Infinity's own mark is
    what tells someone which application they are in. */
-@media (max-width: 1345px) {
+@media (max-width: 1075px) {
   .noble-mark { display: none; }
 }
 
 /* The name goes before any navigation does. Someone knows who they are signed
    in as; they cannot know where a link went. It stays reachable on hover
    through the title on .topbar__user. */
-@media (max-width: 1240px) {
+@media (max-width: 955px) {
   .topbar__user > span { display: none; }
 }
 
 /* Out of things to shed. The nav collapses to one control and reopens as a
-   full screen — see NavMenu.tsx for why a scrolling row was not good enough.
-   The bar itself stays a single row at every width from here down. */
-@media (max-width: 1080px) {
+   full screen — see NavMenu.tsx for why a scrolling row was not good enough,
+   and why the sheet stays flat where the bar is grouped. The bar itself stays
+   a single row at every width from here down. */
+@media (max-width: 850px) {
   .topbar__nav { display: none; }
   .nav-toggle { display: grid; }
   /* Sign out moves into the sheet, where there is room to give it a proper
