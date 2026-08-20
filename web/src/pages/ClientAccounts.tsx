@@ -113,7 +113,7 @@ export function ClientAccounts() {
             </p>
           </div>
           <div className="row" style={{ marginLeft: 'auto', flexWrap: 'wrap' }}>
-            <Link to={`/accounts/${single.mccId}/sales`} className="btn btn--ghost btn--sm">
+            <Link to={`/sales/${single.mccId}`} className="btn btn--ghost btn--sm">
               Sales →
             </Link>
             {can('report:release') && (
@@ -252,7 +252,7 @@ export function ClientAccounts() {
                     <button className="btn btn--ghost btn--sm" onClick={() => setLedgerFor(a)}>
                       Ledger
                     </button>
-                    <Link className="btn btn--ghost btn--sm" to={`/accounts/${a.mccId}/sales`}>
+                    <Link className="btn btn--ghost btn--sm" to={`/sales/${a.mccId}`}>
                       Sales
                     </Link>
                     {can('report:release') && (
@@ -426,7 +426,7 @@ function LedgerModal({ account, onClose }: { account: ClientAccount; onClose: ()
             never fit a dialog. The link keeps it one click from where the
             money questions start. */}
         <div className="row" style={{ gap: '.4rem', margin: '.4rem 0 .7rem' }}>
-          <Link to={`/accounts/${account.mccId}/sales`} className="btn btn--ghost btn--sm">
+          <Link to={`/sales/${account.mccId}`} className="btn btn--ghost btn--sm">
             Sales →
           </Link>
         </div>

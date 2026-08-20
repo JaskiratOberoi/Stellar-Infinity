@@ -50,7 +50,7 @@ export function SalesHome() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  if (only) return <Navigate to={`/accounts/${only.mccId}/sales`} replace />;
+  if (only) return <Navigate to={`/sales/${only.mccId}`} replace />;
 
   if (!resolved) {
     return (
@@ -93,7 +93,7 @@ export function SalesHome() {
                     {a.owed > 0 ? <span style={{ color: 'var(--danger)' }}>{inr(a.owed)}</span> : <span className="muted">—</span>}
                   </td>
                   <td style={{ textAlign: 'right' }}>
-                    <Link className="btn btn--ghost btn--sm" to={`/accounts/${a.mccId}/sales`}>
+                    <Link className="btn btn--ghost btn--sm" to={`/sales/${a.mccId}`}>
                       Sales →
                     </Link>
                   </td>

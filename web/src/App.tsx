@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { NavLink, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { Mark } from './components/Mark';
 import { SignInDraw } from './components/SignInDraw';
@@ -182,6 +182,12 @@ const NAV: NavEntry[] = [
   },
 ];
 
+/** Forwards the sales page's original /accounts/:mcc/sales address. */
+function RedirectMccSales() {
+  const { mcc = '' } = useParams();
+  return <Navigate to={`/sales/${mcc}`} replace />;
+}
+
 export function App() {
   const { user, loading, signOut, can, entering, finishEntering } = useAuth();
   const loc = useLocation();
@@ -343,7 +349,13 @@ export function App() {
         {/* Sales grew out of a tab on the account modal — nine columns of
             itemised lines want a page, and a reconciliation wants a URL it
             can come back to. Same gate as the list it grew from. */}
-        <Route path="/accounts/:mcc/sales" element={can('billing:view') ? <ClientSales /> : <Navigate to="/" replace />} />
+        {/* Under /sales, not /accounts: the nav lights its entries by path
+            prefix, and a sales page filed under /accounts lit Accounts while
+            the reader was looking at Sales. */}
+        <Route path="/sales/:mcc" element={can('billing:view') ? <ClientSales /> : <Navigate to="/" replace />} />
+        {/* The address this page first shipped under — forwarded, not broken,
+            for anything that bookmarked it in the meantime. */}
+        <Route path="/accounts/:mcc/sales" element={<RedirectMccSales />} />
         <Route path="/sales" element={can('billing:view') ? <SalesHome /> : <Navigate to="/" replace />} />
         {/* billing:view to look; rate:manage is checked inside for every edit,
             and independently by the API on each write. */}
