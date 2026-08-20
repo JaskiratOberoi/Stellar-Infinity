@@ -449,19 +449,40 @@ export function SampleFilters({
 
           <label className="field">
             <span>Client code</span>
-            <Combobox
-              value={value.clientCode}
-              // The locked wording states the rule rather than offering a
-              // filter. "Any centre in your scope" is true for a centre too,
-              // but it reads as an invitation to widen.
-              emptyLabel={lockClientCode ? 'Your account' : 'Any centre in your scope'}
-              onChange={(v) => set('clientCode', v)}
-              // Code and name as separate columns rather than one "AG0050A — MEHAR"
-              // string: both are searchable, and an operator knows one or the other.
-              options={clientOptions}
-              onQueryChange={searchClients}
-              disabled={lockClientCode}
-            />
+            {lockClientCode ? (
+              /* A READ-BACK, not a greyed-out picker. The disabled combobox
+                 said "Your account" and named nobody — a centre looking at its
+                 own reports should see its own code where every other role sees
+                 a code. The search endpoint already returns a client exactly
+                 one row (their own centre), so the first option IS the account;
+                 until it lands the wording falls back to the rule. */
+              <div className="input" aria-readonly="true"
+                   style={{ display: 'flex', alignItems: 'center', gap: '.45rem',
+                            cursor: 'default', background: 'var(--accent-softer)' }}>
+                <b className="mono">{clientOptions[0]?.label ?? 'Your account'}</b>
+                {clientOptions[0]?.hint && (
+                  <span className="muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {clientOptions[0].hint}
+                  </span>
+                )}
+                {/* a small lock, so the fixed value reads as pinned rather than broken */}
+                <svg viewBox="0 0 16 16" aria-hidden="true"
+                     style={{ width: 12, height: 12, marginLeft: 'auto', flex: 'none', opacity: .45 }}>
+                  <rect x="3.5" y="7" width="9" height="6" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4"/>
+                  <path d="M5.5 7V5.5a2.5 2.5 0 0 1 5 0V7" fill="none" stroke="currentColor" strokeWidth="1.4"/>
+                </svg>
+              </div>
+            ) : (
+              <Combobox
+                value={value.clientCode}
+                emptyLabel="Any centre in your scope"
+                onChange={(v) => set('clientCode', v)}
+                // Code and name as separate columns rather than one "AG0050A — MEHAR"
+                // string: both are searchable, and an operator knows one or the other.
+                options={clientOptions}
+                onQueryChange={searchClients}
+              />
+            )}
             {lockClientCode && (
               <span className="muted" style={{ fontSize: '.72rem' }}>
                 Reports are limited to your own account.
@@ -469,17 +490,25 @@ export function SampleFilters({
             )}
           </label>
 
-          <label className="field">
-            <span>Department</span>
-            <Combobox
-              value={value.departmentId === '' ? '' : String(value.departmentId)}
-              emptyLabel="Any department"
-              onChange={(v) => set('departmentId', v === '' ? '' : Number(v))}
-              options={options.departments.map((d) => ({
-                value: String(d.id), label: d.name ?? `Department ${d.id}`,
-              }))}
-            />
-          </label>
+          {/* Not for a client account. Departments are the LAB's sections —
+              how work is benched, not how a centre thinks about its patients'
+              reports — and the Test filter beside it already narrows by what
+              was actually ordered. Unlike the unit list this is no leak (the
+              department is printed on their own reports), so it is hidden
+              rather than emptied server-side. */}
+          {!lockClientCode && (
+            <label className="field">
+              <span>Department</span>
+              <Combobox
+                value={value.departmentId === '' ? '' : String(value.departmentId)}
+                emptyLabel="Any department"
+                onChange={(v) => set('departmentId', v === '' ? '' : Number(v))}
+                options={options.departments.map((d) => ({
+                  value: String(d.id), label: d.name ?? `Department ${d.id}`,
+                }))}
+              />
+            </label>
+          )}
 
           <label className="field">
             <span>Test</span>
