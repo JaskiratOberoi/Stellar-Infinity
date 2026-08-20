@@ -967,6 +967,32 @@ export const PAYMENT_MODES = [
   { id: 6, label: 'Other' },
 ] as const;
 
+/** One itemised sale line — a billable test, as the LIS counts them. */
+export interface SaleLine {
+  regdNo: number;
+  patientName: string | null;
+  sid: string | null;
+  sampleDate: string | null;
+  age: number | null;
+  ageType: number | null;
+  gender: number | null;
+  testCode: string | null;
+  testName: string | null;
+  amount: number;
+  doctor: string | null;
+  customer: string | null;
+}
+
+export interface SalesResponse {
+  rows: SaleLine[];
+  hasMore: boolean;
+  page: number;
+  pageSize: number;
+  totals: { sampleCount: number; saleAmount: number; lineCount: number };
+  from: string;
+  to: string;
+}
+
 export const accountsApi = {
   list: (search: string, onlyOwing: boolean, page = 1, pageSize = 100) => {
     const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
@@ -976,6 +1002,10 @@ export const accountsApi = {
   },
   ledger: (mcc: number, page = 1, pageSize = 100) =>
     api.get<PagedResponse<LedgerEntry>>(`/api/accounts/${mcc}/ledger?page=${page}&pageSize=${pageSize}`),
+  /** Itemised billable test lines + totals, the LIS Sales Data view. */
+  sales: (mcc: number, from: string, to: string, page = 1, pageSize = 100) =>
+    api.get<SalesResponse>(
+      `/api/accounts/${mcc}/sales?from=${from}&to=${to}&page=${page}&pageSize=${pageSize}`),
   pay: (mcc: number, body: { amount: number; mode: number; chequeNo?: string | null; reason?: string | null }) =>
     api.post<{ ok: boolean; newBalance: number | null; message: string | null }>(
       `/api/accounts/${mcc}/payments`, body),

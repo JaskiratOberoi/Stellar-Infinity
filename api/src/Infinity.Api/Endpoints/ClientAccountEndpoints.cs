@@ -26,6 +26,13 @@ public static class ClientAccountEndpoints
          .RequireCapability(Capabilities.BillingView)
          .WithName("ClientLedger");
 
+        // The Sales Data view — itemised billable test lines, as the LIS
+        // Sales/SalesDataforMcc screen shows them. Same gate and scope as the
+        // ledger beside it: this is the commercial history of one account.
+        g.MapGet("/{mcc:int}/sales", Sales)
+         .RequireCapability(Capabilities.BillingView)
+         .WithName("ClientSales");
+
         g.MapPost("/{mcc:int}/payments", RecordPayment)
          .RequireCapability(Capabilities.PaymentCapture)
          .WithName("RecordClientPayment");
@@ -94,6 +101,45 @@ public static class ClientAccountEndpoints
             page = r.Page, pageSize = r.PageSize, pageCount = r.PageCount,
         });
     }
+
+    private static async Task<IResult> Sales(
+        int mcc,
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
+        SalesRepository repo,
+        CancellationToken ct,
+        string? from = null,
+        string? to = null,
+        int page = 1,
+        int pageSize = 100)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+        if (!await InScopeAsync(scopes, userId, mcc, ct).ConfigureAwait(false)) return Results.NotFound();
+
+        // IST calendar days, defaulting to today — the same default the LIS
+        // screen opens on. A malformed date falls back rather than erroring:
+        // the worst case is today's view, never a 500.
+        var today = Reads.StatsRepository.TodayIst();
+        var f = IsDay(from) ? from! : today;
+        var t = IsDay(to) ? to! : today;
+        // A reversed window returns the empty set; swapping silently would
+        // answer a question the caller did not ask.
+
+        var r = await repo.GetAsync(mcc, f, t, page, pageSize, ct).ConfigureAwait(false);
+        return Results.Ok(new
+        {
+            rows = r.Rows,
+            hasMore = r.HasMore,
+            page = r.Page,
+            pageSize = r.PageSize,
+            totals = r.Totals,
+            from = f,
+            to = t,
+        });
+    }
+
+    private static bool IsDay(string? s) =>
+        s is not null && System.Text.RegularExpressions.Regex.IsMatch(s, @"^\d{4}-\d{2}-\d{2}$");
 
     public sealed record PaymentRequest(int Amount, int Mode, string? ChequeNo, string? Reason);
 

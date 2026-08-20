@@ -45,6 +45,7 @@ builder.Services.AddSingleton<Infinity.Api.Reports.CatalogueDetailRepository>();
 builder.Services.AddSingleton<Infinity.Api.Reports.SmartReportAccessRepository>();
 builder.Services.AddSingleton<Infinity.Api.Reports.ReportLink>();
 builder.Services.AddSingleton<Infinity.Api.Orders.ClientAccountRepository>();
+builder.Services.AddSingleton<Infinity.Api.Orders.SalesRepository>();
 builder.Services.AddSingleton<Infinity.Api.Payments.PaymentRepository>();
 // Signs the public receipt link. Shares Reports:TokenSecret with the report
 // QR links, under a different purpose prefix - see PaymentReceiptLink.
