@@ -67,5 +67,35 @@ services:
       timeout: 3s
       retries: 10
 
+  # The Noble → stellar replication worker. Polls Change Tracking every 15s
+  # and applies the delta; see api/src/Stellar.Sync/Program.cs for the
+  # snapshot/tail model. Runs the default table set — the 68M-row result
+  # table's first load stays a deliberate act (`--result`), not a restart
+  # side effect.
+  #
+  # Kept in THIS compose file, not the product stack: the replica and its
+  # feeder live and die together, and `docker compose -f
+  # docker-compose.stellar.yml down` must quiesce both without touching
+  # anything serving users.
+  sync:
+    build:
+      context: ./api
+      dockerfile: Dockerfile.sync
+    image: stellar-sync
+    # The same Noble__* credentials the API reads. The worker also loads this
+    # file by path when run from a checkout; in the container the path does
+    # not exist, so env_file is what actually feeds it.
+    env_file:
+      - ./api/.env
+    environment:
+      # Service name, not 127.0.0.1: inside the compose network the replica
+      # is `postgres`, and the host-published 5435 is not visible.
+      Stellar__ConnectionString: "Host=postgres;Port=5432;Database=stellar;Username=stellar;Password=stellar_dev"
+      Stellar__IntervalSeconds: "15"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   stellar_pgdata:

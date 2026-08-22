@@ -67,7 +67,7 @@ internal static class ClinicalTables
                 Conv.Text(r["MRNID"]),
                 Conv.ToInt(r["Status"]),
                 Conv.Origin(r["addedby"]),
-                Conv.Ts(r["addeddate"]),
+                Conv.CreatedAt(r["addeddate"], r["sample_time"]),
             }).ToList();
 
             await Upsert.RunAsync(pg, "registration",
@@ -126,7 +126,7 @@ internal static class ClinicalTables
                     Conv.Ts(r["modifieddate"]),        // Listec's "Registration Date"
                     Conv.Ts(r["lastmodified_date"]),   // Listec's "Report Date"
                     Conv.Origin(r["addedby"]),
-                    Conv.Ts(r["addeddate"]),
+                    Conv.CreatedAt(r["addeddate"], r["modifieddate"]),
                 }).ToList();
 
             await Upsert.RunAsync(pg, "sample",
@@ -163,7 +163,7 @@ internal static class ClinicalTables
                 Conv.Flag(r["amount_checked"]),
                 Conv.Text(r["comments"]),
                 Conv.Origin(r["addedby"]),
-                Conv.Ts(r["addeddate"]),
+                Conv.CreatedAt(r["addeddate"]),
             }).ToList();
 
             await Upsert.RunAsync(pg, "ordered_test",
@@ -271,8 +271,8 @@ internal static class ClinicalTables
                 Conv.Origin(r["addedby"]),
                 // Fallback matters: ~10% of Noble's result rows predate the
                 // addeddate column being populated, and a NULL partition key
-                // is rejected outright.
-                Conv.Ts(r["addeddate"]) ?? new DateTimeOffset(2019, 1, 1, 0, 0, 0, TimeSpan.Zero),
+                // is rejected outright. Conv.Undated is that same 2019-01-01.
+                Conv.CreatedAt(r["addeddate"]),
             }).ToList();
 
             await Upsert.RunAsync(pg, "result",

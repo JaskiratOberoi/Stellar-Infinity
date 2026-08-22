@@ -73,7 +73,7 @@ internal static class BillingTables
                 Conv.Text(r["comments"]),
                 Conv.Ts(r["bill_date"]),
                 Conv.Origin(r["addedby"]),
-                Conv.Ts(r["addeddate"]),
+                Conv.CreatedAt(r["addeddate"], r["bill_date"]),
             }).ToList();
 
             await Upsert.RunAsync(pg, "bill",
@@ -206,7 +206,7 @@ internal static class BillingTables
                     Conv.Text(r["Reason"]),
                     Conv.Ts(r["depositedate"]),
                     Conv.Origin(r["addedby"]),
-                    Conv.Ts(r["addeddate"]),
+                    Conv.CreatedAt(r["addeddate"], r["depositedate"]),
                 };
             }).ToList();
 

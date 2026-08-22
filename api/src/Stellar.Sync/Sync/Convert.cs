@@ -98,6 +98,33 @@ internal static class Conv
     }
 
     /// <summary>
+    /// The stamp for a row Noble never dated; see <see cref="CreatedAt"/>.
+    /// The same value the result load has always used for its pre-addeddate
+    /// rows, so "date unknown" looks identical everywhere.
+    /// </summary>
+    public static readonly DateTimeOffset Undated = new(2019, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+    /// <summary>
+    /// created_at for the replica: addeddate when Noble stamped one, else the
+    /// best in-row timestamp the caller can offer, else <see cref="Undated"/>.
+    ///
+    /// Never null and never the wall clock. created_at is NOT NULL in every
+    /// stellar table, and on result it is the partition key and half the
+    /// conflict target — so the value must exist and must come out identical
+    /// on every re-apply. And Noble rows genuinely arrive undated: its own
+    /// procs can skip the stamp (a usp-written order did on 2026-08-19 and
+    /// stalled the registration and sample tails until this fallback existed).
+    /// </summary>
+    public static DateTimeOffset CreatedAt(params object?[] candidates)
+    {
+        foreach (var c in candidates)
+        {
+            if (Ts(c) is { } ts) return ts;
+        }
+        return Undated;
+    }
+
+    /// <summary>
     /// Which system wrote a Noble row, from its addedby/updatedby marker.
     /// 'telo:&lt;uid&gt;' and 'inf:&lt;uid&gt;' are the convention Telo and
     /// Infinity stamp; anything else came from the legacy LIS.

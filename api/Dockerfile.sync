@@ -1,0 +1,31 @@
+# stellar-sync — the Noble → stellar replication worker.
+#
+# Same two-stage shape as the API's Dockerfile, but the runtime base is the
+# plain .NET runtime: this is a worker, it serves nothing.
+
+# ---- build ----------------------------------------------------------------
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+WORKDIR /src
+
+# Restore first so the layer caches on dependency changes only.
+COPY src/Stellar.Sync/Stellar.Sync.csproj src/Stellar.Sync/
+RUN dotnet restore src/Stellar.Sync/Stellar.Sync.csproj
+
+COPY src/Stellar.Sync/ src/Stellar.Sync/
+RUN dotnet publish src/Stellar.Sync/Stellar.Sync.csproj \
+      -c Release \
+      -o /app/publish \
+      --no-restore \
+      /p:UseAppHost=false
+
+# ---- runtime --------------------------------------------------------------
+FROM mcr.microsoft.com/dotnet/runtime:9.0 AS runtime
+WORKDIR /app
+
+# Non-root: the worker only talks to two databases.
+RUN useradd --uid 64199 --create-home --shell /usr/sbin/nologin stellar
+USER 64199
+
+COPY --from=build --chown=64199:64199 /app/publish .
+
+ENTRYPOINT ["dotnet", "Stellar.Sync.dll"]
