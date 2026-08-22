@@ -982,12 +982,6 @@ export function NewOrder() {
                 <input id="p-dob-y" className="input mono" value={patient.dobYear} inputMode="numeric"
                        maxLength={4} style={{ width: 74 }} placeholder="YYYY" aria-label="Year of birth"
                        onChange={(e) => setPatient({ ...patient, dobYear: e.target.value.replace(/\D/g, '') })} />
-                {/* Live, and beside the boxes rather than under them: it is a
-                    read-back of what was just typed, not a note about it.
-                    aria-live so it is announced as it settles. */}
-                <span className="dob-age" aria-live="polite">
-                  {age ? `${age.age} ${age.ageType === 2 ? 'month' : 'year'}${age.age === 1 ? '' : 's'}` : '—'}
-                </span>
               </div>
 
               {/* The age, typed or told. With a valid birth date these boxes
