@@ -51,7 +51,8 @@ public sealed class RenderClient(HttpClient http, ILogger<RenderClient> log)
 
     private sealed record Envelope(
         [property: JsonPropertyName("cookie")] string? Cookie,
-        [property: JsonPropertyName("reports")] IReadOnlyList<ReportRequest> Reports);
+        [property: JsonPropertyName("reports")] IReadOnlyList<ReportRequest> Reports,
+        [property: JsonPropertyName("numberPages")] bool NumberPages = false);
 
     /// <summary>
     /// Render one or more reports into a single PDF. A batch goes in one call
@@ -61,12 +62,15 @@ public sealed class RenderClient(HttpClient http, ILogger<RenderClient> log)
     public async Task<byte[]> RenderAsync(
         IReadOnlyList<ReportRequest> reports,
         string? cookieHeader,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        // After ct, unconventionally, so the existing call sites that pass ct
+        // positionally keep meaning what they said. Named at the one caller.
+        bool numberPages = false)
     {
         if (reports.Count == 0) throw new ArgumentException("No reports to render.", nameof(reports));
 
         using var content = new StringContent(
-            JsonSerializer.Serialize(new Envelope(cookieHeader, reports), Json),
+            JsonSerializer.Serialize(new Envelope(cookieHeader, reports, numberPages), Json),
             System.Text.Encoding.UTF8,
             "application/json");
 

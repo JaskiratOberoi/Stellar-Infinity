@@ -365,8 +365,11 @@ public static class ReportPdfEndpoints
             // the second pull of the same PID assembles without a browser.
             var graphFp = await GraphFingerprintAsync(graphs, sid, body!.WithGraph, ct).ConfigureAwait(false);
             var query = PrintQuery(body.Split, null, body.SplitDept == true);
+            // n0: rendered WITHOUT per-report page numbers, because the batch
+            // is numbered as one document at the staple. Distinct from the
+            // single route's cache, whose documents carry their own numbers.
             var key = PdfCacheKey("report", sid, row!.LastModifiedAt,
-                $"s{(body.Split == true ? 1 : 0)}d{(body.SplitDept == true ? 1 : 0)}h{(body.Headless == true ? 1 : 0)}g{graphFp}x{query}");
+                $"n0s{(body.Split == true ? 1 : 0)}d{(body.SplitDept == true ? 1 : 0)}h{(body.Headless == true ? 1 : 0)}g{graphFp}x{query}");
 
             if (await cache.GetBytesAsync(key, ct).ConfigureAwait(false) is { } cachedDoc)
             {
@@ -387,7 +390,8 @@ public static class ReportPdfEndpoints
                 // report goes out whole.
                 Url: $"/print/report/{Uri.EscapeDataString(sid)}{query}",
                 Attachments: await CollectGraphsAsync(graphs, sid, body.WithGraph, ct).ConfigureAwait(false),
-                Headless: body.Headless));
+                Headless: body.Headless,
+                PageNumbers: false));
             misses.Add((included.Count - 1, key));
         }
 
@@ -428,7 +432,9 @@ public static class ReportPdfEndpoints
 
             http.Response.Headers["X-Report-Cache"] = $"{hits}/{included.Count}";
 
-            var pdf = await render.RenderAsync(included, cookieHeader, ct).ConfigureAwait(false);
+            // The whole bundle numbered once, "Page 1 of 8" meaning the stack
+            // in hand — graph sheets counted like any other sheet.
+            var pdf = await render.RenderAsync(included, cookieHeader, ct, numberPages: true).ConfigureAwait(false);
 
             // The skip list rides on a header: the body has to be the PDF, and a
             // silent short delivery ("I asked for 20, I got 19") is exactly the

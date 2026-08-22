@@ -346,11 +346,11 @@ export function PrintReport() {
      sections rather than from report.departments directly so the exclusion
      filtering and section ordering stay in exactly one place. */
   const deptGroups = useMemo(() => {
-    const out: { deptName: string; entries: Entry[] }[] = [];
+    const out: { deptName: string; secs: Section[] }[] = [];
     for (const sec of sections) {
       const run = out[out.length - 1];
-      if (run && run.deptName === sec.deptName) run.entries.push(...sec.entries);
-      else out.push({ deptName: sec.deptName, entries: [...sec.entries] });
+      if (run && run.deptName === sec.deptName) run.secs.push(sec);
+      else out.push({ deptName: sec.deptName, secs: [sec] });
     }
     return out;
   }, [sections]);
@@ -427,7 +427,14 @@ export function PrintReport() {
      every printed page the table spans), one department band, the entries.
      The section sheets and the department sheets are the same table at two
      grains. */
-  const blockTable = (deptName: string, entries: Entry[], last: boolean) => (
+  /* One self-contained table. Each SECTION is its own <tbody
+     class="lr__keep"> — the unit Chromium is told not to break: a test and
+     its interpretation either fit in the space left on the page or move to
+     the next one whole. The department band rides in the first section's
+     body, so it can never be orphaned at a page's foot. A section taller
+     than an entire page still fragments — avoid is a preference, not a vow —
+     which is the right failure. */
+  const blockTable = (deptName: string, secs: Section[], last: boolean) => (
     <table className="lr__table">
       <ReportColgroup />
       <thead>
@@ -445,18 +452,22 @@ export function PrintReport() {
         <ColumnHeaderRow />
       </thead>
       {tfoot}
-      <tbody>
-        <tr>
-          <td colSpan={5} className="lr__dept">{deptName}</td>
-        </tr>
-        {entries.map(renderItem)}
-        {last && <EndOfReport />}
-      </tbody>
+      {secs.map((sec, i) => (
+        <tbody className="lr__keep" key={i}>
+          {i === 0 && (
+            <tr>
+              <td colSpan={5} className="lr__dept">{deptName}</td>
+            </tr>
+          )}
+          {sec.entries.map(renderItem)}
+          {last && i === secs.length - 1 && <EndOfReport />}
+        </tbody>
+      ))}
     </table>
   );
 
   const sectionTable = (sec: Section, last: boolean) =>
-    blockTable(sec.deptName, sec.entries, last);
+    blockTable(sec.deptName, [sec], last);
 
   const shell = pdfMode ? 'lr' : previewSheets ? 'lr lr--sheets' : 'lr lr--screen';
 
@@ -489,7 +500,7 @@ export function PrintReport() {
                pages, none ever sharing a sheet with the next. */
             deptGroups.map((g, gi) => (
               <div key={gi} className="lr__section">
-                {blockTable(g.deptName, g.entries, gi === deptGroups.length - 1)}
+                {blockTable(g.deptName, g.secs, gi === deptGroups.length - 1)}
               </div>
             ))
           ) : split ? (
@@ -540,17 +551,20 @@ export function PrintReport() {
                 <ColumnHeaderRow />
               </thead>
               {tfoot}
+              {/* A tbody per section — the same keep-together unit the split
+                  modes use, so a test and its interpretation never straddle a
+                  page break while the space for them exists below. */}
+              {sections.map((sec, si) => (
+                <tbody className="lr__keep" key={si}>
+                  {sec.deptStart && (
+                    <tr>
+                      <td colSpan={5} className="lr__dept">{sec.deptName}</td>
+                    </tr>
+                  )}
+                  {sec.entries.map(renderItem)}
+                </tbody>
+              ))}
               <tbody>
-                {sections.map((sec, si) => (
-                  <Fragment key={si}>
-                    {sec.deptStart && (
-                      <tr>
-                        <td colSpan={5} className="lr__dept">{sec.deptName}</td>
-                      </tr>
-                    )}
-                    {sec.entries.map(renderItem)}
-                  </Fragment>
-                ))}
                 <EndOfReport />
               </tbody>
             </table>

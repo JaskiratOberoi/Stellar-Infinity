@@ -208,6 +208,11 @@
    first section opens the PDF with a blank sheet. */
 .lr__section + .lr__section { break-before: page; }
 
+/* The keep-together unit: one section — a test with its interpretation, a
+   panel, the vitamin pair. Chromium moves the whole body to the next page
+   rather than splitting it, unless it is taller than a page outright. */
+.lr__keep { break-inside: avoid; }
+
 /* ---------- patient block ---------- */
 
 .lr__meta { border-bottom: 1px solid #d1d5db; padding-bottom: 4px; }

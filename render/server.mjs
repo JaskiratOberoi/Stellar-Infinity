@@ -228,6 +228,32 @@ async function appendAttachment(reportBytes, { b64, mime }) {
   return out.save();
 }
 
+/**
+ * Stamp "Page X of Y" across a finished document — the batch path, where the
+ * per-report stamping is turned OFF and the merged bundle is numbered as one
+ * document instead: an eight-sheet stack that says "Page 1 of 2" halfway
+ * through reads as a misprint. Same ink as compositeOntoLetterhead: 8pt
+ * Helvetica, right-aligned to the 14mm margin, on the footer baseline.
+ */
+async function stampPageNumbers(bytes, pageNumberY = 99) {
+  const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const pages = doc.getPages();
+  const rightMargin = (14 / 25.4) * 72;
+  for (let i = 0; i < pages.length; i++) {
+    const page = pages[i];
+    const label = `Page ${i + 1} of ${pages.length}`;
+    page.drawText(label, {
+      x: page.getWidth() - rightMargin - font.widthOfTextAtSize(label, 8),
+      y: pageNumberY,
+      size: 8,
+      font,
+      color: rgb(0.35, 0.35, 0.35),
+    });
+  }
+  return doc.save();
+}
+
 /** Concatenate finished reports, each keeping its own page numbering. */
 async function concat(docs) {
   if (docs.length === 1) return docs[0];
@@ -299,7 +325,8 @@ const server = createServer(async (req, res) => {
         return doc;
       });
 
-      const pdf = Buffer.from(await concat(rendered));
+      let pdf = Buffer.from(await concat(rendered));
+      if (body.numberPages === true) pdf = Buffer.from(await stampPageNumbers(pdf));
       console.log(`render ok reports=${reports.length} pages_in=${rendered.length} bytes=${pdf.length} ms=${Date.now() - started}`);
       res.writeHead(200, { 'content-type': 'application/pdf', 'content-length': pdf.length });
       return res.end(pdf);
