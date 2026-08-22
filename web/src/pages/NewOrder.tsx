@@ -16,7 +16,7 @@ interface PatientForm {
   name: string;
   initial: string;
   /**
-   * Date of birth, as three boxes — the only age input there is now.
+   * Date of birth, as three boxes.
    *
    * The years-and-months pair is DERIVED from this at submit and is still what
    * goes on the wire, because the create procedure takes age + age_type and
@@ -29,6 +29,15 @@ interface PatientForm {
   dobDay: string;
   dobMonth: string;
   dobYear: string;
+  /**
+   * The age typed directly, for the patient who does not know their birth
+   * date — a requisition slip that says only "62 yrs" is common. Spoken ONLY
+   * when all three birth-date boxes are blank: a started date owns the
+   * answer, and a broken one must block rather than quietly deferring to
+   * whatever age was typed earlier.
+   */
+  ageYears: string;
+  ageMonths: string;
   gender: number;
   mobile: string;
   email: string;
@@ -39,6 +48,7 @@ interface PatientForm {
 
 const EMPTY_PATIENT: PatientForm = {
   name: '', initial: 'Mr', dobDay: '', dobMonth: '', dobYear: '', gender: 1,
+  ageYears: '', ageMonths: '',
   mobile: '', email: '', mrnId: '', clinicalHistory: '',
 };
 
@@ -574,13 +584,17 @@ export function NewOrder() {
     setBusy(true);
     setError(null);
     try {
-      // Derived at the last moment from the birth date. resolveAge still owns
-      // the paediatric rule — under two years old is stored in months — so the
-      // LIS receives exactly what it did when this was two boxes.
+      // The birth date when there is one, the typed age when there is not —
+      // and a STARTED date never falls back to the typed pair, or a mistyped
+      // 31/02 would silently book under an age from another visit. resolveAge
+      // still owns the paediatric rule — under two years is stored in months.
       const fromDob = ageFromDob(patient.dobDay, patient.dobMonth, patient.dobYear);
+      const dateBlank = patient.dobDay.trim() === ''
+        && patient.dobMonth.trim() === ''
+        && patient.dobYear.trim() === '';
       const resolved = fromDob
         ? resolveAge(String(fromDob.years), String(fromDob.months))
-        : null;
+        : dateBlank ? resolveAge(patient.ageYears, patient.ageMonths) : null;
       const result = await cartApi.place({
         mcc: cart.mcc,
         items: cart.items,
@@ -695,12 +709,17 @@ export function NewOrder() {
   }
 
   const dobAge = ageFromDob(patient.dobDay, patient.dobMonth, patient.dobYear);
-  const age = dobAge ? resolveAge(String(dobAge.years), String(dobAge.months)) : null;
   // Whether the operator has STARTED a date, which is what separates "not
   // filled in yet" from "filled in wrong". All three blank must stay silent.
   const dobStarted = patient.dobDay.trim() !== ''
     || patient.dobMonth.trim() !== ''
     || patient.dobYear.trim() !== '';
+  const ageStarted = patient.ageYears.trim() !== '' || patient.ageMonths.trim() !== '';
+  // A started date owns the answer outright; the typed pair speaks only when
+  // every date box is blank. Mirrors the same rule at submit.
+  const age = dobStarted
+    ? (dobAge ? resolveAge(String(dobAge.years), String(dobAge.months)) : null)
+    : resolveAge(patient.ageYears, patient.ageMonths);
   // A half-typed number is a typo, not a phone number. Blank is fine —
   // hospital counters often have no reachable number — but six digits is
   // someone who was interrupted, and the LIS would keep it forever.
@@ -717,6 +736,7 @@ export function NewOrder() {
    */
   const patientStarted = patient.name.trim() !== ''
     || dobStarted
+    || ageStarted
     || patient.mobile.trim() !== '';
   const testsOn = cart.mcc != null && (patientStarted || cart.items.length > 0);
 
@@ -969,12 +989,36 @@ export function NewOrder() {
                   {age ? `${age.age} ${age.ageType === 2 ? 'month' : 'year'}${age.age === 1 ? '' : 's'}` : '—'}
                 </span>
               </div>
+
+              {/* The age, typed or told. With a valid birth date these boxes
+                  READ BACK the derived age and lock — the date is the record,
+                  and two authorities for one fact is how they disagree. With
+                  the date blank they are the input, for the patient who knows
+                  only their age. */}
+              <div className="row" style={{ gap: '.35rem', alignItems: 'center', marginTop: '.45rem' }}>
+                <input id="p-age-y" className="input mono" inputMode="numeric" maxLength={3}
+                       style={{ width: 58 }} placeholder="Age" aria-label="Age in years"
+                       value={dobAge ? String(dobAge.years) : patient.ageYears}
+                       disabled={dobAge !== null}
+                       onChange={(e) => setPatient({ ...patient, ageYears: e.target.value.replace(/\D/g, '') })} />
+                <input id="p-age-m" className="input mono" inputMode="numeric" maxLength={2}
+                       style={{ width: 58 }} placeholder="Mo" aria-label="Age, months part"
+                       value={dobAge ? String(dobAge.months) : patient.ageMonths}
+                       disabled={dobAge !== null}
+                       onChange={(e) => setPatient({ ...patient, ageMonths: e.target.value.replace(/\D/g, '') })} />
+                <span className="muted" style={{ fontSize: '.72rem' }}>
+                  {dobAge ? 'age — from the date of birth' : 'years · months — when the date is not known'}
+                </span>
+              </div>
+
               <span className="muted" style={{ fontSize: '.7rem' }}>
-                {!dobStarted
-                  ? 'Day, month and year'
+                {!dobStarted && !ageStarted
+                  ? 'Date of birth when known — the age alone works too.'
                   : age
                     ? `Recorded as ${age.age} ${age.ageType === 2 ? 'month' : 'year'}${age.age === 1 ? '' : 's'}.`
-                    : <b style={{ color: 'var(--danger)' }}>Not a real past date — check the day, month and year.</b>}
+                    : dobStarted
+                      ? <b style={{ color: 'var(--danger)' }}>Not a real past date — check the day, month and year.</b>
+                      : <b style={{ color: 'var(--danger)' }}>Not a usable age — months run 0–11 past age two.</b>}
               </span>
             </div>
             <div className="field">
