@@ -61,15 +61,23 @@ public static class ReportPdfEndpoints
         ILoggerFactory loggers,
         SmartReportAccessRepository smartAccess,
         RenderClient render,
+        Caching.InfinityCache cache,
         CancellationToken ct)
     {
-        var (ok, fail) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct).ConfigureAwait(false);
+        var (ok, fail, row) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct).ConfigureAwait(false);
         if (!ok) return fail!;
 
         // Sold, not given. Same 404 as the data route behind it — see
         // SmartReportAccessRepository.
         if (!await smartAccess.SidHasSmartReportAsync(sid, ct).ConfigureAwait(false))
             return Results.NotFound();
+
+        var key = PdfCacheKey("smart", sid, row!.LastModifiedAt, "-");
+        if (await cache.GetBytesAsync(key, ct).ConfigureAwait(false) is { } cached)
+        {
+            http.Response.Headers["X-Report-Cache"] = "hit";
+            return Results.File(cached, "application/pdf", $"HealthSummary_{Sanitise(sid)}.pdf");
+        }
 
         try
         {
@@ -82,6 +90,8 @@ public static class ReportPdfEndpoints
                 http.Request.Headers.Cookie.ToString(),
                 ct).ConfigureAwait(false);
 
+            await cache.SetBytesAsync(key, pdf, PdfCacheTtl, ct).ConfigureAwait(false);
+            http.Response.Headers["X-Report-Cache"] = "miss";
             return Results.File(pdf, "application/pdf", $"HealthSummary_{Sanitise(sid)}.pdf");
         }
         catch (RenderFailedException)
@@ -133,7 +143,7 @@ public static class ReportPdfEndpoints
     /// issued would withhold a file the lab already owns for a reason that has
     /// nothing to do with it. Every route that renders a report leaves this on.
     /// </param>
-    private static async Task<(bool Ok, IResult? Fail)> GateAsync(
+    private static async Task<(bool Ok, IResult? Fail, Reads.WorksheetRow? Row)> GateAsync(
         string sid,
         System.Security.Claims.ClaimsPrincipal principal,
         ScopeRepository scopes,
@@ -145,15 +155,15 @@ public static class ReportPdfEndpoints
         bool requireSignatory = true)
     {
         if (principal.UserId() is not int userId)
-            return (false, Results.Unauthorized());
+            return (false, Results.Unauthorized(), null);
         if (string.IsNullOrWhiteSpace(sid) || sid.Length > 50)
-            return (false, Results.BadRequest(new { error = "A SID is required." }));
+            return (false, Results.BadRequest(new { error = "A SID is required." }), null);
 
         var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
-        if (scope.IsDenied) return (false, Results.NotFound());
+        if (scope.IsDenied) return (false, Results.NotFound(), null);
 
         var row = await repo.GetBySidAsync(scope.ClientCodes, sid, ct).ConfigureAwait(false);
-        if (row is null) return (false, Results.NotFound());
+        if (row is null) return (false, Results.NotFound(), null);
 
         var lockState = await locks.GetAsync(sid, ct).ConfigureAwait(false);
         if (lockState.Locked)
@@ -166,7 +176,7 @@ public static class ReportPdfEndpoints
                 error = "BALANCE_LOCKED",
                 reason = lockState.Reason,
                 dueAmount = lockState.DueAmount,
-            }, statusCode: StatusCodes.Status423Locked));
+            }, statusCode: StatusCodes.Status423Locked), null);
         }
 
         // Last, and deliberately after the lock: a report with nobody to sign it
@@ -176,10 +186,38 @@ public static class ReportPdfEndpoints
         if (requireSignatory)
         {
             var signoff = await ReportSignoff.RequireAsync(extras, sid, loggers, ct).ConfigureAwait(false);
-            if (signoff.Refusal is not null) return (false, signoff.Refusal);
+            if (signoff.Refusal is not null) return (false, signoff.Refusal, null);
         }
 
-        return (true, null);
+        return (true, null, row);
+    }
+
+    /* ---------------------------------------------------------------------
+     * The finished-PDF cache.
+     *
+     * An issued report is immutable: its content changes only when someone
+     * reopens and re-saves the sample, and every such act bumps the sample's
+     * lastmodified_date. So the date IS the invalidation — it rides in the
+     * key, and a stale entry simply stops being addressed. Graphs can be
+     * attached in the LIS without touching the sample, so their count and
+     * newest id ride along too. TTL bounds Redis memory and doubles as the
+     * horizon for the one thing the key cannot see: a redeploy that changes
+     * the print layout itself. Bump the version to orphan everything at once.
+     * ------------------------------------------------------------------- */
+    private const string PdfCacheV = "1";
+    private static readonly TimeSpan PdfCacheTtl = TimeSpan.FromMinutes(45);
+
+    private static string PdfCacheKey(
+        string kind, string sid, DateTimeOffset? lastModified, string options) =>
+        $"rptpdf:{PdfCacheV}:{kind}:{sid.ToUpperInvariant()}:{lastModified?.UtcTicks ?? 0}:{options}";
+
+    /// <summary>count.maxid of the SID's graph attachments, without the bytes.</summary>
+    private static async Task<string> GraphFingerprintAsync(
+        GraphRepository graphs, string sid, bool wanted, CancellationToken ct)
+    {
+        if (!wanted) return "off";
+        var meta = await graphs.ListAsync(sid, ct).ConfigureAwait(false);
+        return meta.Count == 0 ? "0" : $"{meta.Count}.{meta[^1].Id}";
     }
 
     /// <summary>The report as a PDF on the Noble letterhead.</summary>
@@ -205,10 +243,23 @@ public static class ReportPdfEndpoints
         ILoggerFactory loggers,
         GraphRepository graphs,
         RenderClient render,
+        Caching.InfinityCache cache,
         CancellationToken ct)
     {
-        var (ok, fail) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct).ConfigureAwait(false);
+        var (ok, fail, row) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct).ConfigureAwait(false);
         if (!ok) return fail!;
+
+        // Everything that changes the bytes is in the key; the exclude list is
+        // already digits-and-commas by the time PrintQuery is done with it.
+        var graphFp = await GraphFingerprintAsync(graphs, sid, withGraph == true, ct).ConfigureAwait(false);
+        var key = PdfCacheKey("report", sid, row!.LastModifiedAt,
+            $"s{(split == true ? 1 : 0)}h{(headless == true ? 1 : 0)}g{graphFp}x{PrintQuery(split, exclude)}");
+
+        if (await cache.GetBytesAsync(key, ct).ConfigureAwait(false) is { } cached)
+        {
+            http.Response.Headers["X-Report-Cache"] = "hit";
+            return Results.File(cached, "application/pdf", $"Report_{Sanitise(sid)}.pdf");
+        }
 
         var attachments = await CollectGraphsAsync(graphs, sid, withGraph == true, ct).ConfigureAwait(false);
 
@@ -222,6 +273,8 @@ public static class ReportPdfEndpoints
                 http.Request.Headers.Cookie.ToString(),
                 ct).ConfigureAwait(false);
 
+            await cache.SetBytesAsync(key, pdf, PdfCacheTtl, ct).ConfigureAwait(false);
+            http.Response.Headers["X-Report-Cache"] = "miss";
             return Results.File(pdf, "application/pdf", $"Report_{Sanitise(sid)}.pdf");
         }
         catch (RenderFailedException)
@@ -245,6 +298,7 @@ public static class ReportPdfEndpoints
         ILoggerFactory loggers,
         GraphRepository graphs,
         RenderClient render,
+        Caching.InfinityCache cache,
         CancellationToken ct)
     {
         var sids = (body?.Sids ?? [])
@@ -263,6 +317,7 @@ public static class ReportPdfEndpoints
         // held up by the twentieth.
         var included = new List<RenderClient.ReportRequest>();
         var skipped = new List<object>();
+        var misses = new List<(int Index, string Key)>();
 
         /*
          * The merged document comes out in the LIS's own order, not the order
@@ -279,9 +334,10 @@ public static class ReportPdfEndpoints
          */
         sids = (await repo.OrderAsLisAsync(sids, ct).ConfigureAwait(false)).ToList();
 
+        var hits = 0;
         foreach (var sid in sids)
         {
-            var (ok, fail) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct).ConfigureAwait(false);
+            var (ok, fail, row) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct).ConfigureAwait(false);
             if (!ok)
             {
                 // Named separately from "unavailable": an operator can act on
@@ -303,6 +359,23 @@ public static class ReportPdfEndpoints
                 continue;
             }
 
+            // The batch shares the single route's cache, entry for entry. A hit
+            // travels as finished bytes for the renderer to staple; a miss is
+            // rendered individually below so ITS bytes land in the cache too —
+            // the second pull of the same PID assembles without a browser.
+            var graphFp = await GraphFingerprintAsync(graphs, sid, body!.WithGraph, ct).ConfigureAwait(false);
+            var query = PrintQuery(body.Split, null, body.SplitDept == true);
+            var key = PdfCacheKey("report", sid, row!.LastModifiedAt,
+                $"s{(body.Split == true ? 1 : 0)}d{(body.SplitDept == true ? 1 : 0)}h{(body.Headless == true ? 1 : 0)}g{graphFp}x{query}");
+
+            if (await cache.GetBytesAsync(key, ct).ConfigureAwait(false) is { } cachedDoc)
+            {
+                hits++;
+                included.Add(new RenderClient.ReportRequest(
+                    Url: null, PdfB64: Convert.ToBase64String(cachedDoc)));
+                continue;
+            }
+
             included.Add(new RenderClient.ReportRequest(
                 // pdf=1 matters here too. Without it the print route renders in
                 // its preview shape — tick boxes down the left and a letterhead
@@ -312,15 +385,10 @@ public static class ReportPdfEndpoints
                 // A batch has no per-report selection: it comes from ticking
                 // rows on the worksheet, not from opening each one, so every
                 // report goes out whole.
-                //
-                // Split is accepted but nothing sends it yet — the batch bar
-                // offers only "include graphs". Left at the continuous layout
-                // rather than quietly adopting the preview's new default, which
-                // would change what an existing batch download looks like
-                // without anyone asking for it.
-                Url: $"/print/report/{Uri.EscapeDataString(sid)}{PrintQuery(body!.Split, null, body.SplitDept == true)}",
+                Url: $"/print/report/{Uri.EscapeDataString(sid)}{query}",
                 Attachments: await CollectGraphsAsync(graphs, sid, body.WithGraph, ct).ConfigureAwait(false),
                 Headless: body.Headless));
+            misses.Add((included.Count - 1, key));
         }
 
         if (included.Count == 0)
@@ -328,7 +396,39 @@ public static class ReportPdfEndpoints
 
         try
         {
-            var pdf = await render.RenderAsync(included, http.Request.Headers.Cookie.ToString(), ct).ConfigureAwait(false);
+            /*
+             * Misses render one document per call, in parallel, capped at the
+             * renderer's own page ceiling — then everything, hit and fresh
+             * alike, goes back as finished bytes for one concatenation pass.
+             * Two trips instead of one, but each fresh document comes back
+             * alone, which is what lets it be CACHED; the old single-trip
+             * shape returned only the merged batch, so a repeated PID
+             * download re-rendered every report every time.
+             */
+            var cookieHeader = http.Request.Headers.Cookie.ToString();
+            if (misses.Count > 0)
+            {
+                using var gate = new SemaphoreSlim(3);
+                await Task.WhenAll(misses.Select(async m =>
+                {
+                    await gate.WaitAsync(ct).ConfigureAwait(false);
+                    try
+                    {
+                        var one = await render.RenderAsync([included[m.Index]], cookieHeader, ct).ConfigureAwait(false);
+                        await cache.SetBytesAsync(m.Key, one, PdfCacheTtl, ct).ConfigureAwait(false);
+                        included[m.Index] = new RenderClient.ReportRequest(
+                            Url: null, PdfB64: Convert.ToBase64String(one));
+                    }
+                    finally
+                    {
+                        gate.Release();
+                    }
+                })).ConfigureAwait(false);
+            }
+
+            http.Response.Headers["X-Report-Cache"] = $"{hits}/{included.Count}";
+
+            var pdf = await render.RenderAsync(included, cookieHeader, ct).ConfigureAwait(false);
 
             // The skip list rides on a header: the body has to be the PDF, and a
             // silent short delivery ("I asked for 20, I got 19") is exactly the
@@ -362,8 +462,8 @@ public static class ReportPdfEndpoints
         GraphRepository graphs,
         CancellationToken ct)
     {
-        var (ok, fail) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct,
-                                         requireSignatory: false).ConfigureAwait(false);
+        var (ok, fail, _) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct,
+                                            requireSignatory: false).ConfigureAwait(false);
         if (!ok) return fail!;
 
         if (meta == true)

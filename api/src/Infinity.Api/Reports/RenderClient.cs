@@ -30,12 +30,19 @@ public sealed class RenderClient(HttpClient http, ILogger<RenderClient> log)
     };
 
     /// <summary>One report in a render request: a print URL plus anything stapled after it.</summary>
+    /// <param name="PdfB64">
+    /// A FINISHED report — letterhead, numbers, attachments already in — that
+    /// only needs concatenating into the batch. The cache's currency: a batch
+    /// re-downloaded minutes later renders nothing and merely re-staples.
+    /// When set, Url is ignored.
+    /// </param>
     public sealed record ReportRequest(
-        [property: JsonPropertyName("url")] string Url,
+        [property: JsonPropertyName("url")] string? Url,
         [property: JsonPropertyName("attachments")] IReadOnlyList<Attachment>? Attachments = null,
         [property: JsonPropertyName("headless")] bool? Headless = null,
         [property: JsonPropertyName("pageNumbers")] bool? PageNumbers = null,
-        [property: JsonPropertyName("pageNumberY")] double? PageNumberY = null);
+        [property: JsonPropertyName("pageNumberY")] double? PageNumberY = null,
+        [property: JsonPropertyName("pdfB64")] string? PdfB64 = null);
 
     /// <summary>A graph or image to staple after a report's own pages.</summary>
     public sealed record Attachment(

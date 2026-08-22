@@ -33,7 +33,7 @@ const PORT = Number(process.env.PORT ?? 8090);
 const BASE_URL = process.env.RENDER_BASE_URL ?? 'http://web';
 const NAV_TIMEOUT = Number(process.env.RENDER_NAV_TIMEOUT_MS ?? 45_000);
 /** Pages open at once. A batch of 50 reports must not open 50 tabs. */
-const CONCURRENCY = Number(process.env.RENDER_CONCURRENCY ?? 3);
+const CONCURRENCY = Number(process.env.RENDER_CONCURRENCY ?? 4);
 
 const LETTERHEAD_PATH = path.join(process.cwd(), 'report-assets', 'letterhead.pdf');
 let letterheadBytes = null;
@@ -99,21 +99,43 @@ async function renderContent(url, cookieHeader) {
     const jar = cookiesFor(cookieHeader, target.hostname);
     if (jar.length) await page.setCookie(...jar);
 
-    const res = await page.goto(target.toString(), { waitUntil: 'networkidle2', timeout: NAV_TIMEOUT });
+    /*
+     * Waits, in order of what they actually guarantee:
+     *
+     *   domcontentloaded   the document exists — nothing more. The old
+     *                      networkidle2 gate here charged a fixed 500ms of
+     *                      network silence on top of everything below, per
+     *                      report, and guaranteed nothing the later waits
+     *                      don't.
+     *   data-print-ready   the page's own contract: data fetched, painted.
+     *   fonts.ready        text metrics are final — a PDF taken earlier can
+     *                      reflow mid-photograph.
+     *   networkidle(200)   images the ready flag knows nothing about (QR,
+     *                      signatures, the smart cover art). Usually already
+     *                      settled by now, so this is ~200ms — and best-effort,
+     *                      because a stray long request must not fail a render
+     *                      that is visibly complete.
+     */
+    const t0 = Date.now();
+    const res = await page.goto(target.toString(), { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
     if (res && res.status() >= 400) {
       throw new Error(`print route returned HTTP ${res.status()} for ${target.pathname}`);
     }
-    // The print route sets this once its data has arrived and it has painted.
-    // Without it networkidle2 can fire during the SPA's own loading state and
-    // the PDF is a picture of a spinner.
+    const tNav = Date.now();
     await page.waitForSelector('[data-print-ready="true"]', { timeout: NAV_TIMEOUT });
+    const tReady = Date.now();
+    await page.evaluate(() => document.fonts.ready.then(() => undefined));
+    await page.waitForNetworkIdle({ idleTime: 200, timeout: 8_000 }).catch(() => {});
+    const tSettle = Date.now();
 
-    return await page.pdf({
+    const pdf = await page.pdf({
       format: 'A4',
       printBackground: true,
       preferCSSPageSize: true,
       margin: { top: '0', right: '0', bottom: '0', left: '0' },
     });
+    console.log(`page ${target.pathname} nav=${tNav - t0} ready=${tReady - tNav} settle=${tSettle - tReady} pdf=${Date.now() - tSettle}`);
+    return pdf;
   } finally {
     await page.close().catch(() => {});
   }
@@ -265,6 +287,10 @@ const server = createServer(async (req, res) => {
       }
 
       const rendered = await mapLimit(reports, CONCURRENCY, async (r) => {
+        // A finished document — the API's cache hit — skips the browser, the
+        // letterhead and the stapling: all of that is already baked into it.
+        if (r.pdfB64) return Buffer.from(r.pdfB64, 'base64');
+
         let doc = await compositeOntoLetterhead(
           await renderContent(r.url, body.cookie ?? null),
           { headless: r.headless, pageNumbers: r.pageNumbers, pageNumberY: r.pageNumberY },

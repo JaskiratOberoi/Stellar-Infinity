@@ -88,6 +88,54 @@ public sealed partial class InfinityCache : IAsyncDisposable
         return _local.TryGetValue(Key(key), out string? local) ? local : null;
     }
 
+    /// <summary>Read cached bytes, or null. Never throws.</summary>
+    public async Task<byte[]?> GetBytesAsync(string key, CancellationToken ct = default)
+    {
+        if (_db is not null)
+        {
+            try
+            {
+                var value = await _db.StringGetAsync(Key(key)).WaitAsync(ct).ConfigureAwait(false);
+                if (value.HasValue) return (byte[]?)value;
+                return null;
+            }
+            catch (Exception ex)
+            {
+                LogDegraded(_logger, "getbytes", ex.Message);
+            }
+        }
+
+        return _local.TryGetValue(Key(key), out byte[]? local) ? local : null;
+    }
+
+    /// <summary>
+    /// Write cached bytes. Never throws. Redis stores binary natively, so a
+    /// PDF goes in as-is — base64 would add a third to every value for
+    /// nothing. The in-process fallback carries the value's size so a burst of
+    /// large documents evicts instead of accumulating.
+    /// </summary>
+    public async Task SetBytesAsync(string key, byte[] value, TimeSpan ttl, CancellationToken ct = default)
+    {
+        if (_db is not null)
+        {
+            try
+            {
+                await _db.StringSetAsync(Key(key), value, ttl).WaitAsync(ct).ConfigureAwait(false);
+                return;
+            }
+            catch (Exception ex)
+            {
+                LogDegraded(_logger, "setbytes", ex.Message);
+            }
+        }
+
+        _local.Set(Key(key), value, new MemoryCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = ttl,
+            Size = value.Length,
+        });
+    }
+
     /// <summary>Write a cached string. Never throws.</summary>
     public async Task SetAsync(string key, string value, TimeSpan ttl, CancellationToken ct = default)
     {
