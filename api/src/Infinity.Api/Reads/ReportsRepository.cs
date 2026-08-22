@@ -154,7 +154,9 @@ public sealed record WorksheetListPage(
     int Total,
     int Page,
     int PageSize,
-    DateTimeOffset AsOf)
+    DateTimeOffset AsOf,
+    /// <summary>Distinct patients in the whole filtered set, not this page.</summary>
+    int PatientCount = 0)
 {
     public int PageCount => PageSize > 0 ? (Total + PageSize - 1) / PageSize : 0;
 }
@@ -382,13 +384,18 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
 
                 var rows = new List<WorksheetRow>();
                 var total = 0;
+                var patients = 0;
 
                 while (await reader.ReadAsync(inner).ConfigureAwait(false))
                 {
                     // COUNT(*) OVER() repeats on every row; reading it once is
                     // enough, and a page with no rows leaves it at zero, which
                     // is the right answer for "nothing matched".
-                    if (rows.Count == 0) total = reader.NullableInt("total_count") ?? 0;
+                    if (rows.Count == 0)
+                    {
+                        total = reader.NullableInt("total_count") ?? 0;
+                        patients = TryInt(reader, "patient_count") ?? 0;
+                    }
 
                     rows.Add(new WorksheetRow(
                         Sid: reader.Str("sid") ?? "",
@@ -419,7 +426,7 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
                         SpecimenRank: TryInt(reader, "specimen_rank")));
                 }
 
-                return new WorksheetListPage(rows, total, pageNo, size, NobleTime.ToIst(snapshot));
+                return new WorksheetListPage(rows, total, pageNo, size, NobleTime.ToIst(snapshot), patients);
             }, token), ct).ConfigureAwait(false);
     }
 

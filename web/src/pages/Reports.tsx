@@ -4,6 +4,7 @@ import { downloadFile, fmtDateTime } from '../lib/format';
 import { ReportViewer } from './ReportViewer';
 import { SmartReportModal } from './SmartReport';
 import { InfinityLoader } from '../components/InfinityLoader';
+import { Pager } from '../components/Pager';
 import { useAuth } from '../auth/AuthContext';
 import { TestList } from '../components/TestList';
 import {
@@ -99,6 +100,8 @@ export function Reports() {
    */
   /** The PID whose complete report is being prepared, so only its own row spins. */
   const [pidBusy, setPidBusy] = useState<number | null>(null);
+  const [total, setTotal] = useState(0);
+  const [patients, setPatients] = useState(0);
   const [withGraphs, setWithGraphs] = useState(true);
   const [letterhead, setLetterhead] = useLetterhead();
   const [merging, setMerging] = useState(false);
@@ -238,9 +241,13 @@ export function Reports() {
       // which reads as "that is all there is" when it is not. The worksheet
       // learned this the same way — see PENDING_STATUSES there.
       p.set('statusIds', REPORTABLE_STATUSES.join(','));
-      const r = await api.get<{ rows: WorksheetRow[]; count: number; scope: string }>(`/api/reports/?${p}`);
+      const r = await api.get<{
+        rows: WorksheetRow[]; count: number; total: number; patients: number; scope: string;
+      }>(`/api/reports/?${p}`);
       setRows(r.rows);
       setScope(r.scope);
+      setTotal(r.total);
+      setPatients(r.patients ?? 0);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load the worksheet.');
     } finally {
@@ -263,11 +270,11 @@ export function Reports() {
         <div>
           <h1 className="page__title">Reporting</h1>
           <p className="page__sub">
-            {rows.length} sample{rows.length === 1 ? '' : 's'}
-            {/* Grouping is always on, so the count of samples alone no longer
-                describes the list: it is worth saying how many of those rows
-                are the same person, which is what the brackets are showing. */}
-            {multiSamplePatients > 0 && ` · ${multiSamplePatients} patient${multiSamplePatients === 1 ? '' : 's'} with more than one sample`}
+            {/* The FILTERED set, not the page — a reconciliation counts the
+                day, and the day rarely fits one page. */}
+            {total.toLocaleString()} sample{total === 1 ? '' : 's'}
+            {patients > 0 && ` · ${patients.toLocaleString()} patient${patients === 1 ? '' : 's'}`}
+            {multiSamplePatients > 0 && ` · ${multiSamplePatients} on this page with more than one sample`}
             {scope && ` · ${scope === 'all' ? 'all centres' : scope}`}
           </p>
         </div>
@@ -476,16 +483,11 @@ export function Reports() {
             </table>
           </div>
 
-          <div className="row" style={{ justifyContent: 'center', marginTop: '1rem' }}>
-            <button className="btn btn--ghost btn--sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-              Previous
-            </button>
-            <span className="muted" style={{ fontSize: '.78rem' }}>Page {page}</span>
-            {/* The worksheet procedure pages without returning a total, so
-                "next" is offered whenever the page came back full. */}
-            <button className="btn btn--ghost btn--sm" disabled={rows.length < 50} onClick={() => setPage((p) => p + 1)}>
-              Next
-            </button>
+          {/* The shared pager — the procedure has returned a real total for a
+              while; this page was the last one still guessing from a full
+              page. */}
+          <div style={{ marginTop: '1rem' }}>
+            <Pager page={page} pageSize={50} total={total} noun="sample" onPage={setPage} />
           </div>
         </>
       )}

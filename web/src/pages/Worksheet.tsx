@@ -116,6 +116,7 @@ export function Worksheet() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
   const [total, setTotal] = useState(0);
+  const [patients, setPatients] = useState(0);
   // The instant the current result set describes. Pinned on the first request
   // and echoed back while paging, so registrations arriving mid-walk cannot
   // shuffle a sample from the page ahead onto a page already passed.
@@ -156,13 +157,14 @@ export function Worksheet() {
       if (asOfRef.current && page > 1) p.set('asOf', asOfRef.current);
 
       const r = await api.get<{
-        rows: WorksheetRow[]; count: number; total: number;
+        rows: WorksheetRow[]; count: number; total: number; patients: number;
         page: number; pageSize: number; pageCount: number; scope: string; asOf: string;
       }>(`/api/reports/?${p}`);
 
       setRows(r.rows);
       setScope(r.scope);
       setTotal(r.total);
+      setPatients(r.patients ?? 0);
       if (page === 1) { asOfRef.current = r.asOf; setAsOf(r.asOf); }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load the worklist.');
@@ -308,6 +310,7 @@ export function Worksheet() {
                 below, so a page is never mistaken for the whole result set. */}
             {total.toLocaleString()} sample{total === 1 ? '' : 's'} match
             {total === 1 ? 'es' : ''} these filters
+            {patients > 0 && ` · ${patients.toLocaleString()} patient${patients === 1 ? '' : 's'}`}
             {scope && ` · ${scope === 'all' ? 'all centres' : scope}`}
             {/* Stated whenever the list is pinned. Beyond page 1 the operator is
                 walking a fixed set, and they should know it is a moment in time

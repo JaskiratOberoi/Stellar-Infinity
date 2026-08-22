@@ -55,9 +55,21 @@ export function Pager({
           <button className="btn btn--ghost btn--sm" disabled={page <= 1}
                   onClick={() => onPage(page - 1)}>Previous</button>
 
-          <span className="muted" style={{ fontSize: '.78rem', padding: '0 .5rem' }}>
-            Page {page.toLocaleString()} of {pageCount.toLocaleString()}
-          </span>
+          {/* The pages themselves, so a known destination is one click, not
+              a walk. Windowed around the current page: fifty page buttons
+              would be a slider wearing button clothes. */}
+          {pageWindow(page, pageCount).map((p, i) =>
+            p === GAP ? (
+              <span key={`gap${i}`} className="muted" style={{ padding: '0 .15rem' }}>…</span>
+            ) : (
+              <button key={p}
+                      className={`btn btn--sm ${p === page ? 'btn--primary' : 'btn--ghost'}`}
+                      aria-current={p === page ? 'page' : undefined}
+                      disabled={p === page}
+                      onClick={() => onPage(p)}>
+                {p.toLocaleString()}
+              </button>
+            ))}
 
           <button className="btn btn--ghost btn--sm" disabled={page >= pageCount}
                   onClick={() => onPage(page + 1)}>Next</button>
@@ -77,4 +89,32 @@ export function Pager({
       )}
     </div>
   );
+}
+
+const GAP = -1;
+
+/**
+ * The visible page numbers: all of them up to nine, else the ends and a
+ * window round the current page, with gaps marked. Never two numbers hidden
+ * behind one ellipsis — a gap of exactly one is shown as the number itself,
+ * which is why the window maths uses the neighbours' distance from the ends.
+ */
+function pageWindow(page: number, count: number): number[] {
+  if (count <= 9) return Array.from({ length: count }, (_, i) => i + 1);
+
+  const around = [page - 2, page - 1, page, page + 1, page + 2]
+    .filter((p) => p >= 1 && p <= count);
+
+  const out: number[] = [];
+  if (around[0] > 1) {
+    out.push(1);
+    if (around[0] > 2) out.push(around[0] === 3 ? 2 : GAP);
+  }
+  out.push(...around);
+  const last = around[around.length - 1];
+  if (last < count) {
+    if (last < count - 1) out.push(last === count - 2 ? count - 1 : GAP);
+    out.push(count);
+  }
+  return out;
 }

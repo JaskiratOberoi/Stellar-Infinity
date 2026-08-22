@@ -265,7 +265,7 @@ public static class ApiEndpoints
             return Results.Ok(new
             {
                 rows = Array.Empty<object>(),
-                count = 0, total = 0, page = 1, pageSize, pageCount = 0,
+                count = 0, total = 0, patients = 0, page = 1, pageSize, pageCount = 0,
                 scope = "none",
             });
         }
@@ -323,12 +323,19 @@ public static class ApiEndpoints
                 r.Age, r.AgeUnit, r.SampleDrawn, r.RegisteredAt, r.LastModifiedAt,
                 r.StatusCode, r.Status, r.TestNames, r.OrderNumber, r.BillNumber,
                 r.ClinicalHistory,
+                // The tube and its bench rank — the grouping order both lists
+                // draw. An explicit projection swallows new fields silently,
+                // which is exactly what happened to these two at first.
+                r.SampleType, r.SpecimenRank,
                 SmartReport = smartPids.Contains(r.Pid),
             }),
             // count is this page; total is the whole filtered set. Both are
             // sent because conflating them is what made the list look truncated.
             count = result.Rows.Count,
             total = result.Total,
+            // Distinct patients across the whole filtered set — the second
+            // number an operator reconciling a day actually wants.
+            patients = result.PatientCount,
             page = result.Page,
             pageSize = result.PageSize,
             pageCount = result.PageCount,

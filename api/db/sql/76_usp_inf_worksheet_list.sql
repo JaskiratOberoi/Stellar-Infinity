@@ -261,9 +261,13 @@ BEGIN
         -- The count of the FILTERED set, before paging. This is what lets the
         -- client say "showing 51-100 of 3,412" instead of guessing.
         COUNT(*) OVER() AS total_count,
+        -- Distinct patients over the same set. COUNT(DISTINCT) has no windowed
+        -- form, so this is the textbook substitute: the highest dense rank
+        -- over pid IS the number of distinct pids, in the same single pass.
+        MAX(H.pid_rank) OVER () AS patient_count,
         -- Echoed back by the client on every later page so the set stays fixed.
         @snapshot AS as_of
-    FROM H
+    FROM (SELECT H0.*, pid_rank = DENSE_RANK() OVER (ORDER BY H0.pid) FROM H H0) H
     -- sid is unique per sample, so this ordering is total. Without the
     -- tiebreak, OFFSET paging over tied regd_at values silently duplicates and
     -- drops rows between pages.
