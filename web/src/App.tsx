@@ -20,6 +20,7 @@ import { Reports } from './pages/Reports';
 import { Worksheet } from './pages/Worksheet';
 import { AutoAuthSettings } from './pages/AutoAuthSettings';
 import { Instruments } from './pages/Instruments';
+import { Interfacing } from './pages/Interfacing';
 import { AdminUsers } from './pages/AdminUsers';
 import { InvoiceConfigPage } from './pages/InvoiceConfig';
 import { ThemeToggle } from './theme/ThemeToggle';
@@ -164,6 +165,10 @@ const NAV: NavEntry[] = [
       { to: '/worksheet', label: 'Worksheet', icon: 'worksheet', cap: 'result:enter' },
       { to: '/reports', label: 'Reporting', icon: 'reporting', cap: 'report:view' },
       { to: '/instruments', label: 'Instruments', icon: 'instruments', cap: 'result:enter' },
+      // The remote-lab middleware fleet. analytics:view rather than
+      // result:enter — this is monitoring, not bench work, and the numbers it
+      // shows (throughput, entry sources) are the dashboard's kind of numbers.
+      { to: '/interfacing', label: 'Interfacing', icon: 'instruments', cap: 'analytics:view' },
       // "Jarvis" alone: the page's own heading already reads
       // "Jarvis · auto-authorisation". With the bench rather than with Admin
       // because what it governs is result sign-off.
@@ -363,6 +368,7 @@ export function App() {
         <Route path="/worksheet" element={can('result:enter') ? <Worksheet /> : <Navigate to="/" replace />} />
         <Route path="/reports" element={can('report:view') ? <Reports /> : <Navigate to="/" replace />} />
         <Route path="/instruments" element={can('result:enter') ? <Instruments /> : <Navigate to="/" replace />} />
+        <Route path="/interfacing" element={can('analytics:view') ? <Interfacing /> : <Navigate to="/" replace />} />
         <Route
           path="/settings/auto-auth"
           element={can('autoauth:manage') ? <AutoAuthSettings /> : <Navigate to="/" replace />}

@@ -1143,3 +1143,145 @@ export const attachmentApi = {
   href: (sid: string, id: number) =>
     `/api/worksheet/${encodeURIComponent(sid)}/attachments/${id}`,
 };
+
+/* ---- interfacing: remote lab sites running Stellar Synapse ---- */
+
+/** disconnected | stuck-connecting | stale — derived server-side, see OverviewAsync. */
+export interface InstrumentAlert {
+  kind: string;
+  since: string | null;
+}
+
+export interface SiteInstrument {
+  key: string;
+  name: string | null;
+  driverId: string | null;
+  protocol: string | null;
+  /** tcp-client | tcp-server | serial */
+  transport: string | null;
+  address: string | null;
+  enabled: boolean;
+  /** online | offline | listening | error | connecting | unknown */
+  status: string;
+  statusSince: string | null;
+  lastMessageAt: string | null;
+  /** Cumulative since the agent started, as the agent counts them. */
+  messagesReceived: number;
+  resultsProcessed: number;
+  resultParamsProcessed: number;
+  errors: number;
+  todaySamples: number;
+  todayResults: number;
+  todayErrors: number;
+  updatedAt: string | null;
+  alert: InstrumentAlert | null;
+}
+
+export interface SiteOverview {
+  id: number;
+  code: string;
+  name: string;
+  location: string | null;
+  businessUnitId: number | null;
+  businessUnitName: string | null;
+  isActive: boolean;
+  /** The agent reported within the freshness window and the site is active. */
+  online: boolean;
+  lastSeenAt: string | null;
+  agentVersion: string | null;
+  labName: string | null;
+  labLocation: string | null;
+  instruments: SiteInstrument[];
+}
+
+/** One alert flattened with its site, for the banner strip. */
+export interface InterfacingAlert {
+  siteId: number;
+  siteCode: string;
+  siteName: string;
+  instrumentKey: string;
+  instrumentName: string | null;
+  kind: string;
+  since: string | null;
+}
+
+export interface InterfacingOverview {
+  sites: SiteOverview[];
+  alerts: InterfacingAlert[];
+}
+
+export interface InterfacingDailyRow {
+  siteId: number;
+  code: string;
+  name: string;
+  instrumentKey: string;
+  instrumentName: string | null;
+  /** yyyy-MM-dd */
+  day: string;
+  samples: number;
+  results: number;
+  errors: number;
+}
+
+export interface ResultSourceRow {
+  /** yyyy-MM-dd — the sample's registration day. */
+  day: string;
+  businessUnitId: number | null;
+  businessUnitCode: string | null;
+  businessUnitName: string | null;
+  /** Null for manual entries; 'IMPORT' or the machine name otherwise. */
+  machineName: string | null;
+  /** manual | interfaced */
+  entryMode: string;
+  resultCount: number;
+}
+
+export interface LabSite {
+  id: number;
+  code: string;
+  name: string;
+  location: string | null;
+  businessUnitId: number | null;
+  businessUnitName: string | null;
+  apiKeyHint: string | null;
+  isActive: boolean;
+  agentVersion: string | null;
+  labName: string | null;
+  labLocation: string | null;
+  createdAt: string | null;
+  lastSeenAt: string | null;
+  instrumentCount: number;
+}
+
+export const interfacingApi = {
+  overview: () => api.get<InterfacingOverview>('/api/interfacing/overview'),
+
+  daily: (from: string, to: string) =>
+    api.get<{ rows: InterfacingDailyRow[]; from: string; to: string }>(
+      `/api/interfacing/daily?from=${from}&to=${to}`),
+
+  /** Cached server-side for five minutes per range — it aggregates the live LIS. */
+  resultSources: (from: string, to: string) =>
+    api.get<{ rows: ResultSourceRow[]; from: string; to: string }>(
+      `/api/interfacing/result-sources?from=${from}&to=${to}`),
+
+  sites: () => api.get<{ sites: LabSite[] }>('/api/interfacing/sites'),
+
+  /**
+   * Create or update a site. The API mints the key server-side; the response
+   * carries it in plaintext EXACTLY ONCE (create or rotateKey) — only its hash
+   * is stored, so it can never be shown again.
+   */
+  upsertSite: (body: {
+    id?: number | null;
+    code: string;
+    name: string;
+    location?: string | null;
+    businessUnitId?: number | null;
+    isActive: boolean;
+    rotateKey?: boolean;
+  }) => api.post<{ site: LabSite; apiKey: string | null }>('/api/interfacing/sites', body),
+
+  businessUnits: () =>
+    api.get<{ units: BusinessUnit[] }>('/api/interfacing/business-units'),
+};

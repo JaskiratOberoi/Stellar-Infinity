@@ -16,6 +16,14 @@ public static class RateLimitPolicies
     public const string Instrument = "instrument";
 
     /// <summary>
+    /// Remote lab sites' Synapse agents (ping + status reports). A well-behaved
+    /// agent reports every few seconds at most, so 120/min is head-room, not a
+    /// budget; the cap exists to stop a misconfigured agent in a retry loop
+    /// from saturating the API.
+    /// </summary>
+    public const string Site = "site";
+
+    /// <summary>
     /// Guards the auto-authorization unlock password. See
     /// <see cref="AddInfinityRateLimiting"/> for the limit and why it is
     /// partitioned by user rather than by IP.
@@ -91,6 +99,26 @@ public static class RateLimitPolicies
                 return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
                 {
                     PermitLimit = 600,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                });
+            });
+
+            options.AddPolicy(Site, http =>
+            {
+                // Partitioned per site, so one faulty lab's agent cannot starve
+                // the others. Falls back to IP when the header is absent — an
+                // unidentified caller is not a site we want to be generous
+                // with anyway. Same construction as the Instrument policy.
+                var code = http.Request.Headers["X-Site-Code"].ToString();
+                var key = string.IsNullOrWhiteSpace(code)
+                    ? http.Connection.RemoteIpAddress?.ToString() ?? "unknown"
+                    : code.ToUpperInvariant();
+
+                return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 120,
                     Window = TimeSpan.FromMinutes(1),
                     QueueLimit = 0,
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst,

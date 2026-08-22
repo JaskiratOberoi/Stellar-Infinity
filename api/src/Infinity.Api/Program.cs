@@ -97,6 +97,10 @@ builder.Services.AddSingleton<Infinity.Api.Worksheet.InwardRepository>();
 builder.Services.AddSingleton<Infinity.Api.Instruments.InstrumentRepository>();
 builder.Services.AddSingleton<Infinity.Api.Instruments.InstrumentAuthenticator>();
 
+// ---- interfacing (remote lab sites running Stellar Synapse) --------------
+builder.Services.AddSingleton<Infinity.Api.Interfacing.SiteAuthenticator>();
+builder.Services.AddSingleton<Infinity.Api.Interfacing.InterfacingRepository>();
+
 // Auto-authorization unlock secret. Validated at STARTUP rather than on first
 // use: a malformed hash makes the gate fail closed, and an operator would
 // otherwise discover that only when they tried to change a setting and were
@@ -249,6 +253,7 @@ app.MapAuthEndpoints();
 app.MapAdminEndpoints();
 app.MapWorksheetEndpoints();
 app.MapInstrumentEndpoints();
+app.MapInterfacingEndpoints();
 app.MapOrderEntryEndpoints();
 app.MapAccessionEndpoints();
 app.MapInwardEndpoints();
