@@ -314,7 +314,32 @@ export function PrintReport() {
         firstInDept = false;
       }
     }
-    return out;
+    /*
+     * The vitamin pair. B12 and D are the two commonly co-ordered standalones
+     * that both carry long clinical notes, which is exactly what makes each
+     * its own section — and two one-test sheets out of one blood draw reads
+     * as padding to the clinician holding it. When both are present in a
+     * department, the later folds into the earlier: one section, one sheet in
+     * split mode, adjacent in the continuous flow. Content taller than a page
+     * still paginates normally — "together" is the promise, not "cramped".
+     */
+    const isVitamin = (sec: Section) =>
+      sec.entries.length === 1
+      && sec.entries[0].item.kind === 'single'
+      && /vit(?:amin)?\s*\.?-?\s*(d3?\b|b\s*-?\s*12\b)/i.test(
+        sec.entries[0].item.row?.name ?? '');
+
+    const merged: Section[] = [];
+    const vitaminHome = new Map<string, Section>();
+    for (const sec of out) {
+      if (isVitamin(sec)) {
+        const home = vitaminHome.get(sec.deptName);
+        if (home) { home.entries.push(...sec.entries); continue; }
+        vitaminHome.set(sec.deptName, sec);
+      }
+      merged.push(sec);
+    }
+    return merged;
   }, [report, interactive, excluded]);
 
   /* Sections re-joined into whole departments, for ?split=dept. Built from

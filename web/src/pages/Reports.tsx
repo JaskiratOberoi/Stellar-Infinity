@@ -31,6 +31,10 @@ export interface WorksheetRow {
   orderNumber: string | null;
   billNumber: string | null;
   clinicalHistory: string | null;
+  /** Specimen, e.g. "WB - EDTA". */
+  sampleType?: string | null;
+  /** 1 EDTA · 2 fluoride · 3 serum · 4 urine · 5 the rest. */
+  specimenRank?: number | null;
   /**
    * Did this patient's order include the paid Smart Report (SMART-RPT)?
    *
@@ -131,7 +135,15 @@ export function Reports() {
       if (!byPid.has(key)) { byPid.set(key, []); order.push(key); }
       byPid.get(key)!.push(r);
     }
-    return order.map((pid) => ({ pid, rows: byPid.get(pid)! }));
+    return order.map((pid) => ({
+      pid,
+      // Bench order within the patient: EDTA, fluoride, serum, urine, then
+      // the rest — the order the tubes are picked up, and the order their
+      // reports combine in the PID download. The list's own row order breaks
+      // ties, so two serum tubes keep their chronology.
+      rows: [...byPid.get(pid)!].sort(
+        (a, b) => (a.specimenRank ?? 5) - (b.specimenRank ?? 5)),
+    }));
   }, [rows]);
 
   /** Flattened rows carrying what the table needs to band and bracket a group. */

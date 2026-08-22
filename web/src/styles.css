@@ -4223,3 +4223,12 @@ html:has(.rcpt), body:has(.rcpt) {
 
 @page receipt { size: A4; margin: 0; }
 @media print { .rcpt { page: receipt; padding: 18mm; } }
+
+/* The small line under a stat in the balance card — headroom before reports
+   hold, or the hold itself. Tighter and dimmer than the value it sits under. */
+.clienthome__hint {
+  margin: .2rem 0 0;
+  font-size: .72rem;
+  color: var(--ink-dim);
+}
+.clienthome__hint--warn { color: var(--danger); font-weight: 600; }

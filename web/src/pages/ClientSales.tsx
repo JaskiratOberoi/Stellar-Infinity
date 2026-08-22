@@ -112,10 +112,16 @@ export function ClientSales() {
             {p.label}
           </button>
         ))}
+        {/* width:auto, because .input--sm is 100% by default — which made each
+            date box claim the whole row and pushed the pair onto two lines of
+            their own. They belong inline with the presets, sized to hold a
+            date and nothing more. */}
         <input className="input input--sm" type="date" value={from} max={to}
+               style={{ width: 'auto', flex: '0 0 auto' }}
                onChange={(e) => { setFrom(e.target.value); setPage(1); }} aria-label="From date" />
         <span className="muted">to</span>
         <input className="input input--sm" type="date" value={to} min={from} max={today}
+               style={{ width: 'auto', flex: '0 0 auto' }}
                onChange={(e) => { setTo(e.target.value); setPage(1); }} aria-label="To date" />
       </div>
 

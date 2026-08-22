@@ -167,12 +167,28 @@ BEGIN
             P.order_number,
             P.bill_number,
             S.Sample_Comments       AS sample_comments,
-            S.Sample_ClinicalHistory AS clinical_history
+            S.Sample_ClinicalHistory AS clinical_history,
+            SM.Sampletype           AS sample_type,
+            -- The bench walks a patient's tubes in a fixed order: EDTA,
+            -- fluoride (the NaF plasma family), serum, urine, then whatever
+            -- else. Matched on the NAME because the master holds 150 rows of
+            -- freehand variants ("Plasma- NaF (F)", "24 Hr Urine Collection")
+            -- and an id list would rot the first time someone adds one.
+            CASE
+                WHEN UPPER(SM.Sampletype) LIKE '%EDTA%' THEN 1
+                WHEN UPPER(SM.Sampletype) LIKE '%NAF%'
+                  OR UPPER(SM.Sampletype) LIKE '%FLUORIDE%'
+                  OR UPPER(SM.Sampletype) LIKE '%FLOURIDE%' THEN 2
+                WHEN UPPER(SM.Sampletype) LIKE '%SERUM%' THEN 3
+                WHEN UPPER(SM.Sampletype) LIKE '%URINE%' THEN 4
+                ELSE 5
+            END AS specimen_rank
         FROM dbo.tbl_med_mcc_patient_samples S
         INNER JOIN dbo.tbl_med_mcc_patient_master P ON S.patient_id = P.id
         INNER JOIN dbo.tbl_med_mcc_unit_master U ON P.mcc_code = U.id
         LEFT JOIN dbo.tbl_med_business_unit_master BU ON BU.id = S.business_unit_id
         LEFT JOIN dbo.tbl_med_mcc_patient_samples_status_master STAT ON STAT.id = S.sample_status
+        LEFT JOIN dbo.tbl_med_sample_master SM ON SM.id = S.sampleid
         WHERE S.modifieddate BETWEEN @from AND @to
           AND S.sample_status > 1
           AND (@statusCount = 0 OR EXISTS (SELECT 1 FROM @statuses st WHERE st.status_id = S.sample_status))
@@ -240,6 +256,8 @@ BEGIN
         H.bill_number,
         H.sample_comments,
         H.clinical_history,
+        H.sample_type,
+        H.specimen_rank,
         -- The count of the FILTERED set, before paging. This is what lets the
         -- client say "showing 51-100 of 3,412" instead of guessing.
         COUNT(*) OVER() AS total_count,

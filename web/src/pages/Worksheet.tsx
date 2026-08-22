@@ -243,7 +243,15 @@ export function Worksheet() {
       byPid.get(key)!.push(r);
     }
 
-    return order.map((pid) => ({ pid, rows: byPid.get(pid)! }));
+    return order.map((pid) => ({
+      pid,
+      // Bench order within the patient: EDTA, fluoride, serum, urine, then
+      // the rest — the order the tubes are picked up, and the order their
+      // reports combine in the PID download. The list's own row order breaks
+      // ties, so two serum tubes keep their chronology.
+      rows: [...byPid.get(pid)!].sort(
+        (a, b) => (a.specimenRank ?? 5) - (b.specimenRank ?? 5)),
+    }));
   }, [visible, groupByPid]);
 
   const multiSamplePatients = grouped.filter((g) => g.rows.length > 1).length;

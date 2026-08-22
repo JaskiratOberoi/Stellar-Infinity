@@ -87,7 +87,11 @@ public sealed record WorksheetRow(
     /// Date of birth, from Infinity's sidecar (the LIS keeps none). Null for a
     /// patient booked before the order form began storing it.
     /// </summary>
-    DateOnly? Dob = null);
+    DateOnly? Dob = null,
+    /// <summary>Specimen, e.g. "WB - EDTA". List rows only.</summary>
+    string? SampleType = null,
+    /// <summary>1 EDTA · 2 fluoride · 3 serum · 4 urine · 5 the rest. List rows only.</summary>
+    int? SpecimenRank = null);
 
 public sealed record WorksheetPage(IReadOnlyList<WorksheetRow> Rows, int Count);
 
@@ -407,7 +411,12 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
                         // The list never renders results, and the procedure does
                         // not fetch them: that per-row FOR JSON subquery was the
                         // reason large pages were expensive.
-                        Results: []));
+                        Results: [],
+                        // Tolerant on purpose: these two columns arrive with a
+                        // procedure redeploy, and the API must not 500 against
+                        // the old procedure in the window between the two.
+                        SampleType: TryStr(reader, "sample_type"),
+                        SpecimenRank: TryInt(reader, "specimen_rank")));
                 }
 
                 return new WorksheetListPage(rows, total, pageNo, size, NobleTime.ToIst(snapshot));
@@ -605,10 +614,23 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
             {
                 var names = string.Join(",", sids.Select((_, i) => "@s" + i.ToString(System.Globalization.CultureInfo.InvariantCulture)));
                 await using var cmd = NobleConnectionFactory.CreateCommand(conn, $"""
-                    SELECT vailid, seq = MIN(id)
-                    FROM dbo.tbl_med_mcc_patient_test_result
-                    WHERE vailid IN ({names})
-                    GROUP BY vailid;
+                    SELECT r.vailid,
+                           seq = MIN(r.id),
+                           pat = MIN(s.patient_id),
+                           spec = MIN(CASE
+                               WHEN UPPER(SM.Sampletype) LIKE '%EDTA%' THEN 1
+                               WHEN UPPER(SM.Sampletype) LIKE '%NAF%'
+                                 OR UPPER(SM.Sampletype) LIKE '%FLUORIDE%'
+                                 OR UPPER(SM.Sampletype) LIKE '%FLOURIDE%' THEN 2
+                               WHEN UPPER(SM.Sampletype) LIKE '%SERUM%' THEN 3
+                               WHEN UPPER(SM.Sampletype) LIKE '%URINE%' THEN 4
+                               ELSE 5
+                           END)
+                    FROM dbo.tbl_med_mcc_patient_test_result r
+                    LEFT JOIN dbo.tbl_med_mcc_patient_samples s ON s.vailid = r.vailid
+                    LEFT JOIN dbo.tbl_med_sample_master SM ON SM.id = s.sampleid
+                    WHERE r.vailid IN ({names})
+                    GROUP BY r.vailid;
                     """);
                 for (var i = 0; i < sids.Count; i++)
                 {
@@ -616,25 +638,54 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
                                        SqlDbType.NVarChar, 50).Value = sids[i];
                 }
 
-                var map = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+                var map = new Dictionary<string, (long Seq, long Pat, int Spec)>(StringComparer.OrdinalIgnoreCase);
                 await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);
                 while (await r.ReadAsync(inner).ConfigureAwait(false))
                 {
                     var v = r.Str("vailid");
                     if (v is null || await r.IsDBNullAsync(1, inner).ConfigureAwait(false)) continue;
-                    map[v.Trim()] = Convert.ToInt64(r.GetValue(1));
+                    map[v.Trim()] = (
+                        Convert.ToInt64(r.GetValue(1)),
+                        r.NullableInt("pat") ?? long.MaxValue,
+                        r.NullableInt("spec") ?? 5);
                 }
                 return map;
             }, token), ct).ConfigureAwait(false);
 
-        // Ordered by the LIS sequence; anything with no results keeps its given
-        // position relative to the others and follows behind.
+        /*
+         * Patients stay contiguous (a multi-patient batch must not interleave
+         * every EDTA tube first), and WITHIN a patient the tubes walk the
+         * bench's order — EDTA, fluoride, serum, urine, the rest — with the
+         * LIS result sequence breaking ties, exactly as it ordered everything
+         * before specimen rank existed. A patient's place in the batch is
+         * their earliest sequence, so the batch as a whole still reads
+         * chronologically. Anything with no results follows behind.
+         */
+        var patientFirst = seq.Values
+            .GroupBy(v => v.Pat)
+            .ToDictionary(g => g.Key, g => g.Min(v => v.Seq));
+
         return sids
             .Select((sid, i) => (sid, i, has: seq.TryGetValue(sid.Trim(), out var v), v))
             .OrderBy(x => x.has ? 0 : 1)
-            .ThenBy(x => x.has ? x.v : x.i)
+            .ThenBy(x => x.has ? patientFirst[x.v.Pat] : x.i)
+            .ThenBy(x => x.has ? x.v.Spec : 0)
+            .ThenBy(x => x.has ? x.v.Seq : x.i)
             .Select(x => x.sid)
             .ToList();
+    }
+
+    /// <summary>A column that may not exist yet — null instead of a throw.</summary>
+    private static string? TryStr(System.Data.Common.DbDataReader r, string name)
+    {
+        try { var v = r[name]; return v is DBNull ? null : ((string)v).Trim(); }
+        catch (IndexOutOfRangeException) { return null; }
+    }
+
+    private static int? TryInt(System.Data.Common.DbDataReader r, string name)
+    {
+        try { var v = r[name]; return v is DBNull ? null : Convert.ToInt32(v); }
+        catch (IndexOutOfRangeException) { return null; }
     }
 
     private static IReadOnlyList<TestResult> ParseResults(string? json)

@@ -38,6 +38,10 @@ interface AccountRow {
   balance: number;
   owed: number;
   totalDeposited: number;
+  /** The LIS allowance, stored NEGATIVE: -5000 = may owe up to ₹5,000. */
+  creditLimit: number;
+  /** Computed server-side, honouring the limit and any unlock. */
+  reportsLocked: boolean;
 }
 
 interface LedgerRow {
@@ -186,6 +190,23 @@ export function ClientHome() {
    */
   const owes = (account?.owed ?? 0) > 0;
 
+  /*
+   * The credit limit, as a centre reads it.
+   *
+   * The LIS stores it NEGATIVE — -5000 means "may owe up to ₹5,000" — and only
+   * a negative value is an allowance; zero or positive mean none, exactly as
+   * the report lock treats it. The floor is that same negative number, and the
+   * raw balance (also negative when owing) sits above or below it. Headroom is
+   * the gap between them: how much more the centre may run up before reports
+   * hold. reportsLocked is the server's authoritative answer — it already
+   * accounts for permanent and temporary unlocks — so it, not this arithmetic,
+   * decides whether to show the hold.
+   */
+  const creditLimit = account?.creditLimit ?? 0;
+  const allowance = creditLimit < 0 ? Math.round(-creditLimit) : 0;
+  const floor = creditLimit < 0 ? creditLimit : 0;
+  const headroom = Math.round((account?.balance ?? 0) - floor);
+
   return (
     <div className="page clienthome-page">
       <div className="page__head">
@@ -232,6 +253,23 @@ export function ClientHome() {
                 <div>
                   <p className="clienthome__label">Total paid</p>
                   <p className="clienthome__sub">{inr(account.totalDeposited)}</p>
+                </div>
+                <div>
+                  <p className="clienthome__label">Credit limit</p>
+                  <p className="clienthome__sub">{allowance > 0 ? inr(allowance) : 'None'}</p>
+                  {/* The lock is what a centre actually cares about here: are
+                      their reports about to hold, and how much room is left.
+                      reportsLocked overrides the headroom line — once held, the
+                      gap to the floor is beside the point. */}
+                  {account.reportsLocked ? (
+                    <p className="clienthome__hint clienthome__hint--warn">Reports on hold</p>
+                  ) : allowance > 0 ? (
+                    <p className="clienthome__hint">
+                      {headroom > 0 ? `${inr(headroom)} before reports hold` : 'At your limit'}
+                    </p>
+                  ) : owes ? (
+                    <p className="clienthome__hint clienthome__hint--warn">Clear the balance to release reports</p>
+                  ) : null}
                 </div>
                 <div>
                   <p className="clienthome__label">Reports</p>
