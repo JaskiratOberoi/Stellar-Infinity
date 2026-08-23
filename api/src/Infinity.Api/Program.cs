@@ -254,6 +254,7 @@ app.MapAdminEndpoints();
 app.MapWorksheetEndpoints();
 app.MapInstrumentEndpoints();
 app.MapInterfacingEndpoints();
+app.MapUpdateEndpoints();
 app.MapOrderEntryEndpoints();
 app.MapAccessionEndpoints();
 app.MapInwardEndpoints();

@@ -120,6 +120,10 @@ services:
       # OAuth callback, no third-party embed — so the strictest setting costs
       # nothing and blocks the classic CSRF shapes outright.
       AuthCookie__SameSite: "Strict"
+    # Synapse OTA artifacts, served by /api/updates/synapse behind the fleet
+    # key. Shared with staging: one host directory, whichever stack answers.
+    volumes:
+      - ./updates:/updates:ro
     depends_on:
       redis:
         condition: service_healthy

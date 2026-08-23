@@ -70,6 +70,11 @@ services:
       # is Reports__TokenSecret in api/.env, and with it unset no QR is drawn
       # and the public route rejects everything.
       Reports__PublicBaseUrl: "https://infinity-staging.genomicslab.in"
+    # Synapse OTA artifacts (latest.yml + installer + blockmap), served by
+    # /api/updates/synapse behind the fleet key. Publishing a release is copying
+    # files into ./updates/synapse on the host — no rebuild, no restart.
+    volumes:
+      - ./updates:/updates:ro
     depends_on:
       redis:
         condition: service_healthy

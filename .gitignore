@@ -15,3 +15,6 @@ web/dist/
 # Generated intermediates from tools/smartmeta-export.mjs
 api/tools/.smartmeta.tmp.*
 api/.env.*
+
+# Synapse OTA release artifacts (published binaries, served by the api container)
+updates/
