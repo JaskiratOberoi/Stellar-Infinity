@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { NavLink, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { Mark } from './components/Mark';
@@ -62,7 +63,13 @@ function EnterVeil({ done }: { done: () => void }) {
     return () => window.clearTimeout(t);
   }, [done]);
 
-  return (
+  // PORTALLED to the body, not rendered inside the shell: .shell--hello
+  // animates transform, and a transformed ancestor becomes the containing
+  // block for position:fixed descendants — so on a page taller than the
+  // viewport (the admin dashboard) the veil's inset:0 spanned the whole
+  // DOCUMENT and centred the symbol below the fold. The same escape the nav
+  // sheet uses, for the same reason.
+  return createPortal(
     <div
       className="enter-veil"
       aria-hidden="true"
@@ -73,7 +80,8 @@ function EnterVeil({ done }: { done: () => void }) {
           the head of the stroke, which then writes the symbol. */}
       <span className="sdraw__seed" />
       <SignInDraw />
-    </div>
+    </div>,
+    document.body,
   );
 }
 
