@@ -23,7 +23,10 @@ public sealed record OrderLine(
     string? TestName,
     string? TestType,
     decimal Amount,
-    bool Cancelled);
+    bool Cancelled,
+    /// <summary>Billed by us, performed outside Noble (an extras-only line).
+    /// The invoice marks these * and adds the not-performed-by-Noble note.</summary>
+    bool IsExternal);
 
 public sealed record OrderSample(
     string Vailid,
@@ -39,7 +42,9 @@ public sealed record OrderReceipt(
     string? Reference,
     /// <summary>payment | refund</summary>
     string Kind,
-    bool Voided);
+    bool Voided,
+    /// <summary>Gateway/manual transaction id from telo_txn, when one exists.</summary>
+    string? TxnId);
 
 public sealed record OrderDetail(
     int BillId,
@@ -63,6 +68,11 @@ public sealed record OrderDetail(
     decimal AmountPaid,
     int? PatientId,
     string? RegisteredBy,
+    /// <summary>The registering ACCOUNT's printed name (telo_account.prepared_by).
+    /// Telo's bill prints this over the user's own name when set — several desks
+    /// share one client code and each prints its own — so the parity bill needs
+    /// the same value, not a re-derivation.</summary>
+    string? PreparedByOverride,
     IReadOnlyList<OrderLine> Lines,
     IReadOnlyList<OrderSample> Samples,
     IReadOnlyList<OrderReceipt> Receipts)
@@ -214,7 +224,8 @@ public sealed class OrdersRepository(NobleConnectionFactory db, SqlRetry retry)
                            TRY_CONVERT(INT, b.medid) AS patientId,
                            -- Whoever registered it: works for both the 'telo:' and
                            -- 'inf:' origin markers, since both are '<prefix>:<userId>'.
-                           NULLIF(LTRIM(RTRIM(CONCAT(uu.firstname, ' ', uu.lastname))), '') AS registeredBy
+                           NULLIF(LTRIM(RTRIM(CONCAT(uu.firstname, ' ', uu.lastname))), '') AS registeredBy,
+                           NULLIF(LTRIM(RTRIM(ta.prepared_by)), '') AS preparedByOverride
                     FROM dbo.tbl_billing_patient_detail b
                     LEFT JOIN dbo.tbl_med_mcc_unit_master u ON u.id = b.mcc_code
                     LEFT JOIN dbo.tbl_med_mcc_doctors  d ON d.id = b.ref_doctor
@@ -223,6 +234,7 @@ public sealed class OrdersRepository(NobleConnectionFactory db, SqlRetry retry)
                     LEFT JOIN dbo.tbl_med_user_master uu
                            ON (b.addedby LIKE 'telo:%' OR b.addedby LIKE 'inf:%')
                           AND uu.id = TRY_CONVERT(INT, SUBSTRING(b.addedby, CHARINDEX(':', b.addedby) + 1, 20))
+                    LEFT JOIN dbo.telo_account ta ON ta.user_id = uu.id
                     WHERE b.id = @bid AND {sc.Predicate}
                     """;
 
@@ -258,6 +270,7 @@ public sealed class OrdersRepository(NobleConnectionFactory db, SqlRetry retry)
                         AmountPaid: r.Dec("amountPaid"),
                         PatientId: patientId,
                         RegisteredBy: Trim(r.Str("registeredBy")),
+                        PreparedByOverride: Trim(r.Str("preparedByOverride")),
                         Lines: [], Samples: [], Receipts: []);
                 }
 
@@ -298,7 +311,11 @@ public sealed class OrdersRepository(NobleConnectionFactory db, SqlRetry retry)
         await using var cmd = NobleConnectionFactory.CreateCommand(conn, """
             SELECT d.id AS lineId, d.testcode AS testCode, d.testname AS testName,
                    d.testtype AS testType, d.testamount AS amount,
-                   CASE WHEN tc.line_id IS NULL THEN 0 ELSE 1 END AS cancelled
+                   CASE WHEN tc.line_id IS NULL THEN 0 ELSE 1 END AS cancelled,
+                   CASE WHEN EXISTS (
+                          SELECT 1 FROM dbo.telo_custom_test_order cto
+                          WHERE cto.bill_id = d.billid AND LEFT(cto.code, 10) = d.testcode
+                        ) THEN 1 ELSE 0 END AS isExternal
             FROM dbo.tbl_billing_patient_test_detail d
             LEFT JOIN dbo.telo_test_cancellation tc ON tc.line_id = d.id
             WHERE d.billid = @bid
@@ -312,7 +329,8 @@ public sealed class OrdersRepository(NobleConnectionFactory db, SqlRetry retry)
         {
             list.Add(new OrderLine(
                 r.Int("lineId"), r.Str("testCode"), r.Str("testName"),
-                r.Str("testType"), r.Dec("amount"), r.Int("cancelled") == 1));
+                r.Str("testType"), r.Dec("amount"), r.Int("cancelled") == 1,
+                r.Int("isExternal") == 1));
         }
         return list;
     }
@@ -325,8 +343,10 @@ public sealed class OrdersRepository(NobleConnectionFactory db, SqlRetry retry)
             SELECT r.id AS receiptId, r.recd_date AS date, r.amount,
                    r.pay_mode AS method, r.card_number AS reference,
                    r.receive_status AS status,
-                   CASE WHEN v.receipt_id IS NULL THEN 0 ELSE 1 END AS voided
+                   CASE WHEN v.receipt_id IS NULL THEN 0 ELSE 1 END AS voided,
+                   t.txn_id AS txnId
             FROM dbo.tbl_billing_patient_amount_receipt r
+            LEFT JOIN dbo.telo_txn t ON t.receipt_id = r.id
             LEFT JOIN dbo.telo_receipt_void v ON v.receipt_id = r.id
             WHERE r.bill_id = @bid
             ORDER BY r.id
@@ -344,7 +364,8 @@ public sealed class OrdersRepository(NobleConnectionFactory db, SqlRetry retry)
                 Trim(r.Str("method")),
                 Trim(r.Str("reference")),
                 r.Str("status") == "2" ? "refund" : "payment",
-                r.Int("voided") == 1));
+                r.Int("voided") == 1,
+                Trim(r.Str("txnId"))));
         }
         return list;
     }

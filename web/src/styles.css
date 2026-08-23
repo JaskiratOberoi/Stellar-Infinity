@@ -1012,6 +1012,164 @@ button, input, select { font: inherit; color: inherit; }
 }
 @media print { .print__toolbar { display: none; } }
 
+/* =========================================================
+   The bill — Telo's bill-invoice.tsx, measurement for measurement.
+
+   Every rule here is a Tailwind class from that file written out as its
+   literal value (px-5 = 20px, text-[13px] = 13px, gray-400 = #9ca3af, …),
+   because the two systems print bills for the same clients against the same
+   database and the documents must be indistinguishable. Do not restyle this
+   to Infinity's own idiom; if the bill changes, it changes in Telo first.
+   ========================================================= */
+
+.bill {
+  width: 100%;
+  background: #fff;
+  color: #000;
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.375;
+  border: 1px solid #9ca3af;
+}
+.bill p { margin: 0; }
+
+.bill__band { border-bottom: 1px solid #9ca3af; padding: 12px 20px; }
+.bill__band--slim { padding: 8px 20px; }
+
+/* Equal fixed side columns keep the centre block page-centred whether 0/1/2
+   logos are present; oversized artwork shrinks to its column. */
+.bill__head {
+  padding: 16px 20px;
+  display: grid;
+  grid-template-columns: 96px 1fr 96px;
+  align-items: center;
+  gap: 12px;
+}
+.bill__head-side { display: flex; align-items: center; overflow: hidden; }
+.bill__head-side--left { justify-content: flex-start; }
+.bill__head-side--right { justify-content: flex-end; }
+.bill__head-centre { text-align: center; min-width: 0; }
+.bill__labname { font-size: 20px; font-weight: 700; letter-spacing: -0.025em; }
+.bill__headline { margin-top: 2px; color: #4b5563; }
+.bill__sep { margin: 0 8px; color: #d1d5db; }
+
+.bill__logo { width: auto; max-width: 100%; object-fit: contain; display: block; }
+.bill__logo--noble { height: 48px; }
+.bill__logo--custom { height: 56px; }
+
+.bill__label {
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .025em;
+  color: #6b7280;
+}
+.bill__section-label { margin-bottom: 6px; }
+
+.bill__meta { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; }
+.bill__meta-item { display: flex; align-items: baseline; gap: 8px; }
+.bill__meta-no { font-weight: 700; }
+
+.bill__rows { display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; row-gap: 4px; }
+.bill__row { display: flex; align-items: baseline; gap: 6px; }
+.bill__row-label { color: #6b7280; flex: none; width: 64px; }
+
+.bill__mono { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 12px; color: #374151; }
+.bill__mono--dim { color: #4b5563; }
+
+.bill__history { margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb; }
+.bill__history p { margin-top: 2px; color: #374151; }
+
+.bill__table { width: 100%; border-collapse: collapse; }
+.bill__table thead tr { border-bottom: 1px solid #d1d5db; background: #f9fafb; }
+.bill__table th {
+  padding: 4px 8px 4px 0;
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .025em;
+  color: #6b7280;
+}
+.bill__th-idx { width: 24px; }
+.bill__th-amt { width: 112px; text-align: right !important; padding-right: 0 !important; }
+.bill__table tbody tr { border-bottom: 1px solid #f3f4f6; }
+.bill__table td { padding: 2px 8px 2px 0; vertical-align: top; }
+.bill__td-idx { color: #6b7280; }
+.bill__td-amt { text-align: right; padding-right: 0 !important; }
+.bill__td-amt--refund { color: #b91c1c; }
+.bill__ext { color: #6b7280; }
+.bill__cancelled { color: #6b7280; }
+.bill__table tfoot tr { border-top: 1px solid #d1d5db; background: #f9fafb; }
+.bill__subtotal-label { padding: 4px 8px 4px 0; font-weight: 600; text-align: right; color: #4b5563; }
+.bill__subtotal-amt { padding-top: 4px; padding-bottom: 4px; font-weight: 600; }
+
+.bill__refund-badge {
+  margin-left: 6px;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: #b91c1c;
+}
+
+.bill__summary { margin-left: auto; max-width: 320px; }
+.bill__sumrow { display: flex; justify-content: space-between; gap: 16px; }
+.bill__sumrow + .bill__sumrow { margin-top: 2px; }
+.bill__sumrow > span:first-child { color: #4b5563; }
+.bill__sumrow--bold { font-weight: 700; }
+.bill__sumrow--bold > span:first-child { color: #000; }
+.bill__sumdue { border-top: 1px solid #d1d5db; padding-top: 4px; margin-top: 4px; }
+.bill__behalf { margin-top: 6px; text-align: right; font-size: 12px; font-style: italic; color: #6b7280; }
+
+.bill__prepared { font-size: 12px; color: #374151; }
+.bill__prepared-label {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .025em;
+  color: #4b5563;
+}
+
+.bill__notes-label {
+  margin-bottom: 4px;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .025em;
+  color: #4b5563;
+}
+.bill__notes { margin: 0; padding-left: 16px; list-style: decimal; font-size: 12px; color: #374151; }
+.bill__notes li + li { margin-top: 2px; }
+
+.bill__disclaimer { font-size: 11px; font-style: italic; color: #4b5563; }
+
+.bill__foot {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: end;
+  padding: 16px 20px;
+}
+.bill__generated { color: #9ca3af; font-size: 11px; }
+.bill__sign { text-align: right; }
+.bill__sign-line { margin-bottom: 24px; border-bottom: 1px solid #9ca3af; display: inline-block; width: 144px; }
+.bill__sign-title { font-weight: 600; }
+.bill__sign-name { color: #6b7280; }
+
+@media print {
+  /* The app's graph-paper backdrop must never print behind a document. */
+  body { background: #fff; }
+  .bill { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .bill__logo--noble { height: 14mm; }
+  .bill__logo--custom { height: 16mm; }
+  /* Chromium's UA default (thead/tfoot break-inside: avoid) makes a table
+     with a footer group jump wholesale to the next page — a one-line bill
+     printed on two sheets. These tables are a few rows; let them fragment. */
+  .bill__table thead, .bill__table tfoot { break-inside: auto; }
+}
+
 .inv__lab { font-size: 15pt; font-weight: 600; letter-spacing: .01em; }
 .inv__addr { font-size: 9pt; color: #444; margin-top: .12rem; }
 .inv__title {

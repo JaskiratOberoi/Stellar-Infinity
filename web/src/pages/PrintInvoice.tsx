@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
-import { inr, fmtDate, fmtDateTime, fmtAge, fmtGender, plainText } from '../lib/format';
+import { plainText } from '../lib/format';
 
 /**
  * The invoice for one bill, in two copies.
@@ -12,18 +12,20 @@ import { inr, fmtDate, fmtDateTime, fmtAge, fmtGender, plainText } from '../lib/
  *   lab     — the same document plus the sample ids, for the collection
  *             envelope and the lab's own file.
  *
- * One component rather than two, which is a deliberate change from Telo. There
- * the two copies are separate files (bill-invoice.tsx and lab-invoice.tsx) and
- * they have already drifted — the same bill can print two different addresses
- * depending on which button you pressed. Here the difference is one section.
+ * The document is Telo's bill-invoice.tsx, transcribed band for band — both
+ * systems print bills against the same database, often for the same client on
+ * the same day, and two documents for one bill must not look like two vendors.
+ * Where Telo writes a Tailwind class this writes the same measurements into
+ * .bill rules in styles.css; the section order, labels, casing and column
+ * widths are Telo's, not a redesign. If a band changes there, change it here.
+ *
+ * One component rather than Telo's two files (bill-invoice / lab-invoice, which
+ * have already drifted apart there): the lab copy is the same document plus one
+ * samples band.
  *
  * Like the printed report this is a ROUTE, not a modal: what prints is what is
  * on screen, so there is one description of the document rather than a preview
  * and a printable version that agree until someone edits one of them.
- *
- * Theme-free by construction — it inherits `.print`, whose colours are all
- * literal. An invoice must not come out different because the operator had
- * dark mode on.
  */
 
 interface OrderLine {
@@ -32,6 +34,18 @@ interface OrderLine {
   testName: string | null;
   amount: number;
   cancelled: boolean;
+  isExternal: boolean;
+}
+
+interface OrderReceipt {
+  receiptId: number;
+  date: string | null;
+  amount: number;
+  method: string | null;
+  reference: string | null;
+  kind: 'payment' | 'refund';
+  voided: boolean;
+  txnId: string | null;
 }
 
 interface OrderSample {
@@ -53,14 +67,19 @@ interface Order {
   ageType: number | null;
   gender: number | null;
   mobile: string | null;
+  email: string | null;
   refDoctorName: string | null;
+  refCustomerName: string | null;
+  clinicalHistory: string | null;
   paymentType: string | null;
   discount: number;
   amountPaid: number;
   patientId: number | null;
   registeredBy: string | null;
+  preparedByOverride: string | null;
   lines: OrderLine[];
   samples: OrderSample[];
+  receipts: OrderReceipt[];
 }
 
 interface InvoiceLogo {
@@ -76,13 +95,15 @@ interface InvoiceConfig {
   heading: string;
   address: string | null;
   city: string | null;
-  state: string | null;
-  pincode: string | null;
   phone: string | null;
   email: string | null;
   preparedBy: string | null;
   hasConfig: boolean;
   flags: { onBehalf: 'client' | 'qugen'; showDisclaimer: boolean; showSignatory: boolean };
+  /** The row as stored, no centre fallback. The header's state/pincode read
+   *  from HERE: Telo's does (config-only for those two, fallback for the
+   *  rest), and MDCARE's header owes its exact text to that asymmetry. */
+  stored: { state: string | null; pincode: string | null } | null;
 }
 
 const LAB_NAME = 'Noble Diagnostics';
@@ -93,6 +114,40 @@ const LAB_NAME = 'Noble Diagnostics';
  * accounts department, so the legal name has to match to the character.
  */
 const BILLING_ENTITY = 'Qugen Pathlabs Pvt. Ltd.';
+
+/** Telo's inr(): two decimals always, en-IN grouping — "₹250.00". */
+const inr = (n: number) =>
+  '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** Telo's fmtIST(): "23/08/2026, 04:37:43 pm", pinned to IST. */
+const fmtIST = (iso: string | null | undefined) => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
+  });
+};
+
+function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="bill__row">
+      <span className="bill__row-label">{label}</span>
+      <span className={mono ? 'bill__mono' : undefined}>{value}</span>
+    </div>
+  );
+}
+
+function SummaryRow({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+  return (
+    <div className={`bill__sumrow${bold ? ' bill__sumrow--bold' : ''}`}>
+      <span>{label}</span>
+      <span>{value}</span>
+    </div>
+  );
+}
 
 export function PrintInvoice() {
   const { billId = '' } = useParams();
@@ -107,6 +162,9 @@ export function PrintInvoice() {
   const [disclaimer, setDisclaimer] = useState('');
   const [logo, setLogo] = useState<InvoiceLogo | null>(null);
   const [mccId, setMccId] = useState<number | null>(null);
+  /** Both fetches settled — the render service waits on this attribute, and
+   *  before it the page is a loading state that must never become a PDF. */
+  const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -127,6 +185,7 @@ export function PrintInvoice() {
         setDisclaimer(i.disclaimer);
         setLogo(i.logo);
         setMccId(i.mccId);
+        setReady(true);
       } catch (e) {
         if (live) setError(e instanceof Error ? e.message : 'Could not load this invoice.');
       }
@@ -142,38 +201,52 @@ export function PrintInvoice() {
   }
 
   const flags = config?.flags ?? { onBehalf: 'client' as const, showDisclaimer: true, showSignatory: false };
-  const heading = config?.heading?.trim() || order.clientCode || LAB_NAME;
+  const labName = config?.heading?.trim() || order.clientCode || LAB_NAME;
+  const onBehalfName = flags.onBehalf === 'qugen' ? BILLING_ENTITY : labName;
 
-  /**
-   * Who the bill is raised on behalf of.
-   *
-   * NOT a letterhead switch. The header stays the centre's throughout — this
-   * is one attribution line under the totals, which is exactly where Telo puts
-   * it. Making it swap the letterhead (as an earlier draft here did) would
-   * have printed a different document from Telo for the same bill, and the two
-   * systems are live against the same database.
-   */
-  const onBehalfName = flags.onBehalf === 'qugen' ? BILLING_ENTITY : heading;
-
-  const addressLine = [config?.address, config?.city, config?.state, config?.pincode]
+  // Header line 2 — Telo's asymmetry, kept: address/city fall back to the
+  // centre master, state/pincode come from the stored config alone.
+  const addressLine = [config?.address, config?.city, config?.stored?.state, config?.stored?.pincode]
     .map((s) => s?.trim())
     .filter(Boolean)
     .join(', ');
 
-  /*
-   * The LIS's own total, not a sum of the lines.
-   *
-   * `amount` is gross and `balance = amount − discount − paid` holds on every
-   * bill in the database. Re-adding the lines here would usually agree, but
-   * where it did not the invoice would state a total that does not reconcile
-   * with the balance printed three rows below it — and the balance is the
-   * number someone pays against.
-   */
-  const gross = order.amount;
-  const net = gross - order.discount;
+  // Prepared-by precedence, Telo's exactly: the registering account's own
+  // printed name wins; else MDCARE-style clients use the config free text
+  // (several desks share the code, so a user's name would be wrong more often
+  // than right), everyone else the registering user's name.
+  const preparedBy =
+    order.preparedByOverride?.trim() ||
+    (flags.onBehalf === 'qugen'
+      ? config?.preparedBy?.trim() || null
+      : order.registeredBy ?? config?.preparedBy?.trim() ?? null);
+
+  // The printed bill is a clean financial document: voided transactions are
+  // dropped entirely (the on-screen receipt keeps them, struck through, for
+  // audit). The header totals already net out voids.
+  const billReceipts = order.receipts.filter((r) => !r.voided);
+
+  const genderLabel = order.gender === 1 ? 'M' : order.gender === 2 ? 'F' : '—';
+  const subTotal = order.lines.reduce((s, l) => s + (l.cancelled ? 0 : l.amount), 0);
+  const hasExternal = order.lines.some((l) => l.isExternal);
+
+  // Logo panes: the custom mark always renders opposite Noble's, and either
+  // can be switched off — layout per telo_mcc_invoice_config. MDCARE stores
+  // noble on the RIGHT (hidden), which is why Medicare's mark prints top-LEFT.
+  const nobleVisible = logo?.nobleVisible !== false;
+  const customVisible = logo?.customVisible !== false;
+  const noblePane = nobleVisible ? (
+    <img className="bill__logo bill__logo--noble" src="/branding/noble-logo.png" alt="Noble Diagnostics" />
+  ) : null;
+  const customPane = customVisible && logo?.hasCustom && mccId != null ? (
+    <img className="bill__logo bill__logo--custom" src={`/api/invoice-branding/${mccId}/logo`} alt="Partner logo" />
+  ) : null;
+  const nobleLeft = (logo?.position ?? 'left') === 'left';
+  const leftPane = nobleLeft ? noblePane : customPane;
+  const rightPane = nobleLeft ? customPane : noblePane;
 
   return (
-    <div className="print print--invoice">
+    <div className="print print--invoice" data-print-ready={ready ? 'true' : undefined}>
       {/* Screen-only. The one control on the page, and it removes itself from
           the thing it produces. */}
       <div className="print__toolbar">
@@ -183,131 +256,216 @@ export function PrintInvoice() {
         </span>
       </div>
 
-      <header className="print__head">
-        <div>
-          <div className="inv__lab">{heading}</div>
-          {addressLine && <div className="inv__addr">{addressLine}</div>}
-          {(config?.phone || config?.email) && (
-            <div className="inv__addr">
-              {[config?.phone, config?.email].filter(Boolean).join(' · ')}
+      <div className="bill">
+        {/* ── Header: [left logo] | lab name block | [right logo] ── */}
+        <div className="bill__band bill__head">
+          <div className="bill__head-side bill__head-side--left">{leftPane}</div>
+          <div className="bill__head-centre">
+            <p className="bill__labname">{labName}</p>
+            {addressLine && <p className="bill__headline">{addressLine}</p>}
+            {(config?.phone || config?.email) && (
+              <p className="bill__headline">
+                {config?.phone && <>Ph: {config.phone}</>}
+                {config?.phone && config?.email && <span className="bill__sep">|</span>}
+                {config?.email && <>Email: {config.email}</>}
+              </p>
+            )}
+          </div>
+          <div className="bill__head-side bill__head-side--right">{rightPane}</div>
+        </div>
+
+        {/* ── Bill meta ── */}
+        <div className="bill__band bill__meta">
+          <div className="bill__meta-item">
+            <span className="bill__label">Bill No.</span>
+            <span className="bill__meta-no">{order.billNumber ?? order.billId}</span>
+          </div>
+          <div className="bill__meta-item">
+            <span className="bill__label">Date</span>
+            <span>{fmtIST(order.billDate)}</span>
+          </div>
+        </div>
+
+        {/* ── Patient details ── */}
+        <div className="bill__band">
+          <p className="bill__label bill__section-label">Patient Details</p>
+          <div className="bill__rows">
+            <Row label="Name" value={order.patientName ?? '—'} />
+            {order.patientId != null && <Row label="PID" value={String(order.patientId)} mono />}
+            <Row label="Age / Sex" value={`${order.age ?? '—'} / ${genderLabel}`} />
+            <Row label="Mobile" value={order.mobile ?? '—'} />
+            {order.email && <Row label="Email" value={order.email} />}
+            {order.refCustomerName && <Row label="MRD / Visit" value={order.refCustomerName} />}
+            {order.refDoctorName && <Row label="Ref. doctor" value={order.refDoctorName} />}
+            {order.paymentType && <Row label="Payment" value={order.paymentType} />}
+          </div>
+          {order.clinicalHistory && (
+            <div className="bill__history">
+              <span className="bill__label">Clinical history</span>
+              <p>{order.clinicalHistory}</p>
             </div>
           )}
         </div>
-        <div style={{ textAlign: 'right' }}>
-          {/* The client's own mark, when it has one and has not hidden it —
-              MDCARE bills print under Medicare's, exactly as Telo's do. The
-              artwork is fetched as an image rather than carried in the JSON,
-              so a logo never inflates the payload as base64. */}
-          {logo?.hasCustom && logo.customVisible !== false && mccId != null && (
-            <img className="inv__logo" alt="" src={`/api/invoice-branding/${mccId}/logo`} />
-          )}
-          <div className="inv__title">{isLabCopy ? 'Lab Invoice' : 'Invoice'}</div>
-          <dl className="print__meta print__meta--right">
-            <div><dt>Bill no.</dt><dd>{order.billNumber ?? order.billId}</dd></div>
-            <div><dt>Date</dt><dd>{fmtDate(order.billDate)}</dd></div>
-            {order.clientCode && <div><dt>Client</dt><dd>{order.clientCode}</dd></div>}
-          </dl>
-        </div>
-      </header>
 
-      <section className="inv__party">
-        <dl className="print__meta">
-          <div><dt>Patient</dt><dd>{order.patientName || '—'}</dd></div>
-          <div><dt>Age / Sex</dt><dd>{fmtAge(order.age, order.ageType)} · {fmtGender(order.gender)}</dd></div>
-          {order.patientId != null && <div><dt>Patient ID</dt><dd>{order.patientId}</dd></div>}
-          {order.mobile && <div><dt>Mobile</dt><dd>{order.mobile}</dd></div>}
-          {order.refDoctorName && <div><dt>Ref. doctor</dt><dd>{order.refDoctorName}</dd></div>}
-        </dl>
-      </section>
-
-      <table className="print__table inv__lines">
-        <thead>
-          <tr>
-            <th style={{ width: '3rem' }}>#</th>
-            <th>Test</th>
-            <th style={{ width: '6rem' }}>Code</th>
-            <th style={{ width: '7rem', textAlign: 'right' }}>Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          {order.lines.map((l, i) => (
-            <tr key={l.lineId} className={l.cancelled ? 'inv__cancelled' : undefined}>
-              <td>{i + 1}</td>
-              <td>
-                {plainText(l.testName) || l.testCode || '—'}
-                {l.cancelled && <span className="inv__note"> (cancelled)</span>}
-              </td>
-              <td>{l.testCode ?? '—'}</td>
-              <td style={{ textAlign: 'right' }}>{l.cancelled ? '—' : inr(l.amount)}</td>
-            </tr>
-          ))}
-          {order.lines.length === 0 && (
-            <tr><td colSpan={4}>No tests on this bill.</td></tr>
-          )}
-        </tbody>
-      </table>
-
-      <div className="inv__totals">
-        <dl>
-          <div><dt>Gross</dt><dd>{inr(gross)}</dd></div>
-          {order.discount > 0 && <div><dt>Discount</dt><dd>−{inr(order.discount)}</dd></div>}
-          <div className="inv__totals-net"><dt>Net payable</dt><dd>{inr(net)}</dd></div>
-          <div><dt>Paid</dt><dd>{inr(order.amountPaid)}</dd></div>
-          <div className={order.balance > 0 ? 'inv__totals-due' : undefined}>
-            <dt>{order.balance < 0 ? 'Credit' : 'Balance due'}</dt>
-            <dd>{inr(Math.abs(order.balance))}</dd>
-          </div>
-        </dl>
-      </div>
-      <p className="inv__behalf">On behalf of {onBehalfName}</p>
-
-      {/* Sample ids are the whole difference between the two copies. */}
-      {isLabCopy && order.samples.length > 0 && (
-        <section className="inv__samples">
-          <h2>Samples</h2>
-          <table className="print__table">
+        {/* ── Line items ── */}
+        <div className="bill__band">
+          <p className="bill__label bill__section-label">Services</p>
+          <table className="bill__table">
             <thead>
               <tr>
-                <th style={{ width: '9rem' }}>Sample ID</th>
-                <th style={{ width: '9rem' }}>Type</th>
-                <th>Tests</th>
+                <th className="bill__th-idx">#</th>
+                <th>Description</th>
+                <th className="bill__th-amt">Amount (₹)</th>
               </tr>
             </thead>
             <tbody>
-              {order.samples.map((s) => (
-                <tr key={s.vailid}>
-                  <td>{s.vailid}</td>
-                  <td>{s.sampleTypeName}</td>
-                  <td>{s.testCodes ?? '—'}</td>
+              {order.lines.map((l, idx) => (
+                <tr key={l.lineId}>
+                  <td className="bill__td-idx">{idx + 1}</td>
+                  <td>
+                    {plainText(l.testName) || l.testCode || '—'}
+                    {l.isExternal && <sup className="bill__ext">*</sup>}
+                    {l.cancelled && <span className="bill__cancelled"> (cancelled)</span>}
+                  </td>
+                  <td className="bill__td-amt">{l.cancelled ? '—' : inr(l.amount)}</td>
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={2} className="bill__subtotal-label">Sub-total</td>
+                <td className="bill__td-amt bill__subtotal-amt">{inr(subTotal)}</td>
+              </tr>
+            </tfoot>
           </table>
-        </section>
-      )}
-
-      {flags.showDisclaimer && disclaimer && (
-        <p className="inv__disclaimer">{disclaimer}</p>
-      )}
-
-      <footer className="inv__foot">
-        <div>
-          {order.paymentType && <div>Payment: {order.paymentType}</div>}
-          <div>
-            Prepared by {config?.preparedBy?.trim() || order.registeredBy || '—'}
-            {' · '}
-            {fmtDateTime(order.billDate)}
-          </div>
-          <div>This is a computer-generated bill.</div>
         </div>
-        {flags.showSignatory && (
-          <div className="inv__sign">
-            <div className="inv__sign-line" />
-            <div><b>Authorised Signatory</b></div>
-            <div>{heading}</div>
+
+        {/* ── Samples: the whole difference between the two copies ── */}
+        {isLabCopy && order.samples.length > 0 && (
+          <div className="bill__band">
+            <p className="bill__label bill__section-label">Samples</p>
+            <table className="bill__table">
+              <thead>
+                <tr>
+                  <th style={{ width: '9rem' }}>Sample ID</th>
+                  <th style={{ width: '9rem' }}>Type</th>
+                  <th>Tests</th>
+                </tr>
+              </thead>
+              <tbody>
+                {order.samples.map((s) => (
+                  <tr key={s.vailid}>
+                    <td className="bill__mono">{s.vailid}</td>
+                    <td>{s.sampleTypeName}</td>
+                    <td>{s.testCodes ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
-      </footer>
+
+        {/* ── Payment history ── */}
+        {billReceipts.length > 0 && (
+          <div className="bill__band">
+            <p className="bill__label bill__section-label">
+              Payments &amp; Refunds · {billReceipts.length}
+            </p>
+            <table className="bill__table">
+              <thead>
+                <tr>
+                  <th className="bill__th-idx">#</th>
+                  <th style={{ width: '6rem' }}>Date</th>
+                  <th style={{ width: '5rem' }}>Method</th>
+                  <th>Reference</th>
+                  <th style={{ width: '6rem' }}>Txn ID</th>
+                  <th className="bill__th-amt" style={{ width: '6rem' }}>Amount (₹)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {billReceipts.map((rcpt, idx) => {
+                  const isRefund = rcpt.kind === 'refund';
+                  return (
+                    <tr key={rcpt.receiptId}>
+                      <td className="bill__td-idx">{idx + 1}</td>
+                      <td>{rcpt.date ? fmtIST(rcpt.date) : '—'}</td>
+                      <td>
+                        {rcpt.method ?? 'Cash'}
+                        {isRefund && <span className="bill__refund-badge">refund</span>}
+                      </td>
+                      <td className="bill__mono bill__mono--dim">{rcpt.reference ?? '—'}</td>
+                      <td className="bill__mono">{rcpt.txnId ?? '—'}</td>
+                      <td className={`bill__td-amt${isRefund ? ' bill__td-amt--refund' : ''}`}>
+                        {isRefund ? '− ' : ''}
+                        {inr(rcpt.amount)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* ── Summary ── */}
+        <div className="bill__band">
+          <div className="bill__summary">
+            <SummaryRow label="Amount" value={inr(order.amount)} />
+            {order.discount > 0 && <SummaryRow label="Discount" value={`− ${inr(order.discount)}`} />}
+            <SummaryRow label="Net paid" value={inr(order.amountPaid)} />
+            <div className="bill__sumdue">
+              <SummaryRow label="Balance Due" value={inr(order.balance)} bold />
+            </div>
+            <p className="bill__behalf">On behalf of {onBehalfName}</p>
+          </div>
+        </div>
+
+        {/* ── Prepared by ── */}
+        {preparedBy && (
+          <div className="bill__band bill__band--slim">
+            <p className="bill__prepared">
+              <span className="bill__prepared-label">Prepared By:</span> {preparedBy}
+            </p>
+          </div>
+        )}
+
+        {/* ── Notes ── */}
+        <div className="bill__band">
+          <p className="bill__notes-label">Note:</p>
+          <ol className="bill__notes">
+            <li>Not Valid for medico legal use.</li>
+            <li>Non refundable, subject to realization of cheque.</li>
+            <li>All above services are exempted under GST.</li>
+            {hasExternal && (
+              <li>
+                Service(s) marked <b>*</b> are performed by the referring
+                facility, not by Noble Diagnostics. Noble has billed them on
+                the facility&rsquo;s behalf and is not responsible for their
+                conduct, results or interpretation.
+              </li>
+            )}
+          </ol>
+        </div>
+
+        {/* ── Disclaimer (toggle: default on, MDCARE off) ── */}
+        {flags.showDisclaimer && disclaimer && (
+          <div className="bill__band bill__band--slim">
+            <p className="bill__disclaimer">{disclaimer}</p>
+          </div>
+        )}
+
+        {/* ── Footer ── */}
+        <div className="bill__foot">
+          <p className="bill__generated">This is a computer-generated bill.</p>
+          {flags.showSignatory && (
+            <div className="bill__sign">
+              <div className="bill__sign-line" />
+              <p className="bill__sign-title">Authorised Signatory</p>
+              <p className="bill__sign-name">{labName}</p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
