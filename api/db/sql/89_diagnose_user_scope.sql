@@ -9,6 +9,12 @@
  * difference is exactly where an admin can end up seeing orders but no
  * worksheet: the operational branch grants Super Admin / Admin every centre,
  * while the report branch is mappings ∪ own centre for EVERY usertype.
+ *
+ * SUPERSEDED for parity questions by 127_verify_lis_scope_parity.sql. This
+ * script predates the LIS-parity rule (a non-client account with no mappings
+ * and no own centre now resolves to EVERY centre, both scopes), so its counts
+ * show 0 where the live resolution is "all" for such users. 127 computes the
+ * current rules for every account and diffs them against the LIS's.
  */
 SET NOCOUNT ON;
 

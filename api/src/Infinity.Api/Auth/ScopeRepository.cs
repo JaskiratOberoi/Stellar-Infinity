@@ -61,14 +61,30 @@ public sealed class ScopeRepository(
     /// <summary>
     /// Operational scope: what the user may ORDER and BILL under.
     ///
-    /// Note the missing IsActive filter on the unrestricted branch — that is
+    /// The LIS parity rule: absence of restriction is ALL ACCESS. A staff
+    /// account with no sales mappings and no own centre is unrestricted in the
+    /// legacy LIS, so it is unrestricted here too — except for the client
+    /// usertypes, which stay locked to their own centre (an unset PCC on a
+    /// client login must fail closed, not open the whole lab; the LIS opens it,
+    /// and that is the one divergence we keep on purpose).
+    ///
+    /// Note the missing IsActive filter on the unrestricted branches — that is
     /// intentional and copied from Telo. IsActive is not a liveness flag for
     /// client codes and the LIS ignores it too; filtering on it silently kept
     /// ~1,700 live client codes out of every admin's scope.
     /// </summary>
     public Task<IReadOnlyList<int>> GetScopeAsync(int userId, CancellationToken ct = default) =>
-        Cached($"inf:scope:{userId}", Query(userId, """
+        Cached($"scope:{userId}", Query(userId, """
             DECLARE @ut INT = (SELECT usertypeid FROM dbo.tbl_med_user_master WHERE id = @uid);
+
+            -- Does the user carry ANY restriction the LIS would honour?
+            DECLARE @restricted BIT =
+                CASE WHEN EXISTS (SELECT 1 FROM dbo.tbl_med_user_sales_mcc_mapping m
+                                  WHERE m.user_id = @uid AND m.mcc_code IS NOT NULL)
+                       OR EXISTS (SELECT 1 FROM dbo.tbl_med_user_master u
+                                  WHERE u.id = @uid
+                                    AND (ISNULL(u.PCC_Id, 0) > 0 OR ISNULL(u.sub_pcc_id, 0) > 0))
+                     THEN 1 ELSE 0 END;
 
             IF @ut IN (1, 5)
                 SELECT id AS mcc_code FROM dbo.tbl_med_mcc_unit_master;
@@ -78,7 +94,7 @@ public sealed class ScopeRepository(
                 UNION
                 SELECT u.sub_pcc_id FROM dbo.tbl_med_user_master u
                 WHERE u.id = @uid AND u.sub_pcc_id IS NOT NULL AND u.sub_pcc_id > 0;
-            ELSE
+            ELSE IF @restricted = 1
                 SELECT DISTINCT m.mcc_code
                 FROM dbo.tbl_med_user_sales_mcc_mapping m
                 WHERE m.user_id = @uid AND m.mcc_code IS NOT NULL
@@ -88,6 +104,11 @@ public sealed class ScopeRepository(
                 UNION
                 SELECT u.sub_pcc_id FROM dbo.tbl_med_user_master u
                 WHERE u.id = @uid AND u.sub_pcc_id IS NOT NULL AND u.sub_pcc_id > 0;
+            ELSE IF EXISTS (SELECT 1 FROM dbo.tbl_med_user_master WHERE id = @uid)
+                -- LIS parity: no restriction anywhere means every centre. The
+                -- EXISTS guard is load-bearing: a token whose user row is gone
+                -- must keep resolving to NOTHING, not fall into this branch.
+                SELECT id AS mcc_code FROM dbo.tbl_med_mcc_unit_master;
             """), ct);
 
     /// <summary>
@@ -98,6 +119,10 @@ public sealed class ScopeRepository(
     /// Telo learned this the hard way — a CLIENT REPORTING user locked to their
     /// own centre saw zero reports, because the codes an admin had granted them
     /// were exactly the mappings the usertype lock discarded.
+    ///
+    /// And the LIS parity rule applies here as it does operationally: a
+    /// non-client account with no mappings and no own centre reports on every
+    /// centre, because that is exactly what the legacy LIS gives it.
     ///
     /// Safe because this governs visibility only; ordering and billing still go
     /// through <see cref="GetScopeAsync"/>.
@@ -123,28 +148,51 @@ public sealed class ScopeRepository(
      * see them; that is what the lab's own mapping says.
      */
     public Task<IReadOnlyList<int>> GetReportScopeAsync(int userId, CancellationToken ct = default) =>
-        Cached($"inf:reportscope:{userId}", Query(userId, """
-            WITH own AS (
-                SELECT DISTINCT m.mcc_code AS id
-                FROM dbo.tbl_med_user_sales_mcc_mapping m
-                WHERE m.user_id = @uid AND m.mcc_code IS NOT NULL
+        Cached($"reportscope:{userId}", Query(userId, """
+            DECLARE @ut INT = (SELECT usertypeid FROM dbo.tbl_med_user_master WHERE id = @uid);
+
+            -- Same restriction test as the operational scope: the LIS parity
+            -- rule is that a staff account restricted NOWHERE reports on
+            -- everything. Client usertypes are excluded from that rule — a
+            -- client login with no centre stays Denied rather than seeing the
+            -- whole lab (deliberate divergence from the LIS).
+            DECLARE @restricted BIT =
+                CASE WHEN EXISTS (SELECT 1 FROM dbo.tbl_med_user_sales_mcc_mapping m
+                                  WHERE m.user_id = @uid AND m.mcc_code IS NOT NULL)
+                       OR EXISTS (SELECT 1 FROM dbo.tbl_med_user_master u
+                                  WHERE u.id = @uid
+                                    AND (ISNULL(u.PCC_Id, 0) > 0 OR ISNULL(u.sub_pcc_id, 0) > 0))
+                     THEN 1 ELSE 0 END;
+
+            IF @restricted = 1 OR @ut IN (2, 7, 8, 10, 12)
+            BEGIN
+                WITH own AS (
+                    SELECT DISTINCT m.mcc_code AS id
+                    FROM dbo.tbl_med_user_sales_mcc_mapping m
+                    WHERE m.user_id = @uid AND m.mcc_code IS NOT NULL
+                    UNION
+                    SELECT u.PCC_Id FROM dbo.tbl_med_user_master u
+                    WHERE u.id = @uid AND u.PCC_Id IS NOT NULL AND u.PCC_Id > 0
+                    UNION
+                    SELECT u.sub_pcc_id FROM dbo.tbl_med_user_master u
+                    WHERE u.id = @uid AND u.sub_pcc_id IS NOT NULL AND u.sub_pcc_id > 0
+                )
+                SELECT id FROM own
                 UNION
-                SELECT u.PCC_Id FROM dbo.tbl_med_user_master u
-                WHERE u.id = @uid AND u.PCC_Id IS NOT NULL AND u.PCC_Id > 0
-                UNION
-                SELECT u.sub_pcc_id FROM dbo.tbl_med_user_master u
-                WHERE u.id = @uid AND u.sub_pcc_id IS NOT NULL AND u.sub_pcc_id > 0
-            )
-            SELECT id FROM own
-            UNION
-            SELECT f.sub_franchise_code
-            FROM dbo.tbl_med_mcc_unit_franchise_mapping f
-            JOIN own o ON o.id = f.mcc_code
-            WHERE f.sub_franchise_code IS NOT NULL
-              AND f.sub_franchise_code > 0
-              -- A row mapping a centre to itself would be harmless here but is
-              -- excluded so the intent stays legible: this UNION adds CHILDREN.
-              AND f.sub_franchise_code <> f.mcc_code;
+                SELECT f.sub_franchise_code
+                FROM dbo.tbl_med_mcc_unit_franchise_mapping f
+                JOIN own o ON o.id = f.mcc_code
+                WHERE f.sub_franchise_code IS NOT NULL
+                  AND f.sub_franchise_code > 0
+                  -- A row mapping a centre to itself would be harmless here but is
+                  -- excluded so the intent stays legible: this UNION adds CHILDREN.
+                  AND f.sub_franchise_code <> f.mcc_code;
+            END
+            ELSE IF EXISTS (SELECT 1 FROM dbo.tbl_med_user_master WHERE id = @uid)
+                -- LIS parity: no restriction rows for a non-client usertype
+                -- means every centre. The EXISTS guard keeps a deleted user's
+                -- token resolving to nothing.
+                SELECT id FROM dbo.tbl_med_mcc_unit_master;
             """), ct);
 
     /// <summary>

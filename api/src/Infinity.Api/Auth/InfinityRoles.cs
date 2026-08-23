@@ -193,12 +193,15 @@ public static class InfinityRoles
     /// Roles that may view reports for EVERY client code, rather than only the
     /// centres mapped to their account.
     ///
-    /// This exists because the report-scope SQL has no unrestricted branch: it
-    /// is deliberately "admin-assigned mappings ∪ own centre" for every LIS
-    /// usertype, so that a CLIENT REPORTING user actually receives the codes an
-    /// admin granted them. Applied to an administrator that same rule resolves
-    /// to ZERO centres — no mappings, no own centre — and the worksheet goes
-    /// blank while orders still work.
+    /// This exists because the report-scope SQL resolves "admin-assigned
+    /// mappings ∪ own centre" for every LIS usertype, so that a CLIENT
+    /// REPORTING user actually receives the codes an admin granted them.
+    /// Applied to an administrator that rule once resolved to ZERO centres —
+    /// no mappings, no own centre — and the worksheet went blank while orders
+    /// still worked. The SQL has since grown an LIS-parity branch that gives
+    /// an unrestricted NON-CLIENT account every centre, which covers most
+    /// admins too; this role set stays as the belt to that suspender, and it
+    /// still decides the question for admins who DO carry mappings.
     ///
     /// Telo makes the same split, in lib/reportScope.ts rather than in SQL.
     /// Porting only the SQL half is what produced the blank worksheet.
