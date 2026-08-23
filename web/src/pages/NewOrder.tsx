@@ -839,6 +839,46 @@ export function NewOrder() {
     );
   }
 
+  /*
+   * The Place row, defined ONCE and rendered in both payment branches. It used
+   * to live inline in the B2C payment card only, which meant the B2B branch —
+   * whose step 4 is just a "settled on the ledger" note — had no submit at
+   * all: a fully filled client order with no way to place it. Whatever the
+   * channel does about money, the order still has to be bookable.
+   */
+  const placeRow = (
+    <div className="row" style={{ marginTop: '.9rem' }}>
+      <button className="btn btn--primary" disabled={!canPlace} onClick={() => void place()}>
+        {busy ? 'Placing…' : isB2b ? `Place order · ${inr(payable)} to ledger` : `Place order · ${inr(payable)}`}
+      </button>
+      {/* Only when the button's figure is no longer the basket total,
+          so the operator can see WHY. Without this the button quietly
+          said ₹70 while the bill came out at ₹35. */}
+      {!busy && (goldApplied || appliedDiscount > 0) && (
+        <span className="muted" style={{ fontSize: '.76rem' }}>
+          {inr((preview?.total ?? 0) + customTotal)}
+          {goldApplied && ' less 50% Gold Card on tests'}
+          {appliedDiscount > 0 && ` less ${inr(appliedDiscount)} discount`}
+        </span>
+      )}
+      {/* Names whichever thing is actually missing. A disabled button
+          beside "A patient name is required" when the name is filled
+          and the AGE is not is worse than no message. */}
+      {!canPlace && !busy && (
+        <span className="muted" style={{ fontSize: '.76rem' }}>
+          {cart.mcc == null ? 'Choose a client to bill.'
+            : cart.items.length === 0 ? 'Add at least one test.'
+            : !patient.name.trim() ? 'A patient name is required.'
+            : age === null ? 'An age is required — years and/or months.'
+            : !mobileOk ? 'The mobile number is incomplete.'
+            : sidTaken ? 'A Sample ID is already in use — see the barcodes above.'
+            : sidChecking ? 'Still checking a Sample ID…'
+            : 'Some tests have no price for this client.'}
+        </span>
+      )}
+    </div>
+  );
+
   return (
     <div className="page">
       {/* The channel lives in the header now, as a segmented control.
@@ -1576,6 +1616,7 @@ export function NewOrder() {
                 Nothing is collected on a client order. The bill records what is
                 owed, and it is settled later against the centre's account.
               </p>
+              {placeRow}
             </div>
           ) : (
           <div className={`card order-step${hasBillable ? '' : ' order-step--off'}`}>
@@ -1731,36 +1772,7 @@ export function NewOrder() {
                 )}
               </div>
 
-              <div className="row" style={{ marginTop: '.9rem' }}>
-                <button className="btn btn--primary" disabled={!canPlace} onClick={() => void place()}>
-                  {busy ? 'Placing…' : `Place order · ${inr(payable)}`}
-                </button>
-                {/* Only when the button's figure is no longer the basket total,
-                    so the operator can see WHY. Without this the button quietly
-                    said ₹70 while the bill came out at ₹35. */}
-                {!busy && (goldApplied || appliedDiscount > 0) && (
-                  <span className="muted" style={{ fontSize: '.76rem' }}>
-                    {inr((preview?.total ?? 0) + customTotal)}
-                    {goldApplied && ' less 50% Gold Card on tests'}
-                    {appliedDiscount > 0 && ` less ${inr(appliedDiscount)} discount`}
-                  </span>
-                )}
-                {/* Names whichever thing is actually missing. A disabled button
-                    beside "A patient name is required" when the name is filled
-                    and the AGE is not is worse than no message. */}
-                {!canPlace && !busy && (
-                  <span className="muted" style={{ fontSize: '.76rem' }}>
-                    {cart.mcc == null ? 'Choose a client to bill.'
-                      : cart.items.length === 0 ? 'Add at least one test.'
-                      : !patient.name.trim() ? 'A patient name is required.'
-                      : age === null ? 'An age is required — years and/or months.'
-                      : !mobileOk ? 'The mobile number is incomplete.'
-                      : sidTaken ? 'A Sample ID is already in use — see the barcodes above.'
-                      : sidChecking ? 'Still checking a Sample ID…'
-                      : 'Some tests have no price for this client.'}
-                  </span>
-                )}
-              </div>
+              {placeRow}
               </>
             )}
           </div>
