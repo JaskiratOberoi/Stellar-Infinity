@@ -19,6 +19,13 @@ public static class InfinityRoles
     public const string Technician = "technician";
     public const string Reporting = "reporting";
     public const string Client = "client";
+    /// <summary>A client centre confined to the WALK-IN channel — the MDCARE
+    /// shape: reception raises B2C orders, never B2B. Telo carried a
+    /// b2c_billing role for the same accounts.</summary>
+    public const string ClientB2c = "client_b2c";
+    /// <summary>A client login that only READS — reports and its own account.
+    /// Telo calls the same shape client_reporting.</summary>
+    public const string ClientReporting = "client_reporting";
     public const string Viewer = "viewer";
 
     /// <summary>
@@ -29,7 +36,7 @@ public static class InfinityRoles
     /// </summary>
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
-        SuperAdmin, Admin, LabManager, Technician, Reporting, Client, Viewer,
+        SuperAdmin, Admin, LabManager, Technician, Reporting, Client, ClientB2c, ClientReporting, Viewer,
     };
 
     public static bool IsValid(string? role) => role is not null && All.Contains(role);
@@ -121,6 +128,21 @@ public static class InfinityRoles
                 Capabilities.OrderCreate, Capabilities.OrderView,
                 Capabilities.OrderB2b,
                 Capabilities.PatientCreate, Capabilities.PatientView,
+                Capabilities.ReportView,
+                Capabilities.BillingView),
+
+            // The Client shape with the channel swapped: B2C only. The whole
+            // point is the cap it does NOT hold — a B2B order from these
+            // accounts bills the client ledger, and MDCARE has ruled that out.
+            [ClientB2c] = Caps(
+                Capabilities.OrderCreate, Capabilities.OrderView,
+                Capabilities.OrderB2c,
+                Capabilities.PatientCreate, Capabilities.PatientView,
+                Capabilities.ReportView,
+                Capabilities.BillingView),
+
+            // Reads reports and the account it belongs to; places nothing.
+            [ClientReporting] = Caps(
                 Capabilities.ReportView,
                 Capabilities.BillingView),
 
