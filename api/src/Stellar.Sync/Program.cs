@@ -37,13 +37,15 @@ if (args.Contains("--masters")) groups.AddRange(MasterTables.All);
 if (args.Contains("--clinical")) groups.AddRange(ClinicalTables.All);
 if (args.Contains("--billing")) groups.AddRange(BillingTables.All);
 if (args.Contains("--result")) groups.Add(ClinicalTables.Result);
-if (groups.Count == 0)
+var wantsDefaultSet = groups.Count == 0;
+if (wantsDefaultSet)
 {
     groups.AddRange(MasterTables.All);
     groups.AddRange(ClinicalTables.All);
     groups.AddRange(BillingTables.All);
 }
-IReadOnlyList<TableSync> tables = groups;
+// `tables` is finalised below, after configuration — the default set still
+// has a decision pending that needs the replica's connection string.
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -92,6 +94,24 @@ var pgConn = cfg["Stellar:ConnectionString"]
     ?? "Host=127.0.0.1;Port=5435;Database=stellar;Username=stellar;Password=stellar_dev";
 
 var interval = int.TryParse(cfg["Stellar:IntervalSeconds"], out var s) ? s : 15;
+
+// result joins the default set the moment its first load has happened. The
+// snapshot itself must stay a deliberate act (see the note on --result), but
+// once snapshot_completed_at is stamped the table has to tail with everything
+// else — left out, its watermark would quietly age past the 7-day retention
+// floor and the hours-long load would have to be repeated. A restart after
+// the load is what flips this; the compose service's restart policy means a
+// plain `docker restart stellar-sync-1` is the whole ceremony.
+if (wantsDefaultSet)
+{
+    await using var probe = new Npgsql.NpgsqlConnection(pgConn);
+    await probe.OpenAsync();
+    await using var check = new Npgsql.NpgsqlCommand(
+        "SELECT snapshot_completed_at IS NOT NULL FROM stellar.sync_watermark WHERE noble_table = @t", probe);
+    check.Parameters.AddWithValue("@t", ClinicalTables.Result.NobleTable);
+    if (await check.ExecuteScalarAsync() is true) groups.Add(ClinicalTables.Result);
+}
+IReadOnlyList<TableSync> tables = groups;
 
 builder.Services.AddSingleton(sp => new SyncEngine(
     nobleConn, pgConn, sp.GetRequiredService<ILogger<SyncEngine>>()));
