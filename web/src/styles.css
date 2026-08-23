@@ -1610,6 +1610,31 @@ tbody tr:hover { background: var(--accent-softer); }
 .bills__range { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
 /* Dates hug their content instead of filling the row. */
 .bills__range .input { width: auto; flex: none; min-width: 9.5rem; }
+
+/* A phone gets two tiles across rather than four stacked screens of summary
+   before the first bill. The figures still fit: the widest is ₹15,01,794 at
+   1.3rem, ~130px inside a ~180px column. */
+@media (max-width: 600px) {
+  .bills__tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .5rem;
+  }
+  .bills__tiles > .card { padding: .7rem .75rem; }
+  .bills__tiles dl { font-size: .7rem; }
+}
+
+/* The balance sits in the card's headline slot — the figure a bills list is
+   scanned for. cell--tag is a badge slot by default, so give the number room
+   to be a number: no truncation, and the danger colour it carries stays. */
+@media (max-width: 880px) {
+  .table-wrap--cards td.cell--tag[data-label="Balance"] {
+    font-size: 1rem;
+    white-space: nowrap;
+  }
+  /* Its label would sit above the figure and push the headline out of line;
+     the amount beside a bill number needs no word to say what it is. */
+  .table-wrap--cards td.cell--tag[data-label="Balance"]::before { content: none; }
+}
 .stack { display: flex; flex-direction: column; gap: .9rem; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: .9rem; }
 /* Wider floor than grid2: a leaderboard row carries a name AND a figure, and

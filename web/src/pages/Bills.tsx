@@ -320,8 +320,10 @@ export function Bills() {
         ))}
       </div>
 
-      <input className="input" style={{ marginBottom: '.7rem', maxWidth: 480 }}
-             placeholder="Search all bills in this period — bill #, name, PID, SID, mobile…"
+      <input className="input" style={{ marginBottom: '.7rem', width: '100%', maxWidth: 480 }}
+             /* Short enough to read whole on a phone; the period is already
+                stated in the subtitle above. */
+             placeholder="Search bills — number, name, PID, SID, mobile…"
              value={qLive} onChange={(e) => setQLive(e.target.value)} />
 
       {loading && !data ? (
@@ -355,17 +357,17 @@ export function Bills() {
                         {b.billDate ? b.billDate.slice(0, 10) : '—'}
                       </td>
                       <td className="cell--head">{b.patientName ?? '—'}</td>
-                      <td className="muted cell--body" data-label="Ref" style={{ fontSize: '.76rem' }}>
+                      <td className="muted cell--meta" data-label="Ref" style={{ fontSize: '.76rem' }}>
                         {[b.doctorName, b.customerName].filter(Boolean).join(' · ') || '—'}
                       </td>
-                      <td className="cell--tag">{b.paymentType ?? '—'}</td>
+                      <td className="cell--meta" data-label="Payment">{b.paymentType ?? '—'}</td>
                       <td className="muted cell--meta" data-label="Age">{ageLabel(b)}</td>
                       <td className="mono cell--meta" data-label="Amount" style={{ textAlign: 'right' }}>{inr(b.amount)}</td>
                       <td className="mono muted cell--meta" data-label="Disc" style={{ textAlign: 'right' }}>
                         {b.discount > 0 ? `− ${inr(b.discount)}` : '—'}
                       </td>
                       <td className="mono cell--meta" data-label="Paid" style={{ textAlign: 'right' }}>{inr(b.amountPaid)}</td>
-                      <td className="mono cell--meta" data-label="Balance" style={{
+                      <td className="mono cell--tag" data-label="Balance" style={{
                         textAlign: 'right', fontWeight: 600,
                         color: off ? 'var(--danger)' : undefined,
                       }}>
