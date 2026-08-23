@@ -63,6 +63,13 @@ interface Order {
   samples: OrderSample[];
 }
 
+interface InvoiceLogo {
+  hasCustom: boolean;
+  customVisible: boolean;
+  nobleVisible: boolean;
+  position: string;
+}
+
 interface InvoiceConfig {
   clientCode: string | null;
   clientName: string | null;
@@ -98,6 +105,8 @@ export function PrintInvoice() {
   const [order, setOrder] = useState<Order | null>(null);
   const [config, setConfig] = useState<InvoiceConfig | null>(null);
   const [disclaimer, setDisclaimer] = useState('');
+  const [logo, setLogo] = useState<InvoiceLogo | null>(null);
+  const [mccId, setMccId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -110,12 +119,14 @@ export function PrintInvoice() {
         const o = await api.get<{ order: Order }>(`/api/orders/${billId}`);
         if (!live) return;
         setOrder(o.order);
-        const i = await api.get<{ config: InvoiceConfig | null; disclaimer: string }>(
+        const i = await api.get<{ config: InvoiceConfig | null; disclaimer: string; logo: InvoiceLogo | null; mccId: number | null }>(
           `/api/orders/${billId}/invoice`,
         );
         if (!live) return;
         setConfig(i.config);
         setDisclaimer(i.disclaimer);
+        setLogo(i.logo);
+        setMccId(i.mccId);
       } catch (e) {
         if (live) setError(e instanceof Error ? e.message : 'Could not load this invoice.');
       }
@@ -183,6 +194,13 @@ export function PrintInvoice() {
           )}
         </div>
         <div style={{ textAlign: 'right' }}>
+          {/* The client's own mark, when it has one and has not hidden it —
+              MDCARE bills print under Medicare's, exactly as Telo's do. The
+              artwork is fetched as an image rather than carried in the JSON,
+              so a logo never inflates the payload as base64. */}
+          {logo?.hasCustom && logo.customVisible !== false && mccId != null && (
+            <img className="inv__logo" alt="" src={`/api/invoice-branding/${mccId}/logo`} />
+          )}
           <div className="inv__title">{isLabCopy ? 'Lab Invoice' : 'Invoice'}</div>
           <dl className="print__meta print__meta--right">
             <div><dt>Bill no.</dt><dd>{order.billNumber ?? order.billId}</dd></div>

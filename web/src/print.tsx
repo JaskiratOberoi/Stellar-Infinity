@@ -5,6 +5,7 @@ import { PrintReport } from './pages/PrintReport';
 import { PrintSmartReport } from './pages/PrintSmartReport';
 import { PrintInvoice } from './pages/PrintInvoice';
 import { PrintPaymentReceipt } from './pages/PrintPaymentReceipt';
+import { PrintStatement } from './pages/PrintStatement';
 import './styles.css';
 
 /**
@@ -33,6 +34,7 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/print/report/:sid/smart" element={<PrintSmartReport />} />
         <Route path="/print/invoice/:billId" element={<PrintInvoice />} />
         <Route path="/print/payment-receipt/:orderRef" element={<PrintPaymentReceipt />} />
+        <Route path="/print/statement/:mcc" element={<PrintStatement />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>,

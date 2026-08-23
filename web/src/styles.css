@@ -900,6 +900,45 @@ button, input, select { font: inherit; color: inherit; }
 /* Two columns of label/value with a block beside them. The columns are
    equal-width so the two dt gutters line up down the page — ragged label
    columns are what makes a header look photocopied. */
+/* The client's own mark, top-right of a document printed under its
+   letterhead. Capped rather than scaled: artwork arrives at whatever size the
+   client supplied, and a header is not the place to discover that. */
+.inv__logo {
+  max-height: 18mm;
+  max-width: 55mm;
+  object-fit: contain;
+  display: block;
+  margin: 0 0 2mm auto;
+}
+
+/* ---------- account statement ---------- */
+
+.stmt__totals {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4mm;
+  margin: 4mm 0 3mm;
+}
+.stmt__totals > div {
+  border: 0.3mm solid #ccc;
+  border-radius: 1.5mm;
+  padding: 2mm 2.5mm;
+  display: flex;
+  flex-direction: column;
+  gap: .5mm;
+}
+.stmt__totals span { font-size: 7.5pt; letter-spacing: .06em; text-transform: uppercase; color: #555; }
+.stmt__totals b { font-size: 12pt; }
+.stmt__totals em { font-style: normal; font-size: 7.5pt; color: #555; }
+
+.stmt__table { font-size: 8pt; }
+.stmt__table .num { text-align: right; white-space: nowrap; }
+.stmt__table tfoot td {
+  border-top: 0.4mm solid #999;
+  font-weight: 600;
+  padding-top: 1mm;
+}
+
 .print__head {
   display: grid;
   grid-template-columns: 1fr 1fr auto;

@@ -293,7 +293,12 @@ public static class BillingEndpoints
         string? from = null,
         string? to = null,
         string? q = null,
-        int page = 1)
+        int page = 1,
+        // "My registrations" — this operator's own bills, in either counter.
+        bool mine = false,
+        // Every matching bill, for the Excel export and the printed statement.
+        // Both describe the whole period; neither may ship the page on screen.
+        bool all = false)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
 
@@ -312,11 +317,14 @@ public static class BillingEndpoints
         const int pageSize = 50;
         var pg = Math.Max(1, page);
 
-        var totals = await billing.BillTotalsAsync(mcc, fromDate, toDate, q, ct).ConfigureAwait(false);
+        int? mineId = mine ? userId : null;
+
+        var totals = await billing.BillTotalsAsync(mcc, fromDate, toDate, q, mineId, ct).ConfigureAwait(false);
         var pageCount = Math.Max(1, (totals.Count + pageSize - 1) / pageSize);
         pg = Math.Min(pg, pageCount);
 
-        var rows = await billing.BillsPageAsync(mcc, fromDate, toDate, q, pg, pageSize, ct).ConfigureAwait(false);
+        var rows = await billing.BillsPageAsync(
+            mcc, fromDate, toDate, q, pg, all ? 0 : pageSize, mineId, ct).ConfigureAwait(false);
         var collected = await billing.CollectedInPeriodAsync(mcc, fromDate, toDate, ct).ConfigureAwait(false);
 
         return Results.Ok(new
@@ -325,9 +333,12 @@ public static class BillingEndpoints
             totals,
             collected,
             rows,
-            page = pg,
-            pageSize,
-            pageCount,
+            page = all ? 1 : pg,
+            pageSize = all ? rows.Count : pageSize,
+            pageCount = all ? 1 : pageCount,
+            // True when the export hit its ceiling — the caller must say so
+            // rather than hand over a workbook that silently stops.
+            truncated = all && rows.Count >= Orders.BillingRepository.ExportRowCap,
             from = fromDate,
             to = toDate,
         });

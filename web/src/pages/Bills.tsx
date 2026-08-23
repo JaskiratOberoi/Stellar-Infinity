@@ -40,6 +40,7 @@ interface BillRow {
 }
 
 interface BillsResponse {
+  truncated?: boolean;
   clientCode: string | null;
   totals: {
     count: number; balance: number; amount: number; amountPaid: number;
@@ -177,6 +178,9 @@ export function Bills() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewing, setViewing] = useState<number | null>(null);
+  /** "My registrations" — this operator's own bills, in either counter. */
+  const [mine, setMine] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // The search debounces itself; everything else refetches immediately.
   useEffect(() => {
@@ -191,14 +195,82 @@ export function Bills() {
     setError(null);
     const p = new URLSearchParams({ from, to, page: String(page) });
     if (q.trim()) p.set('q', q.trim());
+    if (mine) p.set('mine', 'true');
     void api.get<BillsResponse>(`/api/bills/${mccId}?${p}`)
       .then((r) => { if (live) setData(r); })
       .catch((e) => { if (live) setError(e instanceof Error ? e.message : 'Could not load bills.'); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, [mccId, from, to, q, page, viewing === null]);
+  }, [mccId, from, to, q, page, mine, viewing === null]);
 
   const pick = (f: string, t: string) => { setFrom(f); setTo(t); setPage(1); };
+
+  /**
+   * Every matching bill as a real workbook — amounts as numbers so the sheet
+   * can be summed and corrected, one row per bill. The page is paginated, so
+   * this refetches the whole period rather than exporting what is on screen:
+   * a workbook that silently held one page of a reconciliation would be worse
+   * than none. The writer is imported on click, so it costs the rest of the
+   * app nothing.
+   */
+  async function exportExcel() {
+    if (exporting || !t || t.count === 0) return;
+    setExporting(true);
+    try {
+      const p = new URLSearchParams({ from, to, all: 'true' });
+      if (q.trim()) p.set('q', q.trim());
+      if (mine) p.set('mine', 'true');
+      const full = await api.get<BillsResponse>(`/api/bills/${mccId}?${p}`);
+      if (full.rows.length === 0) return;
+
+      const writeXlsxFile = (await import('write-excel-file/browser')).default;
+      const header = [
+        'Bill #', 'Date', 'Patient', 'PID', 'Ref. Doctor', 'Ref. Customer',
+        'Payment', 'Age', 'Amount', 'Discount', 'Paid', 'Balance',
+      ].map((value) => ({ value, fontWeight: 'bold' as const }));
+
+      const rows = full.rows.map((b) => {
+        // Telo's shading, so a correction sheet reads the same in both:
+        // owing yellow, refund-due red, settled plain.
+        const fill = b.balance > 0 ? { backgroundColor: '#FFF3C4' }
+          : b.balance < 0 ? { backgroundColor: '#FFD6D6' }
+          : {};
+        return [
+          { type: Number, value: b.billNumber ?? b.billId, ...fill },
+          { type: String, value: b.billDate ? b.billDate.slice(0, 10) : '', ...fill },
+          { type: String, value: b.patientName ?? '', ...fill },
+          { type: Number, value: b.patientId ?? null, ...fill },
+          { type: String, value: b.doctorName ?? '', ...fill },
+          { type: String, value: b.customerName ?? '', ...fill },
+          { type: String, value: b.paymentType ?? '', ...fill },
+          { type: String, value: ageLabel(b), ...fill },
+          { type: Number, value: b.amount, ...fill },
+          { type: Number, value: b.discount, ...fill },
+          { type: Number, value: b.amountPaid, ...fill },
+          { type: Number, value: b.balance, ...fill },
+        ];
+      });
+
+      const name = `Bills_${(full.clientCode ?? mccId).toString().replace(/[^A-Za-z0-9_-]/g, '')}_${from}_${to}.xlsx`;
+      // v4 returns { toFile, toBlob }; toFile triggers the download.
+      await writeXlsxFile([header, ...rows] as never, {
+        columns: [12, 11, 26, 11, 22, 18, 10, 7, 11, 11, 11, 11].map((width) => ({ width })),
+      }).toFile(name);
+    } catch {
+      setError('The export did not complete.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  function printStatement() {
+    const p = new URLSearchParams({ from, to });
+    if (q.trim()) p.set('q', q.trim());
+    if (mine) p.set('mine', 'true');
+    // Its own tab: the statement loads the WHOLE period and prints itself, and
+    // printing this screen would produce one page of it.
+    window.open(`/print/statement/${mccId}?${p}`, '_blank', 'noopener');
+  }
   const firstOfWeek = () => {
     const d = new Date();
     const day = d.getDay();
@@ -244,6 +316,30 @@ export function Bills() {
             {data && data.pageCount > 1 ? ` · page ${data.page} of ${data.pageCount}` : ''}
           </p>
         </div>
+        <div className="row" style={{ marginLeft: 'auto', gap: '.4rem', flexWrap: 'wrap' }}>
+          <button className="btn btn--ghost btn--sm" disabled={exporting || (t?.count ?? 0) === 0}
+                  onClick={() => void exportExcel()}
+                  title="Every bill in this period as a workbook — not just this page.">
+            {exporting ? 'Exporting…' : 'Export Excel'}
+          </button>
+          <button className="btn btn--ghost btn--sm" disabled={(t?.count ?? 0) === 0}
+                  onClick={printStatement}
+                  title="The full period as a printed statement, under this client's letterhead.">
+            Print report
+          </button>
+        </div>
+      </div>
+
+      {/* Whose bills. Telo calls the second one "My Accounts Summary"; the
+          plainer name says the same and matches the button beside it. */}
+      <div className="row" style={{ gap: '.4rem', marginBottom: '.55rem' }}>
+        {([false, true] as const).map((v) => (
+          <button key={String(v)} type="button"
+                  className={`btn btn--sm ${mine === v ? 'btn--primary' : 'btn--ghost'}`}
+                  onClick={() => { setMine(v); setPage(1); }}>
+            {v ? 'My registrations' : 'All registrations'}
+          </button>
+        ))}
       </div>
 
       <div className="bills__range" style={{ marginBottom: '.7rem' }}>

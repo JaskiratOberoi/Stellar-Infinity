@@ -48,6 +48,17 @@ public sealed record InvoiceStored(
     bool? ShowDisclaimer,
     bool? ShowSignatory);
 
+/// <summary>
+/// The client's own letterhead artwork, as stored. MDCARE prints under
+/// Medicare's mark with Noble's hidden — which is what "the same way Telo
+/// does it" means on a B2C bill.
+/// </summary>
+public sealed record InvoiceLogo(
+    bool HasCustom, bool CustomVisible, bool NobleVisible, string Position);
+
+/// <summary>The artwork itself, for the route that streams it.</summary>
+public sealed record InvoiceLogoFile(byte[] Bytes, string Mime);
+
 public sealed record InvoiceConfig(
     int MccId,
     string? ClientCode,
@@ -179,6 +190,52 @@ public sealed class InvoiceRepository(NobleConnectionFactory db, SqlRetry retry)
 
         return await GetAsync(mcc, ct).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// The client's letterhead SETTINGS, read straight from the shared table
+    /// rather than through usp_inf_invoice_config — the procedure predates
+    /// these columns and Telo prints from the same row, so widening it would
+    /// mean changing a procedure both systems depend on to add a field only
+    /// one of them reads.
+    /// </summary>
+    public Task<InvoiceLogo> GetLogoAsync(int mcc, CancellationToken ct = default) =>
+        retry.ExecuteAsync("invoice.logo.flags", token =>
+            db.QueryAsync("invoice.logo.flags", async (conn, inner) =>
+            {
+                await using var cmd = NobleConnectionFactory.CreateCommand(conn, """
+                    SELECT has_custom = CASE WHEN top_right_logo_bytes IS NULL THEN 0 ELSE 1 END,
+                           custom_visible = ISNULL(custom_logo_visible, 1),
+                           noble_visible  = ISNULL(noble_logo_visible, 1),
+                           position       = ISNULL(NULLIF(LTRIM(RTRIM(noble_logo_position)), ''), 'left')
+                    FROM dbo.telo_mcc_invoice_config WHERE mcc_id = @mcc;
+                    """);
+                cmd.Parameters.Add("@mcc", SqlDbType.Int).Value = mcc;
+                await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);
+                // No row at all is the ordinary case: a client with no branding
+                // prints under Noble's, which is the default below.
+                if (!await r.ReadAsync(inner).ConfigureAwait(false))
+                    return new InvoiceLogo(false, false, true, "left");
+                return new InvoiceLogo(
+                    r.Int("has_custom") == 1, r.Bool("custom_visible"),
+                    r.Bool("noble_visible"), r.Str("position") ?? "left");
+            }, token), ct);
+
+    /// <summary>The artwork's bytes, or null when the client stores none.</summary>
+    public Task<InvoiceLogoFile?> GetLogoFileAsync(int mcc, CancellationToken ct = default) =>
+        retry.ExecuteAsync("invoice.logo.file", token =>
+            db.QueryAsync("invoice.logo.file", async (conn, inner) =>
+            {
+                await using var cmd = NobleConnectionFactory.CreateCommand(conn, """
+                    SELECT top_right_logo_bytes AS bytes,
+                           ISNULL(NULLIF(LTRIM(RTRIM(top_right_logo_mime)), ''), 'image/png') AS mime
+                    FROM dbo.telo_mcc_invoice_config
+                    WHERE mcc_id = @mcc AND top_right_logo_bytes IS NOT NULL;
+                    """);
+                cmd.Parameters.Add("@mcc", SqlDbType.Int).Value = mcc;
+                await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);
+                if (!await r.ReadAsync(inner).ConfigureAwait(false)) return null;
+                return new InvoiceLogoFile((byte[])r["bytes"], r.Str("mime") ?? "image/png");
+            }, token), ct);
 
     private static void Text(SqlCommand cmd, string name, int size, string? value) =>
         cmd.Parameters.Add(name, SqlDbType.NVarChar, size).Value =

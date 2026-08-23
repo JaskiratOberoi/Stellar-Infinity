@@ -49,6 +49,23 @@ public static class InvoiceEndpoints
                        .RequireAuthorization()
                        .RequireCapability(Capabilities.UserManage);
 
+        // The artwork, for the documents that print under it. billing:view and
+        // in-scope only — same gate as the invoice it appears on — and NOT
+        // behind user:manage like the editor above: printing a bill is desk
+        // work, editing the branding is not.
+        // The client's letterhead as DATA — heading, address, and which marks
+        // to draw. The invoice route above answers the same for one bill; the
+        // statement has no bill to ask through.
+        app.MapGet("/api/invoice-branding/{mcc:int}", GetBranding)
+           .RequireAuthorization()
+           .RequireCapability(Capabilities.BillingView)
+           .WithName("GetInvoiceBranding");
+
+        app.MapGet("/api/invoice-branding/{mcc:int}/logo", GetLogo)
+           .RequireAuthorization()
+           .RequireCapability(Capabilities.BillingView)
+           .WithName("GetInvoiceLogo");
+
         admin.MapGet("/{mcc:int}", GetConfig).WithName("GetInvoiceConfig");
         admin.MapPut("/{mcc:int}", SaveConfig).WithName("SaveInvoiceConfig");
     }
@@ -143,6 +160,43 @@ public static class InvoiceEndpoints
         return scope.Contains(mcc);
     }
 
+    private static async Task<IResult> GetBranding(
+        int mcc,
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
+        InvoiceRepository invoices,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+        if (!await InScopeAsync(scopes, userId, mcc, ct).ConfigureAwait(false))
+            return Results.NotFound();
+
+        return Results.Ok(new
+        {
+            config = await invoices.GetAsync(mcc, ct).ConfigureAwait(false),
+            logo = await invoices.GetLogoAsync(mcc, ct).ConfigureAwait(false),
+        });
+    }
+
+    private static async Task<IResult> GetLogo(
+        int mcc,
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
+        InvoiceRepository invoices,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+        if (!await InScopeAsync(scopes, userId, mcc, ct).ConfigureAwait(false))
+            return Results.NotFound();
+
+        var file = await invoices.GetLogoFileAsync(mcc, ct).ConfigureAwait(false);
+        if (file is null) return Results.NotFound();
+
+        // A logo changes about never, and the print page fetches it on every
+        // document. Private, because it is served behind a session.
+        return Results.File(file.Bytes, file.Mime);
+    }
+
     private static async Task<IResult> GetInvoice(
         int billId,
         System.Security.Claims.ClaimsPrincipal principal,
@@ -166,9 +220,19 @@ public static class InvoiceEndpoints
             ? await invoices.GetAsync(mcc, ct).ConfigureAwait(false)
             : null;
 
+        // The letterhead's SHAPE, not its bytes: whether this client prints
+        // under its own mark, whether Noble's stays, and which side each sits.
+        // The artwork itself is a separate request the print page makes, so a
+        // logo never rides inside a JSON payload as base64.
+        var logo = order.MccCode is int lm
+            ? await invoices.GetLogoAsync(lm, ct).ConfigureAwait(false)
+            : null;
+
         return Results.Ok(new
         {
             config,
+            logo,
+            mccId = order.MccCode,
             disclaimer = InvoiceRepository.DisclaimerText,
         });
     }

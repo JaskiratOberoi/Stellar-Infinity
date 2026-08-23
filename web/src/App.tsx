@@ -38,6 +38,7 @@ import { PrintSmartReport } from './pages/PrintSmartReport';
 import { EnvBanner } from './components/EnvBanner';
 import { PrintInvoice } from './pages/PrintInvoice';
 import { PrintPaymentReceipt } from './pages/PrintPaymentReceipt';
+import { PrintStatement } from './pages/PrintStatement';
 import { PaymentComplete } from './pages/PaymentComplete';
 
 /**
@@ -277,6 +278,9 @@ export function App() {
             has no session, and the renderer producing the PDF has none
             either. See PaymentReceiptLink. */}
         <Route path="/print/payment-receipt/:orderRef" element={<PrintPaymentReceipt />} />
+        {/* The account statement — every bill in the period under the
+            client's own letterhead. See PrintStatement. */}
+        <Route path="/print/statement/:mcc" element={<PrintStatement />} />
       </Routes>
     );
   }

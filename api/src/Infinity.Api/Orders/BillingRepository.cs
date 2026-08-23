@@ -43,6 +43,9 @@ public sealed class BillingRepository(NobleConnectionFactory db)
      * old counter's bills would read as money vanishing.
      * ------------------------------------------------------------------- */
 
+    /// <summary>The most rows an export or printed statement will carry.</summary>
+    public const int ExportRowCap = 20_000;
+
     public sealed record BillTotals(
         int Count, decimal Balance, decimal Amount, decimal AmountPaid,
         decimal Discount, int PendingCount);
@@ -59,6 +62,10 @@ public sealed class BillingRepository(NobleConnectionFactory db)
 
     private const string BillsWhere = """
         WHERE (b.addedby LIKE 'telo:%' OR b.addedby LIKE 'inf:%')
+          -- "My registrations": the SAME person in either counter. The desks
+          -- are migrating, so an operator's own day spans both markers and a
+          -- filter that knew only one would hide half their own work.
+          AND (@mineTelo IS NULL OR b.addedby IN (@mineTelo, @mineInf))
           AND b.mcc_code = @mcc
           AND b.bill_date >= CAST(@from AS DATE)
           AND b.bill_date <  DATEADD(day, 1, CAST(@to AS DATE))
@@ -76,8 +83,14 @@ public sealed class BillingRepository(NobleConnectionFactory db)
           ))
         """;
 
-    private static void BindBillsWhere(Microsoft.Data.SqlClient.SqlCommand cmd, int mcc, string from, string to, string? q)
+    private static void BindBillsWhere(
+        Microsoft.Data.SqlClient.SqlCommand cmd, int mcc, string from, string to, string? q,
+        int? mineUserId = null)
     {
+        cmd.Parameters.Add("@mineTelo", SqlDbType.NVarChar, 64).Value =
+            mineUserId is int mt ? $"telo:{mt}" : DBNull.Value;
+        cmd.Parameters.Add("@mineInf", SqlDbType.NVarChar, 64).Value =
+            mineUserId is int mi ? $"inf:{mi}" : DBNull.Value;
         cmd.Parameters.Add("@mcc", SqlDbType.Int).Value = mcc;
         cmd.Parameters.Add("@from", SqlDbType.VarChar, 10).Value = from;
         cmd.Parameters.Add("@to", SqlDbType.VarChar, 10).Value = to;
@@ -92,7 +105,8 @@ public sealed class BillingRepository(NobleConnectionFactory db)
     }
 
     public Task<BillTotals> BillTotalsAsync(
-        int mcc, string from, string to, string? q, CancellationToken ct = default) =>
+        int mcc, string from, string to, string? q, int? mineUserId = null,
+        CancellationToken ct = default) =>
         db.QueryAsync("billing.billTotals", async (conn, inner) =>
         {
             await using var cmd = NobleConnectionFactory.CreateCommand(conn, $"""
@@ -107,7 +121,7 @@ public sealed class BillingRepository(NobleConnectionFactory db)
                 LEFT JOIN dbo.tbl_med_mcc_customer c ON c.id = b.ref_customer
                 {BillsWhere}
                 """);
-            BindBillsWhere(cmd, mcc, from, to, q);
+            BindBillsWhere(cmd, mcc, from, to, q, mineUserId);
             await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);
             if (!await r.ReadAsync(inner).ConfigureAwait(false))
                 return new BillTotals(0, 0, 0, 0, 0, 0);
@@ -150,9 +164,14 @@ public sealed class BillingRepository(NobleConnectionFactory db)
                 r.Int("rc"), r.Int("cc"), r.Int("oc"));
         }, ct);
 
+    /// <param name="pageSize">
+    /// Zero means EVERY matching bill, for the export and the printed
+    /// statement — both of which must describe the whole period, not the page
+    /// on screen. Capped, because a workbook nobody can open is not an export.
+    /// </param>
     public Task<IReadOnlyList<BillRow>> BillsPageAsync(
         int mcc, string from, string to, string? q, int page, int pageSize,
-        CancellationToken ct = default) =>
+        int? mineUserId = null, CancellationToken ct = default) =>
         db.QueryAsync("billing.billsPage", async (conn, inner) =>
         {
             await using var cmd = NobleConnectionFactory.CreateCommand(conn, $"""
@@ -169,9 +188,10 @@ public sealed class BillingRepository(NobleConnectionFactory db)
                 ORDER BY b.bill_date DESC, b.id DESC
                 OFFSET @off ROWS FETCH NEXT @lim ROWS ONLY
                 """);
-            BindBillsWhere(cmd, mcc, from, to, q);
-            cmd.Parameters.Add("@off", SqlDbType.Int).Value = (page - 1) * pageSize;
-            cmd.Parameters.Add("@lim", SqlDbType.Int).Value = pageSize;
+            BindBillsWhere(cmd, mcc, from, to, q, mineUserId);
+            var unpaged = pageSize <= 0;
+            cmd.Parameters.Add("@off", SqlDbType.Int).Value = unpaged ? 0 : (page - 1) * pageSize;
+            cmd.Parameters.Add("@lim", SqlDbType.Int).Value = unpaged ? ExportRowCap : pageSize;
             await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);
             var rows = new List<BillRow>();
             while (await r.ReadAsync(inner).ConfigureAwait(false))
