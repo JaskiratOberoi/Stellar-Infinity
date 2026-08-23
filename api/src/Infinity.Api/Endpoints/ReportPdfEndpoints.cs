@@ -320,19 +320,28 @@ public static class ReportPdfEndpoints
         var misses = new List<(int Index, string Key)>();
 
         /*
-         * The merged document comes out in the LIS's own order, not the order
-         * the screen happened to send.
+         * The stapled merge comes out in a chronological order, not the order
+         * the screen happened to send: the reporting list is newest-first, so
+         * passing its order straight through produced the reports back to
+         * front. See OrderAsLisAsync.
          *
-         * A patient's complete report is read against the one the LIS prints,
-         * and that is ordered by result id ascending — see OrderAsLisAsync. The
-         * reporting list is newest-first, so sending its order straight through
-         * produced the reports back to front.
-         *
-         * Applied to every merge rather than only to the per-patient one: a
-         * stack of reports reads chronologically whatever selected it, and
-         * "whichever order the UI iterated in" is not an order anyone chose.
+         * The complete patient report does NOT go through here — it is one
+         * department-major document rather than a stack of per-sample ones, so
+         * a sequence of whole reports cannot express it. See the deptMajor
+         * branch below.
          */
-        sids = (await repo.OrderAsLisAsync(sids, ct).ConfigureAwait(false)).ToList();
+        var deptMajor = body!.DeptMajor == true;
+        if (!deptMajor)
+        {
+            sids = (await repo.OrderAsLisAsync(sids, ct).ConfigureAwait(false)).ToList();
+        }
+
+        // Gated, in the order given. The complete report re-orders them into
+        // department units; the stapled merge keeps the sequence resolved
+        // above. The stamps ride along so a unit's cache entry expires when its
+        // sample is re-authorised, exactly as a whole report's does.
+        var allowed = new List<string>();
+        var rowStamps = new Dictionary<string, DateTimeOffset?>(StringComparer.OrdinalIgnoreCase);
 
         var hits = 0;
         foreach (var sid in sids)
@@ -358,6 +367,15 @@ public static class ReportPdfEndpoints
                 });
                 continue;
             }
+
+            allowed.Add(sid);
+            rowStamps[sid] = row!.LastModifiedAt;
+
+            // The complete report is cut into department units below, so there
+            // is no whole-sample document to build here. Gating still had to
+            // run per SID, which is why this sits inside the loop rather than
+            // replacing it.
+            if (deptMajor) continue;
 
             // The batch shares the single route's cache, entry for entry. A hit
             // travels as finished bytes for the renderer to staple; a miss is
@@ -393,6 +411,122 @@ public static class ReportPdfEndpoints
                 Headless: body.Headless,
                 PageNumbers: false));
             misses.Add((included.Count - 1, key));
+        }
+
+        /*
+         * The complete patient report — one document, not a stack.
+         *
+         * Departments run in the lab's own Orderno sequence and the samples sit
+         * INSIDE them, which is why this cannot be assembled by stapling
+         * per-sample PDFs: the LIS prints one sample's tests under two
+         * different department headings with other samples in between, and a
+         * whole-report-per-sample merge can only ever keep a sample together.
+         *
+         * One render, so one browser trip and no per-sample cache. A complete
+         * report is pulled far less often than a single one, and its cache key
+         * would have to fold every sample's last-modified stamp together.
+         */
+        if (deptMajor)
+        {
+            if (allowed.Count == 0)
+                return Results.BadRequest(new { error = "None of the selected reports can be released.", skipped });
+
+            var units = await repo.GetPatientUnitsAsync(allowed, ct).ConfigureAwait(false);
+
+            // A sample with no authorised result belongs to no department and
+            // so produces no unit. Falling through to the stapled merge would
+            // silently hand back a differently-shaped document, so say it
+            // plainly instead.
+            if (units.Count == 0)
+                return Results.BadRequest(new { error = "None of the selected reports can be released.", skipped });
+
+            var deptDocs = new List<RenderClient.ReportRequest>();
+            var deptMisses = new List<(int Index, string Key)>();
+            var graphed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            for (var i = 0; i < units.Count; i++)
+            {
+                var u = units[i];
+                var last = i == units.Count - 1;
+
+                // Only the LAST unit closes the document. The LIS prints no end
+                // marker at all; one at the foot of every sheet-run would put
+                // five "End of Report" lines inside a single report.
+                var query = $"?pdf=1&split=dept&dept={Uri.EscapeDataString(u.Department)}"
+                          + (last ? string.Empty : "&end=0");
+
+                // A sample's graphs ride with the FIRST unit that sample appears
+                // in, so a tube whose tests span two departments does not carry
+                // its graph sheets twice. Decided BEFORE the cache is consulted
+                // and folded into the key: a cached unit already has its graphs
+                // baked in, so deciding after a hit would attach them a second
+                // time to the next unit of the same sample.
+                var carriesGraphs = graphed.Add(u.Sid);
+
+                var graphFp = carriesGraphs
+                    ? await GraphFingerprintAsync(graphs, u.Sid, body.WithGraph, ct).ConfigureAwait(false)
+                    : "0";
+                var key = PdfCacheKey("reportdept", u.Sid, rowStamps.GetValueOrDefault(u.Sid),
+                    $"{u.Department}|e{(last ? 1 : 0)}h{(body.Headless == true ? 1 : 0)}g{graphFp}");
+
+                if (await cache.GetBytesAsync(key, ct).ConfigureAwait(false) is { } cachedUnit)
+                {
+                    hits++;
+                    deptDocs.Add(new RenderClient.ReportRequest(
+                        Url: null, PdfB64: Convert.ToBase64String(cachedUnit)));
+                    continue;
+                }
+
+                var attachments = carriesGraphs
+                    ? await CollectGraphsAsync(graphs, u.Sid, body.WithGraph, ct).ConfigureAwait(false)
+                    : null;
+
+                deptDocs.Add(new RenderClient.ReportRequest(
+                    Url: $"/print/report/{Uri.EscapeDataString(u.Sid)}{query}",
+                    Attachments: attachments,
+                    Headless: body.Headless,
+                    PageNumbers: false));
+                deptMisses.Add((deptDocs.Count - 1, key));
+            }
+
+            try
+            {
+                var cookie = http.Request.Headers.Cookie.ToString();
+                if (deptMisses.Count > 0)
+                {
+                    using var gate = new SemaphoreSlim(3);
+                    await Task.WhenAll(deptMisses.Select(async m =>
+                    {
+                        await gate.WaitAsync(ct).ConfigureAwait(false);
+                        try
+                        {
+                            var one = await render.RenderAsync([deptDocs[m.Index]], cookie, ct).ConfigureAwait(false);
+                            await cache.SetBytesAsync(m.Key, one, PdfCacheTtl, ct).ConfigureAwait(false);
+                            deptDocs[m.Index] = new RenderClient.ReportRequest(
+                                Url: null, PdfB64: Convert.ToBase64String(one));
+                        }
+                        finally
+                        {
+                            gate.Release();
+                        }
+                    })).ConfigureAwait(false);
+                }
+
+                http.Response.Headers["X-Report-Cache"] = $"{hits}/{deptDocs.Count}";
+
+                var patientPdf = await render.RenderAsync(
+                    deptDocs, cookie, ct, numberPages: true).ConfigureAwait(false);
+
+                if (skipped.Count > 0)
+                    http.Response.Headers["X-Reports-Skipped"] = System.Text.Json.JsonSerializer.Serialize(skipped);
+
+                var when = NobleTime.NowForNoble().ToString("yyyyMMdd-HHmm");
+                return Results.File(patientPdf, "application/pdf", $"Reports_{allowed.Count}_{when}.pdf");
+            }
+            catch (RenderFailedException)
+            {
+                return Results.Problem("The report could not be rendered.", statusCode: StatusCodes.Status502BadGateway);
+            }
         }
 
         if (included.Count == 0)
@@ -519,7 +653,14 @@ public static class ReportPdfEndpoints
     /// Skip the letterhead artwork, for pre-printed stationery — the same
     /// choice the LIS offers as its "Without Header" button.
     /// </param>
+    /// <param name="DeptMajor">
+    /// Assemble ONE complete report with the departments on the outside and
+    /// the samples within, the way the LIS's PID report prints — instead of
+    /// stapling one whole report per sample. Sent by the PID download only;
+    /// the worksheet's multi-select merge stays a stack of per-sample reports,
+    /// because there the samples are the point and need not share a patient.
+    /// </param>
     public sealed record BulkPdfRequest(
         IReadOnlyList<string>? Sids, bool WithGraph = true, bool? Headless = null, bool? Split = null,
-        bool? SplitDept = null);
+        bool? SplitDept = null, bool? DeptMajor = null);
 }

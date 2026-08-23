@@ -62,6 +62,11 @@ import '../report.css';
  *               patient block repeating, exactly like the continuous layout.
  * `?split=1`    a section per page. On screen that is drawn as separate sheets
  *               on a grey desk, because screen media has no page breaks to see.
+ * `?dept=NAME`  only that department of this sample. The complete patient
+ *               report is stapled from one of these per (sample, department),
+ *               because the LIS groups it by department with the samples
+ *               inside — see GetPatientUnitsAsync.
+ * `?end=0`      no closing marker, for every run of such a report but the last.
  * `?t=…`        the patient's own copy, opened from the QR. No session, so the
  *               data comes from the public route the token opens.
  * default       the in-app preview: tickable, with the band drawn.
@@ -121,6 +126,21 @@ export function PrintReport() {
   // Not state: nothing toggles it after load — it exists for the render
   // service, which bakes it into the print URL.
   const splitDept = params.get('split') === 'dept';
+
+  /*
+   * ── ONE DEPARTMENT OF THIS SAMPLE ────────────────────────────────────────
+   * The complete patient report is assembled from these: the LIS groups it by
+   * DEPARTMENT and puts the samples inside, so a sample whose tests span two
+   * departments is printed in two places with other samples between them. The
+   * merge therefore asks for one (sample, department) run at a time and
+   * staples them in the LIS's order — see GetPatientUnitsAsync.
+   *
+   * Absent, nothing here applies and the route renders the whole sample
+   * exactly as it always has. `end=0` suppresses the closing marker on every
+   * run but the last, so a five-run report ends once rather than five times.
+   */
+  const deptFilter = params.get('dept');
+  const showEnd = params.get('end') !== '0';
   const [headless, setHeadless] = useState(params.get('headless') === '1');
   const [excluded, setExcluded] = useState<Set<number>>(() => parseExcluded(params.get('exclude')));
 
@@ -292,7 +312,13 @@ export function PrintReport() {
     };
 
     const out: Section[] = [];
+    const wanted = deptFilter?.trim().toUpperCase();
     for (const dept of report.departments) {
+      // Matched on the trimmed, upper-cased name because that name is the only
+      // handle the two ends share — the merge reads it from the department
+      // master and this route reads it off the result rows.
+      if (wanted && dept.name.trim().toUpperCase() !== wanted) continue;
+
       const entries = dept.items
         .filter(survives)
         .map((item) => ({ item, key: keyOf(item) }));
@@ -340,7 +366,7 @@ export function PrintReport() {
       merged.push(sec);
     }
     return merged;
-  }, [report, interactive, excluded]);
+  }, [report, interactive, excluded, deptFilter]);
 
   /* Sections re-joined into whole departments, for ?split=dept. Built from
      sections rather than from report.departments directly so the exclusion
@@ -460,7 +486,7 @@ export function PrintReport() {
             </tr>
           )}
           {sec.entries.map(renderItem)}
-          {last && i === secs.length - 1 && <EndOfReport />}
+          {last && showEnd && i === secs.length - 1 && <EndOfReport />}
         </tbody>
       ))}
     </table>
@@ -564,9 +590,11 @@ export function PrintReport() {
                   {sec.entries.map(renderItem)}
                 </tbody>
               ))}
-              <tbody>
-                <EndOfReport />
-              </tbody>
+              {showEnd && (
+                <tbody>
+                  <EndOfReport />
+                </tbody>
+              )}
             </table>
           )}
 

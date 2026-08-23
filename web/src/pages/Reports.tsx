@@ -200,10 +200,14 @@ export function Reports() {
       await downloadFile('/api/reports/pdf/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...csrfHeader() },
-        // Always department-per-sheet: the complete report mirrors the LIS's
-        // PID report, where one department never shares a page with the next.
-        // The letterhead answer is per download — see PidReportButton.
-        body: JSON.stringify({ sids, withGraph: withGraphs, splitDept: true, headless: !letterhead }),
+        // deptMajor: assembled the way the LIS's PID report is — departments on
+        // the outside, samples within, so a sample whose tests span two
+        // departments prints in both places. splitDept rides along because each
+        // of those runs is still a department that never shares a page with the
+        // next. The letterhead answer is per download — see PidReportButton.
+        body: JSON.stringify({
+          sids, withGraph: withGraphs, splitDept: true, deptMajor: true, headless: !letterhead,
+        }),
         fallbackName: `Reports_PID_${pid}.pdf`,
       });
     } catch (e) {

@@ -588,23 +588,28 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
     }
 
     /// <summary>
-    /// Put a set of SIDs into the order the LIS prints them in.
+    /// Put a set of SIDs into a defensible reading order for a STAPLED merge —
+    /// the worksheet's multi-select download, where each sample stays a whole
+    /// report and the samples simply follow one another.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A merged report has to come out in the LIS's sequence, because the same
-    /// patient's reports are read side by side with the ones the LIS produced.
-    /// GET_PATIENT_REPORT_PAT_ID — the procedure behind the LIS's own complete
-    /// report — ends in <c>ORDER BY tbl_med_mcc_patient_test_result.id asc</c>,
-    /// so the LIS orders a patient's whole report by the identity of the RESULT
-    /// ROWS: oldest work first, regardless of when a sample was registered.
+    /// NOT the order of the LIS's complete patient report, despite the name it
+    /// has carried. GET_PATIENT_REPORT_PAT_ID ends in <c>ORDER BY
+    /// tbl_med_mcc_patient_test_result.id asc</c>, and that much is true — but
+    /// the procedure only feeds Crystal, which then REGROUPS its rows by
+    /// department. A printed LIS PID report (patient 3594080) puts one sample's
+    /// tests under two different department headings with other samples in
+    /// between, which no ordering of whole per-sample documents can reproduce.
+    /// That report is assembled by the department-major patient route instead;
+    /// see GetPatientUnitsAsync.
     /// </para>
     /// <para>
-    /// A sample is therefore placed by its EARLIEST result id, which is where
-    /// that sample's block begins in the LIS's own listing. Ordering by
+    /// What survives for the stapled merge: a sample is placed by its EARLIEST
+    /// result id, so the stack reads oldest-work-first. Ordering by
     /// registration time instead is close but not the same — a sample
     /// registered later can be resulted first — and the reporting list is
-    /// newest-first, which is the reverse of what the LIS prints.
+    /// newest-first, which is the reverse of what anyone reads.
     /// </para>
     /// <para>
     /// A SID with no results yet has no place in that sequence; those keep
@@ -679,6 +684,106 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
             .ThenBy(x => x.has ? x.v.Spec : 0)
             .ThenBy(x => x.has ? x.v.Seq : x.i)
             .Select(x => x.sid)
+            .ToList();
+    }
+
+    /// <summary>
+    /// One sheet-run of the complete report: a SAMPLE's results within ONE
+    /// department. <paramref name="Rank"/> and <paramref name="SampleType"/>
+    /// are what it is ordered by, not what it prints.
+    /// </summary>
+    public sealed record PatientUnit(string Sid, string Department, int Rank, string SampleType);
+
+    /// <summary>
+    /// The complete report, broken into the units it prints as and put into the
+    /// LIS's order.
+    ///
+    /// <para>
+    /// Verified against a printed LIS PID report (patient 3594080, 15 pages).
+    /// The report groups by DEPARTMENT first: sample 9148892 appears under
+    /// Hematology on page 1 and again under Clinical Biochemistry on page 13,
+    /// with two other samples in between. So a sample is NOT the unit of the
+    /// document — a sample within a department is, and no page mixes two of
+    /// them.
+    /// </para>
+    /// <para>
+    /// Departments run in <c>tbl_med_department_master.Orderno</c> order
+    /// (Hematology 0, Clinical Biochemistry 1, Clinical Pathology 2 — exactly
+    /// the printed sequence). Read live rather than hard-coded: it is
+    /// lab-editable master data, and a rank frozen into this code would stop
+    /// matching the LIS the first time someone reorders a department there.
+    /// </para>
+    /// <para>
+    /// Inside a department the samples go by SPECIMEN NAME — the printout runs
+    /// Plasma-NaF, Serum, WB-EDTA in biochemistry and Stool, Urine in
+    /// pathology. The specimen comes from the SAMPLE's own tube
+    /// (<c>tbl_med_mcc_patient_samples.sampleid</c>), not from the test
+    /// catalogue's expected specimen that the per-result <c>specimen</c> column
+    /// carries; the two differ whenever a test is run on a tube it does not
+    /// nominate.
+    /// </para>
+    /// <para>
+    /// Only AUTHORISED results count, matching what the report prints: a
+    /// department holding nothing but unauthorised rows would otherwise be
+    /// given a sheet-run and render empty.
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyList<PatientUnit>> GetPatientUnitsAsync(
+        IReadOnlyList<string> sids, CancellationToken ct = default)
+    {
+        if (sids.Count == 0) return [];
+
+        var units = await retry.ExecuteAsync("reports.patientUnits", token =>
+            db.QueryAsync("reports.patientUnits", async (conn, inner) =>
+            {
+                var names = string.Join(",", sids.Select((_, i) =>
+                    "@s" + i.ToString(CultureInfo.InvariantCulture)));
+
+                await using var cmd = NobleConnectionFactory.CreateCommand(conn, $"""
+                    SELECT DISTINCT
+                        sid         = r.vailid,
+                        -- 'OTHER' mirrors what the report model calls a result
+                        -- whose test names no department; the two must agree or
+                        -- the sheet-run would ask for a department the page
+                        -- cannot find.
+                        department  = ISNULL(NULLIF(LTRIM(RTRIM(d.Name)), ''), 'OTHER'),
+                        rank        = ISNULL(d.Orderno, 2147483647),
+                        sample_type = ISNULL(LTRIM(RTRIM(SM.Sampletype)), '')
+                    FROM dbo.tbl_med_mcc_patient_test_result r
+                    LEFT JOIN dbo.tbl_med_test_master m ON m.id = r.testid
+                    LEFT JOIN dbo.tbl_med_department_master d ON d.id = m.DepartmentId
+                    LEFT JOIN dbo.tbl_med_mcc_patient_samples s ON s.vailid = r.vailid
+                    LEFT JOIN dbo.tbl_med_sample_master SM ON SM.id = s.sampleid
+                    WHERE r.vailid IN ({names}) AND r.auth = 1
+                    """);
+                for (var i = 0; i < sids.Count; i++)
+                {
+                    cmd.Parameters.Add("@s" + i.ToString(CultureInfo.InvariantCulture),
+                                       SqlDbType.NVarChar, 50).Value = sids[i];
+                }
+
+                var rows = new List<PatientUnit>();
+                await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);
+                while (await r.ReadAsync(inner).ConfigureAwait(false))
+                {
+                    var sid = r.Str("sid");
+                    var dept = r.Str("department");
+                    if (sid is null || dept is null) continue;
+                    rows.Add(new PatientUnit(sid, dept,
+                        r.NullableInt("rank") ?? int.MaxValue, r.Str("sample_type") ?? string.Empty));
+                }
+                return (IReadOnlyList<PatientUnit>)rows;
+            }, token), ct).ConfigureAwait(false);
+
+        // Department, then specimen. The final SID tie-break is not the LIS's
+        // rule but a determinism guarantee: two tubes of one specimen in one
+        // department must not swap places between two downloads of the same
+        // report.
+        return units
+            .OrderBy(u => u.Rank)
+            .ThenBy(u => u.Department, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(u => u.SampleType, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(u => u.Sid, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 
