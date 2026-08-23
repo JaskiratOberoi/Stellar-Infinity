@@ -432,16 +432,90 @@ public static class OrderEntryEndpoints
         CartStore carts,
         OrderWriteRepository orders,
         CustomTestRepository customTests,
+        Reads.CatalogRepository catalog,
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
         if (!await InScopeAsync(scopes, userId, body.Mcc, ct).ConfigureAwait(false))
             return Results.NotFound();
-        if (body.Items.Count == 0)
-            return Results.BadRequest(new { error = "An order needs at least one test." });
+        // Custom-only is a real order — "Glucose - External" alone is a walk-in
+        // Telo accepts, and its own action says so in as many words. What an
+        // order cannot be is EMPTY.
+        if (body.Items.Count == 0 && (body.CustomLines?.Count ?? 0) == 0)
+            return Results.BadRequest(new { error = "An order needs at least one test or external item." });
 
         var (channel, channelError) = ResolveChannel(principal, body.Channel);
         if (channelError is not null) return channelError;
+
+        /*
+         * The walk-in counter's money rules, ported from Telo and enforced
+         * HERE because the browser's copy is a courtesy. B2C only: a B2B
+         * order takes no money at the counter and the procedure ignores the
+         * card there.
+         *
+         *   gold    requires REAL-looking card details, and is itself the
+         *           discount — the two never stack.
+         *   discount is capped at a % of the DISCOUNTABLE base: the client's
+         *           policy rate (MDCARE/MEDICARE 10%, default 20%) over the
+         *           bill minus that client's contract-priced tests. Custom
+         *           lines stay in the base.
+         */
+        if (channel != B2b)
+        {
+            if (body.GoldCard)
+            {
+                if (!DiscountPolicy.IsValidGoldCardNumber(body.GoldCardNumber)
+                    || !DiscountPolicy.IsValidGoldCardHolder(body.GoldCardHolder))
+                {
+                    return Results.BadRequest(new
+                    {
+                        error = "A Gold Card order needs the card number and holder as printed on the card.",
+                    });
+                }
+                if (body.DiscountAmount > 0)
+                {
+                    return Results.BadRequest(new
+                    {
+                        error = "A Gold Card order takes no separate discount — the card is the discount.",
+                    });
+                }
+            }
+            else if (body.DiscountAmount > 0)
+            {
+                var clientCode = await catalog.ClientCodeAsync(body.Mcc, ct).ConfigureAwait(false);
+
+                // The same per-client pricing read the preview uses, so the
+                // gate and the quote can never disagree about a line's value.
+                var priced = body.Items.Count > 0
+                    ? (await catalog.SearchAsync(body.Mcc, null, null, 1, 1000, ct, body.Items)
+                        .ConfigureAwait(false)).Rows
+                    : [];
+                var lines = priced
+                    .Select(p => (p.Code, Amount: (int)Math.Round(p.Rate ?? 0m)))
+                    .ToList();
+
+                var customTotal = 0;
+                foreach (var l in body.CustomLines ?? [])
+                {
+                    var t = await customTests.ResolveAsync(body.Mcc, l.CustomTestId, ct).ConfigureAwait(false);
+                    if (t is not null) customTotal += t.Mrp * Math.Max(1, l.Qty);
+                }
+
+                var total = lines.Sum(l => l.Amount) + customTotal;
+                var baseAmount = DiscountPolicy.DiscountableTotal(clientCode, lines, total);
+                var max = (int)Math.Round(baseAmount * DiscountPolicy.CapPct(clientCode));
+
+                if (body.DiscountAmount > max)
+                {
+                    return Results.BadRequest(new
+                    {
+                        error = baseAmount == 0
+                            ? "These tests are contract-priced for this client and take no discount."
+                            : $"The discount cannot exceed {DiscountPolicy.CapLabel(clientCode)}% of the discountable total — up to ₹{max:N0} on this order.",
+                    });
+                }
+            }
+        }
 
         // Checked before anything is decoded: base64 inflates by a third, so a
         // 40 MB string is a 30 MB allocation before the cap would otherwise be

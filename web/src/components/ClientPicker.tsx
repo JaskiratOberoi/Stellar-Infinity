@@ -59,6 +59,7 @@ const MAX_VISIBLE = 50;
 export function ClientPicker({
   value,
   onChange,
+  onClient,
   activeOnly = false,
   allowNone = true,
   noneLabel = 'All clients',
@@ -66,6 +67,9 @@ export function ClientPicker({
 }: {
   value: number | null;
   onChange: (mcc: number | null) => void;
+  /** The resolved selection with its CODE — for callers whose policy is
+   *  keyed on the client code (discount caps), not the numeric id. */
+  onClient?: (client: { id: number; code: string } | null) => void;
   activeOnly?: boolean;
   allowNone?: boolean;
   noneLabel?: string;
@@ -121,6 +125,14 @@ export function ClientPicker({
   );
 
   const selected = value == null ? null : pool.find((c) => c.id === value) ?? null;
+
+  // Reported from an effect rather than inside onChange, so the caller also
+  // hears about the selection the single-client auto-pick makes, and about
+  // the initial resolve once the list arrives.
+  useEffect(() => {
+    onClient?.(selected ? { id: selected.id, code: selected.code } : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
 
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();

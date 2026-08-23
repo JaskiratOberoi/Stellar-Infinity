@@ -69,6 +69,18 @@ public sealed class CatalogRepository(NobleConnectionFactory db, SqlRetry retry)
         param.TypeName = "dbo.TeloTestList";
     }
 
+    /// <summary>The MCCUnitCode for one centre — discount policy is keyed on it.</summary>
+    public Task<string?> ClientCodeAsync(int mcc, CancellationToken ct = default) =>
+        retry.ExecuteAsync("catalog.clientCode", token =>
+            db.QueryAsync("catalog.clientCode", async (conn, inner) =>
+            {
+                await using var cmd = NobleConnectionFactory.CreateCommand(conn,
+                    "SELECT LTRIM(RTRIM(MCCUnitCode)) FROM dbo.tbl_med_mcc_unit_master WHERE id = @mcc;");
+                cmd.Parameters.Add("@mcc", System.Data.SqlDbType.Int).Value = mcc;
+                var v = await cmd.ExecuteScalarAsync(inner).ConfigureAwait(false);
+                return v is string code && code.Length > 0 ? code : null;
+            }, token), ct);
+
     public Task<Paged<CatalogItem>> SearchAsync(
         int? mcc,
         string? search,

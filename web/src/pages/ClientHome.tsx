@@ -42,6 +42,9 @@ interface AccountRow {
   creditLimit: number;
   /** Computed server-side, honouring the limit and any unlock. */
   reportsLocked: boolean;
+  /** The admin override — reports released regardless of balance. */
+  unlocked?: boolean;
+  tempUnlocked?: boolean;
 }
 
 interface LedgerRow {
@@ -225,6 +228,13 @@ export function ClientHome() {
 
       {error && <div className="alert alert--error">{error}</div>}
 
+      {/* The DAY, before the account — the same operational dashboard Telo
+          shows a client login: today's revenue, collections and sample
+          movement, resolved server-side inside this centre's scope. The
+          account below answers "where do I stand"; this answers "how is
+          today going", which is what a reception desk opens the page for. */}
+      <ClientDayStats />
+
       {!account ? (
         <div className="card">
           <p className="muted" style={{ margin: 0 }}>
@@ -263,6 +273,13 @@ export function ClientHome() {
                       gap to the floor is beside the point. */}
                   {account.reportsLocked ? (
                     <p className="clienthome__hint clienthome__hint--warn">Reports on hold</p>
+                  ) : account.unlocked || account.tempUnlocked ? (
+                    /* The admin override outranks every warning below — telling
+                       a RELEASED client to clear the balance is the exact
+                       confusion this branch order used to cause. */
+                    <p className="clienthome__hint">
+                      Reports released{account.tempUnlocked && !account.unlocked ? ' (temporary)' : ''} — override active
+                    </p>
                   ) : allowance > 0 ? (
                     <p className="clienthome__hint">
                       {headroom > 0 ? `${inr(headroom)} before reports hold` : 'At your limit'}
@@ -408,5 +425,123 @@ export function ClientHome() {
         </div>
       )}
     </div>
+  );
+}
+
+/* ---- the day's numbers, Telo's client-dashboard shape ---------------- */
+
+interface DayStats {
+  date: string;
+  bills: number;
+  patients: number;
+  registrations: number;
+  revenue: number;
+  collected: number;
+  outstanding: number;
+  discount: number;
+  byStatus: { status: string; count: number }[];
+  trend: { date: string; revenue: number }[];
+}
+
+function todayIso(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+function shiftIso(iso: string, days: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const t = new Date(y, m - 1, d + days);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}`;
+}
+
+function ClientDayStats() {
+  const [date, setDate] = useState(todayIso());
+  const [stats, setStats] = useState<DayStats | null>(null);
+  const [busy, setBusy] = useState(true);
+
+  useEffect(() => {
+    let live = true;
+    setBusy(true);
+    void api.get<{ stats: DayStats }>(`/api/dashboard/my-day?date=${date}`)
+      .then((r) => { if (live) setStats(r.stats); })
+      .catch(() => { if (live) setStats(null); })
+      .finally(() => { if (live) setBusy(false); });
+    return () => { live = false; };
+  }, [date]);
+
+  // A quiet failure shows nothing rather than an error card: the account
+  // below is the page's core, and the day section is an addition to it.
+  if (!busy && !stats) return null;
+
+  const t = stats;
+  const chip = (label: string, value: string, accent = false) => (
+    <div className="card" style={{ padding: '.7rem .9rem', minWidth: '9.5rem', flex: '1 1 9.5rem' }}>
+      <p className="clienthome__label" style={{ margin: 0 }}>{label}</p>
+      <p style={{ margin: '.15rem 0 0', fontSize: '1.15rem', fontWeight: 600,
+                  color: accent ? 'var(--teal)' : undefined }}>{value}</p>
+    </div>
+  );
+
+  const max = Math.max(1, ...(t?.trend ?? []).map((p) => p.revenue));
+  const points = (t?.trend ?? []).map((p, i, arr) =>
+    `${(i / Math.max(1, arr.length - 1)) * 100},${34 - (p.revenue / max) * 30}`).join(' ');
+
+  return (
+    <section className="card" style={{ marginBottom: '.9rem' }}>
+      <div className="row" style={{ flexWrap: 'wrap', gap: '.6rem', alignItems: 'center' }}>
+        <h2 style={{ fontSize: '.95rem', fontWeight: 500, margin: 0 }}>Your day</h2>
+        <div className="row" style={{ marginLeft: 'auto', gap: '.35rem' }}>
+          <button className="btn btn--ghost btn--sm" onClick={() => setDate((d) => shiftIso(d, -1))}>‹</button>
+          <input className="input input--sm" type="date" value={date} max={todayIso()}
+                 onChange={(e) => e.target.value && setDate(e.target.value)} />
+          <button className="btn btn--ghost btn--sm" disabled={date >= todayIso()}
+                  onClick={() => setDate((d) => shiftIso(d, 1))}>›</button>
+          <button className="btn btn--ghost btn--sm" disabled={date === todayIso()}
+                  onClick={() => setDate(todayIso())}>Today</button>
+        </div>
+      </div>
+
+      {t && (
+        <>
+          <div className="row" style={{ flexWrap: 'wrap', gap: '.6rem', marginTop: '.7rem' }}>
+            {chip('Revenue', `${inr(t.revenue)} · ${t.bills} bill${t.bills === 1 ? '' : 's'}`, true)}
+            {chip('Collected', inr(t.collected))}
+            {chip('Outstanding', `${inr(t.outstanding)}${t.discount > 0 ? ` · ${inr(t.discount)} off` : ''}`)}
+            {chip('Patients billed', String(t.patients))}
+            {chip('Registrations', String(t.registrations))}
+          </div>
+
+          {t.byStatus.length > 0 && (
+            <div className="row" style={{ flexWrap: 'wrap', gap: '.35rem', marginTop: '.7rem' }}>
+              {t.byStatus.map((b) => (
+                <span key={b.status} className="badge badge--lis">
+                  {b.status}: <b>{b.count}</b>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {t.trend.length > 1 && (
+            <div style={{ marginTop: '.7rem' }}>
+              <p className="clienthome__label" style={{ marginBottom: '.25rem' }}>
+                Revenue · 7 days
+              </p>
+              <svg viewBox="0 0 100 36" preserveAspectRatio="none"
+                   style={{ width: '100%', height: 54, display: 'block' }} aria-hidden="true">
+                <polyline points={points} fill="none" stroke="var(--teal)"
+                          strokeWidth="1.6" vectorEffect="non-scaling-stroke"
+                          strokeLinejoin="round" strokeLinecap="round" />
+              </svg>
+              <div className="row" style={{ justifyContent: 'space-between', fontSize: '.62rem' }}>
+                <span className="muted">{t.trend[0]?.date?.slice(5)}</span>
+                <span className="muted">{t.trend[t.trend.length - 1]?.date?.slice(5)}</span>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </section>
   );
 }

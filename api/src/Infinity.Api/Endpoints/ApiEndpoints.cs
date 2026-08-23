@@ -19,6 +19,15 @@ public static class ApiEndpoints
                .RequireCapability(Capabilities.PatientView)
                .WithName("GetSampleHeader");
 
+        // The SAME handler twice, behind two gates. Every figure in DayStats is
+        // resolved inside the caller's scope, so a client centre reading it
+        // sees its own day and nothing else — which is exactly the dashboard
+        // Telo shows a client login. The lab-only month totals and
+        // leaderboards stay behind analytics:view below.
+        app.MapGet("/api/dashboard/my-day", GetStats)
+           .RequireAuthorization()
+           .RequireCapability(Capabilities.BillingView);
+
         app.MapGet("/api/dashboard/stats", GetStats)
            .RequireAuthorization()
            .RequireCapability(Capabilities.AnalyticsView)

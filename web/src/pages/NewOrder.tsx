@@ -7,6 +7,10 @@ import {
 import { inr, plainText } from '../lib/format';
 import { InfinityLoader } from '../components/InfinityLoader';
 import { ClientPicker } from '../components/ClientPicker';
+import {
+  discountCapLabel, discountCapPct, discountableTotal,
+  isValidGoldCardHolder, isValidGoldCardNumber,
+} from '../lib/discountPolicy';
 import { useAuth } from '../auth/AuthContext';
 import { RateSourceBadge } from './Catalogue';
 import { Combobox } from '../components/Combobox';
@@ -279,6 +283,8 @@ export function NewOrder() {
    */
   const [customTests, setCustomTests] = useState<CustomTest[]>([]);
   const [customPicked, setCustomPicked] = useState<Record<number, number>>({});
+  /** The selected client's CODE — discount policy is keyed on it. */
+  const [clientCode, setClientCode] = useState<string | null>(null);
 
   useEffect(() => {
     if (cart.mcc == null) { setCustomTests([]); setCustomPicked({}); return; }
@@ -506,11 +512,45 @@ export function NewOrder() {
   // value, which must never be hidden by a channel switch.
   const showDiscount = discountOpen ?? (!isB2b || discount !== '');
 
-  const goldOk = gold && !isB2b && goldNumber.trim() !== '' && goldHolder.trim() !== '';
-  const payable = Math.max(
-    0,
-    Math.round((preview?.total ?? 0) * (goldOk ? 0.5 : 1)) - Number(discount || 0),
+  /*
+   * Telo's B2C money rules, line for line, so the two counters can never
+   * disagree with each other or with the server gate.
+   *
+   *   goldTotal   halves every REAL line with per-line round-half-up — the
+   *               same arithmetic the create procedure applies, so the button
+   *               and the bill match to the rupee.
+   *   customTotal external items bill at a fixed amount × qty; never halved,
+   *               always discountable.
+   *   discount    capped at the client's policy % of the discountable base
+   *               (MDCARE/MEDICARE 10%, default 20%), where that client's
+   *               contract-priced tests drop out of the base. Never stacks
+   *               with a Gold Card — the card IS the discount.
+   */
+  const goldApplied = gold && !isB2b;
+  const goldDetailsOk = isValidGoldCardNumber(goldNumber) && isValidGoldCardHolder(goldHolder);
+  const goldTotal = (preview?.lines ?? []).reduce(
+    (sum, l) => sum + Math.round((l.rate ?? 0) / 2), 0);
+  const customTotal = customTests.reduce(
+    (sum, t) => sum + t.mrp * (customPicked[t.id] ?? 0), 0);
+  const hasBillable = cart.items.length > 0 || customTotal > 0;
+  const effectiveTotal = (goldApplied ? goldTotal : (preview?.total ?? 0)) + customTotal;
+
+  const discountPctLabel = discountCapLabel(clientCode);
+  const discountBase = discountableTotal(
+    clientCode,
+    (preview?.lines ?? []).map((l) => ({
+      code: l.code,
+      amount: goldApplied ? Math.round((l.rate ?? 0) / 2) : (l.rate ?? 0),
+    })),
+    effectiveTotal,
   );
+  const hasExcludedLines = effectiveTotal > 0 && discountBase < effectiveTotal;
+  const maxDiscount = discountBase > 0
+    ? Math.round(discountBase * discountCapPct(clientCode))
+    : 0;
+
+  const appliedDiscount = goldApplied ? 0 : Math.min(Number(discount || 0), maxDiscount);
+  const payable = Math.max(0, effectiveTotal - appliedDiscount);
 
   /**
    * Read the chosen PDF into base64 for the order body.
@@ -625,7 +665,9 @@ export function NewOrder() {
         customLines: Object.entries(customPicked)
           .map(([id, qty]) => ({ customTestId: Number(id), qty }))
           .filter((l) => l.customTestId > 0 && l.qty > 0),
-        discountAmount: Number(discount || 0),
+        // The snapped figure, and zero under a Gold Card — mirrors the
+        // server gate, which rejects rather than snaps.
+        discountAmount: appliedDiscount,
         // Split lines go as a TVP; the scalar pair stays empty so the
         // procedure takes the TVP path and cannot receipt the money twice.
         receiptAmount: 0,
@@ -741,10 +783,12 @@ export function NewOrder() {
   const testsOn = cart.mcc != null && (patientStarted || cart.items.length > 0);
 
   const canPlace = cart.mcc != null
-    && cart.items.length > 0
+    && hasBillable
     && patient.name.trim().length > 0
     && age !== null
     && mobileOk
+    // A ticked Gold Card without plausible details is not yet a Gold Card.
+    && (!goldApplied || goldDetailsOk)
     && (preview?.unpriced ?? 0) === 0
     // Barcodes are optional, but a barcode that is WRONG is not — the create
     // procedure would reject the order after the operator had typed all of it.
@@ -900,6 +944,7 @@ export function NewOrder() {
             activeOnly
             allowNone={false}
             onChange={(mcc) => { if (mcc != null) void act(() => cartApi.setClient(mcc)); }}
+            onClient={(c) => setClientCode(c?.code ?? null)}
           />
           {cart.items.length > 0 && (
             <span className="muted" style={{ fontSize: '.72rem' }}>
@@ -1533,18 +1578,18 @@ export function NewOrder() {
               </p>
             </div>
           ) : (
-          <div className={`card order-step${cart.items.length > 0 ? '' : ' order-step--off'}`}>
+          <div className={`card order-step${hasBillable ? '' : ' order-step--off'}`}>
             <div className="order-step__head">
-              <span className={`order-step__num${cart.items.length > 0 ? ' order-step__num--on' : ''}`}>4</span>
+              <span className={`order-step__num${hasBillable ? ' order-step__num--on' : ''}`}>4</span>
               <h2 className="order-step__title">Payment</h2>
-              {cart.items.length === 0 && (
+              {!hasBillable && (
                 <span className="muted" style={{ fontSize: '.76rem' }}>
-                  Add at least one test.
+                  Add at least one test or external item.
                 </span>
               )}
             </div>
 
-            {cart.items.length > 0 && (
+            {hasBillable && (
               <>
 
               {/* ---- money taken at the counter ----
@@ -1561,12 +1606,34 @@ export function NewOrder() {
                     everyday. An empty box on every B2B order is a field to
                     skip past a hundred times a day. */}
                 {showDiscount ? (
-                  <label className="field" style={{ maxWidth: '11rem' }}>
-                    <span>Discount ₹</span>
-                    <input className="input mono" inputMode="numeric" placeholder="0" autoFocus={isB2b}
-                           value={discount}
-                           onChange={(e) => setDiscount(e.target.value.replace(/\D/g, ''))} />
-                  </label>
+                  <div className="row" style={{ gap: '.8rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                    <label className="field" style={{ maxWidth: '11rem', marginBottom: 0 }}>
+                      <span>Discount ₹</span>
+                      <input className="input mono" inputMode="numeric" placeholder="0" autoFocus={isB2b}
+                             disabled={goldApplied}
+                             value={goldApplied ? '' : discount}
+                             onChange={(e) => {
+                               // Snapped to the ceiling as typed — the server
+                               // enforces the same cap, so letting a larger
+                               // figure sit in the box would only stage a
+                               // rejection.
+                               const raw = Number(e.target.value.replace(/\D/g, '') || 0);
+                               setDiscount(raw > 0 ? String(Math.min(raw, maxDiscount)) : '');
+                             }} />
+                    </label>
+                    <span className="muted" style={{ fontSize: '.72rem', lineHeight: 1.5, paddingBottom: '.4rem' }}>
+                      {goldApplied
+                        ? 'The Gold Card is the discount — no separate discount applies.'
+                        : maxDiscount > 0
+                          ? `Up to ${inr(maxDiscount)} (${discountPctLabel}% of the discountable total).`
+                          : hasBillable
+                            ? 'These tests are contract-priced — no discount applies.'
+                            : ''}
+                      {!goldApplied && hasExcludedLines && maxDiscount > 0 && (
+                        <> Contract-priced tests on this order take no discount.</>
+                      )}
+                    </span>
+                  </div>
                 ) : (
                   <button className="btn btn--ghost btn--sm" style={{ marginBottom: '.4rem' }}
                           onClick={() => setDiscountOpen(true)}>
@@ -1635,17 +1702,29 @@ export function NewOrder() {
                     </label>
 
                     {gold && (
-                      <div className="fgroup__grid fgroup__grid--narrow" style={{ marginTop: '.6rem' }}>
-                        <label className="field">
-                          <span>Card number</span>
-                          <input className="input mono" maxLength={50} value={goldNumber}
-                                 onChange={(e) => setGoldNumber(e.target.value)} />
-                        </label>
-                        <label className="field">
-                          <span>Card holder</span>
-                          <input className="input" maxLength={200} value={goldHolder}
-                                 onChange={(e) => setGoldHolder(e.target.value)} />
-                        </label>
+                      <div style={{
+                        marginTop: '.6rem', padding: '.7rem .8rem',
+                        border: '1px solid var(--line)', borderRadius: 10,
+                      }}>
+                        <div className="fgroup__grid fgroup__grid--narrow">
+                          <label className="field" style={{ marginBottom: 0 }}>
+                            <span>Card number <b style={{ color: 'var(--danger)' }}>*</b></span>
+                            <input className="input mono" maxLength={50} value={goldNumber}
+                                   onChange={(e) => setGoldNumber(e.target.value)} />
+                          </label>
+                          <label className="field" style={{ marginBottom: 0 }}>
+                            <span>Card holder <b style={{ color: 'var(--danger)' }}>*</b></span>
+                            <input className="input" maxLength={200} value={goldHolder}
+                                   onChange={(e) => setGoldHolder(e.target.value)} />
+                          </label>
+                        </div>
+                        {!goldDetailsOk && (
+                          <span className="muted" style={{ fontSize: '.72rem', display: 'block', marginTop: '.4rem' }}>
+                            {goldNumber.trim() === '' && goldHolder.trim() === ''
+                              ? 'Both are required to apply the 50% Gold Card rate.'
+                              : 'Enter the number and holder as printed on the card.'}
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1659,11 +1738,11 @@ export function NewOrder() {
                 {/* Only when the button's figure is no longer the basket total,
                     so the operator can see WHY. Without this the button quietly
                     said ₹70 while the bill came out at ₹35. */}
-                {!busy && payable !== (preview?.total ?? 0) && (
+                {!busy && (goldApplied || appliedDiscount > 0) && (
                   <span className="muted" style={{ fontSize: '.76rem' }}>
-                    {inr(preview?.total ?? 0)}
-                    {gold && goldOk && ' less 50% Gold Card'}
-                    {Number(discount || 0) > 0 && ` less ${inr(Number(discount))} discount`}
+                    {inr((preview?.total ?? 0) + customTotal)}
+                    {goldApplied && ' less 50% Gold Card on tests'}
+                    {appliedDiscount > 0 && ` less ${inr(appliedDiscount)} discount`}
                   </span>
                 )}
                 {/* Names whichever thing is actually missing. A disabled button
