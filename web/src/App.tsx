@@ -16,6 +16,7 @@ import { Catalogue } from './pages/Catalogue';
 import { ClientAccounts } from './pages/ClientAccounts';
 import { ClientSales } from './pages/ClientSales';
 import { SalesHome } from './pages/SalesHome';
+import { Bills, BillsHome } from './pages/Bills';
 import { RateLists } from './pages/RateLists';
 import { Reports } from './pages/Reports';
 import { Worksheet } from './pages/Worksheet';
@@ -160,7 +161,19 @@ const NAV: NavEntry[] = [
       { to: '/accounts', label: 'Accounts', icon: 'orders', cap: 'billing:view' },
       // Sales data is per client; /sales resolves WHOSE — a single-account
       // visitor lands directly on their own, anyone else picks. See SalesHome.
-      { to: '/sales', label: 'Sales', icon: 'orders', cap: 'billing:view' },
+      // Hidden from B2C clients: their money is per-patient bills, and the
+      // Bills entry below is that page.
+      {
+        to: '/sales', label: 'Sales', icon: 'orders', cap: 'billing:view',
+        hideForRoles: ['client_b2c', 'client_reporting'],
+      },
+      // Per-patient billing for the B2C franchise brands — Telo's balances
+      // screen. The route double-checks the code server-side; this only
+      // decides who is POINTED at it.
+      {
+        to: '/bills', label: 'Bills', icon: 'orders', cap: 'billing:view',
+        onlyForRoles: ['client_b2c', 'client_reporting', 'super_admin'],
+      },
       // rate:manage, not billing:view — clients hold billing:view for their
       // own ledger, and this screen lists every rate list in the lab. See the
       // remark in RateListEndpoints.
@@ -280,7 +293,9 @@ export function App() {
   const visible = (i: NavItem) =>
     (!i.cap || can(i.cap))
       && i.hideForRole !== user.role
-      && (!i.onlyForRole || i.onlyForRole === user.role);
+      && !(i.hideForRoles?.includes(user.role))
+      && (!i.onlyForRole || i.onlyForRole === user.role)
+      && (!i.onlyForRoles || i.onlyForRoles.includes(user.role));
   const navEntries: NavEntry[] = NAV.flatMap((e): NavEntry[] => {
     if (!isNavGroup(e)) return visible(e) ? [e] : [];
     const items = e.items.filter(visible);
@@ -369,7 +384,14 @@ export function App() {
         {/* The address this page first shipped under — forwarded, not broken,
             for anything that bookmarked it in the meantime. */}
         <Route path="/accounts/:mcc/sales" element={<RedirectMccSales />} />
-        <Route path="/sales" element={can('billing:view') ? <SalesHome /> : <Navigate to="/" replace />} />
+        {/* A B2C client asking for sales is asking for its bills — same
+            question, this client's shape of the answer. */}
+        <Route path="/sales" element={
+          !can('billing:view') ? <Navigate to="/" replace />
+          : ['client_b2c', 'client_reporting'].includes(user.role) ? <Navigate to="/bills" replace />
+          : <SalesHome />} />
+        <Route path="/bills" element={can('billing:view') ? <BillsHome /> : <Navigate to="/" replace />} />
+        <Route path="/bills/:mcc" element={can('billing:view') ? <Bills /> : <Navigate to="/" replace />} />
         {/* billing:view to look; rate:manage is checked inside for every edit,
             and independently by the API on each write. */}
         <Route path="/rate-lists" element={can('rate:manage') ? <RateLists /> : <Navigate to="/" replace />} />

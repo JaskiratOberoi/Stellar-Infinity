@@ -12,6 +12,14 @@
 
 export const DEFAULT_DISCOUNT_CAP_PCT = 0.2;
 
+/** The B2C franchise brands — the clients whose patients pay at the counter.
+ *  Mirrors Orders/DiscountPolicy.cs, which is the authoritative copy. */
+export const B2C_CLIENT_CODES: ReadonlySet<string> = new Set(['MDCARE', 'MEDICARE']);
+
+export function isB2cClientCode(code: string | null | undefined): boolean {
+  return code != null && B2C_CLIENT_CODES.has(code.trim().toUpperCase());
+}
+
 const CLIENT_DISCOUNT_CAP_PCT: Record<string, number> = {
   MDCARE: 0.1,
   MEDICARE: 0.1,

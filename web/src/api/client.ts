@@ -1039,6 +1039,15 @@ export const billingApi = {
       `/api/orders/${billId}/receipts/${receiptId}`, { newAmount, reason }),
   discount: (billId: number, discount: number) =>
     api.put<{ ok: boolean; balance: number | null }>(`/api/orders/${billId}/discount`, { discount }),
+  // ---- the super-admin corrections, Telo's controls ported ----
+  cancelTest: (billId: number, lineId: number, reason: string) =>
+    api.post<{ ok: boolean; balance: number | null }>(
+      `/api/orders/${billId}/cancel-test`, { lineId, reason }),
+  refund: (billId: number, body: { amount: number; payMode?: string; reference?: string | null }) =>
+    api.post<{ ok: boolean; balance: number | null }>(`/api/orders/${billId}/refund`, body),
+  cancelBooking: (billId: number, reason: string) =>
+    api.post<{ ok: boolean; cancelled: number; refunded: number }>(
+      `/api/orders/${billId}/cancel-booking`, { reason }),
 };
 
 /* ---- rate lists ---- */

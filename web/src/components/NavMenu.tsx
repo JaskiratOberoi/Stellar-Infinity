@@ -46,6 +46,9 @@ export interface NavItem {
   /** Hidden without it. Cosmetic only — the API enforces every capability
    *  independently on its own routes. */
   cap?: string;
+  /** Plural forms of the two above, for entries several roles share or shun. */
+  hideForRoles?: string[];
+  onlyForRoles?: string[];
 }
 
 /**

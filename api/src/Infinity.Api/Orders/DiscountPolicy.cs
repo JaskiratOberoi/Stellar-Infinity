@@ -47,6 +47,17 @@ public static class DiscountPolicy
     private static readonly HashSet<string> ExclusionClients =
         new(StringComparer.OrdinalIgnoreCase) { "MDCARE", "MEDICARE" };
 
+    /// <summary>
+    /// The B2C franchise brands — clients whose patients pay at the counter.
+    /// The Bills page exists for exactly these codes and refuses the rest:
+    /// a B2B client's money lives on its ledger, not on per-patient bills.
+    /// </summary>
+    private static readonly HashSet<string> B2cClientCodes =
+        new(StringComparer.OrdinalIgnoreCase) { "MDCARE", "MEDICARE" };
+
+    public static bool IsB2cClientCode(string? clientCode) =>
+        clientCode is not null && B2cClientCodes.Contains(clientCode.Trim());
+
     public static decimal CapPct(string? clientCode) =>
         clientCode is not null && ClientCapPct.TryGetValue(clientCode.Trim(), out var pct)
             ? pct

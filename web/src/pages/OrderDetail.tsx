@@ -58,8 +58,11 @@ interface OrderDetail {
 }
 
 export function OrderDetailModal({ billId, onClose }: { billId: number; onClose: () => void }) {
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   const canCapture = can('payment:capture');
+  // Telo's after-the-fact money controls are super-admin's alone, and the
+  // server now enforces the same — these flags only decide what is DRAWN.
+  const isSuperAdmin = user?.role === 'super_admin';
 
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [canSeeMoney, setCanSeeMoney] = useState(true);
@@ -72,6 +75,9 @@ export function OrderDetailModal({ billId, onClose }: { billId: number; onClose:
   const [takingPayment, setTakingPayment] = useState(false);
   const [discounting, setDiscounting] = useState(false);
   const [voiding, setVoiding] = useState<OrderReceipt | null>(null);
+  const [cancellingLine, setCancellingLine] = useState<OrderLine | null>(null);
+  const [refunding, setRefunding] = useState(false);
+  const [cancellingBooking, setCancellingBooking] = useState(false);
   const [editing, setEditing] = useState<OrderReceipt | null>(null);
 
   const reload = useCallback(async () => {
@@ -183,6 +189,14 @@ export function OrderDetailModal({ billId, onClose }: { billId: number; onClose:
                           {l.cancelled && <span className="badge badge--lis" style={{ marginLeft: '.5rem' }}>cancelled</span>}
                         </td>
                         {canSeeMoney && <td className="mono" style={{ textAlign: 'right', width: 100 }}>{inr(l.amount)}</td>}
+                        {isSuperAdmin && (
+                          <td style={{ textAlign: 'right', width: 80 }}>
+                            {!l.cancelled && l.amount > 0 && (
+                              <button className="btn btn--ghost btn--sm"
+                                      onClick={() => setCancellingLine(l)}>Cancel</button>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     ))}
                     {order.lines.length === 0 && <tr><td className="muted" style={{ padding: '1rem' }}>No test lines.</td></tr>}
@@ -236,7 +250,7 @@ export function OrderDetailModal({ billId, onClose }: { billId: number; onClose:
                                 is already reversed; editing it would move a
                                 balance that no longer includes it. */}
                             <td style={{ textAlign: 'right', width: 150, whiteSpace: 'nowrap' }}>
-                              {canCapture && !r.voided && (
+                              {isSuperAdmin && !r.voided && (
                                 <>
                                   <button className="btn btn--ghost btn--sm"
                                           onClick={() => setEditing(r)}>Correct</button>
@@ -265,9 +279,22 @@ export function OrderDetailModal({ billId, onClose }: { billId: number; onClose:
                       Record payment · {inr(order.balance)} due
                     </button>
                   )}
-                  <button className="btn btn--ghost btn--sm" onClick={() => setDiscounting(true)}>
-                    {order.discount > 0 ? 'Change discount' : 'Add discount'}
-                  </button>
+                  {isSuperAdmin && (
+                    <button className="btn btn--ghost btn--sm" onClick={() => setDiscounting(true)}>
+                      {order.discount > 0 ? 'Change discount' : 'Add discount'}
+                    </button>
+                  )}
+                  {isSuperAdmin && order.amountPaid > 0 && (
+                    <button className="btn btn--ghost btn--sm" onClick={() => setRefunding(true)}>
+                      Record refund
+                    </button>
+                  )}
+                  {isSuperAdmin && (
+                    <button className="btn btn--ghost btn--sm" style={{ color: 'var(--danger)' }}
+                            onClick={() => setCancellingBooking(true)}>
+                      Cancel booking
+                    </button>
+                  )}
                 </div>
               </Section>
             )}
@@ -320,6 +347,64 @@ export function OrderDetailModal({ billId, onClose }: { billId: number; onClose:
                       ? 'That reference was already recorded — nothing changed.'
                       : `${inr(v.amount)} recorded.`;
                   });
+                }}
+              />
+            )}
+
+            {cancellingLine && (
+              <MoneyPrompt
+                title={`Cancel ${plainText(cancellingLine.testName) || 'this test'}`}
+                lead={`Removes ${inr(cancellingLine.amount)} from the bill and recomputes its balance. The line stays on record, struck through.`}
+                warning="Cannot be undone from here. A test already accessioned may refuse to cancel."
+                confirm="Cancel test"
+                reasonOnly
+                withReason
+                onCancel={() => setCancellingLine(null)}
+                onSubmit={async (v) => {
+                  const r = await billingApi.cancelTest(order.billId, cancellingLine.lineId, v.reason || 'cancelled');
+                  setMoney(`Test cancelled.${r.balance != null ? ` Balance is now ${inr(r.balance)}.` : ''}`);
+                  setCancellingLine(null);
+                  await reload();
+                }}
+              />
+            )}
+
+            {refunding && (
+              <MoneyPrompt
+                title="Record refund"
+                lead={`${inr(order.amountPaid)} has been received on this bill — that is the most that can go back.`}
+                warning="Money out of the drawer, on the record. This cannot be undone from here."
+                confirm="Record refund"
+                amountLabel="Amount to refund"
+                defaultAmount={String(Math.round(order.amountPaid))}
+                withMode
+                withReference
+                onCancel={() => setRefunding(false)}
+                onSubmit={async (v) => {
+                  const r = await billingApi.refund(order.billId, {
+                    amount: v.amount, payMode: v.mode, reference: v.reference || null,
+                  });
+                  setMoney(`${inr(v.amount)} refunded.${r.balance != null ? ` Balance is now ${inr(r.balance)}.` : ''}`);
+                  setRefunding(false);
+                  await reload();
+                }}
+              />
+            )}
+
+            {cancellingBooking && (
+              <MoneyPrompt
+                title="Cancel the whole booking"
+                lead="Every active test is cancelled, any discount cleared, and everything paid is refunded — the bill settles at exactly zero."
+                warning="The most drastic control on this screen. A test already accessioned will stop the whole flow before any money moves."
+                confirm="Cancel booking"
+                reasonOnly
+                withReason
+                onCancel={() => setCancellingBooking(false)}
+                onSubmit={async (v) => {
+                  const r = await billingApi.cancelBooking(order.billId, v.reason || 'booking cancelled');
+                  setMoney(`Booking cancelled — ${r.cancelled} test${r.cancelled === 1 ? '' : 's'}${r.refunded > 0 ? `, ${inr(r.refunded)} refunded` : ''}.`);
+                  setCancellingBooking(false);
+                  await reload();
                 }}
               />
             )}
