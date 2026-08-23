@@ -1388,11 +1388,15 @@ export function NewOrder() {
                   <thead>
                     <tr>
                       <th>Test</th>
-                      {/* In B2B the charge IS the MRP, so a separate MRP column
-                          would print the same number twice. The useful second
-                          number there is what the centre pays. */}
-                      <th style={{ textAlign: 'right' }}>{b2b ? 'Client pays' : 'MRP'}</th>
-                      <th style={{ textAlign: 'right' }}>{b2b ? 'Patient pays' : 'Rate'}</th>
+                      {/* B2B bills the CLIENT RATE (see the preview endpoint),
+                          so the bold column is what the client owes and the
+                          muted one is the MRP its patient pays. When the two
+                          columns both showed the billed rate, a rate list
+                          priced above MRP made the margin look impossible:
+                          ₹90 / ₹90 / −₹20 — the −₹20 was real (MRP ₹70), the
+                          columns were not. */}
+                      <th style={{ textAlign: 'right' }}>{b2b ? 'Patient pays' : 'MRP'}</th>
+                      <th style={{ textAlign: 'right' }}>{b2b ? 'Client pays' : 'Rate'}</th>
                       {b2b && <th style={{ textAlign: 'right' }}>Margin</th>}
                       <th>Source</th>
                       <th />
@@ -1403,15 +1407,13 @@ export function NewOrder() {
                       <tr key={`${l.kind}:${l.id}`}>
                         <td className="cell--lead">{plainText(l.name) || l.code}</td>
                         <td className="mono muted cell--meta"
-                            data-label={b2b ? 'Client pays' : 'MRP'} style={{ textAlign: 'right' }}>
-                          {b2b
-                            ? (l.clientCost != null ? inr(l.clientCost) : '—')
-                            : (l.mrp != null && l.mrp > 0 ? inr(l.mrp) : '—')}
+                            data-label={b2b ? 'Patient pays' : 'MRP'} style={{ textAlign: 'right' }}>
+                          {l.mrp != null && l.mrp > 0 ? inr(l.mrp) : '—'}
                         </td>
                         <td className="mono cell--tag" style={{ textAlign: 'right', fontWeight: 600 }}>
                           {l.rate != null && l.rate > 0
                             ? inr(l.rate)
-                            : <span className="muted">{b2b ? 'no MRP — bills at ₹0' : 'no price'}</span>}
+                            : <span className="muted">{b2b ? 'no rate — bills at ₹0' : 'no price'}</span>}
                         </td>
                         {b2b && (
                           <td className="mono cell--meta" data-label="Margin" style={{
@@ -1447,7 +1449,9 @@ export function NewOrder() {
 
               <div className="row" style={{ marginTop: '.8rem', flexWrap: 'wrap', gap: '1.2rem' }}>
                 <span style={{ fontSize: '1.05rem' }}>
-                  {b2b ? 'Patient pays' : 'Total'} <b>{inr(preview.total)}</b>
+                  {/* preview.total sums the BILLED rates — in B2B that is the
+                      client's number, not the patient's. */}
+                  {b2b ? 'Bill total' : 'Total'} <b>{inr(preview.total)}</b>
                 </span>
 
                 {/* Stated with its basis — a bare margin figure is something
