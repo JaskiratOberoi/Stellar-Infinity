@@ -60,7 +60,15 @@ const inr = (n: number) =>
   '₹' + Math.abs(Math.round(n)).toLocaleString('en-IN');
 
 export function ClientHome() {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
+  /*
+   * A walk-in-only client (client_b2c / client_reporting — no order:b2b)
+   * settles nothing itself: its patients pay at the counter, so a balance
+   * demanding payment and a pay-online box are someone else's page. The
+   * capability is the discriminator because it IS the fact in question —
+   * whether this client ever raises bills that land on its ledger.
+   */
+  const b2cOnly = !can('order:b2b');
   const [account, setAccount] = useState<AccountRow | null>(null);
   const [ledger, setLedger] = useState<LedgerRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -242,7 +250,7 @@ export function ClientHome() {
           </p>
         </div>
       ) : (
-        <div className="clienthome">
+        <div className="clienthome" style={b2cOnly ? { gridTemplateColumns: 'minmax(0, 1fr)' } : undefined}>
           {/* Left: what the account IS. Right: what to do about it.
 
               Two columns rather than one long scroll, because the balance and
@@ -250,6 +258,14 @@ export function ClientHome() {
               is one glance from acting on it. Collapses to a single column
               below 900px, balance first. */}
           <div className="clienthome__main">
+            {b2cOnly ? (
+              <section className="card">
+                <p className="clienthome__label">Reports</p>
+                <p className="clienthome__sub" style={{ marginTop: '.2rem' }}>
+                  <Link to="/reports">Open reporting →</Link>
+                </p>
+              </section>
+            ) : (
             <section className={`card clienthome__balance${owes ? ' clienthome__balance--owing' : ''}`}>
               <p className="clienthome__label">Account balance</p>
               <p className="clienthome__amount">{inr(account.owed || account.balance)}</p>
@@ -296,6 +312,7 @@ export function ClientHome() {
                 </div>
               </div>
             </section>
+            )}
   
             <section className="card">
               <div className="row" style={{ alignItems: 'baseline', gap: '.6rem' }}>
@@ -325,6 +342,7 @@ export function ClientHome() {
             </section>
           </div>
 
+          {!b2cOnly && (
           <div className="clienthome__side">
             {/* Pay Noble online.
 
@@ -422,6 +440,7 @@ export function ClientHome() {
               )}
             </section>
           </div>
+          )}
         </div>
       )}
     </div>
