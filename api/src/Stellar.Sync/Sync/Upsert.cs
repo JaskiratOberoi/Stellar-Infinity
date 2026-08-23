@@ -60,13 +60,25 @@ internal static class Upsert
     /// comes from Noble's addeddate and is therefore stable across re-syncs.
     /// Were it now(), every update would land as a new row in a new partition.
     /// </param>
+    /// <param name="conflictWhere">
+    /// The predicate of a PARTIAL unique index, when that is what backs the
+    /// conflict target. Postgres will not infer a partial index from the column
+    /// list alone — it fails with 42P10, "no unique or exclusion constraint
+    /// matching the ON CONFLICT specification" — so the index's own WHERE has
+    /// to be repeated here for it to be found.
+    ///
+    /// Only `result` needs it: every other synced table has a plain unique
+    /// index on noble_id, which is why the first attempt at the 68M-row load
+    /// was the first time this was discovered.
+    /// </param>
     public static async Task RunAsync(
         NpgsqlConnection conn,
         string table,
         string[] columns,
         IReadOnlyList<object?[]> rows,
         CancellationToken ct,
-        string conflict = "noble_id")
+        string conflict = "noble_id",
+        string? conflictWhere = null)
     {
         if (rows.Count == 0) return;
 
@@ -77,7 +89,7 @@ internal static class Upsert
             for (var offset = 0; offset < rows.Count; offset += perStatement)
             {
                 var slice = rows.Skip(offset).Take(perStatement).ToList();
-                await RunAsync(conn, table, columns, slice, ct, conflict).ConfigureAwait(false);
+                await RunAsync(conn, table, columns, slice, ct, conflict, conflictWhere).ConfigureAwait(false);
             }
             return;
         }
@@ -124,8 +136,9 @@ internal static class Upsert
             sql.Append(')');
         }
 
-        sql.Append(" ON CONFLICT (").Append(conflict).Append(") DO UPDATE SET ").Append(updates)
-           .Append(", updated_at = now()");
+        sql.Append(" ON CONFLICT (").Append(conflict).Append(')');
+        if (conflictWhere is not null) sql.Append(" WHERE ").Append(conflictWhere);
+        sql.Append(" DO UPDATE SET ").Append(updates).Append(", updated_at = now()");
 
         cmd.CommandText = sql.ToString();
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);

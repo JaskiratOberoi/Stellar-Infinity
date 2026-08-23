@@ -28,7 +28,17 @@ internal sealed class SyncEngine(
     private const int SnapshotBatch = 5_000;
     private const int ChangeBatch = 5_000;
 
-    public async Task<int> RunAsync(IReadOnlyList<TableSync> tables, CancellationToken ct)
+    /// <summary>
+    /// What one pass did. <paramref name="Failures"/> is what a scripted
+    /// <c>--once</c> run has to see: a pass keeps going when a table throws, so
+    /// the process exits 0 either way and a wrapper reading only the exit code
+    /// would call a pass that applied nothing a success — as one did on
+    /// 2026-08-23, reporting "load finished OK" for a result snapshot that had
+    /// failed on its first batch.
+    /// </summary>
+    public sealed record SyncOutcome(int Rows, int Failures);
+
+    public async Task<SyncOutcome> RunAsync(IReadOnlyList<TableSync> tables, CancellationToken ct)
     {
         await using var sql = new SqlConnection(nobleConn);
         await sql.OpenAsync(ct);
@@ -36,6 +46,7 @@ internal sealed class SyncEngine(
         await pg.OpenAsync(ct);
 
         var total = 0;
+        var failures = 0;
         foreach (var t in tables)
         {
             ct.ThrowIfCancellationRequested();
@@ -50,6 +61,7 @@ internal sealed class SyncEngine(
                 // rarely-used table should not stall the clinical core.
                 log.LogError(ex, "sync failed for {Table}", t.NobleTable);
                 await RecordErrorAsync(pg, t.NobleTable, ex.Message, ct);
+                failures++;
             }
         }
 
@@ -58,7 +70,7 @@ internal sealed class SyncEngine(
         // their parent table failed on the run that loaded them.
         await Resolver.RunAsync(pg, log, ct);
 
-        return total;
+        return new SyncOutcome(total, failures);
     }
 
     private async Task<int> SyncTableAsync(

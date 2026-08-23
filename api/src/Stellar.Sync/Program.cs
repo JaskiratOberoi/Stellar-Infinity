@@ -123,8 +123,20 @@ if (once)
     var logger = host.Services.GetRequiredService<ILogger<Program>>();
 
     logger.LogInformation("stellar-sync: single pass over {N} tables", tables.Count);
-    var n = await engine.RunAsync(tables, CancellationToken.None);
-    logger.LogInformation("stellar-sync: {Rows} rows applied", n);
+    var outcome = await engine.RunAsync(tables, CancellationToken.None);
+    logger.LogInformation("stellar-sync: {Rows} rows applied", outcome.Rows);
+
+    // A failed table is a failed RUN when someone asked for one pass. The loop
+    // deliberately swallows the same failure and carries on, because there the
+    // next pass retries in fifteen seconds — but a scheduled load has no next
+    // pass, and its wrapper decides whether to promote the result table off
+    // this exit code.
+    if (outcome.Failures > 0)
+    {
+        logger.LogError("stellar-sync: {Failures} of {N} tables failed; see sync_watermark.last_error",
+            outcome.Failures, tables.Count);
+        Environment.ExitCode = 1;
+    }
     return;
 }
 

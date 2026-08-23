@@ -281,7 +281,10 @@ internal static class ClinicalTables
                  "value", "unit", "normal_range", "comments", "is_abnormal",
                  "is_authorised", "has_attachment", "has_parameters", "machine_name",
                  "tat", "origin", "created_at"],
-                vals, ct, conflict: "noble_id, created_at");
+                // The predicate matches result_noble_key, which is partial;
+                // without it Postgres cannot find the index and rejects the
+                // whole statement. See the note on Upsert's conflictWhere.
+                vals, ct, conflict: "noble_id, created_at", conflictWhere: "noble_id IS NOT NULL");
         },
         Delete = async (pg, ids, ct) =>
         {
