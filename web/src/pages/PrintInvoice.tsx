@@ -9,8 +9,10 @@ import { plainText } from '../lib/format';
  *   costing — what the payer owes. Tests and money, no sample ids. This is the
  *             copy that leaves the lab with the patient or goes to the client's
  *             accounts department.
- *   lab     — the same document plus the sample ids, for the collection
- *             envelope and the lab's own file.
+ *   lab     — the pre-analytical receipt: patient, tests, sample ids, and NO
+ *             monetary figure anywhere (payment appears only as a paid/pending
+ *             pill). It travels with the specimens, so it must not double as a
+ *             price list.
  *
  * The document is Telo's bill-invoice.tsx, transcribed band for band — both
  * systems print bills against the same database, often for the same client on
@@ -245,6 +247,143 @@ export function PrintInvoice() {
   const leftPane = nobleLeft ? noblePane : customPane;
   const rightPane = nobleLeft ? customPane : noblePane;
 
+  /*
+   * The lab copy is Telo's lab-invoice.tsx, and it is a DIFFERENT document
+   * from the bill, not the bill plus samples: a pre-analytical receipt with no
+   * monetary figure anywhere on it. It goes with the specimens, so money on it
+   * is at best noise for accessioning and at worst a price list handed to
+   * whoever picks up the envelope. Payment appears only as the pass/fail pill.
+   */
+  if (isLabCopy) {
+    const paymentStatus: 'paid' | 'pending' | 'free' =
+      order.balance > 0 ? 'pending' : order.amountPaid > 0 ? 'paid' : 'free';
+    const pillLabel =
+      paymentStatus === 'paid' ? '✓ Paid' : paymentStatus === 'pending' ? 'Payment Pending' : 'No Charge';
+
+    return (
+      <div className="print print--invoice" data-print-ready={ready ? 'true' : undefined}>
+        <div className="print__toolbar">
+          <button className="btn btn--primary btn--sm" onClick={() => window.print()}>Print</button>
+          <span className="muted" style={{ fontSize: '.78rem' }}>
+            Lab copy — internal, no amounts
+          </span>
+        </div>
+
+        <div className="bill">
+          {/* ── Header: text only — the lab copy never carries branding ── */}
+          <div className="bill__band bill__head--centre">
+            <p className="bill__labname">{labName}</p>
+            {addressLine && <p className="bill__headline">{addressLine}</p>}
+            {(config?.phone || config?.email) && (
+              <p className="bill__headline">
+                {config?.phone && <>Ph: {config.phone}</>}
+                {config?.phone && config?.email && <span className="bill__sep">|</span>}
+                {config?.email && <>Email: {config.email}</>}
+              </p>
+            )}
+          </div>
+
+          {/* ── Internal use marker ── */}
+          <div className="bill__labuse">
+            <span className="bill__labuse-badge">Internal — Lab use only</span>
+          </div>
+
+          {/* ── Receipt meta + payment status ── */}
+          <div className="bill__band bill__meta bill__meta--3">
+            <div className="bill__meta-item">
+              <span className="bill__label">Receipt No.</span>
+              <span className="bill__meta-no">{order.billNumber ?? order.billId}</span>
+            </div>
+            <div className="bill__meta-item">
+              <span className="bill__label">Date</span>
+              <span>{fmtIST(order.billDate)}</span>
+            </div>
+            <div className="bill__meta-pill">
+              <span className={`bill__pill bill__pill--${paymentStatus}`}>{pillLabel}</span>
+            </div>
+          </div>
+
+          {/* ── Patient details — no Payment row on the lab copy ── */}
+          <div className="bill__band">
+            <p className="bill__label bill__section-label">Patient Details</p>
+            <div className="bill__rows">
+              <Row label="Name" value={order.patientName ?? '—'} />
+              {order.patientId != null && <Row label="PID" value={String(order.patientId)} mono />}
+              <Row label="Age / Sex" value={`${order.age ?? '—'} / ${genderLabel}`} />
+              <Row label="Mobile" value={order.mobile ?? '—'} />
+              {order.email && <Row label="Email" value={order.email} />}
+              {order.refCustomerName && <Row label="MRD / Visit" value={order.refCustomerName} />}
+              {order.refDoctorName && <Row label="Ref. doctor" value={order.refDoctorName} />}
+            </div>
+            {order.clinicalHistory && (
+              <div className="bill__history">
+                <span className="bill__label">Clinical history</span>
+                <p>{order.clinicalHistory}</p>
+              </div>
+            )}
+          </div>
+
+          {/* ── Tests — code and name, deliberately no amount column ── */}
+          <div className="bill__band">
+            <p className="bill__label bill__section-label">Tests</p>
+            <table className="bill__table">
+              <thead>
+                <tr>
+                  <th className="bill__th-idx">#</th>
+                  <th style={{ width: '6rem' }}>Code</th>
+                  <th>Test Name</th>
+                </tr>
+              </thead>
+              <tbody>
+                {order.lines.map((l, idx) => (
+                  <tr key={l.lineId}>
+                    <td className="bill__td-idx">{idx + 1}</td>
+                    <td className="bill__mono">{l.testCode ?? '—'}</td>
+                    <td>
+                      {plainText(l.testName) || '—'}
+                      {/* Not in Telo's lab copy, kept on purpose: a cancelled
+                          test on the accession sheet must say so, or the lab
+                          runs it. Prints only when a cancellation exists. */}
+                      {l.cancelled && <span className="bill__cancelled"> (cancelled)</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* ── Samples ── */}
+          {order.samples.length > 0 && (
+            <div className="bill__band">
+              <p className="bill__label bill__section-label">Sample IDs</p>
+              <div className="bill__samples">
+                {order.samples.map((s) => (
+                  <div key={s.vailid} className="bill__sample">
+                    <span className="bill__sample-type">{s.sampleTypeName}</span>
+                    <span className="bill__mono bill__mono--dim">{s.vailid}</span>
+                    {s.testCodes && <span className="bill__sample-codes">{s.testCodes}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Footer ── */}
+          <div className="bill__foot">
+            <p className="bill__generated">This is a computer-generated receipt.</p>
+            {flags.showSignatory && (
+              <div className="bill__sign">
+                <div className="bill__sign-line" />
+                <p className="bill__sign-title">Authorised Signatory</p>
+                <p className="bill__sign-name">{labName}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="print print--invoice" data-print-ready={ready ? 'true' : undefined}>
       {/* Screen-only. The one control on the page, and it removes itself from
@@ -252,7 +391,7 @@ export function PrintInvoice() {
       <div className="print__toolbar">
         <button className="btn btn--primary btn--sm" onClick={() => window.print()}>Print</button>
         <span className="muted" style={{ fontSize: '.78rem' }}>
-          {isLabCopy ? 'Lab copy — includes sample IDs' : 'Costing copy — no sample IDs'}
+          Costing copy — amounts, no sample IDs
         </span>
       </div>
 
@@ -339,31 +478,6 @@ export function PrintInvoice() {
             </tfoot>
           </table>
         </div>
-
-        {/* ── Samples: the whole difference between the two copies ── */}
-        {isLabCopy && order.samples.length > 0 && (
-          <div className="bill__band">
-            <p className="bill__label bill__section-label">Samples</p>
-            <table className="bill__table">
-              <thead>
-                <tr>
-                  <th style={{ width: '9rem' }}>Sample ID</th>
-                  <th style={{ width: '9rem' }}>Type</th>
-                  <th>Tests</th>
-                </tr>
-              </thead>
-              <tbody>
-                {order.samples.map((s) => (
-                  <tr key={s.vailid}>
-                    <td className="bill__mono">{s.vailid}</td>
-                    <td>{s.sampleTypeName}</td>
-                    <td>{s.testCodes ?? '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
 
         {/* ── Payment history ── */}
         {billReceipts.length > 0 && (
