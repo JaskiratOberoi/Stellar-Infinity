@@ -57,6 +57,24 @@ interface BillsResponse {
   to: string;
 }
 
+/**
+ * "60Y" / "8M" / "3D".
+ *
+ * tbl_billing_patient_detail.age_type is the LIS's numeric code in a
+ * VARCHAR — 1 year, 2 month, 3 day — so appending its first character
+ * printed the code itself: a 60-year-old read "601". Telo maps the same
+ * three values. An unrecognised value falls back to years, which is what
+ * every bill without one means.
+ */
+const AGE_UNIT: Record<string, string> = { '1': 'Y', '2': 'M', '3': 'D' };
+
+function ageLabel(b: { age: number | null; ageType: string | null }): string {
+  if (b.age == null) return '—';
+  const raw = (b.ageType ?? '').trim();
+  const unit = AGE_UNIT[raw] ?? (/^[YMDymd]/.test(raw) ? raw[0].toUpperCase() : 'Y');
+  return `${b.age}${unit}`;
+}
+
 function todayIso(): string {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, '0');
@@ -204,8 +222,10 @@ export function Bills() {
   const c = data?.collected;
   const avg = t && t.count > 0 ? Math.round(t.amount / t.count) : 0;
 
+  // Sizing lives in .bills__tiles — a grid, so every tile is the same width
+  // and the same height as its neighbours.
   const tile = (label: string, body: React.ReactNode) => (
-    <div className="card" style={{ padding: '.9rem 1rem', flex: '1 1 12rem', minWidth: '12rem' }}>
+    <div className="card">
       <p className="clienthome__label" style={{ margin: 0 }}>{label}</p>
       {body}
     </div>
@@ -226,7 +246,7 @@ export function Bills() {
         </div>
       </div>
 
-      <div className="row" style={{ flexWrap: 'wrap', gap: '.4rem', marginBottom: '.7rem', alignItems: 'center' }}>
+      <div className="bills__range" style={{ marginBottom: '.7rem' }}>
         <input className="input input--sm" type="date" value={from} max={to}
                onChange={(e) => e.target.value && pick(e.target.value, to)} aria-label="From date" />
         <span className="muted">to</span>
@@ -243,7 +263,7 @@ export function Bills() {
 
       {error && <div className="alert alert--error" style={{ marginBottom: '.8rem' }}>{error}</div>}
 
-      <div className="row" style={{ flexWrap: 'wrap', gap: '.6rem', marginBottom: '.8rem' }}>
+      <div className="bills__tiles">
         {tile('Total billed', (
           <>
             <p style={{ margin: '.15rem 0 0', fontSize: '1.3rem', fontWeight: 600 }}>{t ? inr(t.amount) : '—'}</p>
@@ -339,7 +359,7 @@ export function Bills() {
                         {[b.doctorName, b.customerName].filter(Boolean).join(' · ') || '—'}
                       </td>
                       <td className="cell--tag">{b.paymentType ?? '—'}</td>
-                      <td className="muted cell--meta" data-label="Age">{b.age != null ? `${b.age}${(b.ageType ?? 'Y')[0]}` : '—'}</td>
+                      <td className="muted cell--meta" data-label="Age">{ageLabel(b)}</td>
                       <td className="mono cell--meta" data-label="Amount" style={{ textAlign: 'right' }}>{inr(b.amount)}</td>
                       <td className="mono muted cell--meta" data-label="Disc" style={{ textAlign: 'right' }}>
                         {b.discount > 0 ? `− ${inr(b.discount)}` : '—'}

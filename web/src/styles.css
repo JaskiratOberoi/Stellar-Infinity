@@ -1581,6 +1581,35 @@ tbody tr:hover { background: var(--accent-softer); }
 .toggle:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
 
 .row { display: flex; align-items: center; gap: .5rem; }
+
+/* ---------- the Bills page's header furniture ----------
+   Two things .row cannot do here. It centres its children, which left the
+   taller "collected" tile floating against its shorter neighbours; and
+   .input--sm is width:100% for form fields, which made each date picker
+   claim a line of its own. */
+
+.bills__tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));
+  gap: .7rem;
+  /* stretch, not centre: every tile ends level with the tallest, which is
+     what makes four boxes read as one row of boxes. */
+  align-items: stretch;
+  margin-bottom: .9rem;
+}
+.bills__tiles > .card {
+  padding: .85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .1rem;
+}
+/* The collection split sits at the FOOT of its tile, so the three headline
+   figures beside it stay on one optical line. */
+.bills__tiles dl { margin: auto 0 0; }
+
+.bills__range { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+/* Dates hug their content instead of filling the row. */
+.bills__range .input { width: auto; flex: none; min-width: 9.5rem; }
 .stack { display: flex; flex-direction: column; gap: .9rem; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: .9rem; }
 /* Wider floor than grid2: a leaderboard row carries a name AND a figure, and
