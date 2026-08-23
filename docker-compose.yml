@@ -10,7 +10,7 @@
 #
 # Ports, both bound to localhost and reached from outside only through the host
 # cloudflared tunnel:
-#   3120  splash    -> infinity.genomicslab.in  (PUBLIC — do not repoint casually)
+#   3120  splash    -> local only since 2026-08-23; infinity.genomicslab.in now serves the platform (3121)
 #   3121  web       -> the platform SPA
 #
 # The API and Redis are deliberately NOT published. The API holds the Noble
@@ -106,16 +106,13 @@ services:
       # The JWT is delivered as an httpOnly cookie, so script cannot read it
       # and an XSS defect cannot exfiltrate a session.
       #
-      # Secure is FALSE here, and that is a deliberate, temporary concession to
-      # how this stack is served: nginx listens on plain HTTP at
-      # 127.0.0.1:3121, and browsers silently DISCARD a Secure cookie on an
-      # insecure origin — which would not degrade the login, it would break it
-      # outright. The API logs a warning at every startup while this is off.
-      #
-      # SET THIS TO "true" the moment TLS terminates in front of the SPA.
-      # Until then the session cookie is only as private as the loopback
-      # interface it never leaves.
-      AuthCookie__Secure: "false"
+      # TRUE since the day infinity.genomicslab.in started pointing at this
+      # stack: Cloudflare terminates TLS in front of it, so the browser's
+      # origin is https and a Secure cookie is accepted — and never sent over
+      # a plain-http channel. The cost is that logging in at the raw
+      # http://127.0.0.1:3121 no longer works (the browser discards the
+      # cookie); use the public hostname, which is the address now.
+      AuthCookie__Secure: "true"
       # No cross-site flow needs to arrive already authenticated here — no
       # OAuth callback, no third-party embed — so the strictest setting costs
       # nothing and blocks the classic CSRF shapes outright.
