@@ -150,6 +150,20 @@ internal sealed class SyncEngine(
                 "(clear snapshot_completed_at in sync_watermark).");
         }
 
+        /*
+         * Captured BEFORE the changes query, and it is what an EMPTY poll
+         * advances the watermark to. A table that never changes never used to
+         * move its watermark at all, so after seven quiet days it fell below
+         * the retention floor and tripped the gap guard above — for changes
+         * that never existed. Two lookup tables (sample_master and the sample
+         * status master) died exactly this way in the first week; every other
+         * slow mover was days from joining them. Advancing to a version read
+         * before the query is safe by construction: any change committed
+         * after the capture has a higher version and is still discoverable
+         * from the new watermark.
+         */
+        var current = await ScalarLongAsync(sql, "SELECT CHANGE_TRACKING_CURRENT_VERSION()", ct);
+
         var upserts = new List<Dictionary<string, object?>>(ChangeBatch);
         var deletes = new List<int>();
         long maxVersion = since;
@@ -185,7 +199,9 @@ internal sealed class SyncEngine(
 
         if (upserts.Count == 0 && deletes.Count == 0)
         {
-            await TouchPolledAsync(pg, t.NobleTable, ct);
+            // Quiet is not stuck: the watermark rides the current version so
+            // the retention window can never close over this table.
+            await AdvanceQuietAsync(pg, t.NobleTable, current, ct);
             return 0;
         }
 
@@ -245,11 +261,23 @@ internal sealed class SyncEngine(
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    private static async Task TouchPolledAsync(NpgsqlConnection pg, string table, CancellationToken ct)
+    /// <summary>
+    /// An empty poll's bookkeeping: the watermark advances (see the capture
+    /// note in TailAsync) but last_change_at does NOT — that column answers
+    /// "when did this table last actually change", and a quiet poll is not a
+    /// change. GREATEST() so a concurrent non-empty pass can never be walked
+    /// backwards by a slower quiet one.
+    /// </summary>
+    private static async Task AdvanceQuietAsync(
+        NpgsqlConnection pg, string table, long version, CancellationToken ct)
     {
-        await using var cmd = new NpgsqlCommand(
-            "UPDATE stellar.sync_watermark SET last_polled_at = now() WHERE noble_table = @t", pg);
+        await using var cmd = new NpgsqlCommand("""
+            UPDATE stellar.sync_watermark
+            SET last_version = GREATEST(last_version, @v), last_polled_at = now(), updated_at = now()
+            WHERE noble_table = @t
+            """, pg);
         cmd.Parameters.AddWithValue("@t", table);
+        cmd.Parameters.AddWithValue("@v", version);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
