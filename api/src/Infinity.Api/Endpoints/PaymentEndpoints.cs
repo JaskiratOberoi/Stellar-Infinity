@@ -97,6 +97,8 @@ public static class PaymentEndpoints
         PaymentRepository payments,
         IOptions<CCAvenueOptions> opts,
         ILoggerFactory logs,
+        Audit.AuditLog audit,
+        HttpContext http,
         CancellationToken ct)
     {
         var o = opts.Value;
@@ -126,6 +128,9 @@ public static class PaymentEndpoints
         var intent = await payments.CreateAsync(userId, body.Mcc, body.Amount, orderRef, ct).ConfigureAwait(false);
         if (!intent.Ok)
             return Results.BadRequest(new { error = intent.Message ?? "The payment could not be started." });
+
+        audit.Log("mcc.online_payment.initiated", actor: userId, ip: Audit.AuditIp.From(http),
+            details: new { mcc = body.Mcc, amount = body.Amount, orderId = orderRef });
 
         // The centre's details, for billing_*. A failure here must not stop a
         // payment: these are optional fields and a blank one is better than a
@@ -232,6 +237,7 @@ public static class PaymentEndpoints
         IOptions<CCAvenueOptions> opts,
         PaymentReceiptLink receipts,
         ILoggerFactory logs,
+        Audit.AuditLog audit,
         CancellationToken ct)
     {
         var log = logs.CreateLogger("Payments");
@@ -311,6 +317,10 @@ public static class PaymentEndpoints
         var r = await payments.SettleAsync(
             orderRef, trackingId, status, amount, Trim(message, 400), o.PaymentMode,
             instrument, card, ct).ConfigureAwait(false);
+
+        audit.Log("mcc.online_payment.result",
+            details: new { orderId = orderRef, status = r.Status, ok = r.Ok,
+                           amount, instrument = instrument.Length > 0 ? instrument : null });
 
         log.LogInformation(
             "payment.callback ref={Ref} gatewaySaid={Raw} recorded={Status} ok={Ok} code={Code} instrument={Instrument} card={Card}",

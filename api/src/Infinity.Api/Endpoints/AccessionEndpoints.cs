@@ -135,6 +135,8 @@ public static class AccessionEndpoints
         System.Security.Claims.ClaimsPrincipal principal,
         ScopeRepository scopes,
         AccessionRepository repo,
+        Audit.AuditLog audit,
+        HttpContext http,
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
@@ -153,6 +155,9 @@ public static class AccessionEndpoints
         var result = await repo.AddSidsAsync(userId, body.PatientId, body.Mcc, body.Sids, ct)
             .ConfigureAwait(false);
 
+        if (result.Ok)
+            audit.Log("sample.sids_attached", actor: userId, ip: Audit.AuditIp.From(http),
+                details: new { mcc = body.Mcc, patientId = body.PatientId, count = body.Sids.Count });
         return result.Ok
             ? Results.Ok(result)
             : Results.BadRequest(new { error = result.Message, code = result.ErrorCode });
@@ -168,6 +173,8 @@ public static class AccessionEndpoints
         [FromBody] RegisterRequest body,
         System.Security.Claims.ClaimsPrincipal principal,
         AccessionRepository repo,
+        Audit.AuditLog audit,
+        HttpContext http,
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
@@ -183,6 +190,13 @@ public static class AccessionEndpoints
         // it can see; a barcode belonging elsewhere simply does not register.
         var result = await repo.AccessionAsync(userId, username!, body.Vailids, ct).ConfigureAwait(false);
 
+        // The moment the wallet debit happens (CheckTransCash), so the trail
+        // must carry it: this row is what "when was this charged" resolves to.
+        if (result.Ok)
+            audit.Log("sample.accessioned", actor: userId, ip: Audit.AuditIp.From(http),
+                sid: body.Vailids.Count == 1 ? body.Vailids[0] : null,
+                details: new { registered = result.Registered, skipped = result.Skipped,
+                               sids = body.Vailids.Count });
         return result.Ok
             ? Results.Ok(result)
             : Results.BadRequest(new { error = result.Message, code = result.ErrorCode });

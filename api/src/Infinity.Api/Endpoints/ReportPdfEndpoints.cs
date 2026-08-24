@@ -62,6 +62,7 @@ public static class ReportPdfEndpoints
         SmartReportAccessRepository smartAccess,
         RenderClient render,
         Caching.InfinityCache cache,
+        Audit.AuditLog audit,
         CancellationToken ct)
     {
         var (ok, fail, row) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct).ConfigureAwait(false);
@@ -71,6 +72,8 @@ public static class ReportPdfEndpoints
         // SmartReportAccessRepository.
         if (!await smartAccess.SidHasSmartReportAsync(sid, ct).ConfigureAwait(false))
             return Results.NotFound();
+
+        audit.Log("report.smart_pdf", actor: principal.UserId(), sid: sid, ip: Audit.AuditIp.From(http));
 
         var key = PdfCacheKey("smart", sid, row!.LastModifiedAt, "-");
         if (await cache.GetBytesAsync(key, ct).ConfigureAwait(false) is { } cached)
@@ -244,10 +247,13 @@ public static class ReportPdfEndpoints
         GraphRepository graphs,
         RenderClient render,
         Caching.InfinityCache cache,
+        Audit.AuditLog audit,
         CancellationToken ct)
     {
         var (ok, fail, row) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct).ConfigureAwait(false);
         if (!ok) return fail!;
+
+        audit.Log("report.pdf", actor: principal.UserId(), sid: sid, ip: Audit.AuditIp.From(http));
 
         // Everything that changes the bytes is in the key; the exclude list is
         // already digits-and-commas by the time PrintQuery is done with it.
@@ -299,6 +305,7 @@ public static class ReportPdfEndpoints
         GraphRepository graphs,
         RenderClient render,
         Caching.InfinityCache cache,
+        Audit.AuditLog audit,
         CancellationToken ct)
     {
         var sids = (body?.Sids ?? [])
@@ -318,6 +325,9 @@ public static class ReportPdfEndpoints
         var included = new List<RenderClient.ReportRequest>();
         var skipped = new List<object>();
         var misses = new List<(int Index, string Key)>();
+
+        audit.Log("report.pdf_bulk", actor: principal.UserId(), ip: Audit.AuditIp.From(http),
+            details: new { requested = sids.Count });
 
         /*
          * The stapled merge comes out in a chronological order, not the order

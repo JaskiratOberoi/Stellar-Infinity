@@ -24,6 +24,7 @@ import { AutoAuthSettings } from './pages/AutoAuthSettings';
 import { Instruments } from './pages/Instruments';
 import { Interfacing } from './pages/Interfacing';
 import { AdminUsers } from './pages/AdminUsers';
+import { AuditTrail } from './pages/AuditTrail';
 import { InvoiceConfigPage } from './pages/InvoiceConfig';
 import { ThemeToggle } from './theme/ThemeToggle';
 import { InfinityLoader } from './components/InfinityLoader';
@@ -205,6 +206,9 @@ const NAV: NavEntry[] = [
       // clients receive, and Telo gates its own copy of this screen the same
       // way. The page heading says "Invoice branding" in full.
       { to: '/admin/invoice', label: 'Branding', icon: 'orders', cap: 'user:manage' },
+      // Telo's Audit tab, over both platforms' trails. Same gate: the feed
+      // names users, bills, amounts and IPs across every client.
+      { to: '/admin/audit', label: 'Audit trail', icon: 'users', cap: 'user:manage' },
     ],
   },
 ];
@@ -410,6 +414,10 @@ export function App() {
         <Route
           path="/admin/users"
           element={can('user:manage') ? <AdminUsers /> : <Navigate to="/" replace />}
+        />
+        <Route
+          path="/admin/audit"
+          element={can('user:manage') ? <AuditTrail /> : <Navigate to="/" replace />}
         />
         <Route
           path="/admin/invoice"

@@ -82,6 +82,8 @@ builder.Services.AddHttpClient<Infinity.Api.Reports.RenderClient>(c =>
 
 builder.Services.AddSingleton<ScopeRepository>();
 builder.Services.AddSingleton<Infinity.Api.Audit.AuditRepository>();
+builder.Services.AddSingleton<Infinity.Api.Audit.AuditLog>();
+builder.Services.AddSingleton<Infinity.Api.Audit.AuditTrailRepository>();
 
 // ---- worksheet -----------------------------------------------------------
 builder.Services.AddSingleton<Infinity.Api.Worksheet.WorksheetRepository>();
@@ -256,6 +258,7 @@ app.MapInstrumentEndpoints();
 app.MapInterfacingEndpoints();
 app.MapUpdateEndpoints();
 app.MapOrderEntryEndpoints();
+app.MapAuditEndpoints();
 app.MapAccessionEndpoints();
 app.MapInwardEndpoints();
 app.MapClientAccountEndpoints();

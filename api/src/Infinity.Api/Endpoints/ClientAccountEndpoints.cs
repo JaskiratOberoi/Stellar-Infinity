@@ -158,6 +158,7 @@ public static class ClientAccountEndpoints
         System.Security.Claims.ClaimsPrincipal principal,
         ScopeRepository scopes,
         ClientAccountRepository repo,
+        Audit.AuditLog audit,
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
@@ -173,6 +174,9 @@ public static class ClientAccountEndpoints
         var r = await repo.RecordPaymentAsync(
             userId, mcc, body.Amount, body.Mode, body.ChequeNo, body.Reason, ct).ConfigureAwait(false);
 
+        if (r.Ok)
+            audit.Log("mcc.payment.recorded", actor: userId,
+                details: new { mcc, amount = body.Amount, mode = body.Mode });
         return r.Ok
             ? Results.Ok(r)
             : Results.BadRequest(new { error = r.Message, code = r.ErrorCode });

@@ -71,6 +71,8 @@ public static class BillingEndpoints
         ScopeRepository scopes,
         OrdersRepository orders,
         BillingRepository billing,
+        Audit.AuditLog audit,
+        HttpContext http,
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
@@ -83,6 +85,9 @@ public static class BillingEndpoints
             userId, billId, body.Amount, body.PayMode ?? "Cash", body.Reference, ct).ConfigureAwait(false);
 
         if (!r.Ok) return Results.BadRequest(new { error = r.Message, code = r.ErrorCode });
+
+        audit.Log("payment.recorded", actor: userId, billId: billId, ip: Audit.AuditIp.From(http),
+            details: new { amount = body.Amount, mode = body.PayMode ?? "Cash", reference = body.Reference });
 
         // Distinguished for the UI. Without a reference there is no idempotency
         // key at all, so "already recorded" can only ever be the truth about a
@@ -100,6 +105,8 @@ public static class BillingEndpoints
         ScopeRepository scopes,
         OrdersRepository orders,
         BillingRepository billing,
+        Audit.AuditLog audit,
+        HttpContext http,
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
@@ -109,6 +116,9 @@ public static class BillingEndpoints
         var r = await billing.VoidReceiptAsync(userId, receiptId, billId, body.Reason, ct)
             .ConfigureAwait(false);
 
+        if (r.Ok)
+            audit.Log("receipt.voided", actor: userId, billId: billId, ip: Audit.AuditIp.From(http),
+                details: new { receiptId, reason = body.Reason });
         return r.Ok ? Results.Ok(r) : Results.BadRequest(new { error = r.Message, code = r.ErrorCode });
     }
 
@@ -121,6 +131,8 @@ public static class BillingEndpoints
         ScopeRepository scopes,
         OrdersRepository orders,
         BillingRepository billing,
+        Audit.AuditLog audit,
+        HttpContext http,
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
@@ -132,6 +144,9 @@ public static class BillingEndpoints
         var r = await billing.EditReceiptAsync(userId, receiptId, billId, body.NewAmount, body.Reason, ct)
             .ConfigureAwait(false);
 
+        if (r.Ok)
+            audit.Log("receipt.amount.edited", actor: userId, billId: billId, ip: Audit.AuditIp.From(http),
+                details: new { receiptId, newAmount = body.NewAmount, reason = body.Reason });
         return r.Ok ? Results.Ok(r) : Results.BadRequest(new { error = r.Message, code = r.ErrorCode });
     }
 
@@ -144,6 +159,8 @@ public static class BillingEndpoints
         ScopeRepository scopes,
         OrdersRepository orders,
         BillingRepository billing,
+        Audit.AuditLog audit,
+        HttpContext http,
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
@@ -154,6 +171,9 @@ public static class BillingEndpoints
 
         var r = await billing.SetDiscountAsync(userId, billId, body.Discount, ct).ConfigureAwait(false);
 
+        if (r.Ok)
+            audit.Log("bill.discount.set", actor: userId, billId: billId, ip: Audit.AuditIp.From(http),
+                details: new { discount = body.Discount });
         return r.Ok ? Results.Ok(r) : Results.BadRequest(new { error = r.Message, code = r.ErrorCode });
     }
 
@@ -171,6 +191,8 @@ public static class BillingEndpoints
         ScopeRepository scopes,
         OrdersRepository orders,
         BillingRepository billing,
+        Audit.AuditLog audit,
+        HttpContext http,
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
@@ -182,6 +204,8 @@ public static class BillingEndpoints
         var r = await billing.CancelTestAsync(userId, billId, body.LineId, body.Reason.Trim(), ct)
             .ConfigureAwait(false);
         if (!r.Ok) return Results.BadRequest(new { error = r.Message, code = r.ErrorCode });
+        audit.Log("bill.test.cancelled", actor: userId, billId: billId, ip: Audit.AuditIp.From(http),
+            details: new { lineId = body.LineId, reason = body.Reason.Trim() });
         return Results.Ok(new { ok = true, balance = r.Balance });
     }
 
@@ -194,6 +218,8 @@ public static class BillingEndpoints
         ScopeRepository scopes,
         OrdersRepository orders,
         BillingRepository billing,
+        Audit.AuditLog audit,
+        HttpContext http,
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
@@ -205,6 +231,8 @@ public static class BillingEndpoints
         var r = await billing.RecordRefundAsync(
             userId, billId, body.Amount, body.PayMode ?? "Cash", body.Reference, ct).ConfigureAwait(false);
         if (!r.Ok) return Results.BadRequest(new { error = r.Message, code = r.ErrorCode });
+        audit.Log("payment.refunded", actor: userId, billId: billId, ip: Audit.AuditIp.From(http),
+            details: new { amount = body.Amount, mode = body.PayMode ?? "Cash", reference = body.Reference });
         return Results.Ok(new { ok = true, balance = r.Balance });
     }
 
@@ -225,6 +253,8 @@ public static class BillingEndpoints
         OrdersRepository orders,
         BillingRepository billing,
         ILoggerFactory loggers,
+        Audit.AuditLog audit,
+        HttpContext http,
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
@@ -280,6 +310,8 @@ public static class BillingEndpoints
             refunded = after.AmountPaid;
         }
 
+        audit.Log("bill.booking.cancelled", actor: userId, billId: billId, ip: Audit.AuditIp.From(http),
+            details: new { cancelled, refunded, reason });
         return Results.Ok(new { ok = true, cancelled, refunded });
     }
 

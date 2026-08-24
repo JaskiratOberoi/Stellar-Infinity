@@ -433,6 +433,8 @@ public static class OrderEntryEndpoints
         OrderWriteRepository orders,
         CustomTestRepository customTests,
         Reads.CatalogRepository catalog,
+        Audit.AuditLog audit,
+        HttpContext http,
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
@@ -611,6 +613,12 @@ public static class OrderEntryEndpoints
             try { await orders.SetPatientDobAsync(pid, dob, $"inf:{userId}", ct).ConfigureAwait(false); }
             catch (Exception) when (!ct.IsCancellationRequested) { /* the order stands */ }
         }
+
+        audit.Log("order.placed", actor: userId, billId: result.BillId,
+            ip: Audit.AuditIp.From(http),
+            details: new { mcc = body.Mcc, total = result.Total, channel,
+                           items = body.Items.Count, custom = body.CustomLines?.Count ?? 0,
+                           discount = body.DiscountAmount, paid = body.ReceiptAmount });
 
         // Only once the order is safely placed — resetting earlier would lose
         // the operator's work on any failure. The ITEMS go; the CLIENT stays.
