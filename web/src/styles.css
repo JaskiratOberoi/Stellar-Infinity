@@ -1027,6 +1027,10 @@ button, input, select { font: inherit; color: inherit; }
 }
 .audit__origin--infinity { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
 .audit__origin--telo { background: color-mix(in srgb, var(--ink) 10%, transparent); color: var(--muted); }
+/* The legacy LIS stands APART — amber, so a legacy row can never be misread
+   as either platform's doing. */
+.audit__origin--lis { background: color-mix(in srgb, #f59e0b 18%, transparent); color: #b45309; }
+.audit__cat--lis { background: color-mix(in srgb, #f59e0b 14%, transparent); color: #b45309; }
 
 .audit__cat {
   display: inline-block;

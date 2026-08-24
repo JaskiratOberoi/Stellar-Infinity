@@ -21,7 +21,7 @@ import { Pager } from '../components/Pager';
 
 interface AuditRow {
   at: string | null;
-  origin: 'infinity' | 'telo';
+  origin: 'infinity' | 'telo' | 'lis';
   kind: string;
   actorId: number | null;
   actorName: string | null;
@@ -53,6 +53,7 @@ const CATEGORIES = [
 
 /** Category of a kind — mirrors the server's prefix sets. */
 function categoryOf(kind: string): string {
+  if (kind.startsWith('lis.')) return 'lis';
   if (kind.startsWith('report.')) return 'reports';
   if (kind.startsWith('result.')) return 'results';
   if (kind.startsWith('admin.')) return 'users';
@@ -120,8 +121,20 @@ const DETAIL_LABEL: Record<string, string> = {
   items: 'items', custom: 'custom', mode: 'mode', channel: 'channel',
   orderId: 'order', instrument: 'via', reference: 'ref', detail: '',
   test: 'test', field: 'field', source: 'source', patientId: 'PID',
+  pid: 'PID', info: 'info',
 };
 const MONEY_KEYS = new Set(['total', 'amount', 'discount', 'paid', 'refunded', 'newAmount', 'oldAmount']);
+
+/** The LIS trail's free-text FUNCTION_PERFORMED, printed verbatim as the
+ *  event — the legacy log has prose where the platforms have kinds. */
+function lisAction(row: AuditRow): string {
+  try {
+    const a = row.details ? (JSON.parse(row.details) as { action?: string }).action : null;
+    return a?.trim() || 'LIS activity';
+  } catch {
+    return 'LIS activity';
+  }
+}
 
 function chips(row: AuditRow): { k: string; v: string }[] {
   if (!row.details) return [];
@@ -131,6 +144,8 @@ function chips(row: AuditRow): { k: string; v: string }[] {
       // billId/sid already stand as their own chips, extracted server-side —
       // Telo's payloads still carry them inside the JSON too.
       .filter(([k]) => k !== 'billId' && k !== 'sid')
+      // 'action' is the LIS row's event text, already printed as the event.
+      .filter(([k]) => !(row.kind === 'lis.activity' && k === 'action'))
       .filter(([, v]) => v !== null && v !== undefined && v !== '' && v !== false)
       .map(([k, v]) => ({
         k: DETAIL_LABEL[k] ?? k,
@@ -202,7 +217,7 @@ export function AuditTrail() {
         <div>
           <h1 className="page__title">Audit trail</h1>
           <p className="page__sub">
-            Every consequential action, across Infinity and Telo — sign-ins, orders,
+            Every consequential action, across Infinity, Telo and the legacy LIS — sign-ins, orders,
             money, reports, results, samples and admin.
           </p>
         </div>
@@ -226,9 +241,10 @@ export function AuditTrail() {
                value={to} min={from} onChange={(e) => { setTo(e.target.value); setPage(1); }} />
         <select className="input" style={{ width: 'auto' }} value={origin}
                 onChange={(e) => { setOrigin(e.target.value); setPage(1); }}>
-          <option value="">Both platforms</option>
+          <option value="">All sources</option>
           <option value="infinity">Infinity only</option>
           <option value="telo">Telo only</option>
+          <option value="lis">LIS only</option>
         </select>
         <input className="input" style={{ flex: 1, minWidth: '14rem', maxWidth: 420 }}
                placeholder="Search — bill no., SID, username, anything in an event…"
@@ -262,7 +278,7 @@ export function AuditTrail() {
                       </td>
                       <td className="cell--lead">
                         <span className={`audit__cat audit__cat--${cat}`}>{cat}</span>{' '}
-                        {KIND_LABEL[r.kind] ?? r.kind}
+                        {r.kind === 'lis.activity' ? lisAction(r) : (KIND_LABEL[r.kind] ?? r.kind)}
                       </td>
                       <td className="cell--head">
                         {r.actorName ?? r.username ?? (r.actorId != null ? `#${r.actorId}` : '—')}
