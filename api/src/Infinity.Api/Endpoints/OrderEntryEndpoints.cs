@@ -2,9 +2,7 @@ using Infinity.Api.Auth;
 using Infinity.Api.Orders;
 using Infinity.Api.Reads;
 using Microsoft.AspNetCore.Mvc;
-
 namespace Infinity.Api.Endpoints;
-
 /// <summary>
 /// Order entry: cart, preview, placement.
 ///
@@ -16,39 +14,59 @@ namespace Infinity.Api.Endpoints;
 /// </summary>
 public static class OrderEntryEndpoints
 {
+    /// <summary>
+    /// The cap on a stored draft, in characters of JSON.
+    /// </summary>
+    /// <remarks>
+    /// A payload carries the clinical-history attachment as base64, so a
+    /// draft is bounded on the same argument the attachment itself is: the
+    /// queue must not become a way to park an unbounded body that the order
+    /// route would have refused. Base64 costs a third on top of the 10MB file
+    /// limit, and the rest of the order is small beside it.
+    /// </remarks>
+    private const int MaxDraftPayloadChars = 15 * 1024 * 1024;
+
     public static void MapOrderEntryEndpoints(this WebApplication app)
     {
         var cart = app.MapGroup("/api/orders/cart")
                       .RequireAuthorization()
                       .RequireCapability(Capabilities.OrderCreate);
-
         cart.MapGet("/", GetCart).WithName("GetCart");
         cart.MapPost("/client", SetCartClient).WithName("SetCartClient");
         cart.MapPost("/items", AddCartItem).WithName("AddCartItem");
         cart.MapDelete("/items/{kind}/{id:int}", RemoveCartItem).WithName("RemoveCartItem");
         cart.MapDelete("/", ClearCart).WithName("ClearCart");
-
         var entry = app.MapGroup("/api/orders")
                        .RequireAuthorization()
                        .RequireCapability(Capabilities.OrderCreate);
-
         // Reference data for the order form's referrer pickers. A read, so it
         // sits with the rest of order entry rather than behind the write gate
         // that PlaceOrder needs.
         entry.MapGet("/referrers", GetReferrers).WithName("GetOrderReferrers");
-
         // Barcode collision feedback for the order form's Sample ID panel.
         entry.MapGet("/sid-taken", GetSidTaken).WithName("GetOrderSidTaken");
-
         // The extras a client may be charged for but the lab never performs —
         // the Smart Report among them. Read-only and scoped, so a centre only
         // ever sees what is offered to it.
         entry.MapGet("/custom-tests", GetCustomTests).WithName("GetOrderCustomTests");
-
         entry.MapPost("/preview", PreviewOrder).WithName("PreviewOrder");
         entry.MapPost("/", PlaceOrder).WithName("PlaceOrder");
+        /*
+         * The draft queue — orders typed but not booked. A run is built up
+         * here and committed by submitting each draft through PlaceOrder
+         * above, which is the SAME path a single order takes: drafts get no
+         * private booking route, so no validation can apply to one and not
+         * the other.
+         *
+         * Under the same capability as placing an order. A draft is an order
+         * waiting to happen, and anyone who may queue one may book it.
+         */
+        entry.MapGet("/drafts", ListDrafts).WithName("ListOrderDrafts");
+        entry.MapGet("/drafts/{id:int}", GetDraft).WithName("GetOrderDraft");
+        entry.MapPost("/drafts", SaveDraft).WithName("SaveOrderDraft");
+        entry.MapDelete("/drafts/{id:int}", DeleteDraft).WithName("DeleteOrderDraft");
+        entry.MapPost("/drafts/{id:int}/failed", MarkDraftFailed).WithName("MarkOrderDraftFailed");
     }
-
     /// <summary>
     /// The referring doctors and customers the order form can offer.
     /// </summary>
@@ -60,7 +78,6 @@ public static class OrderEntryEndpoints
         ReferrerRepository repo,
         CancellationToken ct)
         => Results.Ok(await repo.GetAsync(ct).ConfigureAwait(false));
-
     /// <summary>
     /// Whether a barcode is already on a tube, so the order form can say so
     /// before the operator has typed out the rest of the patient.
@@ -81,21 +98,16 @@ public static class OrderEntryEndpoints
         CancellationToken ct)
     {
         var v = (vailid ?? string.Empty).Trim();
-
         // Blank is not a question. Answering "free" would be true and useless;
         // the caller should not have asked.
         if (v.Length == 0) return Results.BadRequest(new { error = "A Sample ID is required." });
-
         // Bounded before it reaches SQL. The column is nvarchar(50), and a
         // longer string would either be silently truncated into a match against
         // a DIFFERENT barcode or rejected deep in the driver.
         if (v.Length > 50) return Results.BadRequest(new { error = "That Sample ID is too long." });
-
         return Results.Ok(new { vailid = v, taken = await repo.SidTakenAsync(v, ct).ConfigureAwait(false) });
     }
-
     // ---- cart --------------------------------------------------------------
-
     private static async Task<IResult> GetCart(
         System.Security.Claims.ClaimsPrincipal principal,
         CartStore carts,
@@ -104,9 +116,7 @@ public static class OrderEntryEndpoints
         if (principal.UserId() is not int userId) return Results.Unauthorized();
         return Results.Ok(await carts.GetAsync(userId, ct).ConfigureAwait(false));
     }
-
     public sealed record SetClientRequest(int Mcc);
-
     private static async Task<IResult> SetCartClient(
         [FromBody] SetClientRequest body,
         System.Security.Claims.ClaimsPrincipal principal,
@@ -117,12 +127,9 @@ public static class OrderEntryEndpoints
         if (principal.UserId() is not int userId) return Results.Unauthorized();
         if (!await InScopeAsync(scopes, userId, body.Mcc, ct).ConfigureAwait(false))
             return Results.NotFound();
-
         return Results.Ok(await carts.SetClientAsync(userId, body.Mcc, ct).ConfigureAwait(false));
     }
-
     public sealed record AddItemRequest(string Kind, int Id, string? Code, string? Name);
-
     private static async Task<IResult> AddCartItem(
         [FromBody] AddItemRequest body,
         System.Security.Claims.ClaimsPrincipal principal,
@@ -132,16 +139,13 @@ public static class OrderEntryEndpoints
         if (principal.UserId() is not int userId) return Results.Unauthorized();
         if (body.Kind is not ("test" or "profile" or "master"))
             return Results.BadRequest(new { error = "kind must be test, profile or master." });
-
         var cart = await carts.GetAsync(userId, ct).ConfigureAwait(false);
         if (cart.Mcc is null)
             return Results.BadRequest(new { error = "Choose a client before adding tests — the price depends on it." });
-
         return Results.Ok(await carts
             .AddAsync(userId, new CartItem(body.Kind, body.Id, body.Code, body.Name), ct)
             .ConfigureAwait(false));
     }
-
     private static async Task<IResult> RemoveCartItem(
         string kind, int id,
         System.Security.Claims.ClaimsPrincipal principal,
@@ -151,7 +155,6 @@ public static class OrderEntryEndpoints
         if (principal.UserId() is not int userId) return Results.Unauthorized();
         return Results.Ok(await carts.RemoveAsync(userId, kind, id, ct).ConfigureAwait(false));
     }
-
     private static async Task<IResult> ClearCart(
         System.Security.Claims.ClaimsPrincipal principal,
         CartStore carts,
@@ -161,9 +164,7 @@ public static class OrderEntryEndpoints
         await carts.ClearAsync(userId, ct).ConfigureAwait(false);
         return Results.Ok(Cart.Empty);
     }
-
     // ---- preview -----------------------------------------------------------
-
     /// <summary>
     /// What this order will cost and how many tubes it needs, before committing
     /// to any of it.
@@ -188,11 +189,9 @@ public static class OrderEntryEndpoints
         string? channel = null)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
-
         var (chan, chanError) = ResolveChannel(principal, channel);
         if (chanError is not null) return chanError;
         var b2b = chan == B2b;
-
         var cart = await carts.GetAsync(userId, ct).ConfigureAwait(false);
         if (cart.Mcc is not int mcc)
             return Results.BadRequest(new { error = "No client selected." });
@@ -200,9 +199,7 @@ public static class OrderEntryEndpoints
             return Results.NotFound();
         if (cart.Items.Count == 0)
             return Results.Ok(new { lines = Array.Empty<object>(), groups = Array.Empty<object>(), total = 0, mrpTotal = 0, margin = 0 });
-
         var groups = await orders.PreviewSampleGroupsAsync(cart.Items, ct).ConfigureAwait(false);
-
         /*
          * One catalogue read priced for this client — but for THESE ITEMS, not
          * for the first page of everything.
@@ -220,13 +217,11 @@ public static class OrderEntryEndpoints
             .SearchAsync(mcc, null, null, 1, 1000, ct, cart.Items)
             .ConfigureAwait(false);
         var byKey = priced.Rows.ToDictionary(r => (r.Kind, r.Id));
-
         var lines = cart.Items.Select(i =>
         {
             byKey.TryGetValue((i.Kind, i.Id), out var p);
             var mrp = p?.Mrp;
             var clientRate = p?.Rate;
-
             // WHAT THIS LINE IS BILLED AT — the one number that differs by
             // channel, and it mirrors the procedure exactly: with
             // @billAtMrp = 1 the special-rate and rate-list tiers are nulled
@@ -243,7 +238,6 @@ public static class OrderEntryEndpoints
             // charge its patient - and it is the reason B2B has a margin column
             // at all.
             var charge = clientRate;
-
             return new
             {
                 kind = i.Kind,
@@ -271,9 +265,7 @@ public static class OrderEntryEndpoints
                 rateSource = p?.RateSource ?? "none",
             };
         }).ToArray();
-
         var total = lines.Sum(l => l.rate ?? 0m);
-
         // MARGIN IS COMPUTED OVER A SUBSET, DELIBERATELY.
         //
         // A line with no MRP has nothing to compare against, and folding it in
@@ -299,7 +291,6 @@ public static class OrderEntryEndpoints
         var comparable = lines.Where(l => l.mrp is > 0m).ToArray();
         var comparableMrp = comparable.Sum(l => l.mrp ?? 0m);
         var comparableRate = comparable.Sum(l => l.clientCost ?? l.rate ?? 0m);
-
         return Results.Ok(new
         {
             channel = chan,
@@ -338,12 +329,9 @@ public static class OrderEntryEndpoints
             belowCost = b2b ? lines.Count(l => l.margin is < 0m) : 0,
         });
     }
-
     // ---- channels ------------------------------------------------------------
-
     private const string B2c = "b2c";
     private const string B2b = "b2b";
-
     /// <summary>
     /// Resolve the requested channel and check the caller may use it.
     /// </summary>
@@ -369,7 +357,6 @@ public static class OrderEntryEndpoints
         System.Security.Claims.ClaimsPrincipal principal, string? requested)
     {
         var channel = string.IsNullOrWhiteSpace(requested) ? B2c : requested.Trim().ToLowerInvariant();
-
         if (channel is not (B2c or B2b))
         {
             return (B2c, Results.BadRequest(new
@@ -377,7 +364,6 @@ public static class OrderEntryEndpoints
                 error = "channel must be \"b2c\" or \"b2b\".",
             }));
         }
-
         if (channel == B2b && !principal.HasCapability(Capabilities.OrderB2b))
         {
             return (B2c, Results.Problem(
@@ -385,7 +371,6 @@ public static class OrderEntryEndpoints
                 detail: "Raising a client (B2B) order requires the 'order:b2b' capability.",
                 statusCode: StatusCodes.Status403Forbidden));
         }
-
         if (channel == B2c
             && !principal.HasCapability(Capabilities.OrderB2c)
             && !principal.HasCapability(Capabilities.OrderCreate))
@@ -395,12 +380,9 @@ public static class OrderEntryEndpoints
                 detail: "Raising a walk-in (B2C) order requires the 'order:b2c' capability.",
                 statusCode: StatusCodes.Status403Forbidden));
         }
-
         return (channel, null);
     }
-
     // ---- placement ---------------------------------------------------------
-
     /// <summary>
     /// The custom tests offered to one client — billed by the lab, not carried
     /// out by it. The Smart Report (SMART-RPT) is the network-wide one.
@@ -417,10 +399,8 @@ public static class OrderEntryEndpoints
         // and at what price, is not another client's to read.
         if (!await InScopeAsync(scopes, userId, mcc, ct).ConfigureAwait(false))
             return Results.NotFound();
-
         return Results.Ok(await repo.ForMccAsync(mcc, ct).ConfigureAwait(false));
     }
-
     /// <summary>
     /// Place the order. This is the real write: a patient, a bill, a bill
     /// number, samples, and optionally a receipt and a ledger posting.
@@ -431,6 +411,7 @@ public static class OrderEntryEndpoints
         ScopeRepository scopes,
         CartStore carts,
         OrderWriteRepository orders,
+        OrderDraftRepository drafts,
         CustomTestRepository customTests,
         Reads.CatalogRepository catalog,
         Audit.AuditLog audit,
@@ -445,10 +426,8 @@ public static class OrderEntryEndpoints
         // order cannot be is EMPTY.
         if (body.Items.Count == 0 && (body.CustomLines?.Count ?? 0) == 0)
             return Results.BadRequest(new { error = "An order needs at least one test or external item." });
-
         var (channel, channelError) = ResolveChannel(principal, body.Channel);
         if (channelError is not null) return channelError;
-
         /*
          * The walk-in counter's money rules, ported from Telo and enforced
          * HERE because the browser's copy is a courtesy. B2C only: a B2B
@@ -485,7 +464,6 @@ public static class OrderEntryEndpoints
             else if (body.DiscountAmount > 0)
             {
                 var clientCode = await catalog.ClientCodeAsync(body.Mcc, ct).ConfigureAwait(false);
-
                 // The same per-client pricing read the preview uses, so the
                 // gate and the quote can never disagree about a line's value.
                 var priced = body.Items.Count > 0
@@ -495,18 +473,15 @@ public static class OrderEntryEndpoints
                 var lines = priced
                     .Select(p => (p.Code, Amount: (int)Math.Round(p.Rate ?? 0m)))
                     .ToList();
-
                 var customTotal = 0;
                 foreach (var l in body.CustomLines ?? [])
                 {
                     var t = await customTests.ResolveAsync(body.Mcc, l.CustomTestId, ct).ConfigureAwait(false);
                     if (t is not null) customTotal += t.Mrp * Math.Max(1, l.Qty);
                 }
-
                 var total = lines.Sum(l => l.Amount) + customTotal;
                 var baseAmount = DiscountPolicy.DiscountableTotal(clientCode, lines, total);
                 var max = (int)Math.Round(baseAmount * DiscountPolicy.CapPct(clientCode));
-
                 if (body.DiscountAmount > max)
                 {
                     return Results.BadRequest(new
@@ -518,7 +493,6 @@ public static class OrderEntryEndpoints
                 }
             }
         }
-
         // Checked before anything is decoded: base64 inflates by a third, so a
         // 40 MB string is a 30 MB allocation before the cap would otherwise be
         // reached. The number matches Telo's cap so the same file is accepted
@@ -531,7 +505,6 @@ public static class OrderEntryEndpoints
                 error = "The clinical history PDF is larger than 10 MB.",
             });
         }
-
         // The request's own BillAtMrp is DISCARDED and rederived here. It is the
         // bit that decides whether this basket is billed at the client's rate or
         // at MRP, and honouring a posted value would let any order:create holder
@@ -574,7 +547,6 @@ public static class OrderEntryEndpoints
                 GoldCard = false,
             }
             : body with { BillAtMrp = false, Channel = channel };
-
         /*
          * Custom lines are re-priced HERE, from the catalogue, for the client
          * this order belongs to.
@@ -594,16 +566,13 @@ public static class OrderEntryEndpoints
                 .ConfigureAwait(false);
             if (test is not null) resolved.Add((test, line.Qty));
         }
-
         var result = await orders.CreateAsync(userId, placed, resolved, ct).ConfigureAwait(false);
-
         if (!result.Ok)
         {
             // The procedure's own message is the useful one — it knows about
             // duplicate barcodes, the mobile allowance and unpriced items.
             return Results.BadRequest(new { error = result.Message, code = result.ErrorCode });
         }
-
         // Capture the DOB the order form collected. After the fact and
         // best-effort: the LIS keeps no birth date (see the sidecar in
         // 119_table_inf_patient_dob.sql), and a failure to store it must not
@@ -613,12 +582,45 @@ public static class OrderEntryEndpoints
             try { await orders.SetPatientDobAsync(pid, dob, $"inf:{userId}", ct).ConfigureAwait(false); }
             catch (Exception) when (!ct.IsCancellationRequested) { /* the order stands */ }
         }
-
         audit.Log("order.placed", actor: userId, billId: result.BillId,
             ip: Audit.AuditIp.From(http),
             details: new { mcc = body.Mcc, total = result.Total, channel,
                            items = body.Items.Count, custom = body.CustomLines?.Count ?? 0,
                            discount = body.DiscountAmount, paid = body.ReceiptAmount });
+        /*
+         * The draft this order came from goes with it, in THIS request.
+         *
+         * Deleting it from the browser in a second call would leave a window
+         * where the order is booked and the draft still queued — and a tab
+         * closed there would book that patient again on the next Submit All.
+         * The delete filters on user_id, so an id the caller does not own
+         * removes nothing.
+         *
+         * If it somehow fails the order still stands: the draft is marked
+         * instead, so the operator is told it is already booked rather than
+         * being left a row that looks like unfinished work.
+         */
+        if (body.DraftId is int draftId && draftId > 0)
+        {
+            try
+            {
+                if (!await drafts.DeleteAsync(userId, draftId, ct).ConfigureAwait(false))
+                {
+                    // Nothing removed: either not the caller's, or already gone.
+                    // Neither is worth failing a booked order over.
+                }
+            }
+            catch (Exception) when (!ct.IsCancellationRequested)
+            {
+                try
+                {
+                    await drafts.MarkFailedAsync(userId, draftId,
+                        $"Already booked as bill {result.BillNumber ?? result.BillId}. Remove this draft.",
+                        ct).ConfigureAwait(false);
+                }
+                catch (Exception) when (!ct.IsCancellationRequested) { /* the order stands */ }
+            }
+        }
 
         // Only once the order is safely placed — resetting earlier would lose
         // the operator's work on any failure. The ITEMS go; the CLIENT stays.
@@ -629,9 +631,105 @@ public static class OrderEntryEndpoints
         // the screen showed the client still picked: a batch feature that only
         // ever booked one order.
         await carts.SaveAsync(userId, new Cart(body.Mcc, []), ct).ConfigureAwait(false);
-
         return Results.Ok(result);
     }
+    // ---- the draft queue ----------------------------------------------------
+
+    /// <param name="Mcc">The client the queue is being drawn for.</param>
+    /// <param name="Payload">
+    /// The create-order request body, verbatim, as JSON. Stored whole and never
+    /// interpreted here: the queue holds a DEFERRED PLACE CALL, and anything
+    /// this endpoint understood about it would be a second description of an
+    /// order to keep in step with the real one.
+    /// </param>
+    /// <param name="Id">Null queues a new draft; a value edits that one.</param>
+    public sealed record SaveDraftRequest(
+        int Mcc, string Payload, string? PatientName,
+        int Total, int Tubes, int Sids, int? Id);
+
+    private static async Task<IResult> ListDrafts(
+        int mcc,
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
+        OrderDraftRepository drafts,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+        // Same gate as booking: a queue for a client the caller cannot order
+        // under would be a list of orders they could never submit.
+        if (!await InScopeAsync(scopes, userId, mcc, ct).ConfigureAwait(false))
+            return Results.NotFound();
+
+        return Results.Ok(await drafts.ListAsync(userId, mcc, ct).ConfigureAwait(false));
+    }
+
+    private static async Task<IResult> GetDraft(
+        int id,
+        System.Security.Claims.ClaimsPrincipal principal,
+        OrderDraftRepository drafts,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+
+        // No scope check needed: the procedure filters on user_id, so this only
+        // ever returns something the caller queued themselves.
+        var payload = await drafts.GetPayloadAsync(userId, id, ct).ConfigureAwait(false);
+        return payload is null ? Results.NotFound() : Results.Content(payload, "application/json");
+    }
+
+    private static async Task<IResult> SaveDraft(
+        [FromBody] SaveDraftRequest body,
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
+        OrderDraftRepository drafts,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+        if (!await InScopeAsync(scopes, userId, body.Mcc, ct).ConfigureAwait(false))
+            return Results.NotFound();
+
+        // The payload carries a clinical-history attachment, so it is capped on
+        // the same argument as the attachment itself — a queue is not a place
+        // to smuggle an unbounded body past the order route's own limit.
+        if (string.IsNullOrWhiteSpace(body.Payload) || body.Payload.Length > MaxDraftPayloadChars)
+            return Results.BadRequest(new { error = "That order is too large to hold as a draft." });
+
+        var (ok, error, id) = await drafts.SaveAsync(
+            userId, body.Mcc, body.Payload, body.PatientName,
+            body.Total, body.Tubes, body.Sids, body.Id, ct).ConfigureAwait(false);
+
+        return ok ? Results.Ok(new { id }) : Results.BadRequest(new { error });
+    }
+
+    private static async Task<IResult> DeleteDraft(
+        int id,
+        System.Security.Claims.ClaimsPrincipal principal,
+        OrderDraftRepository drafts,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+        var gone = await drafts.DeleteAsync(userId, id, ct).ConfigureAwait(false);
+        return gone ? Results.Ok(new { ok = true }) : Results.NotFound();
+    }
+
+    /// <summary>
+    /// Record why a submission left this draft behind, so the operator reads
+    /// the reason on the row rather than in a toast that has gone.
+    /// </summary>
+    private static async Task<IResult> MarkDraftFailed(
+        int id,
+        [FromBody] DraftFailure body,
+        System.Security.Claims.ClaimsPrincipal principal,
+        OrderDraftRepository drafts,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+        await drafts.MarkFailedAsync(userId, id, body.Error ?? "Could not be booked.", ct)
+                    .ConfigureAwait(false);
+        return Results.Ok(new { ok = true });
+    }
+
+    public sealed record DraftFailure(string? Error);
 
     /// <summary>
     /// An empty operational scope means NO clients, not all of them.

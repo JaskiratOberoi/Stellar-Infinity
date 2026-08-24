@@ -129,7 +129,23 @@ public sealed record CreateOrderRequest(
     /// </summary>
     IReadOnlyList<CustomLine>? CustomLines = null,
     /// <summary>The operator's MRD free text, snapshotted on each custom line.</summary>
-    string? MrdText = null);
+    string? MrdText = null,
+
+    /// <summary>
+    /// The draft this order is being booked FROM, if any — see
+    /// 130_table_inf_order_draft.sql.
+    /// </summary>
+    /// <remarks>
+    /// The endpoint removes that draft once the order is safely placed, in the
+    /// SAME request that books it. Submitting the queue from the browser and
+    /// deleting each draft in a second call would leave a window where a tab
+    /// closed at the wrong moment had booked the order but kept the draft —
+    /// and the next Submit All would book that patient twice.
+    ///
+    /// Ignored unless the draft belongs to the caller: the delete filters on
+    /// user_id, so a guessed id removes nothing.
+    /// </remarks>
+    int? DraftId = null);
 
 /// <param name="CustomTestId">dbo.telo_custom_test.id — the price is re-resolved from it server-side.</param>
 public sealed record CustomLine(int CustomTestId, int Qty);
