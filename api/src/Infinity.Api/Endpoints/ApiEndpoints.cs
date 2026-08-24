@@ -620,6 +620,9 @@ public static class ApiEndpoints
         Infinity.Api.Reports.CatalogueDetailRepository catalogue,
         Infinity.Api.Reports.ReportLink links,
         ILoggerFactory loggers,
+        Infinity.Api.Reports.ReportLockRepository locks,
+        Audit.AuditLog audit,
+        HttpContext http,
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
@@ -632,6 +635,35 @@ public static class ApiEndpoints
 
         var row = await repo.GetBySidAsync(scope.ClientCodes, sid, ct).ConfigureAwait(false);
         if (row is null) return Results.NotFound();
+
+        /*
+         * The balance lock gates the VIEW, not just the download. It always
+         * did in Telo — "a report cannot be viewed or printed while there is
+         * an outstanding balance" — but Infinity only checked it on the PDF
+         * routes, so a held report was still fully readable on screen and the
+         * hold amounted to an inconvenience about file format. Same 423 and
+         * payload as the PDF gate, same escape hatches (PerminentUnlock, the
+         * credit allowance) inside the repository; `message` rides along
+         * because this answer reaches a PAGE, whose generic error path shows
+         * the code alone otherwise.
+         */
+        var lockState = await locks.GetAsync(sid, ct).ConfigureAwait(false);
+        if (lockState.Locked)
+        {
+            return Results.Json(new
+            {
+                error = "BALANCE_LOCKED",
+                message = $"This report is on hold: ₹{Math.Round(lockState.DueAmount):N0} outstanding on the "
+                        + (lockState.Reason == "client" ? "client account" : "patient's bill")
+                        + ". Clear the balance to release it.",
+                reason = lockState.Reason,
+                dueAmount = lockState.DueAmount,
+            }, statusCode: StatusCodes.Status423Locked);
+        }
+
+        // Who opened which patient's report — the same event Telo logs, and
+        // the reason the audit feed can answer "who has seen this result".
+        audit.Log("report.viewed", actor: userId, sid: sid, ip: Audit.AuditIp.From(http));
 
         // No signatory, no report. This used to fall back to printing the sheet
         // bare on the reasoning that a document someone is waiting on beats a
@@ -680,6 +712,7 @@ public static class ApiEndpoints
         Reports.ReportExtrasRepository extras,
         Reports.ReportLink links,
         ILoggerFactory loggers,
+        Reports.ReportLockRepository locks,
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
@@ -690,6 +723,31 @@ public static class ApiEndpoints
 
         var row = await repo.GetBySidAsync(scope.ClientCodes, sid, ct).ConfigureAwait(false);
         if (row is null) return Results.NotFound();
+
+        /*
+         * The balance lock gates the VIEW, not just the download. It always
+         * did in Telo — "a report cannot be viewed or printed while there is
+         * an outstanding balance" — but Infinity only checked it on the PDF
+         * routes, so a held report was still fully readable on screen and the
+         * hold amounted to an inconvenience about file format. Same 423 and
+         * payload as the PDF gate, same escape hatches (PerminentUnlock, the
+         * credit allowance) inside the repository; `message` rides along
+         * because this answer reaches a PAGE, whose generic error path shows
+         * the code alone otherwise.
+         */
+        var lockState = await locks.GetAsync(sid, ct).ConfigureAwait(false);
+        if (lockState.Locked)
+        {
+            return Results.Json(new
+            {
+                error = "BALANCE_LOCKED",
+                message = $"This report is on hold: ₹{Math.Round(lockState.DueAmount):N0} outstanding on the "
+                        + (lockState.Reason == "client" ? "client account" : "patient's bill")
+                        + ". Clear the balance to release it.",
+                reason = lockState.Reason,
+                dueAmount = lockState.DueAmount,
+            }, statusCode: StatusCodes.Status423Locked);
+        }
 
         // The paid gate. 404, not 403: whether a particular patient bought a
         // ₹99 extra is not something this route should confirm to someone who
