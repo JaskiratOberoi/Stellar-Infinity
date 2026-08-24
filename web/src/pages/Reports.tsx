@@ -309,8 +309,13 @@ export function Reports() {
       ) : (
         <>
           {/* The batch bar. Present only once something is picked: an empty
-              toolbar sitting above every list is a permanent reminder of a
-              feature nobody is using yet. */}
+              toolbar is a permanent reminder of a feature nobody is using yet.
+
+              It renders here but does NOT sit here — it is fixed to the foot
+              of the viewport (see .batchbar), so it stays in reach however far
+              down the list the selection was made. Left in the markup above
+              the table because that is where it belongs in reading order: the
+              control follows the count it acts on. */}
           {selected.size > 0 && (
             <div className="batchbar">
               <span className="batchbar__count">

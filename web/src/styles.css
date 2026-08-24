@@ -4180,16 +4180,59 @@ td.cell--value [aria-label] { font-size: .8em; vertical-align: .12em; }
    Appears only once something is picked, so it is never a toolbar of disabled
    controls sitting above an untouched list. */
 
+/* THE BATCH BAR FLOATS, and does not ride at the top of the list.
+   Sitting above the table it scrolled away with the first screenful — so an
+   operator who ticked a row on screen three had to scroll back up to reach the
+   download button they had just earned. Pinned to the foot of the viewport it
+   is wherever they are, which is what Telo's reporting screen does too.
+
+   Fixed rather than sticky: sticky would still be bounded by .page, and the
+   bar has to clear the table's own scroll container. */
 .batchbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 1.1rem;
+  /* Over the New-order button (40), which lifts out of the way below rather
+     than being covered — it stays reachable while a selection is open. */
+  z-index: 45;
+
+  /* The same column .page draws: 1400px capped, centred, inside its 1.8rem
+     gutters. The bar lines up with the table it belongs to instead of
+     spanning a width nothing else uses. */
+  width: min(1400px, 100% - 3.6rem);
+  margin: 0 auto;
+
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: .8rem;
-  margin-bottom: .8rem;
   padding: .6rem .9rem;
   border: 1px solid var(--accent-ring);
   border-radius: var(--radius);
-  background: var(--accent-soft);
+
+  /* The accent tint is 9% opaque and was only ever legible because a solid
+     page sat behind it. Floating, it has ROWS moving underneath, so the tint
+     is layered over the strong glass surface and the backdrop is blurred —
+     the same treatment the topbar gets for the same reason. */
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--surface-glass-strong);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 28px rgba(15, 34, 51, .28), 0 2px 6px rgba(15, 34, 51, .16);
+}
+
+/* Room under the last row for the bar to float over nothing. */
+.page:has(.batchbar) { padding-bottom: 9rem; }
+
+/* The New-order button steps up while a selection is open. Both are fixed to
+   the same corner of the screen, and the bar is the wider of the two. */
+.shell:has(.batchbar) .fab { bottom: 5.6rem; }
+
+/* Narrow screens: the bar wraps to two or three rows, so it is taller and the
+   gutters are tighter. */
+@media (max-width: 880px) {
+  .batchbar { width: min(1400px, 100% - 1.6rem); bottom: .8rem; }
+  .page:has(.batchbar) { padding-bottom: 12rem; }
+  .shell:has(.batchbar) .fab { bottom: 8.5rem; }
 }
 
 .batchbar__count { font-size: .8rem; margin-right: auto; }
