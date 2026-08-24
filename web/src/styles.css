@@ -4637,3 +4637,43 @@ html:has(.rcpt), body:has(.rcpt) {
   color: var(--ink-dim);
 }
 .clienthome__hint--warn { color: var(--danger); font-weight: 600; }
+
+/* ── THE ORDER QUEUE ────────────────────────────────────────────────────────
+   The run list's rows describe a BOOKED order — bill number, patient, tubes,
+   total — and are laid out for exactly those four. A queued draft has no bill
+   number yet (that is the point) and carries two things a booked row never
+   does: the buttons that correct or drop it, and the reason the last Submit
+   All left it behind. So it gets its own grid rather than bending that one. */
+.runlist--queue .runlist__rows { max-height: 11rem; }
+
+.runlist--queue .runlist__rows li {
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  padding: .3rem 0;
+}
+
+/* The reason spans the full width under its row: it is a sentence, and
+   squeezing it into a grid column would truncate the part that says what to
+   do about it. */
+.runlist__why {
+  grid-column: 1 / -1;
+  font-size: .72rem;
+  color: var(--danger, #f87171);
+  padding-bottom: .15rem;
+}
+
+.runlist__acts { display: flex; gap: .3rem; }
+.runlist__acts .btn { padding: .1rem .5rem; font-size: .72rem; }
+
+/* The row currently loaded into the form, so it is obvious which one the
+   Save changes button is about to overwrite. */
+.runlist__row--editing {
+  background: var(--accent-soft);
+  outline: 1px solid var(--accent-ring);
+  border-radius: 4px;
+}
+
+@media (max-width: 880px) {
+  .runlist--queue .runlist__rows li { grid-template-columns: 1fr auto auto; }
+  .runlist__acts { grid-column: 1 / -1; }
+}

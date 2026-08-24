@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   api, cartApi, catalogApi, PAYMENT_MODES,
   type Cart, type CatalogItem, type OrderChannel, type OrderPreview, type PlacedOrder,
-  type CustomTest,
+  type CustomTest, type OrderDraft,
 } from '../api/client';
 import { inr, plainText } from '../lib/format';
 import { InfinityLoader } from '../components/InfinityLoader';
@@ -354,6 +354,23 @@ export function NewOrder() {
   const [clinicalFile, setClinicalFile] = useState<{ name: string; base64: string } | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
 
+  /*
+   * ── THE DRAFT QUEUE ──────────────────────────────────────────────────────
+   * Orders typed but not booked, for the client on screen. This is what the
+   * LIS has always done and Infinity did not: a run is built up, any of it can
+   * be corrected or dropped, and nothing reaches Noble until Submit All.
+   *
+   * Loaded from the server rather than held here, because a draft has to
+   * survive the reload that loses everything else on this page — that is the
+   * whole difference between a draft and the run list it replaces.
+   */
+  const [drafts, setDrafts] = useState<OrderDraft[]>([]);
+  /** The draft being corrected, if any. Null means the form is a new order. */
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [draftBusy, setDraftBusy] = useState(false);
+  const [submitting, setSubmitting] = useState<{ done: number; total: number } | null>(null);
+  const [draftError, setDraftError] = useState<string | null>(null);
+
   /**
    * Orders booked in this sitting, newest first. B2B only — see place().
    *
@@ -619,78 +636,284 @@ export function NewOrder() {
   // through would trade a disabled button for a rejected order.
   const sidChecking = enteredSids.some((s) => sidStatus[s.sampleTypeId] === 'checking');
 
+  /**
+   * The order route's body for whatever is currently on screen.
+   *
+   * Factored out of place() because a DRAFT is the same thing deferred: the
+   * queue stores exactly this and posts it back untouched when it is
+   * submitted, so a queued order and one booked straight away can never
+   * describe themselves differently.
+   */
+  function buildOrderRequest() {
+    // The birth date when there is one, the typed age when there is not —
+    // and a STARTED date never falls back to the typed pair, or a mistyped
+    // 31/02 would silently book under an age from another visit. resolveAge
+    // still owns the paediatric rule — under two years is stored in months.
+    const fromDob = ageFromDob(patient.dobDay, patient.dobMonth, patient.dobYear);
+    const dateBlank = patient.dobDay.trim() === ''
+      && patient.dobMonth.trim() === ''
+      && patient.dobYear.trim() === '';
+    const resolved = fromDob
+      ? resolveAge(String(fromDob.years), String(fromDob.months))
+      : dateBlank ? resolveAge(patient.ageYears, patient.ageMonths) : null;
+    return {
+      mcc: cart.mcc,
+      items: cart.items,
+      // Whatever the operator scanned, which may be none, some or all of the
+      // tubes. Anything left blank is attached later on Accessioning.
+      sampleSids: enteredSids,
+      patientId: 0,
+      name: patient.name.trim(),
+      initial: patient.initial || null,
+      age: resolved?.age ?? null,
+      ageType: resolved?.ageType ?? null,
+      gender: patient.gender,
+      mobile: patient.mobile.trim() || null,
+      email: patient.email.trim() || null,
+      mrnId: patient.mrnId.trim() || null,
+      // An existing referrer travels as its id; a typed one as a name the
+      // create procedure upserts. Never both.
+      refDoctor: refDoctor?.kind === 'existing' ? refDoctor.id : null,
+      newRefDoctorName: refDoctor?.kind === 'new' ? refDoctor.name : null,
+      refCustomer: refCustomer?.kind === 'existing' ? refCustomer.id : null,
+      newRefCustomerName: refCustomer?.kind === 'new' ? refCustomer.name : null,
+      clinicalHistory: patient.clinicalHistory.trim() || null,
+      // The birth date itself, now that it is stored and not only used to
+      // derive the age above. Null when the boxes are blank or invalid.
+      dob: dobIso(patient.dobDay, patient.dobMonth, patient.dobYear),
+      // Ids and quantities only — the server re-prices these against the
+      // client's own catalogue, so nothing here decides what is charged.
+      customLines: Object.entries(customPicked)
+        .map(([id, qty]) => ({ customTestId: Number(id), qty }))
+        .filter((l) => l.customTestId > 0 && l.qty > 0),
+      // The snapped figure, and zero under a Gold Card — mirrors the
+      // server gate, which rejects rather than snaps.
+      discountAmount: appliedDiscount,
+      // Split lines go as a TVP; the scalar pair stays empty so the
+      // procedure takes the TVP path and cannot receipt the money twice.
+      receiptAmount: 0,
+      payMode: null,
+      paymentRef: null,
+      payments: payments
+        .map((x) => ({ method: x.method, amount: Number(x.amount || 0), ref: x.ref.trim() || null }))
+        .filter((x) => x.amount > 0),
+
+      // The API ignores these on a B2B order; sent as typed so the request
+      // says what the operator asked for and the server decides.
+      goldCard: gold,
+      goldCardNumber: gold ? goldNumber.trim() || null : null,
+      goldCardHolder: gold ? goldHolder.trim() || null : null,
+
+      clinicalFileBase64: clinicalFile?.base64 ?? null,
+      clinicalFileName: clinicalFile?.name ?? null,
+      // The API derives billAtMrp from the channel after checking the
+      // capability, and ignores anything sent here — so the channel is the
+      // only thing worth sending.
+      channel,
+      billAtMrp: false,
+    };
+  }
+
+  /**
+   * The screen's own state, stored beside the request so an edit reopens what
+   * was TYPED rather than a reconstruction of it. The request has already
+   * resolved an age into a number and a unit, folded three date boxes into an
+   * ISO string and turned a referrer into an id — none of which can be turned
+   * back into what the operator saw without guessing.
+   */
+  function buildFormSnapshot() {
+    return {
+      patient, refDoctor, refCustomer, customPicked, sids,
+      discount, gold, goldNumber, goldHolder, payments, clinicalFile,
+      items: cart.items, channel,
+    };
+  }
+
+  /**
+   * Clear the form for the next patient, keeping the client.
+   *
+   * Shared by a booking and by queueing a draft, because both end the same
+   * way: this person is dealt with, the next one is typed under the same
+   * client. Money, barcodes and the attachment are per-order and must never
+   * carry over — the create procedure would reject a reused barcode, but only
+   * after the operator had typed out another patient.
+   */
+  function resetForNextPatient() {
+    setCart((c) => ({ mcc: c.mcc, items: [] }));
+    setPatient(EMPTY_PATIENT);
+    setRefDoctor(null);
+    setRefCustomer(null);
+    setPreview(null);
+    setCustomPicked({});
+    // Back to the channel's starting state, not to empty — otherwise the
+    // second walk-in of a run loses the Cash line the first one had.
+    setDiscount(''); setDiscountOpen(null); setPayments(startingPayments(isB2b));
+    setGold(false); setGoldNumber(''); setGoldHolder('');
+    setClinicalFile(null); setFileError(null);
+    setSids({});
+    setSidStatus({});
+    /*
+     * Focus the PATIENT NAME. Under the patient-first layout the next order
+     * starts with the next person's name — the tests panel is locked until
+     * something is typed there anyway, so aiming the cursor at the search box
+     * would point it at a disabled input.
+     */
+    setTimeout(() => nameRef.current?.focus(), 0);
+  }
+
+  /* ---- the draft queue ---------------------------------------------------- */
+
+  /** The queue for the client on screen. Empty for B2C: a walk-in is one
+   *  person at a counter, and its confirmation is the thing acted on next. */
+  const loadDrafts = useCallback(async (mcc: number | null) => {
+    if (mcc == null || !isB2b) { setDrafts([]); return; }
+    try {
+      setDrafts(await cartApi.drafts.list(mcc));
+    } catch {
+      // A queue that cannot be listed must not stop an order being typed.
+      setDrafts([]);
+    }
+  }, [isB2b]);
+
+  useEffect(() => { void loadDrafts(cart.mcc); }, [cart.mcc, loadDrafts]);
+
+  /** Put what is on screen into the queue — or update the draft being edited. */
+  async function queueOrder() {
+    if (cart.mcc == null) return;
+    setDraftBusy(true);
+    setDraftError(null);
+    try {
+      const payload = JSON.stringify({
+        request: buildOrderRequest(), form: buildFormSnapshot(),
+      });
+      await cartApi.drafts.save({
+        mcc: cart.mcc,
+        payload,
+        patientName: patient.name.trim() || null,
+        // Drawn in the list, so they are the PREVIEWED figures — the same
+        // ones the operator is looking at as they add it.
+        total: preview?.total ?? 0,
+        tubes: groups.length,
+        sids: enteredSids.length,
+        id: editingId,
+      });
+      await loadDrafts(cart.mcc);
+      resetForNextPatient();
+    } catch (e) {
+      setDraftError(e instanceof Error ? e.message : 'Could not save that draft.');
+    } finally {
+      setDraftBusy(false);
+    }
+  }
+
+  /**
+   * Reopen a draft for correction.
+   *
+   * The tests go back into the CART, not just into local state: the tests
+   * panel is drawn from the cart and the price comes from a server preview of
+   * it, so a draft restored only into this component would show its tests
+   * against another order's total.
+   */
+  async function editDraft(id: number) {
+    setDraftBusy(true);
+    setDraftError(null);
+    try {
+      const { form } = await cartApi.drafts.get(id);
+      const f = form as ReturnType<typeof buildFormSnapshot>;
+
+      await cartApi.clear();
+      if (cart.mcc != null) await cartApi.setClient(cart.mcc);
+      let latest: Cart = { mcc: cart.mcc, items: [] };
+      for (const item of f.items ?? []) latest = await cartApi.add(item);
+      setCart(latest);
+
+      setPatient(f.patient);
+      setRefDoctor(f.refDoctor);
+      setRefCustomer(f.refCustomer);
+      setCustomPicked(f.customPicked ?? {});
+      setSids(f.sids ?? {});
+      setDiscount(f.discount ?? '');
+      setGold(!!f.gold);
+      setGoldNumber(f.goldNumber ?? '');
+      setGoldHolder(f.goldHolder ?? '');
+      setPayments(f.payments ?? []);
+      setClinicalFile(f.clinicalFile ?? null);
+      setEditingId(id);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (e) {
+      setDraftError(e instanceof Error ? e.message : 'Could not open that draft.');
+    } finally {
+      setDraftBusy(false);
+    }
+  }
+
+  async function removeDraft(id: number) {
+    setDraftBusy(true);
+    setDraftError(null);
+    try {
+      await cartApi.drafts.remove(id);
+      // Dropping the draft that is open leaves the form describing something
+      // that no longer exists, so it becomes a new order again.
+      if (editingId === id) { setEditingId(null); resetForNextPatient(); }
+      await loadDrafts(cart.mcc);
+    } catch (e) {
+      setDraftError(e instanceof Error ? e.message : 'Could not delete that draft.');
+    } finally {
+      setDraftBusy(false);
+    }
+  }
+
+  /**
+   * Book the whole queue.
+   *
+   * One draft at a time, and a failure does not stop the run: the orders that
+   * can be booked are, and the ones that cannot keep their place in the queue
+   * with the reason on them. A deactivated test on the third patient must not
+   * hold up the other nine.
+   *
+   * Each order carries its draftId so the SERVER removes the draft in the same
+   * request that books it — closing the tab mid-run can therefore lose the
+   * rest of the queue, but can never book a patient twice.
+   */
+  async function submitAll() {
+    if (cart.mcc == null || drafts.length === 0) return;
+    setDraftError(null);
+    setSubmitting({ done: 0, total: drafts.length });
+    let booked = 0;
+    let failed = 0;
+    try {
+      for (const [i, d] of drafts.entries()) {
+        setSubmitting({ done: i, total: drafts.length });
+        try {
+          const { request } = await cartApi.drafts.get(d.id);
+          await cartApi.place({ ...request, draftId: d.id });
+          booked += 1;
+        } catch (e) {
+          failed += 1;
+          const why = e instanceof Error ? e.message : 'Could not be booked.';
+          try { await cartApi.drafts.markFailed(d.id, why); } catch { /* reported below */ }
+        }
+      }
+      await loadDrafts(cart.mcc);
+      if (failed > 0) {
+        setDraftError(
+          `${booked} booked. ${failed} could not be and ${failed === 1 ? 'is' : 'are'} still listed — `
+          + 'each says why.');
+      }
+      // The queue is the record of the run while it lasts; once it is empty
+      // the run is over and the form starts clean for the next client.
+      if (failed === 0) { setEditingId(null); resetForNextPatient(); }
+    } finally {
+      setSubmitting(null);
+    }
+  }
+
   async function place() {
     if (cart.mcc == null) return;
     setBusy(true);
     setError(null);
     try {
-      // The birth date when there is one, the typed age when there is not —
-      // and a STARTED date never falls back to the typed pair, or a mistyped
-      // 31/02 would silently book under an age from another visit. resolveAge
-      // still owns the paediatric rule — under two years is stored in months.
-      const fromDob = ageFromDob(patient.dobDay, patient.dobMonth, patient.dobYear);
-      const dateBlank = patient.dobDay.trim() === ''
-        && patient.dobMonth.trim() === ''
-        && patient.dobYear.trim() === '';
-      const resolved = fromDob
-        ? resolveAge(String(fromDob.years), String(fromDob.months))
-        : dateBlank ? resolveAge(patient.ageYears, patient.ageMonths) : null;
-      const result = await cartApi.place({
-        mcc: cart.mcc,
-        items: cart.items,
-        // Whatever the operator scanned, which may be none, some or all of the
-        // tubes. Anything left blank is attached later on Accessioning.
-        sampleSids: enteredSids,
-        patientId: 0,
-        name: patient.name.trim(),
-        initial: patient.initial || null,
-        age: resolved?.age ?? null,
-        ageType: resolved?.ageType ?? null,
-        gender: patient.gender,
-        mobile: patient.mobile.trim() || null,
-        email: patient.email.trim() || null,
-        mrnId: patient.mrnId.trim() || null,
-        // An existing referrer travels as its id; a typed one as a name the
-        // create procedure upserts. Never both.
-        refDoctor: refDoctor?.kind === 'existing' ? refDoctor.id : null,
-        newRefDoctorName: refDoctor?.kind === 'new' ? refDoctor.name : null,
-        refCustomer: refCustomer?.kind === 'existing' ? refCustomer.id : null,
-        newRefCustomerName: refCustomer?.kind === 'new' ? refCustomer.name : null,
-        clinicalHistory: patient.clinicalHistory.trim() || null,
-        // The birth date itself, now that it is stored and not only used to
-        // derive the age above. Null when the boxes are blank or invalid.
-        dob: dobIso(patient.dobDay, patient.dobMonth, patient.dobYear),
-        // Ids and quantities only — the server re-prices these against the
-        // client's own catalogue, so nothing here decides what is charged.
-        customLines: Object.entries(customPicked)
-          .map(([id, qty]) => ({ customTestId: Number(id), qty }))
-          .filter((l) => l.customTestId > 0 && l.qty > 0),
-        // The snapped figure, and zero under a Gold Card — mirrors the
-        // server gate, which rejects rather than snaps.
-        discountAmount: appliedDiscount,
-        // Split lines go as a TVP; the scalar pair stays empty so the
-        // procedure takes the TVP path and cannot receipt the money twice.
-        receiptAmount: 0,
-        payMode: null,
-        paymentRef: null,
-        payments: payments
-          .map((x) => ({ method: x.method, amount: Number(x.amount || 0), ref: x.ref.trim() || null }))
-          .filter((x) => x.amount > 0),
-
-        // The API ignores these on a B2B order; sent as typed so the request
-        // says what the operator asked for and the server decides.
-        goldCard: gold,
-        goldCardNumber: gold ? goldNumber.trim() || null : null,
-        goldCardHolder: gold ? goldHolder.trim() || null : null,
-
-        clinicalFileBase64: clinicalFile?.base64 ?? null,
-        clinicalFileName: clinicalFile?.name ?? null,
-        // The API derives billAtMrp from the channel after checking the
-        // capability, and ignores anything sent here — so the channel is the
-        // only thing worth sending.
-        channel,
-        billAtMrp: false,
-      });
+      const result = await cartApi.place(buildOrderRequest());
       // Captured before the reset below, because the confirmation describes
       // what was just placed and the form is about to stop being that order.
       setPlacedSids({ attached: enteredSids.length, required: groups.length });
@@ -714,35 +937,11 @@ export function NewOrder() {
           patient: patient.name.trim(), total: result.total,
           sids: enteredSids.length, tubes: groups.length,
         }, ...s]);
-        /*
-         * Focus the PATIENT NAME. Under the patient-first layout the next
-         * order starts with the next person's name — the tests panel is
-         * locked until something is typed there anyway, so aiming the cursor
-         * at the search box would point it at a disabled input.
-         */
-        setTimeout(() => nameRef.current?.focus(), 0);
       } else {
         setPlaced(result);
       }
 
-      setCart({ mcc: cart.mcc, items: [] });
-      setPatient(EMPTY_PATIENT);
-      setRefDoctor(null);
-      setRefCustomer(null);
-      setPreview(null);
-      // Money and the attachment are per-order for the same reason the
-      // barcodes are: carrying a receipt into the next patient would take
-      // their money twice.
-      // Back to the channel's starting state, not to empty — otherwise the
-      // second walk-in of a run loses the Cash line the first one had.
-      setDiscount(''); setDiscountOpen(null); setPayments(startingPayments(isB2b));
-      setGold(false); setGoldNumber(''); setGoldHolder('');
-      setClinicalFile(null); setFileError(null);
-      // Barcodes are per-order and must never carry into the next one — the
-      // create procedure would reject the second use, but only after the
-      // operator had typed out another patient.
-      setSids({});
-      setSidStatus({});
+      resetForNextPatient();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'The order was not placed.');
     } finally {
@@ -852,9 +1051,31 @@ export function NewOrder() {
           ACCESSIONS the samples (the LIS's CheckTransCash, ported into the
           registration procedure), not at this click — the old label claimed
           otherwise and read as an immediate charge. */}
-      <button className="btn btn--primary" disabled={!canPlace} onClick={() => void place()}>
-        {busy ? 'Placing…' : `Place order · ${inr(payable)}`}
-      </button>
+      {isB2b ? (
+        /* A CLIENT order joins the queue; nothing reaches Noble until Submit
+           all. A centre sends a run, and a typo found on the fourth patient
+           used to mean a real order to unpick — there is no unpick. */
+        <button className="btn btn--primary" disabled={!canPlace || draftBusy || submitting != null}
+                onClick={() => void queueOrder()}>
+          {draftBusy
+            ? 'Saving…'
+            : editingId != null
+              ? `Save changes · ${inr(payable)}`
+              : `Add to list · ${inr(payable)}`}
+        </button>
+      ) : (
+        /* A walk-in is one person at the counter and its receipt is the next
+           thing acted on, so it still books on the spot. */
+        <button className="btn btn--primary" disabled={!canPlace} onClick={() => void place()}>
+          {busy ? 'Placing…' : `Place order · ${inr(payable)}`}
+        </button>
+      )}
+      {isB2b && editingId != null && (
+        <button className="btn btn--ghost btn--sm" disabled={draftBusy}
+                onClick={() => { setEditingId(null); resetForNextPatient(); }}>
+          Cancel edit
+        </button>
+      )}
       {/* Only when the button's figure is no longer the basket total,
           so the operator can see WHY. Without this the button quietly
           said ₹70 while the bill came out at ₹35. */}
@@ -939,6 +1160,68 @@ export function NewOrder() {
           "did that go through" — the question asked between one patient and
           the next — and it must not push the form down as the run grows,
           hence the fixed height and its own scroll. */}
+      {/* ── THE QUEUE ─────────────────────────────────────────────────────
+          Orders typed but not booked, for the client on screen. Sits above
+          the form because it is the answer to "what have I got so far" — the
+          question asked between one patient and the next — and it must not
+          push the form down as the run grows, hence its own scroll.
+
+          Nothing here has reached Noble. Every row can still be corrected or
+          dropped, and Submit all is the only thing that books any of it. */}
+      {drafts.length > 0 && (
+        <div className="card runlist runlist--queue">
+          <div className="runlist__head">
+            <b>{drafts.length}</b> waiting to be booked
+            <span className="muted">
+              · {inr(drafts.reduce((s, d) => s + d.total, 0))} · nothing booked yet
+            </span>
+            <button className="btn btn--primary btn--sm" style={{ marginLeft: 'auto' }}
+                    disabled={submitting != null || draftBusy || busy}
+                    onClick={() => void submitAll()}>
+              {submitting
+                ? `Booking ${submitting.done + 1} of ${submitting.total}…`
+                : `Submit all ${drafts.length}`}
+            </button>
+          </div>
+
+          {draftError && (
+            <div className="alert alert--error" style={{ margin: '.5rem .9rem' }}>{draftError}</div>
+          )}
+
+          <ol className="runlist__rows">
+            {drafts.map((d) => (
+              <li key={d.id} className={d.id === editingId ? 'runlist__row--editing' : undefined}>
+                <span className="runlist__name">{d.patientName || 'Unnamed'}</span>
+                <span className="muted">
+                  {d.sids} of {d.tubes} tube{d.tubes === 1 ? '' : 's'}
+                </span>
+                <span className="mono">{inr(d.total)}</span>
+                {/* The reason the last Submit All left this one behind, on the
+                    row itself: a toast would have gone by the time the
+                    operator got to fixing it. */}
+                {d.lastError && <span className="runlist__why">{d.lastError}</span>}
+                <span className="runlist__acts">
+                  <button className="btn btn--ghost btn--sm"
+                          disabled={draftBusy || submitting != null}
+                          onClick={() => void editDraft(d.id)}>
+                    {d.id === editingId ? 'Editing' : 'Edit'}
+                  </button>
+                  <button className="btn btn--ghost btn--sm"
+                          disabled={draftBusy || submitting != null}
+                          onClick={() => void removeDraft(d.id)}>
+                    Delete
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      {/* Booked in this run — what Submit all has already put into Noble.
+          Separate from the queue above on purpose: one is work in hand and
+          the other is work done, and running them together would leave an
+          operator unsure which rows were still theirs to change. */}
       {session.length > 0 && (
         <div className="card runlist">
           <div className="runlist__head">

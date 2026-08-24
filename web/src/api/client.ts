@@ -721,6 +721,29 @@ export interface CustomTest {
   allowQty: boolean;
 }
 
+/** A queued order as the run list draws it — everything but the payload. */
+export interface OrderDraft {
+  id: number;
+  mcc: number;
+  patientName: string | null;
+  total: number;
+  tubes: number;
+  sids: number;
+  /** Why the last Submit All left this one behind, if it did. */
+  lastError: string | null;
+  updatedAt: string | null;
+}
+
+/**
+ * What a draft stores. `request` is the order route's own body, posted back
+ * untouched when the queue is submitted; `form` is the screen's state, so an
+ * edit reopens exactly what was typed rather than a reconstruction of it.
+ */
+export interface DraftPayload {
+  request: Record<string, unknown>;
+  form: Record<string, unknown>;
+}
+
 export const cartApi = {
   get: () => api.get<Cart>('/api/orders/cart/'),
   setClient: (mcc: number) => api.post<Cart>('/api/orders/cart/client', { mcc }),
@@ -733,6 +756,31 @@ export const cartApi = {
   preview: (channel: OrderChannel = 'b2c') =>
     api.post<OrderPreview>(`/api/orders/preview?channel=${channel}`),
   place: (body: unknown) => api.post<PlacedOrder>('/api/orders/', body),
+
+  /*
+   * The draft queue — orders typed but not booked.
+   *
+   * A draft's payload is opaque to the server: it stores the string whole and
+   * never reads inside it. That is what lets this client keep BOTH halves in
+   * there — the request body the order route will take, and a snapshot of the
+   * form exactly as it was typed. Rebuilding the form from the request alone
+   * would be lossy in every place the two disagree: the request carries a
+   * resolved age where the form has years and months, an ISO date where the
+   * form has three boxes, and a referrer id where the form knows whether it
+   * was picked or typed.
+   */
+  drafts: {
+    list: (mcc: number) => api.get<OrderDraft[]>(`/api/orders/drafts?mcc=${mcc}`),
+    get: (id: number) => api.get<DraftPayload>(`/api/orders/drafts/${id}`),
+    save: (body: {
+      mcc: number; payload: string; patientName: string | null;
+      total: number; tubes: number; sids: number; id?: number | null;
+    }) => api.post<{ id: number }>('/api/orders/drafts', body),
+    remove: (id: number) =>
+      request<{ ok: boolean }>(`/api/orders/drafts/${id}`, { method: 'DELETE' }),
+    markFailed: (id: number, error: string) =>
+      api.post<{ ok: boolean }>(`/api/orders/drafts/${id}/failed`, { error }),
+  },
   /**
    * The extras this client can be charged for but the lab does not perform —
    * the Smart Report among them. Priced by the server; the order only ever
