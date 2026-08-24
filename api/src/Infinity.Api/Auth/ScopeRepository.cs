@@ -68,6 +68,12 @@ public sealed class ScopeRepository(
     /// client login must fail closed, not open the whole lab; the LIS opens it,
     /// and that is the one divergence we keep on purpose).
     ///
+    /// The franchise roll-up applies here as in the report scope: a parent
+    /// centre may ORDER under its sub-franchises, one level down, because the
+    /// money already posts that way — a child's charges land on the parent's
+    /// wallet. Report-only roll-up made the order form offer a centre the
+    /// cart then refused.
+    ///
     /// Note the missing IsActive filter on the unrestricted branches — that is
     /// intentional and copied from Telo. IsActive is not a liveness flag for
     /// client codes and the LIS ignores it too; filtering on it silently kept
@@ -89,21 +95,43 @@ public sealed class ScopeRepository(
             IF @ut IN (1, 5)
                 SELECT id AS mcc_code FROM dbo.tbl_med_mcc_unit_master;
             ELSE IF @ut IN (2, 7, 8, 10, 12)
-                SELECT u.PCC_Id AS mcc_code FROM dbo.tbl_med_user_master u
-                WHERE u.id = @uid AND u.PCC_Id IS NOT NULL AND u.PCC_Id > 0
+            BEGIN
+                WITH own AS (
+                    SELECT u.PCC_Id AS id FROM dbo.tbl_med_user_master u
+                    WHERE u.id = @uid AND u.PCC_Id IS NOT NULL AND u.PCC_Id > 0
+                    UNION
+                    SELECT u.sub_pcc_id FROM dbo.tbl_med_user_master u
+                    WHERE u.id = @uid AND u.sub_pcc_id IS NOT NULL AND u.sub_pcc_id > 0
+                )
+                SELECT id AS mcc_code FROM own
                 UNION
-                SELECT u.sub_pcc_id FROM dbo.tbl_med_user_master u
-                WHERE u.id = @uid AND u.sub_pcc_id IS NOT NULL AND u.sub_pcc_id > 0;
+                SELECT f.sub_franchise_code
+                FROM dbo.tbl_med_mcc_unit_franchise_mapping f
+                JOIN own o ON o.id = f.mcc_code
+                WHERE f.sub_franchise_code IS NOT NULL AND f.sub_franchise_code > 0
+                  AND f.sub_franchise_code <> f.mcc_code;
+            END
             ELSE IF @restricted = 1
-                SELECT DISTINCT m.mcc_code
-                FROM dbo.tbl_med_user_sales_mcc_mapping m
-                WHERE m.user_id = @uid AND m.mcc_code IS NOT NULL
+            BEGIN
+                WITH own AS (
+                    SELECT DISTINCT m.mcc_code AS id
+                    FROM dbo.tbl_med_user_sales_mcc_mapping m
+                    WHERE m.user_id = @uid AND m.mcc_code IS NOT NULL
+                    UNION
+                    SELECT u.PCC_Id FROM dbo.tbl_med_user_master u
+                    WHERE u.id = @uid AND u.PCC_Id IS NOT NULL AND u.PCC_Id > 0
+                    UNION
+                    SELECT u.sub_pcc_id FROM dbo.tbl_med_user_master u
+                    WHERE u.id = @uid AND u.sub_pcc_id IS NOT NULL AND u.sub_pcc_id > 0
+                )
+                SELECT id AS mcc_code FROM own
                 UNION
-                SELECT u.PCC_Id FROM dbo.tbl_med_user_master u
-                WHERE u.id = @uid AND u.PCC_Id IS NOT NULL AND u.PCC_Id > 0
-                UNION
-                SELECT u.sub_pcc_id FROM dbo.tbl_med_user_master u
-                WHERE u.id = @uid AND u.sub_pcc_id IS NOT NULL AND u.sub_pcc_id > 0;
+                SELECT f.sub_franchise_code
+                FROM dbo.tbl_med_mcc_unit_franchise_mapping f
+                JOIN own o ON o.id = f.mcc_code
+                WHERE f.sub_franchise_code IS NOT NULL AND f.sub_franchise_code > 0
+                  AND f.sub_franchise_code <> f.mcc_code;
+            END
             ELSE IF EXISTS (SELECT 1 FROM dbo.tbl_med_user_master WHERE id = @uid)
                 -- LIS parity: no restriction anywhere means every centre. The
                 -- EXISTS guard is load-bearing: a token whose user row is gone
