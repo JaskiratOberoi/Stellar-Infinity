@@ -53,6 +53,9 @@ public sealed class StatsRepository(NobleConnectionFactory db, SqlRetry retry)
                 var pats = ScopeFilter.For(cmd, "p.mcc_code", scope, "p");
                 var samples = ScopeFilter.For(cmd, "p2.mcc_code", scope, "s");
                 var rcpt = ScopeFilter.For(cmd, "rb.mcc_code", scope, "r");
+                var txn = ScopeFilter.For(cmd, "t.mccid", scope, "t");
+                var txn7 = ScopeFilter.For(cmd, "t7.mccid", scope, "t7");
+                var dep = ScopeFilter.For(cmd, "a.mcccode", scope, "a");
 
                 cmd.CommandText = $"""
                     SELECT
@@ -67,7 +70,31 @@ public sealed class StatsRepository(NobleConnectionFactory db, SqlRetry retry)
                       (SELECT ISNULL(SUM(b.discount_amount),0) FROM dbo.tbl_billing_patient_detail b
                          WHERE CAST(b.bill_date AS DATE) = @d AND {bills.Predicate})            AS discount,
                       (SELECT COUNT(*)                        FROM dbo.tbl_med_mcc_patient_master p
-                         WHERE CAST(p.sample_date AS DATE) = @d AND {pats.Predicate})           AS registrations;
+                         WHERE CAST(p.sample_date AS DATE) = @d AND {pats.Predicate})           AS registrations,
+
+                      /* The LIS wallet flow. A B2B client whose samples arrive by
+                         courier has NO bill rows at all: the lab registers the
+                         tubes in the LIS and CheckTransCash debits the wallet —
+                         tbl_med_mcc_test_transactions is that day's revenue, and
+                         it was invisible here, so such a client's dashboard read
+                         ₹0 against a day of real work. Patients whose order came
+                         through Infinity/Telo are EXCLUDED (their bill already
+                         counts above; the accession debit would double it). */
+                      (SELECT ISNULL(SUM(t.testcharges),0) FROM dbo.tbl_med_mcc_test_transactions t
+                         WHERE CAST(t.transdate AS DATE) = @d AND {txn.Predicate}
+                           AND NOT EXISTS (SELECT 1 FROM dbo.tbl_billing_patient_detail xb
+                                           WHERE xb.mcc_code = t.mccid
+                                             AND xb.medid = CONVERT(VARCHAR(20), t.patientid))) AS ledger_revenue,
+                      (SELECT COUNT(DISTINCT t.patientid) FROM dbo.tbl_med_mcc_test_transactions t
+                         WHERE CAST(t.transdate AS DATE) = @d AND {txn.Predicate}
+                           AND NOT EXISTS (SELECT 1 FROM dbo.tbl_billing_patient_detail xb
+                                           WHERE xb.mcc_code = t.mccid
+                                             AND xb.medid = CONVERT(VARCHAR(20), t.patientid))) AS ledger_patients,
+                      /* Wallet deposits are collections too — the two ₹5,000 the
+                         client paid today belong on the Collected tile. */
+                      (SELECT ISNULL(SUM(a.amount),0) FROM dbo.tbl_med_mcc_account_detail a
+                         WHERE a.credittype = 1
+                           AND CAST(a.depositedate AS DATE) = @d AND {dep.Predicate})           AS deposits;
 
                     -- Sample pipeline by status.
                     SELECT ISNULL(st.status, 'Unknown') AS status, COUNT(*) AS cnt
@@ -78,13 +105,25 @@ public sealed class StatsRepository(NobleConnectionFactory db, SqlRetry retry)
                     GROUP BY st.status
                     ORDER BY COUNT(*) DESC;
 
-                    -- 7-day revenue trend ending on @d (sparse; densified below).
-                    SELECT CAST(b.bill_date AS DATE) AS d, ISNULL(SUM(b.amount),0) AS rev
-                    FROM dbo.tbl_billing_patient_detail b
-                    WHERE CAST(b.bill_date AS DATE) BETWEEN DATEADD(DAY,-6,@d) AND @d
-                      AND {bills.Predicate}
-                    GROUP BY CAST(b.bill_date AS DATE)
-                    ORDER BY 1;
+                    -- 7-day revenue trend ending on @d (sparse; densified
+                    -- below). Bills and the LIS wallet flow together, with the
+                    -- same already-billed exclusion as the headline.
+                    SELECT x.d, SUM(x.rev) AS rev FROM (
+                        SELECT CAST(b.bill_date AS DATE) AS d, ISNULL(SUM(b.amount),0) AS rev
+                        FROM dbo.tbl_billing_patient_detail b
+                        WHERE CAST(b.bill_date AS DATE) BETWEEN DATEADD(DAY,-6,@d) AND @d
+                          AND {bills.Predicate}
+                        GROUP BY CAST(b.bill_date AS DATE)
+                        UNION ALL
+                        SELECT CAST(t7.transdate AS DATE), ISNULL(SUM(t7.testcharges),0)
+                        FROM dbo.tbl_med_mcc_test_transactions t7
+                        WHERE CAST(t7.transdate AS DATE) BETWEEN DATEADD(DAY,-6,@d) AND @d
+                          AND {txn7.Predicate}
+                          AND NOT EXISTS (SELECT 1 FROM dbo.tbl_billing_patient_detail xb
+                                          WHERE xb.mcc_code = t7.mccid
+                                            AND xb.medid = CONVERT(VARCHAR(20), t7.patientid))
+                        GROUP BY CAST(t7.transdate AS DATE)
+                    ) x GROUP BY x.d ORDER BY 1;
 
                     -- Cash flow, keyed on recd_date. receive_status '1' = payment,
                     -- '2' = refund. Voided receipts are excluded via Telo's void
@@ -109,7 +148,7 @@ public sealed class StatsRepository(NobleConnectionFactory db, SqlRetry retry)
 
                 // ---- result set 1: headline counts
                 int billCount = 0, patientCount = 0, registrations = 0;
-                decimal revenue = 0, outstanding = 0, discount = 0;
+                decimal revenue = 0, outstanding = 0, discount = 0, deposits = 0;
                 if (await reader.ReadAsync(inner).ConfigureAwait(false))
                 {
                     billCount = reader.Int("bills");
@@ -118,6 +157,11 @@ public sealed class StatsRepository(NobleConnectionFactory db, SqlRetry retry)
                     outstanding = reader.Dec("outstanding");
                     discount = reader.Dec("discount");
                     registrations = reader.Int("registrations");
+                    // The wallet flow joins the same tiles rather than getting
+                    // its own: to the client it is one day's work either way.
+                    revenue += reader.Dec("ledger_revenue");
+                    patientCount += reader.Int("ledger_patients");
+                    deposits = reader.Dec("deposits");
                 }
 
                 // ---- result set 2: status breakdown
@@ -159,9 +203,9 @@ public sealed class StatsRepository(NobleConnectionFactory db, SqlRetry retry)
 
                 return new DayStats(
                     date, billCount, patientCount, registrations, revenue,
-                    Collected: cashIn + otherIn,
+                    Collected: cashIn + otherIn + deposits,
                     CashCollected: cashIn,
-                    OtherCollected: otherIn,
+                    OtherCollected: otherIn + deposits,
                     Refunded: refunded,
                     Outstanding: outstanding,
                     Discount: discount,
