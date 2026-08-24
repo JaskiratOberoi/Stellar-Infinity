@@ -612,9 +612,15 @@ public static class OrderEntryEndpoints
             catch (Exception) when (!ct.IsCancellationRequested) { /* the order stands */ }
         }
 
-        // Only once the order is safely placed. Clearing earlier would lose the
-        // operator's work on any failure.
-        await carts.ClearAsync(userId, ct).ConfigureAwait(false);
+        // Only once the order is safely placed — resetting earlier would lose
+        // the operator's work on any failure. The ITEMS go; the CLIENT stays.
+        // A centre books a run — one client, many patients, back to back — and
+        // the form promises "client still selected" after each booking. This
+        // used to clear the whole cart, client included, so the SECOND add of
+        // every run failed with "Choose a client before adding tests" while
+        // the screen showed the client still picked: a batch feature that only
+        // ever booked one order.
+        await carts.SaveAsync(userId, new Cart(body.Mcc, []), ct).ConfigureAwait(false);
 
         return Results.Ok(result);
     }

@@ -848,8 +848,12 @@ export function NewOrder() {
    */
   const placeRow = (
     <div className="row" style={{ marginTop: '.9rem' }}>
+      {/* No "to ledger" on the B2B figure: the wallet is debited when the lab
+          ACCESSIONS the samples (the LIS's CheckTransCash, ported into the
+          registration procedure), not at this click — the old label claimed
+          otherwise and read as an immediate charge. */}
       <button className="btn btn--primary" disabled={!canPlace} onClick={() => void place()}>
-        {busy ? 'Placing…' : isB2b ? `Place order · ${inr(payable)} to ledger` : `Place order · ${inr(payable)}`}
+        {busy ? 'Placing…' : `Place order · ${inr(payable)}`}
       </button>
       {/* Only when the button's figure is no longer the basket total,
           so the operator can see WHY. Without this the button quietly
@@ -1617,8 +1621,10 @@ export function NewOrder() {
                 <h2 className="order-step__title">Payment</h2>
               </div>
               <p className="muted" style={{ fontSize: '.82rem', margin: 0 }}>
-                Nothing is collected on a client order. The bill records what is
-                owed, and it is settled later against the centre's account.
+                Nothing is collected on a client order, and nothing posts to the
+                centre&rsquo;s account yet: the amount is debited when the lab
+                accessions the samples — exactly as the LIS does it. Until then
+                the bill only records what will be owed.
               </p>
               {placeRow}
             </div>
