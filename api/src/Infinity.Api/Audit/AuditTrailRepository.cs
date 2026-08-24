@@ -202,11 +202,11 @@ public sealed class AuditTrailRepository(NobleConnectionFactory db, SqlRetry ret
                         at = l.FUNCTION_DATE, origin = 'lis', kind = 'lis.activity',
                         actor_id = l.USERID, username = CONVERT(NVARCHAR(50), NULL),
                         bill_id = CONVERT(INT, NULL),
-                        sid = CONVERT(NVARCHAR(50), NULLIF(LTRIM(RTRIM(l.SAMPLEID)), '')),
+                        sid = CONVERT(NVARCHAR(50), NULLIF(NULLIF(LTRIM(RTRIM(l.SAMPLEID)), ''), '0')),
                         ip = NULLIF(LTRIM(RTRIM(l.IPADDRESS)), ''),
                         details = CONCAT('{"action":"',
                             STRING_ESCAPE(ISNULL(l.FUNCTION_PERFORMED, ''), 'json'), '"',
-                            CASE WHEN NULLIF(LTRIM(RTRIM(l.PID)), '') IS NOT NULL
+                            CASE WHEN NULLIF(NULLIF(LTRIM(RTRIM(l.PID)), ''), '0') IS NOT NULL
                                  THEN CONCAT(',"pid":"', STRING_ESCAPE(LTRIM(RTRIM(l.PID)), 'json'), '"')
                                  ELSE '' END,
                             CASE WHEN NULLIF(LTRIM(RTRIM(l.OTEHR_INFO)), '') IS NOT NULL
