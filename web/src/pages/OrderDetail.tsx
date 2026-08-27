@@ -52,6 +52,7 @@ interface OrderDetail {
   amountPaid: number;
   patientId: number | null;
   registeredBy: string | null;
+  isB2b: boolean;
   lines: OrderLine[];
   samples: OrderSample[];
   receipts: OrderReceipt[];
@@ -306,18 +307,22 @@ export function OrderDetailModal({ billId, onClose }: { billId: number; onClose:
                   payments panel they were about to use. */}
               {canSeeMoney && (
                 <>
-                  <button
-                    className="btn btn--ghost"
+<button className="btn btn--ghost btn--sm"
                     onClick={() => window.open(`/print/invoice/${order.billId}`, '_blank', 'noopener')}
-                  >
-                    Invoice
+                    title="Telo's bill format at patient prices — what the patient pays the centre.">
+                    Patient bill
                   </button>
-                  <button
-                    className="btn btn--ghost"
+                  {order.isB2b && (
+                    <button className="btn btn--ghost btn--sm"
+                            onClick={() => window.open(`/print/invoice/${order.billId}?copy=client`, '_blank', 'noopener')}
+                            title="Contract rates — payable by the client to Qugen Pathlabs.">
+                      Client bill
+                    </button>
+                  )}
+                  <button className="btn btn--ghost btn--sm"
                     onClick={() => window.open(`/print/invoice/${order.billId}?copy=lab`, '_blank', 'noopener')}
-                    title="Same invoice with the sample IDs listed — for the collection envelope and the lab's file."
-                  >
-                    Lab copy
+                    title="Telo's lab slip — no amounts; travels with the samples.">
+                    Lab slip
                   </button>
                 </>
               )}

@@ -35,6 +35,7 @@ interface OrderLine {
   testCode: string | null;
   testName: string | null;
   amount: number;
+  mrp: number | null;
   cancelled: boolean;
   isExternal: boolean;
 }
@@ -79,6 +80,7 @@ interface Order {
   patientId: number | null;
   registeredBy: string | null;
   preparedByOverride: string | null;
+  isB2b: boolean;
   lines: OrderLine[];
   samples: OrderSample[];
   receipts: OrderReceipt[];
@@ -154,10 +156,21 @@ function SummaryRow({ label, value, bold }: { label: string; value: string; bold
 export function PrintInvoice() {
   const { billId = '' } = useParams();
   const [params] = useSearchParams();
-  // Unknown values fall back to the costing copy: it is the strictly smaller
-  // document, so a typo in the query string cannot leak sample ids onto a
-  // patient's invoice.
-  const isLabCopy = params.get('copy') === 'lab';
+  /*
+   * Three documents share this route, ?copy= picking one:
+   *   patient (default) — Telo's bill format at PATIENT prices. A B2C bill is
+   *             billed at patient rate already; a B2B bill stores the client
+   *             rate, so its lines reprice at catalogue MRP here.
+   *   client  — B2B only: the same order billed at the contract rate, payable
+   *             by the client to Qugen Pathlabs Pvt. Ltd.
+   *   lab     — Telo's lab slip: no money on it at all.
+   * Unknown values fall back to the patient copy — the document safest to
+   * hand to the wrong person.
+   */
+  const copy = params.get('copy');
+  const mode: 'patient' | 'client' | 'lab' =
+    copy === 'lab' ? 'lab' : copy === 'client' ? 'client' : 'patient';
+  const isLabCopy = mode === 'lab';
 
   const [order, setOrder] = useState<Order | null>(null);
   const [config, setConfig] = useState<InvoiceConfig | null>(null);
@@ -229,7 +242,17 @@ export function PrintInvoice() {
   const billReceipts = order.receipts.filter((r) => !r.voided);
 
   const genderLabel = order.gender === 1 ? 'M' : order.gender === 2 ? 'F' : '—';
-  const subTotal = order.lines.reduce((s, l) => s + (l.cancelled ? 0 : l.amount), 0);
+
+  /*
+   * What one line costs on THIS document. The patient copy of a B2B order
+   * reprices at catalogue MRP — the stored amount is the centre's contract
+   * rate, which is the centre's cost, not the patient's price. Custom lines
+   * (Smart Report) have no catalogue MRP; their billed amount IS the patient
+   * price. Every other document prints the stored amount.
+   */
+  const patientPriced = mode === 'patient' && order.isB2b;
+  const lineAmount = (l: OrderLine) => (patientPriced ? (l.mrp ?? l.amount) : l.amount);
+  const subTotal = order.lines.reduce((s, l) => s + (l.cancelled ? 0 : lineAmount(l)), 0);
   const hasExternal = order.lines.some((l) => l.isExternal);
 
   // Logo panes: the custom mark always renders opposite Noble's, and either
@@ -384,6 +407,137 @@ export function PrintInvoice() {
     );
   }
 
+  /*
+   * The client bill — the one document of the three that is NEW rather than
+   * ported: Telo never printed one. It bills the CENTRE, not the patient:
+   * lines at the contract (B2B) rate the order was stored at, payable by the
+   * client to Qugen Pathlabs Pvt. Ltd., settled against the centre's account
+   * with Noble at accessioning. Same chassis as the Telo bill so the two
+   * documents read as siblings.
+   */
+  if (mode === 'client') {
+    if (!order.isB2b) {
+      return (
+        <div className="print print--invoice" data-print-ready={ready ? 'true' : undefined}>
+          <p>This is a walk-in order — the patient pays the centre directly, so
+             there is no client bill. Print the patient bill instead.</p>
+        </div>
+      );
+    }
+    return (
+      <div className="print print--invoice" data-print-ready={ready ? 'true' : undefined}>
+        <div className="print__toolbar">
+          <button className="btn btn--primary btn--sm" onClick={() => window.print()}>Print</button>
+          <span className="muted" style={{ fontSize: '.78rem' }}>
+            Client bill — contract rates, payable to Qugen
+          </span>
+        </div>
+
+        <div className="bill">
+          {/* ── Header: Qugen is the biller, so Noble's mark and no other ── */}
+          <div className="bill__band bill__head">
+            <div className="bill__head-side bill__head-side--left">
+              <img className="bill__logo bill__logo--noble" src="/branding/noble-logo.png" alt="Noble Diagnostics" />
+            </div>
+            <div className="bill__head-centre">
+              <p className="bill__labname">{BILLING_ENTITY}</p>
+              <p className="bill__headline">Noble Diagnostics</p>
+            </div>
+            <div className="bill__head-side bill__head-side--right" />
+          </div>
+
+          <div className="bill__band bill__meta">
+            <div className="bill__meta-item">
+              <span className="bill__label">Bill No.</span>
+              <span className="bill__meta-no">{order.billNumber ?? order.billId}</span>
+            </div>
+            <div className="bill__meta-item">
+              <span className="bill__label">Date</span>
+              <span>{fmtIST(order.billDate)}</span>
+            </div>
+          </div>
+
+          {/* ── Who owes it, and whose patient it was ── */}
+          <div className="bill__band">
+            <p className="bill__label bill__section-label">Bill To</p>
+            <div className="bill__rows">
+              <Row label="Client" value={`${order.clientCode ?? ''} — ${labName}`} />
+              {addressLine && <Row label="Address" value={addressLine} />}
+              {config?.phone && <Row label="Phone" value={config.phone} />}
+              <Row label="Patient" value={order.patientName ?? '—'} />
+              {order.patientId != null && <Row label="PID" value={String(order.patientId)} mono />}
+              {order.refDoctorName && <Row label="Ref. doctor" value={order.refDoctorName} />}
+            </div>
+          </div>
+
+          {/* ── Services at the contract rate ── */}
+          <div className="bill__band">
+            <p className="bill__label bill__section-label">Services — contract rate</p>
+            <table className="bill__table">
+              <thead>
+                <tr>
+                  <th className="bill__th-idx">#</th>
+                  <th>Description</th>
+                  <th className="bill__th-amt">Amount (₹)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {order.lines.map((l, idx) => (
+                  <tr key={l.lineId}>
+                    <td className="bill__td-idx">{idx + 1}</td>
+                    <td>
+                      {plainText(l.testName) || l.testCode || '—'}
+                      {l.cancelled && <span className="bill__cancelled"> (cancelled)</span>}
+                    </td>
+                    <td className="bill__td-amt">{l.cancelled ? '—' : inr(l.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan={2} className="bill__subtotal-label">Sub-total</td>
+                  <td className="bill__td-amt bill__subtotal-amt">
+                    {inr(order.lines.reduce((t, l) => t + (l.cancelled ? 0 : l.amount), 0))}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div className="bill__band">
+            <div className="bill__summary">
+              <SummaryRow label="Amount" value={inr(order.amount)} />
+              <div className="bill__sumdue">
+                <SummaryRow label="Payable to Qugen" value={inr(order.amount)} bold />
+              </div>
+              <p className="bill__behalf">
+                Payable by {order.clientCode ?? labName} to {BILLING_ENTITY}
+              </p>
+            </div>
+          </div>
+
+          <div className="bill__band">
+            <p className="bill__notes-label">Note:</p>
+            <ol className="bill__notes">
+              <li>Settled against the centre&rsquo;s account with Noble — the amount is
+                  debited when the samples are accessioned.</li>
+              <li>All above services are exempted under GST.</li>
+            </ol>
+          </div>
+
+          <div className="bill__foot">
+            <p className="bill__generated">This is a computer-generated bill.</p>
+            <div className="bill__sign">
+              <div className="bill__sign-line" />
+              <p className="bill__sign-title">Authorised Signatory</p>
+              <p className="bill__sign-name">{BILLING_ENTITY}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="print print--invoice" data-print-ready={ready ? 'true' : undefined}>
       {/* Screen-only. The one control on the page, and it removes itself from
@@ -391,7 +545,9 @@ export function PrintInvoice() {
       <div className="print__toolbar">
         <button className="btn btn--primary btn--sm" onClick={() => window.print()}>Print</button>
         <span className="muted" style={{ fontSize: '.78rem' }}>
-          Costing copy — amounts, no sample IDs
+          {patientPriced
+            ? 'Patient bill — catalogue MRP, what the patient pays the centre'
+            : 'Patient bill — amounts, no sample IDs'}
         </span>
       </div>
 
@@ -466,7 +622,7 @@ export function PrintInvoice() {
                     {l.isExternal && <sup className="bill__ext">*</sup>}
                     {l.cancelled && <span className="bill__cancelled"> (cancelled)</span>}
                   </td>
-                  <td className="bill__td-amt">{l.cancelled ? '—' : inr(l.amount)}</td>
+                  <td className="bill__td-amt">{l.cancelled ? '—' : inr(lineAmount(l))}</td>
                 </tr>
               ))}
             </tbody>
@@ -521,14 +677,15 @@ export function PrintInvoice() {
           </div>
         )}
 
-        {/* ── Summary ── */}
+        {/* ── Summary — repriced when the lines are (see lineAmount) ── */}
         <div className="bill__band">
           <div className="bill__summary">
-            <SummaryRow label="Amount" value={inr(order.amount)} />
+            <SummaryRow label="Amount" value={inr(patientPriced ? subTotal : order.amount)} />
             {order.discount > 0 && <SummaryRow label="Discount" value={`− ${inr(order.discount)}`} />}
             <SummaryRow label="Net paid" value={inr(order.amountPaid)} />
             <div className="bill__sumdue">
-              <SummaryRow label="Balance Due" value={inr(order.balance)} bold />
+              <SummaryRow label="Balance Due"
+                          value={inr(patientPriced ? subTotal - order.amountPaid : order.balance)} bold />
             </div>
             <p className="bill__behalf">On behalf of {onBehalfName}</p>
           </div>

@@ -23,6 +23,10 @@ public sealed record OrderLine(
     string? TestName,
     string? TestType,
     decimal Amount,
+    /// <summary>Catalogue MRP for this line — what the CENTRE charges its
+    /// patient. Null for custom lines (Smart Report etc.), which have no
+    /// catalogue entry; the billed amount is the patient price there.</summary>
+    decimal? Mrp,
     bool Cancelled,
     /// <summary>Billed by us, performed outside Noble (an extras-only line).
     /// The invoice marks these * and adds the not-performed-by-Noble note.</summary>
@@ -68,6 +72,10 @@ public sealed record OrderDetail(
     decimal AmountPaid,
     int? PatientId,
     string? RegisteredBy,
+    /// <summary>Tagged b2b in telo_order_kind at creation — decides which of
+    /// the three printable documents exist for this order (a walk-in has no
+    /// client bill).</summary>
+    bool IsB2b,
     /// <summary>The registering ACCOUNT's printed name (telo_account.prepared_by).
     /// Telo's bill prints this over the user's own name when set — several desks
     /// share one client code and each prints its own — so the parity bill needs
@@ -92,7 +100,7 @@ public sealed record OrderDetail(
         Discount = 0,
         AmountPaid = 0,
         Receipts = [],
-        Lines = Lines.Select(l => l with { Amount = 0 }).ToArray(),
+        Lines = Lines.Select(l => l with { Amount = 0, Mrp = null }).ToArray(),
     };
 }
 
@@ -225,7 +233,8 @@ public sealed class OrdersRepository(NobleConnectionFactory db, SqlRetry retry)
                            -- Whoever registered it: works for both the 'telo:' and
                            -- 'inf:' origin markers, since both are '<prefix>:<userId>'.
                            NULLIF(LTRIM(RTRIM(CONCAT(uu.firstname, ' ', uu.lastname))), '') AS registeredBy,
-                           NULLIF(LTRIM(RTRIM(ta.prepared_by)), '') AS preparedByOverride
+                           NULLIF(LTRIM(RTRIM(ta.prepared_by)), '') AS preparedByOverride,
+                           CASE WHEN ok.bill_id IS NULL THEN 0 ELSE 1 END AS isB2b
                     FROM dbo.tbl_billing_patient_detail b
                     LEFT JOIN dbo.tbl_med_mcc_unit_master u ON u.id = b.mcc_code
                     LEFT JOIN dbo.tbl_med_mcc_doctors  d ON d.id = b.ref_doctor
@@ -235,6 +244,7 @@ public sealed class OrdersRepository(NobleConnectionFactory db, SqlRetry retry)
                            ON (b.addedby LIKE 'telo:%' OR b.addedby LIKE 'inf:%')
                           AND uu.id = TRY_CONVERT(INT, SUBSTRING(b.addedby, CHARINDEX(':', b.addedby) + 1, 20))
                     LEFT JOIN dbo.telo_account ta ON ta.user_id = uu.id
+                    LEFT JOIN dbo.telo_order_kind ok ON ok.bill_id = b.id AND ok.kind = N'b2b'
                     WHERE b.id = @bid AND {sc.Predicate}
                     """;
 
@@ -271,6 +281,7 @@ public sealed class OrdersRepository(NobleConnectionFactory db, SqlRetry retry)
                         PatientId: patientId,
                         RegisteredBy: Trim(r.Str("registeredBy")),
                         PreparedByOverride: Trim(r.Str("preparedByOverride")),
+                        IsB2b: r.Int("isB2b") == 1,
                         Lines: [], Samples: [], Receipts: []);
                 }
 
@@ -311,6 +322,17 @@ public sealed class OrdersRepository(NobleConnectionFactory db, SqlRetry retry)
         await using var cmd = NobleConnectionFactory.CreateCommand(conn, """
             SELECT d.id AS lineId, d.testcode AS testCode, d.testname AS testName,
                    d.testtype AS testType, d.testamount AS amount,
+                   mrp = CASE
+                       WHEN d.testtype IN ('t', 'Test') THEN
+                           (SELECT TOP 1 tm.MRP FROM dbo.tbl_med_test_master tm
+                             WHERE tm.TestCode = d.testcode ORDER BY tm.id)
+                       WHEN d.testtype IN ('p', 'Profile') THEN
+                           (SELECT TOP 1 pm.MRP FROM dbo.tbl_med_test_profile_master pm
+                             WHERE pm.Profile_Code = d.testcode ORDER BY pm.id)
+                       ELSE
+                           (SELECT TOP 1 mm.MRP FROM dbo.tbl_med_test_master_profile_master mm
+                             WHERE mm.Master_Profile_Code = d.testcode ORDER BY mm.id)
+                   END,
                    CASE WHEN tc.line_id IS NULL THEN 0 ELSE 1 END AS cancelled,
                    CASE WHEN EXISTS (
                           SELECT 1 FROM dbo.telo_custom_test_order cto
@@ -329,7 +351,8 @@ public sealed class OrdersRepository(NobleConnectionFactory db, SqlRetry retry)
         {
             list.Add(new OrderLine(
                 r.Int("lineId"), r.Str("testCode"), r.Str("testName"),
-                r.Str("testType"), r.Dec("amount"), r.Int("cancelled") == 1,
+                r.Str("testType"), r.Dec("amount"), r.NullableDec("mrp"),
+                r.Int("cancelled") == 1,
                 r.Int("isExternal") == 1));
         }
         return list;
