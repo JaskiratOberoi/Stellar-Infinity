@@ -2117,6 +2117,10 @@ fieldset.bare {
   border-bottom: 1px solid var(--line-soft);
 }
 .runlist__rows li:last-child { border-bottom: none; }
+/* The per-row document buttons. Pushed to the row's end; on a narrow screen
+   they wrap under the identity rather than crushing the patient's name. */
+.runlist__docs { margin-left: auto; display: flex; gap: .3rem; flex-wrap: wrap; }
+.runlist__docs .btn { padding: .12rem .5rem; font-size: .7rem; white-space: nowrap; }
 .runlist__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------- new order density ----------

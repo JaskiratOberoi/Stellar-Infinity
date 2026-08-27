@@ -886,8 +886,17 @@ export function NewOrder() {
         setSubmitting({ done: i, total: drafts.length });
         try {
           const { request } = await cartApi.drafts.get(d.id);
-          await cartApi.place({ ...request, draftId: d.id });
+          const result = await cartApi.place({ ...request, draftId: d.id });
           booked += 1;
+          // The booked list is the run's receipt — and where each order's
+          // three documents print from. Without this, a queue run ended with
+          // every booked order simply vanishing: nothing to click, nothing to
+          // print, the operator left to find their own bookings in Orders.
+          setSession((prev) => [{
+            billId: result.billId, billNumber: result.billNumber,
+            patient: d.patientName ?? '', total: result.total,
+            sids: d.sids, tubes: d.tubes,
+          }, ...prev]);
         } catch (e) {
           failed += 1;
           const why = e instanceof Error ? e.message : 'Could not be booked.';
@@ -1032,6 +1041,18 @@ export function NewOrder() {
             <button className="btn btn--primary btn--sm" onClick={() => setPlaced(null)}>
               Book another
             </button>
+            {placed.billId != null && (
+              <>
+                <button className="btn btn--ghost btn--sm"
+                        onClick={() => window.open(`/print/invoice/${placed.billId}`, '_blank', 'noopener')}>
+                  Patient bill
+                </button>
+                <button className="btn btn--ghost btn--sm"
+                        onClick={() => window.open(`/print/invoice/${placed.billId}?copy=lab`, '_blank', 'noopener')}>
+                  Lab slip
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -1243,6 +1264,25 @@ export function NewOrder() {
                   {o.sids} of {o.tubes} tube{o.tubes === 1 ? '' : 's'}
                 </span>
                 <span className="mono">{inr(o.total)}</span>
+                {o.billId != null && (
+                  <span className="runlist__docs">
+                    <button className="btn btn--ghost btn--sm" type="button"
+                            title="What the patient pays the centre — catalogue MRP."
+                            onClick={() => window.open(`/print/invoice/${o.billId}`, '_blank', 'noopener')}>
+                      Patient bill
+                    </button>
+                    <button className="btn btn--ghost btn--sm" type="button"
+                            title="Contract rates — payable by the centre to Qugen."
+                            onClick={() => window.open(`/print/invoice/${o.billId}?copy=client`, '_blank', 'noopener')}>
+                      Client bill
+                    </button>
+                    <button className="btn btn--ghost btn--sm" type="button"
+                            title="No amounts — travels with the samples."
+                            onClick={() => window.open(`/print/invoice/${o.billId}?copy=lab`, '_blank', 'noopener')}>
+                      Lab slip
+                    </button>
+                  </span>
+                )}
               </li>
             ))}
           </ol>
