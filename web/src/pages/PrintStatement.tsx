@@ -205,7 +205,7 @@ export function PrintStatement() {
         </p>
       )}
       <p className="inv__addr">
-        Printed {new Date().toLocaleString('en-IN')} · figures cover the whole period stated above,
+        Printed {new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST · figures cover the whole period stated above,
         not a page of it. Collections are keyed by receipt date.
       </p>
     </div>

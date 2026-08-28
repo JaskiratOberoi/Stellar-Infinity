@@ -116,7 +116,7 @@ public static class ClientRequestEndpoints
                 $"MRF #{r.Id} — {clientCode ?? body.Mcc.ToString()} — {body.Items.Count} item(s)",
                 Mailer.Wrap(
                     $"Material request #{r.Id}",
-                    $"Raised on Infinity by <b>{Mailer.H(who)}</b> for <b>{Mailer.H(clientCode ?? $"centre {body.Mcc}")}</b> · {DateTime.Now:dd MMM yyyy, hh:mm tt}",
+                    $"Raised on Infinity by <b>{Mailer.H(who)}</b> for <b>{Mailer.H(clientCode ?? $"centre {body.Mcc}")}</b> · {Domain.NobleTime.NowForNoble():dd MMM yyyy, hh:mm tt} IST",
                     "<table role='presentation' width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;font-size:14px'>"
                     + "<tr><th style='padding:6px 10px 6px 0;text-align:left;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#5b7183;border-bottom:2px solid #0f766e'>Item</th>"
                     + "<th style='padding:6px 0;text-align:right;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#5b7183;border-bottom:2px solid #0f766e'>Qty</th>"
@@ -160,7 +160,7 @@ public static class ClientRequestEndpoints
                 $"MRF #{id} cancelled — {clientCode ?? body.Mcc.ToString()}",
                 Mailer.Wrap(
                     $"Material request #{id} cancelled",
-                    $"<b>{Mailer.H(clientCode ?? $"centre {body.Mcc}")}</b> · {DateTime.Now:dd MMM yyyy, hh:mm tt}",
+                    $"<b>{Mailer.H(clientCode ?? $"centre {body.Mcc}")}</b> · {Domain.NobleTime.NowForNoble():dd MMM yyyy, hh:mm tt} IST",
                     "<p style='margin:0'>The centre withdrew this request before approval. Nothing to dispatch.</p>"));
         }
         catch (Exception) when (!ct.IsCancellationRequested) { /* the cancel stands */ }
@@ -231,7 +231,7 @@ public static class ClientRequestEndpoints
                 $"Help request #{r.Id} — {clientCode ?? body.Mcc.ToString()} — {subject}",
                 Mailer.Wrap(
                     Mailer.H(subject),
-                    $"{(category == "technical" ? "Technical" : "General")} · raised by <b>{Mailer.H(who)}</b> for <b>{Mailer.H(clientCode ?? $"centre {body.Mcc}")}</b> · {DateTime.Now:dd MMM yyyy, hh:mm tt}",
+                    $"{(category == "technical" ? "Technical" : "General")} · raised by <b>{Mailer.H(who)}</b> for <b>{Mailer.H(clientCode ?? $"centre {body.Mcc}")}</b> · {Domain.NobleTime.NowForNoble():dd MMM yyyy, hh:mm tt} IST",
                     (detail is null ? "<p style='margin:0;color:#5b7183'>No further detail was given.</p>"
                         : $"<p style='margin:0;white-space:pre-wrap'>{Mailer.H(detail)}</p>")
                     + "<p style='margin:16px 0 0;font-size:12px;color:#7b8f9c'>Answer it on Infinity → Admin → Help desk; the centre sees the reply on their Requests page.</p>"));
