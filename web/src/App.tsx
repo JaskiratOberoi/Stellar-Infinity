@@ -25,6 +25,7 @@ import { Instruments } from './pages/Instruments';
 import { Interfacing } from './pages/Interfacing';
 import { AdminUsers } from './pages/AdminUsers';
 import { AuditTrail } from './pages/AuditTrail';
+import { Requests } from './pages/Requests';
 import { InvoiceConfigPage } from './pages/InvoiceConfig';
 import { ThemeToggle } from './theme/ThemeToggle';
 import { InfinityLoader } from './components/InfinityLoader';
@@ -161,6 +162,10 @@ const NAV: NavEntry[] = [
       // order:accession — but the nav's accession gate made the page
       // invisible to the one audience asking 'has the lab got my box'.
       { to: '/inward', label: 'Sample tracking', icon: 'orders', cap: 'order:view', onlyForRole: 'client' },
+      // The LIS's MRF and HRF, rebuilt: consumables from the lab, and a help
+      // channel — the last two client features that still required an LIS
+      // login.
+      { to: '/requests', label: 'Requests', icon: 'orders', cap: 'order:view', onlyForRole: 'client' },
     ],
   },
   {
@@ -216,6 +221,8 @@ const NAV: NavEntry[] = [
       // Telo's Audit tab, over both platforms' trails. Same gate: the feed
       // names users, bills, amounts and IPs across every client.
       { to: '/admin/audit', label: 'Audit trail', icon: 'users', cap: 'user:manage' },
+      // The lab's side of the clients' help channel — same page, unscoped.
+      { to: '/requests', label: 'Help desk', icon: 'users', cap: 'user:manage' },
     ],
   },
 ];
@@ -421,6 +428,10 @@ export function App() {
         <Route
           path="/admin/users"
           element={can('user:manage') ? <AdminUsers /> : <Navigate to="/" replace />}
+        />
+        <Route
+          path="/requests"
+          element={can('order:view') || can('user:manage') ? <Requests /> : <Navigate to="/" replace />}
         />
         <Route
           path="/admin/audit"
