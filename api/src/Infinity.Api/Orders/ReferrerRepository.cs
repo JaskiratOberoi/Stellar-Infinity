@@ -16,9 +16,11 @@ namespace Infinity.Api.Orders;
 /// referrer at all. This is the missing read.
 /// </para>
 /// <para>
-/// Both lists are handed over whole (about 1,400 doctors, 300 customers) and
-/// filtered in the browser, exactly as the test catalogue is: the operator
-/// searches by name, and a round trip per keystroke buys nothing at this size.
+/// SCOPED per centre since the roster screens landed: rosters are per-centre
+/// in the LIS (pcc_code is the owning MCC unit) and both the legacy forms and
+/// Telo filter their pickers to the selected centre. The first version handed
+/// the whole network's roster to every account. Filtered in the browser after
+/// that, exactly as the test catalogue is.
 /// </para>
 /// </remarks>
 public sealed class ReferrerRepository(NobleConnectionFactory db, SqlRetry retry)
@@ -33,12 +35,13 @@ public sealed class ReferrerRepository(NobleConnectionFactory db, SqlRetry retry
         IReadOnlyList<Referrer> Doctors,
         IReadOnlyList<Referrer> Customers);
 
-    public async Task<Referrers> GetAsync(CancellationToken ct = default)
+    public async Task<Referrers> GetAsync(int mcc, CancellationToken ct = default)
     {
         return await retry.ExecuteAsync("orders.referrers", token =>
             db.QueryAsync("orders.referrers", async (conn, inner) =>
             {
                 await using var cmd = db.CreateWriteCommand(conn, "dbo.usp_inf_order_referrers");
+                cmd.Parameters.Add("@mcc", System.Data.SqlDbType.Int).Value = mcc;
 
                 var doctors = new List<Referrer>();
                 await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);

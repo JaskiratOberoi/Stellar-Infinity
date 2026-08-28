@@ -300,12 +300,20 @@ export function NewOrder() {
   }, [cart.mcc]);
   const [refCustomer, setRefCustomer] = useState<RefPick>(null);
   useEffect(() => {
+    // Rosters are PER CENTRE — the pcc_code on the doctor/customer masters is
+    // the owning MCC unit, and both the LIS and Telo scope this picker the
+    // same way. So the list follows the client, and picks made under the
+    // previous client are cleared with it: doctor #57 of one centre is not a
+    // referrer of the next.
+    if (cart.mcc == null) { setRefs({ doctors: [], customers: [] }); return; }
     let live = true;
-    api.get<{ doctors: Referrer[]; customers: Referrer[] }>('/api/orders/referrers')
+    api.get<{ doctors: Referrer[]; customers: Referrer[] }>(`/api/orders/referrers?mcc=${cart.mcc}`)
       .then((r) => { if (live) setRefs(r); })
       .catch(() => { /* Pickers degrade to create-only; the order still books. */ });
+    setRefDoctor((p) => (p?.kind === 'existing' ? null : p));
+    setRefCustomer((p) => (p?.kind === 'existing' ? null : p));
     return () => { live = false; };
-  }, []);
+  }, [cart.mcc]);
 
   /*
    * Sample IDs, keyed by sample type. Optional — see the note on the component.

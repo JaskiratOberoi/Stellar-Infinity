@@ -68,16 +68,27 @@ public static class OrderEntryEndpoints
         entry.MapPost("/drafts/{id:int}/failed", MarkDraftFailed).WithName("MarkOrderDraftFailed");
     }
     /// <summary>
-    /// The referring doctors and customers the order form can offer.
+    /// The referring doctors and customers the order form can offer, for one
+    /// centre.
     /// </summary>
     /// <remarks>
-    /// Not scoped by client code: referrers are shared across the network, and
-    /// the order itself is scoped by the centre the operator picked.
+    /// Scoped like every other order-entry route: rosters are per-centre in
+    /// the LIS (pcc_code is the owning MCC unit), and the first version's
+    /// network-wide list offered one centre's referring doctors — a
+    /// commercially sensitive roster — to every other centre.
     /// </remarks>
     private static async Task<IResult> GetReferrers(
+        [FromQuery] int mcc,
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
         ReferrerRepository repo,
         CancellationToken ct)
-        => Results.Ok(await repo.GetAsync(ct).ConfigureAwait(false));
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+        var scope = await scopes.GetScopeAsync(userId, ct).ConfigureAwait(false);
+        if (!scope.Contains(mcc)) return Results.NotFound();
+        return Results.Ok(await repo.GetAsync(mcc, ct).ConfigureAwait(false));
+    }
     /// <summary>
     /// Whether a barcode is already on a tube, so the order form can say so
     /// before the operator has typed out the rest of the patient.

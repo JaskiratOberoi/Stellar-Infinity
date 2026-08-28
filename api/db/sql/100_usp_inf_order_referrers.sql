@@ -15,18 +15,24 @@ GO
  * operator searches by name, and a round trip per keystroke buys nothing at
  * this size.
  *
- * NOT filtered on IsActive, deliberately. Telo filtered its client codes that
- * way and it "hid half the network" (see its commit 10424fa); the same table
- * hygiene applies here. A referrer that is inactive today still names the
- * doctor who sent last week's patient, and the create procedure is what decides
- * whether a NEW order may cite one.
+ * SCOPED to the centre the order is being booked under, matching both the LIS
+ * (Workorder_FillCombo filters pcc_code to the selected MCC) and Telo
+ * (fetchDoctorsForMcc). The first version handed the whole network's roster
+ * to every account, which offered one centre's referring doctors — a
+ * commercially sensitive list — to every other centre. @mcc NULL keeps the
+ * old unscoped answer so an already-deployed API survives the procedure
+ * landing first; the API always passes the centre.
  *
- * Reference data — not scoped by client code. Referrers are shared across the
- * network, and the order itself is scoped by the mcc the operator picked.
+ * Filtered on IsActive HERE and not in the management list: deactivating a
+ * referrer is precisely the act of removing it from this picker (the legacy
+ * combos never filtered it, which is listed as a defect — deactivation there
+ * did nothing). Historical orders keep their name via the join on id, active
+ * or not.
  *
  * Read-only.
  */
 CREATE OR ALTER PROCEDURE dbo.usp_inf_order_referrers
+    @mcc INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -38,6 +44,7 @@ BEGIN
         LTRIM(RTRIM(ISNULL(d.doctor_name, ''))) AS name
     FROM dbo.tbl_med_mcc_doctors d
     WHERE ISNULL(d.doctor_name, '') <> ''
+      AND (@mcc IS NULL OR (d.pcc_code = @mcc AND ISNULL(d.IsActive, 1) = 1))
     ORDER BY d.doctor_name;
 
     -- 2. customers
@@ -47,6 +54,7 @@ BEGIN
         LTRIM(RTRIM(ISNULL(c.customer_name, ''))) AS name
     FROM dbo.tbl_med_mcc_customer c
     WHERE ISNULL(c.customer_name, '') <> ''
+      AND (@mcc IS NULL OR (c.pcc_code = @mcc AND ISNULL(c.IsActive, 1) = 1))
     ORDER BY c.customer_name;
 END
 GO

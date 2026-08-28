@@ -26,6 +26,7 @@ import { Interfacing } from './pages/Interfacing';
 import { AdminUsers } from './pages/AdminUsers';
 import { AuditTrail } from './pages/AuditTrail';
 import { Requests } from './pages/Requests';
+import { Referrers } from './pages/Referrers';
 import { InvoiceConfigPage } from './pages/InvoiceConfig';
 import { ThemeToggle } from './theme/ThemeToggle';
 import { InfinityLoader } from './components/InfinityLoader';
@@ -166,6 +167,10 @@ const NAV: NavEntry[] = [
       // channel — the last two client features that still required an LIS
       // login.
       { to: '/requests', label: 'Requests', icon: 'orders', cap: 'order:view', onlyForRole: 'client' },
+      // The roster the order form books against — Pcc/Doctors.aspx and
+      // Pcc/Customers.aspx, rebuilt as one page. order:view like the roster
+      // read itself; the page hides its write controls without order:create.
+      { to: '/referrers', label: 'Referrers', icon: 'orders', cap: 'order:view' },
     ],
   },
   {
@@ -432,6 +437,10 @@ export function App() {
         <Route
           path="/requests"
           element={can('order:view') || can('user:manage') ? <Requests /> : <Navigate to="/" replace />}
+        />
+        <Route
+          path="/referrers"
+          element={can('order:view') ? <Referrers /> : <Navigate to="/" replace />}
         />
         <Route
           path="/admin/audit"

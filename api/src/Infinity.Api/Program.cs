@@ -86,6 +86,7 @@ builder.Services.AddSingleton<Infinity.Api.Audit.AuditRepository>();
 builder.Services.AddSingleton<Infinity.Api.Audit.AuditLog>();
 builder.Services.AddSingleton<Infinity.Api.Audit.AuditTrailRepository>();
 builder.Services.AddSingleton<Infinity.Api.Orders.ClientRequestRepository>();
+builder.Services.AddSingleton<Infinity.Api.Orders.ReferrerAdminRepository>();
 // Mail is OPTIONAL: a deployment without Mail__* settings runs fine and just
 // does not notify — so no startup validation, unlike CCAvenue.
 builder.Services.AddOptions<Infinity.Api.Notifications.MailOptions>()
@@ -267,6 +268,7 @@ app.MapUpdateEndpoints();
 app.MapOrderEntryEndpoints();
 app.MapAuditEndpoints();
 app.MapClientRequestEndpoints();
+app.MapReferrerEndpoints();
 app.MapAccessionEndpoints();
 app.MapInwardEndpoints();
 app.MapClientAccountEndpoints();
