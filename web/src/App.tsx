@@ -154,6 +154,13 @@ const NAV: NavEntry[] = [
       // The route from the Accessioning page header stays — same desk, both
       // ways in.
       { to: '/inward', label: 'Inward', icon: 'orders', cap: 'order:accession' },
+      // The SAME screen, offered to clients under the LIS's own name for it.
+      // The legacy security master grants usertype 2 'Sample Tracking'
+      // (worksheet/inward.aspx); Infinity's port always allowed the client
+      // through the API — scoped to their codes, scan hidden without
+      // order:accession — but the nav's accession gate made the page
+      // invisible to the one audience asking 'has the lab got my box'.
+      { to: '/inward', label: 'Sample tracking', icon: 'orders', cap: 'order:view', onlyForRole: 'client' },
     ],
   },
   {
