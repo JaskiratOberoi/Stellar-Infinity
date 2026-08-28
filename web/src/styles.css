@@ -2812,7 +2812,17 @@ select.preview__layout { width: 11.25rem; flex: none; }
   border: 1px solid var(--line); border-radius: 8px;
   background: var(--neutral-soft);
 }
-.preview__switch input, .preview__dlopt input { position: absolute; opacity: 0; pointer-events: none; }
+/* These two hide the REAL checkbox behind a decorative track. The global
+   input[type="checkbox"] restyle further down paints every checkbox as an
+   18px box — including its :disabled state — and, being later in the file at
+   equal specificity, it was winning: the "hidden" input showed as a ghost
+   square inside the download pill whenever the report had no graph. Zero
+   size, not just zero opacity, so no later repaint can resurrect it. */
+.preview__switch input[type="checkbox"],
+.preview__dlopt input[type="checkbox"] {
+  position: absolute; opacity: 0; pointer-events: none;
+  width: 0; height: 0; border: 0; margin: 0;
+}
 
 .preview__track {
   position: relative; width: 26px; height: 15px; flex: none;
@@ -2828,24 +2838,29 @@ select.preview__layout { width: 11.25rem; flex: none; }
 :checked + .preview__track { background: var(--teal); }
 :checked + .preview__track::after { transform: translateX(11px); }
 
-/* Inside the primary button, so it reads as what the download will contain. */
+/* Inside the primary button, so it reads as what the download will contain.
+   Everything in the segment keys off --on-accent, the same token the primary
+   button's own label uses: the dark theme's accent is BRIGHT teal, and the
+   hardcoded white this used to carry disappeared into it. The background is
+   the gradient's own first stop, so the segment reads as one pill with the
+   button beside it in both themes. */
 .preview__dl {
   display: inline-flex; align-items: center; gap: 0;
   border-radius: 8px; overflow: hidden;
-  background: var(--teal);
+  background: var(--accent-grad-from);
 }
-.preview__dlopt { padding: 0 .5rem 0 .6rem; height: 30px; color: #fff; white-space: nowrap; }
+.preview__dlopt { padding: 0 .5rem 0 .6rem; height: 30px; color: var(--on-accent); white-space: nowrap; }
 .preview__dl .btn { border-radius: 0; border: 0; }
-.preview__track--on { background: rgba(255,255,255,.35); }
-:checked + .preview__track--on { background: #fff; }
-:checked + .preview__track--on::after { background: var(--teal); }
+.preview__track--on { background: color-mix(in srgb, var(--on-accent) 35%, transparent); }
+:checked + .preview__track--on { background: var(--on-accent); }
+:checked + .preview__track--on::after { background: var(--accent-grad-from); }
 
 /* Nothing to staple. The control stays, dimmed and unclickable, because its
    absence read as "this download has no attachment option" when what it
    actually meant was "this report has no attachment" — a different fact, and
    the one the operator wanted. */
 .preview__dlopt--none { opacity: .5; cursor: not-allowed; }
-.preview__dlopt--none .preview__track { background: rgba(255,255,255,.25); }
+.preview__dlopt--none .preview__track { background: color-mix(in srgb, var(--on-accent) 25%, transparent); }
 
 /* Grey, like a print preview anywhere else — the point is that the white below
    is a sheet of paper with edges, not the page background. */
