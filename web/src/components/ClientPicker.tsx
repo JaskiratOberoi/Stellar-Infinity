@@ -153,6 +153,37 @@ export function ClientPicker({
     setOpen(false);
   }
 
+  /*
+   * The single-centre account gets a READ-BACK, not a read-only input. The
+   * readOnly picker looked exactly like a live one — same box, same caret on
+   * focus — and an operator kept trying to type into it. The same pinned
+   * treatment the report filters use: the code, the name, and a small lock
+   * that says "fixed", not "broken". Not a disabled input, deliberately:
+   * disabled controls are skipped by screen readers and their text renders
+   * dimmed, and this value is a fact worth reading at full strength.
+   */
+  if (singleClient) {
+    return (
+      <div className="client-picker">
+        <div className="input" aria-readonly="true" aria-label="Client"
+             style={{ display: 'flex', alignItems: 'center', gap: '.45rem',
+                      cursor: 'default', background: 'var(--accent-softer)' }}>
+          <b className="mono">{singleClient.code}</b>
+          {singleClient.name && singleClient.name !== singleClient.code && (
+            <span className="muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {singleClient.name}
+            </span>
+          )}
+          <svg viewBox="0 0 16 16" aria-hidden="true"
+               style={{ width: 12, height: 12, marginLeft: 'auto', flex: 'none', opacity: .45 }}>
+            <rect x="3.5" y="7" width="9" height="6" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4"/>
+            <path d="M5.5 7V5.5a2.5 2.5 0 0 1 5 0V7" fill="none" stroke="currentColor" strokeWidth="1.4"/>
+          </svg>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="client-picker" ref={boxRef}>
       <input
@@ -162,18 +193,11 @@ export function ClientPicker({
         aria-controls={listId}
         aria-label="Client"
         placeholder={selected ? label(selected) : placeholder}
-        /* A locked picker shows its centre outright. The normal expression
-           renders the QUERY while the list is open and falls back to the
-           parent-held selection otherwise - neither is right here, because
-           there is no query to type and the display must not wait on state
-           travelling up to the form and back. */
-        value={singleClient ? label(singleClient)
-                            : (open ? query : (selected ? label(selected) : ''))}
-        onFocus={() => { if (singleClient) return; setOpen(true); }}
-        // Locked when there is only one centre: the value is already correct
-        // and there is nothing to search for.
-        readOnly={singleClient != null}
-        onChange={(e) => { if (singleClient) return; setQuery(e.target.value); setOpen(true); }}
+        /* The QUERY while the list is open, the parent-held selection
+           otherwise. */
+        value={open ? query : (selected ? label(selected) : '')}
+        onFocus={() => setOpen(true)}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
         onKeyDown={(e) => {
           if (e.key === 'Escape') { setOpen(false); setQuery(''); }
           // One match and Enter: the common case when someone types a full code.

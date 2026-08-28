@@ -69,7 +69,7 @@ const EMPTY_PATIENT: PatientForm = {
  */
 const TITLE_SEX: Record<string, 1 | 2> = {
   Mr: 1, Master: 1,
-  Ms: 2, Mrs: 2,
+  Ms: 2, Mrs: 2, Miss: 2,
 };
 
 /**
@@ -1360,7 +1360,7 @@ export function NewOrder() {
                   {/* "Baby of" is the newborn convention: the MOTHER's name
                       goes on the patient line, because the child does not
                       have one yet. */}
-                  {['Mr', 'Ms', 'Mrs', 'Dr', 'Master', 'Baby', 'Baby of', ''].map((t) => (
+                  {['Mr', 'Ms', 'Mrs', 'Miss', 'Dr', 'Master', 'Baby', 'Baby of', ''].map((t) => (
                     <option key={t || 'none'} value={t}>{t || '—'}</option>
                   ))}
                 </select>
