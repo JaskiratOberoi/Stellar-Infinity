@@ -62,7 +62,15 @@ BEGIN
             P.id AS pid,
             U.MCCUnitCode AS client_code,
             BU.BusinessUnitCode AS business_unit,
-            P.name AS patient_name,
+            /*
+             * Salutation + name, as the legacy report prints it. The title
+             * lives in its own column (initial: 'Mrs', 'Dr', ...) and the
+             * order form stores an EMPTY string for the operator's explicit
+             * no-salutation choice — see 108's note — so blank and NULL both
+             * collapse to just the name, never a stray leading space.
+             */
+            CONCAT(NULLIF(LTRIM(RTRIM(ISNULL(P.initial, N''))), N'') + N' ',
+                   P.name) AS patient_name,
             CASE P.gender WHEN 1 THEN 'Male' ELSE 'Female' END AS sex,
             P.age,
             CASE P.age_type
