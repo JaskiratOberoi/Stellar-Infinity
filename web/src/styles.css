@@ -597,6 +597,27 @@ button, input, select { font: inherit; color: inherit; }
 .btn--ghost:hover:not(:disabled) { border-color: var(--teal); background: var(--accent-softer); }
 .btn--sm { padding: .38rem .8rem; font-size: .72rem; }
 .btn--danger { color: var(--danger); border-color: var(--danger-line); background: transparent; }
+/* A control that exists to REFUSE: warn-inked so the hold reads before the
+   click, but still a live button — clicking explains the dues in a toast. */
+.btn--locked { color: var(--warn); border-color: var(--warn-line); background: var(--warn-soft); cursor: not-allowed; }
+.btn--locked:hover:not(:disabled) { border-color: var(--warn); background: var(--warn-soft); }
+
+/* One transient line of feedback, bottom-centre. Above the modals (80): a
+   toast answers the click that just happened, whatever is behind it. */
+.toast {
+  position: fixed; bottom: 1.4rem; left: 50%; transform: translateX(-50%);
+  z-index: 90; max-width: min(92vw, 30rem);
+  padding: .65rem 1.1rem; border-radius: 999px;
+  background: var(--ink); color: var(--bg-top);
+  font-size: .8rem; line-height: 1.45; text-align: center;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .25);
+  animation: toast-in .18s ease-out;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, .5rem); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
 
 .alert {
   padding: .7rem .9rem; border-radius: 10px; font-size: .82rem; line-height: 1.5;

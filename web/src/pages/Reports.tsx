@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, csrfHeader } from '../api/client';
 import { downloadFile, fmtDateTime } from '../lib/format';
 import { ReportViewer } from './ReportViewer';
@@ -67,6 +67,22 @@ export interface WorksheetRow {
  */
 const REPORTABLE_STATUSES = [7, 8, 9];
 
+/** What one balance lock looks like, as /api/reports/locks reports it. */
+interface RowLock { reason: 'patient' | 'client' | null; dueAmount: number }
+
+/** The same sentence the server's 423 sends, so both paths say one thing. */
+const lockMsg = (l: RowLock) =>
+  `This report is on hold: ₹${Math.round(l.dueAmount).toLocaleString('en-IN')} outstanding on the ` +
+  `${l.reason === 'client' ? 'client account' : "patient's bill"}. Clear the balance to release it.`;
+
+const LockGlyph = () => (
+  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       strokeWidth="2.4" aria-hidden="true" style={{ marginRight: '.3rem', verticalAlign: '-1px' }}>
+    <rect x="4" y="11" width="16" height="10" rx="2" />
+    <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+  </svg>
+);
+
 export function Reports() {
   const { user } = useAuth();
   const [rows, setRows] = useState<WorksheetRow[]>([]);
@@ -76,6 +92,23 @@ export function Reports() {
   const [error, setError] = useState<string | null>(null);
   const [openSid, setOpenSid] = useState<string | null>(null);
   const [smartSid, setSmartSid] = useState<string | null>(null);
+
+  /*
+   * Balance locks for the page, keyed by SID — the advisory mirror of the
+   * server's 423. A locked row draws a lock in place of View and a click
+   * explains the dues in a toast, instead of opening a viewer whose first
+   * fetch refuses. The 423 on the view, smart and PDF routes remains the
+   * enforcement; if this map is stale or the lookup failed, the worst case is
+   * the old behaviour, never a leaked report.
+   */
+  const [locks, setLocks] = useState<Record<string, RowLock>>({});
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<number | undefined>(undefined);
+  const showToast = (msg: string) => {
+    setToast(msg);
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 4500);
+  };
 
   // The merge basket. Keyed by SID and deliberately NOT cleared when the page
   // changes: picking three reports on page 1 and two on page 3 has to give five.
@@ -252,6 +285,15 @@ export function Reports() {
       setScope(r.scope);
       setTotal(r.total);
       setPatients(r.patients ?? 0);
+      // Lock states ride a second, non-blocking request so the list never
+      // waits on fifty balance checks. Until they land (or if they fail) the
+      // buttons behave as before, and the server's 423 still guards.
+      setLocks({});
+      if (r.rows.length > 0) {
+        void api.post<{ locks: Record<string, RowLock> }>(
+          '/api/reports/locks', { sids: r.rows.map((x) => x.sid) },
+        ).then((l) => setLocks(l.locks)).catch(() => { /* advisory only */ });
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load the worksheet.');
     } finally {
@@ -383,7 +425,10 @@ export function Reports() {
                       groupSize > 1 && isGroupEnd ? 'pid-group--last' : '',
                     ].filter(Boolean).join(' ')}
                     style={{ cursor: 'pointer' }}
-                    onClick={() => setOpenSid(r.sid)}
+                    onClick={() => {
+                      const l = locks[r.sid];
+                      if (l) showToast(lockMsg(l)); else setOpenSid(r.sid);
+                    }}
                   >
                     {/* Picking a report is not opening it, so the click stops
                         here rather than bubbling to the row. */}
@@ -462,21 +507,38 @@ export function Reports() {
                     {/* The gap between the two buttons is cell--action's job now,
                         so that on a card they can split the foot evenly. */}
                     <td className="cell--action">
-                      <button className="btn btn--ghost btn--sm" onClick={(e) => { e.stopPropagation(); setOpenSid(r.sid); }}>
-                        View
-                      </button>
-                      {/* Only where the patient BOUGHT it. The Smart Report is
-                          a paid extra and the API refuses a SID without the
-                          purchase — a button that always renders is a button
-                          that sometimes answers 404, which is exactly what an
-                          operator reported. The modal's own Smart control is
-                          gated the same way below; the server check remains the
-                          enforcement either way. */}
-                      {r.smartReport && (
-                        <button className="btn btn--primary btn--sm"
-                                onClick={(e) => { e.stopPropagation(); setSmartSid(r.sid); }}>
-                          Smart
+                      {locks[r.sid] ? (
+                        /* A HELD report offers no viewer at all — not a modal
+                           that opens and then refuses. One lock stands in for
+                           both View and Smart (they answer the same 423), and
+                           clicking it says what is owed instead of doing
+                           nothing, because a dead control reads as a bug. */
+                        <button
+                          className="btn btn--ghost btn--sm btn--locked"
+                          title={lockMsg(locks[r.sid])}
+                          onClick={(e) => { e.stopPropagation(); showToast(lockMsg(locks[r.sid])); }}
+                        >
+                          <LockGlyph /> Locked
                         </button>
+                      ) : (
+                        <>
+                          <button className="btn btn--ghost btn--sm" onClick={(e) => { e.stopPropagation(); setOpenSid(r.sid); }}>
+                            View
+                          </button>
+                          {/* Only where the patient BOUGHT it. The Smart Report is
+                              a paid extra and the API refuses a SID without the
+                              purchase — a button that always renders is a button
+                              that sometimes answers 404, which is exactly what an
+                              operator reported. The modal's own Smart control is
+                              gated the same way below; the server check remains the
+                              enforcement either way. */}
+                          {r.smartReport && (
+                            <button className="btn btn--primary btn--sm"
+                                    onClick={(e) => { e.stopPropagation(); setSmartSid(r.sid); }}>
+                              Smart
+                            </button>
+                          )}
+                        </>
                       )}
                     </td>
                   </tr>
@@ -522,6 +584,7 @@ export function Reports() {
         />
       )}
       {smartSid && <SmartReportModal sid={smartSid} onClose={() => setSmartSid(null)} />}
+      {toast && <div className="toast" role="status">{toast}</div>}
     </div>
   );
 }

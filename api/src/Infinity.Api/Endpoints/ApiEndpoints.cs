@@ -69,6 +69,8 @@ public static class ApiEndpoints
         reports.MapGet("/tests/search", SearchFilterTests).WithName("SearchFilterTests");
         reports.MapGet("/{sid}", GetReport).WithName("GetReport");
         reports.MapGet("/{sid}/smart", GetSmartReport).WithName("GetSmartReport");
+        // POST because a page of fifty SIDs does not fit a query string.
+        reports.MapPost("/locks", GetReportLocks).WithName("GetReportLocks");
     }
 
     /// <summary>
@@ -696,6 +698,64 @@ public static class ApiEndpoints
             // not been set up to serve one.
             Qr = links.QrDataUrl(row.Sid),
         });
+    }
+
+    public sealed record ReportLocksRequest(IReadOnlyList<string>? Sids);
+
+    /// <summary>
+    /// Lock states for a page of SIDs, so the list can draw a locked View
+    /// button instead of letting the operator open a modal that answers 423.
+    /// </summary>
+    /// <remarks>
+    /// Advisory only — the 423 on the view, smart and PDF routes remains the
+    /// enforcement, and this endpoint could vanish without a report leaking.
+    /// Out-of-scope and unknown SIDs are silently omitted rather than erroring,
+    /// for the same reason the view route folds them into 404: lock state must
+    /// not be a way to probe that a SID exists. Only LOCKED sids come back;
+    /// absence means unlocked, which keeps the payload the size of the problem
+    /// rather than the page. Each SID rides the repository's 60-second cache,
+    /// so the page load and the clicks that follow share one computation.
+    /// </remarks>
+    private static async Task<IResult> GetReportLocks(
+        ReportLocksRequest body,
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
+        SampleHeaderRepository headers,
+        Infinity.Api.Reports.ReportLockRepository locks,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+
+        // Cap slightly above the page size: this exists to serve one page of
+        // fifty, and an unbounded list would let one request fan out into
+        // thousands of header lookups against the live LIS database.
+        var sids = (body.Sids ?? [])
+            .Where(s => !string.IsNullOrWhiteSpace(s) && s.Trim().Length <= 50)
+            .Select(s => s.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(60)
+            .ToList();
+
+        var found = new Dictionary<string, object>(capacity: 4);
+        if (sids.Count == 0) return Results.Ok(new { locks = found });
+
+        var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
+        if (scope.IsDenied) return Results.Ok(new { locks = found });
+        var allowed = scope.IsUnrestricted
+            ? null
+            : new HashSet<string>(scope.ClientCodes, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var sid in sids)
+        {
+            var header = await headers.GetAsync(sid, ct).ConfigureAwait(false);
+            if (header is null) continue;
+            if (allowed is not null && (header.ClientCode is null || !allowed.Contains(header.ClientCode))) continue;
+
+            var state = await locks.GetAsync(sid, ct).ConfigureAwait(false);
+            if (state.Locked) found[sid] = new { reason = state.Reason, dueAmount = state.DueAmount };
+        }
+
+        return Results.Ok(new { locks = found });
     }
 
     /// <summary>
