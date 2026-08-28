@@ -218,7 +218,14 @@ public sealed class OrdersRepository(NobleConnectionFactory db, SqlRetry retry)
 
                 head.CommandText = $"""
                     SELECT b.id AS billId, b.bill_number AS billNumber, b.bill_date AS billDate,
-                           b.patientname AS patientName, b.mcc_code AS mccCode,
+                           -- Salutation + name, as the reports print it since 77 grew
+                           -- the same prefix. The BILL's own copy of the name stays
+                           -- authoritative; only the title comes from the master —
+                           -- the billing row never stored one. Blank and NULL titles
+                           -- collapse to the bare name.
+                           CONCAT(NULLIF(LTRIM(RTRIM(ISNULL(p.initial, N''))), N'') + N' ',
+                                  b.patientname) AS patientName,
+                           b.mcc_code AS mccCode,
                            u.MCCUnitCode AS clientCode,
                            b.amount AS amount, b.Balance AS balance,
                            b.age, b.age_type AS ageType, b.gender,
