@@ -86,6 +86,11 @@ builder.Services.AddSingleton<Infinity.Api.Audit.AuditRepository>();
 builder.Services.AddSingleton<Infinity.Api.Audit.AuditLog>();
 builder.Services.AddSingleton<Infinity.Api.Audit.AuditTrailRepository>();
 builder.Services.AddSingleton<Infinity.Api.Orders.ClientRequestRepository>();
+// Mail is OPTIONAL: a deployment without Mail__* settings runs fine and just
+// does not notify — so no startup validation, unlike CCAvenue.
+builder.Services.AddOptions<Infinity.Api.Notifications.MailOptions>()
+    .Bind(builder.Configuration.GetSection(Infinity.Api.Notifications.MailOptions.SectionName));
+builder.Services.AddSingleton<Infinity.Api.Notifications.Mailer>();
 
 // ---- worksheet -----------------------------------------------------------
 builder.Services.AddSingleton<Infinity.Api.Worksheet.WorksheetRepository>();

@@ -1,4 +1,5 @@
 using Infinity.Api.Auth;
+using Infinity.Api.Notifications;
 using Infinity.Api.Orders;
 using Microsoft.AspNetCore.Mvc;
 
@@ -71,7 +72,9 @@ public static class ClientRequestEndpoints
         System.Security.Claims.ClaimsPrincipal principal,
         ScopeRepository scopes,
         ClientRequestRepository repo,
+        Reads.CatalogRepository catalog,
         Audit.AuditLog audit,
+        Mailer mail,
         HttpContext http,
         CancellationToken ct)
     {
@@ -90,6 +93,44 @@ public static class ClientRequestEndpoints
 
         audit.Log("mrf.created", actor: userId, ip: Audit.AuditIp.From(http),
             details: new { mcc = body.Mcc, requestId = r.Id, items = body.Items.Count });
+
+        // The notification carries EVERYTHING — the storekeeper should not
+        // need to open anything to know what to pull off the shelf.
+        try
+        {
+            var clientCode = await catalog.ClientCodeAsync(body.Mcc, ct).ConfigureAwait(false);
+            var items = await repo.CatalogueAsync(ct).ConfigureAwait(false);
+            var byId = items.ToDictionary(i => i.Id);
+            var who = principal.Username() ?? $"user #{userId}";
+            decimal estimate = 0;
+            var lines = string.Join("", body.Items.Select(i =>
+            {
+                byId.TryGetValue(i.ItemId, out var item);
+                var rate = item?.Price ?? 0;
+                estimate += rate * i.Qty;
+                return $"<tr><td style='padding:4px 10px;border-bottom:1px solid #eee'>{Mailer.H(item?.Name ?? $"Item #{i.ItemId}")}</td>"
+                     + $"<td style='padding:4px 10px;border-bottom:1px solid #eee;text-align:right'>{i.Qty}</td>"
+                     + $"<td style='padding:4px 10px;border-bottom:1px solid #eee;text-align:right'>₹{rate:N2}</td></tr>";
+            }));
+            mail.Send(
+                $"MRF #{r.Id} — {clientCode ?? body.Mcc.ToString()} — {body.Items.Count} item(s)",
+                $"<div style='font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222'>"
+                + $"<h2 style='margin:0 0 4px'>Material request #{r.Id}</h2>"
+                + $"<p style='margin:0 0 12px;color:#555'>Raised on Infinity by <b>{Mailer.H(who)}</b> for "
+                + $"<b>{Mailer.H(clientCode ?? $"centre {body.Mcc}")}</b> · {DateTime.Now:dd MMM yyyy, hh:mm tt}</p>"
+                + "<table style='border-collapse:collapse'>"
+                + "<tr><th style='padding:4px 10px;text-align:left;border-bottom:2px solid #ccc'>Item</th>"
+                + "<th style='padding:4px 10px;text-align:right;border-bottom:2px solid #ccc'>Qty</th>"
+                + "<th style='padding:4px 10px;text-align:right;border-bottom:2px solid #ccc'>Rate</th></tr>"
+                + lines
+                + $"<tr><td style='padding:6px 10px;font-weight:bold'>Estimate</td><td></td>"
+                + $"<td style='padding:6px 10px;text-align:right;font-weight:bold'>₹{estimate:N2}</td></tr>"
+                + "</table>"
+                + "<p style='color:#777;font-size:12px'>Approve and dispatch in the LIS as usual — this request is already in the inventory queue (status OPEN).</p>"
+                + "</div>");
+        }
+        catch (Exception) when (!ct.IsCancellationRequested) { /* the request stands */ }
+
         return Results.Ok(new { ok = true, id = r.Id });
     }
 
@@ -99,7 +140,9 @@ public static class ClientRequestEndpoints
         System.Security.Claims.ClaimsPrincipal principal,
         ScopeRepository scopes,
         ClientRequestRepository repo,
+        Reads.CatalogRepository catalog,
         Audit.AuditLog audit,
+        Mailer mail,
         HttpContext http,
         CancellationToken ct)
     {
@@ -111,6 +154,18 @@ public static class ClientRequestEndpoints
 
         audit.Log("mrf.cancelled", actor: userId, ip: Audit.AuditIp.From(http),
             details: new { mcc = body.Mcc, requestId = id });
+
+        try
+        {
+            var clientCode = await catalog.ClientCodeAsync(body.Mcc, ct).ConfigureAwait(false);
+            mail.Send(
+                $"MRF #{id} cancelled — {clientCode ?? body.Mcc.ToString()}",
+                $"<div style='font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222'>"
+                + $"<p><b>{Mailer.H(clientCode ?? $"centre {body.Mcc}")}</b> cancelled material request "
+                + $"<b>#{id}</b> before approval · {DateTime.Now:dd MMM yyyy, hh:mm tt}. Nothing to dispatch.</p></div>");
+        }
+        catch (Exception) when (!ct.IsCancellationRequested) { /* the cancel stands */ }
+
         return Results.Ok(new { ok = true });
     }
 
@@ -145,7 +200,9 @@ public static class ClientRequestEndpoints
         System.Security.Claims.ClaimsPrincipal principal,
         ScopeRepository scopes,
         ClientRequestRepository repo,
+        Reads.CatalogRepository catalog,
         Audit.AuditLog audit,
+        Mailer mail,
         HttpContext http,
         CancellationToken ct)
     {
@@ -166,6 +223,24 @@ public static class ClientRequestEndpoints
 
         audit.Log("help.created", actor: userId, ip: Audit.AuditIp.From(http),
             details: new { mcc = body.Mcc, requestId = r.Id, category });
+
+        try
+        {
+            var clientCode = await catalog.ClientCodeAsync(body.Mcc, ct).ConfigureAwait(false);
+            var who = principal.Username() ?? $"user #{userId}";
+            mail.Send(
+                $"Help request #{r.Id} — {clientCode ?? body.Mcc.ToString()} — {Mailer.H(subject)}",
+                $"<div style='font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222'>"
+                + $"<h2 style='margin:0 0 4px'>{Mailer.H(subject)}</h2>"
+                + $"<p style='margin:0 0 10px;color:#555'>{(category == "technical" ? "Technical" : "General")} · "
+                + $"raised by <b>{Mailer.H(who)}</b> for <b>{Mailer.H(clientCode ?? $"centre {body.Mcc}")}</b> · "
+                + $"{DateTime.Now:dd MMM yyyy, hh:mm tt}</p>"
+                + (detail is null ? "" : $"<p style='white-space:pre-wrap'>{Mailer.H(detail)}</p>")
+                + "<p style='color:#777;font-size:12px'>Answer it on Infinity → Admin → Help desk; the centre sees the reply on their Requests page.</p>"
+                + "</div>");
+        }
+        catch (Exception) when (!ct.IsCancellationRequested) { /* the ticket stands */ }
+
         return Results.Ok(new { ok = true, id = r.Id });
     }
 

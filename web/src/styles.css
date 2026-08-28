@@ -1018,37 +1018,72 @@ button, input, select { font: inherit; color: inherit; }
 
 .req__h2 { font-size: 1.02rem; margin: 1.4rem 0 .6rem; }
 .req__grid { display: grid; grid-template-columns: minmax(20rem, 26rem) 1fr; gap: .8rem; align-items: start; }
-@media (max-width: 900px) { .req__grid { grid-template-columns: 1fr; } }
 
 .req__cardhead { display: flex; align-items: center; gap: .6rem; margin-bottom: .6rem; flex-wrap: wrap; }
 .req__cardhead b { margin-right: auto; }
 
-.req__items { max-height: 22rem; overflow-y: auto; display: grid; gap: .2rem; }
+.req__items {
+  max-height: 22rem; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  display: grid; gap: .15rem; margin: 0 -.35rem;
+}
 .req__item {
-  display: flex; align-items: center; gap: .6rem;
-  padding: .3rem .45rem; border-radius: 8px;
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: .6rem;
+  padding: .4rem .55rem; border-radius: 8px;
 }
 .req__item--on { background: color-mix(in srgb, var(--accent) 8%, transparent); }
-.req__item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.req__item-price { font-size: .74rem; white-space: nowrap; }
-.req__qty { display: flex; align-items: center; gap: .25rem; }
-.req__qty-in { width: 3.2rem; text-align: center; padding: .2rem; }
+.req__item-id { display: flex; flex-direction: column; min-width: 0; }
+.req__item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.req__item-price { font-size: .72rem; }
 
-.req__list { display: grid; gap: .8rem; }
+/* One affordance per state: an Add button until the item is wanted, a
+   stepper once it is. Both sized for thumbs. */
+.req__add {
+  border: 1px solid var(--line); background: transparent; color: var(--accent);
+  border-radius: 999px; padding: .3rem .9rem; font: inherit; font-size: .78rem;
+  font-weight: 600; cursor: pointer; min-height: 2.1rem;
+}
+.req__add:hover { border-color: var(--accent); }
+.req__qty { display: flex; align-items: center; gap: .3rem; }
+.req__step {
+  width: 2.1rem; height: 2.1rem; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--card, transparent);
+  color: var(--ink); font-size: 1.05rem; line-height: 1; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.req__step:hover { border-color: var(--accent); color: var(--accent); }
+.req__qty-in {
+  width: 2.9rem; min-height: 2.1rem; text-align: center;
+  border: 1px solid var(--line); border-radius: 8px; background: transparent;
+  color: var(--ink); font: inherit; font-variant-numeric: tabular-nums;
+}
+
+/* The submit bar: summary grows, the button keeps its shape. On a phone the
+   button goes full-width under the summary. */
+.req__submit {
+  display: flex; align-items: center; gap: .9rem; margin-top: .8rem;
+  padding-top: .7rem; border-top: 1px solid var(--line);
+}
+.req__submit-sum { flex: 1; min-width: 0; font-size: .84rem; }
+.req__submit-note { display: block; font-size: .74rem; margin-top: .1rem; }
+.req__submit-btn { flex: none; white-space: nowrap; }
+
+.req__list { display: grid; gap: .8rem; min-width: 0; }
 .req__card { padding: .8rem 1rem; }
 .req__chip {
   font-size: .68rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
-  border-radius: 999px; padding: .12rem .55rem;
+  border-radius: 999px; padding: .12rem .55rem; white-space: nowrap;
 }
 .req__chip--open { background: color-mix(in srgb, #3b82f6 14%, transparent); color: #3b82f6; }
 .req__chip--progress { background: color-mix(in srgb, #f59e0b 16%, transparent); color: #b45309; }
 .req__chip--done { background: color-mix(in srgb, #10b981 14%, transparent); color: #0e9f6e; }
 .req__chip--dead { background: color-mix(in srgb, var(--ink) 10%, transparent); color: var(--muted); }
 
-.req__table { width: 100%; border-collapse: collapse; font-size: .84rem; }
+.req__tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.req__table { width: 100%; border-collapse: collapse; font-size: .84rem; min-width: 26rem; }
 .req__table th {
   text-align: left; font-size: .68rem; text-transform: uppercase; letter-spacing: .06em;
   color: var(--muted); padding: .25rem .5rem .25rem 0; border-bottom: 1px solid var(--line);
+  white-space: nowrap;
 }
 .req__table td { padding: .3rem .5rem .3rem 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent); }
 .req__table tr:last-child td { border-bottom: none; }
@@ -1059,6 +1094,20 @@ button, input, select { font: inherit; color: inherit; }
   background: color-mix(in srgb, var(--accent) 6%, transparent); border-radius: 6px; font-size: .86rem;
 }
 .req__foot { margin: .4rem 0 0; font-size: .76rem; }
+
+@media (max-width: 900px) {
+  .req__grid { grid-template-columns: 1fr; }
+  .req__items { max-height: 18rem; }
+}
+@media (max-width: 600px) {
+  .req__submit { flex-direction: column; align-items: stretch; gap: .6rem; }
+  .req__submit-btn { width: 100%; }
+  /* Thumb-sized on the devices that need thumbs. */
+  .req__step { width: 2.5rem; height: 2.5rem; }
+  .req__add { min-height: 2.5rem; padding: .3rem 1.1rem; }
+  .req__qty-in { min-height: 2.5rem; }
+  .req__cardhead .btn { margin-left: auto; }
+}
 
 /* =========================================================
    Audit trail — origin and category badges, detail chips.

@@ -230,33 +230,47 @@ export function Requests() {
                   const qty = basket.get(i.id) ?? 0;
                   return (
                     <div key={i.id} className={`req__item${qty > 0 ? ' req__item--on' : ''}`}>
-                      <span className="req__item-name">{i.name}</span>
-                      <span className="muted req__item-price">
-                        {i.price > 0 ? inr(i.price) : 'free'}{i.unit ? ` · ${i.unit}` : ''}
+                      <span className="req__item-id">
+                        <span className="req__item-name">{i.name}</span>
+                        <span className="muted req__item-price">
+                          {i.price > 0 ? inr(i.price) : 'No charge'}{i.unit && i.unit !== '1' ? ` · ${i.unit}` : ''}
+                        </span>
                       </span>
-                      <span className="req__qty">
-                        <button className="btn btn--ghost btn--sm" disabled={qty === 0}
-                                onClick={() => setQty(i.id, qty - 1)} aria-label={`One less ${i.name}`}>−</button>
-                        <input className="input req__qty-in" inputMode="numeric" value={qty === 0 ? '' : qty}
-                               onChange={(e) => setQty(i.id, Math.max(0, Math.min(9999, Number(e.target.value.replace(/\D/g, '')) || 0)))} />
-                        <button className="btn btn--ghost btn--sm"
-                                onClick={() => setQty(i.id, qty + 1)} aria-label={`One more ${i.name}`}>+</button>
-                      </span>
+                      {qty === 0 ? (
+                        <button className="req__add" type="button"
+                                onClick={() => setQty(i.id, 1)} aria-label={`Add ${i.name}`}>
+                          Add
+                        </button>
+                      ) : (
+                        <span className="req__qty">
+                          <button className="req__step" type="button"
+                                  onClick={() => setQty(i.id, qty - 1)} aria-label={`One less ${i.name}`}>−</button>
+                          <input className="req__qty-in" inputMode="numeric" value={qty}
+                                 aria-label={`Quantity of ${i.name}`}
+                                 onChange={(e) => setQty(i.id, Math.max(0, Math.min(9999, Number(e.target.value.replace(/\D/g, '')) || 0)))} />
+                          <button className="req__step" type="button"
+                                  onClick={() => setQty(i.id, qty + 1)} aria-label={`One more ${i.name}`}>+</button>
+                        </span>
+                      )}
                     </div>
                   );
                 })}
                 {filtered.length === 0 && <p className="muted">Nothing in the catalogue matches.</p>}
               </div>
-              <div className="row" style={{ marginTop: '.8rem', alignItems: 'center', gap: '.8rem' }}>
-                <button className="btn btn--primary" disabled={busy || basket.size === 0}
+              <div className="req__submit">
+                <div className="req__submit-sum">
+                  {basket.size === 0
+                    ? <span className="muted">Pick items above to build a request.</span>
+                    : <>
+                        <b>{basket.size} item{basket.size === 1 ? '' : 's'}</b>
+                        {estimate > 0 && <span className="muted"> · ≈ {inr(estimate)} at catalogue rates</span>}
+                        <span className="muted req__submit-note">The lab confirms quantities and price on approval.</span>
+                      </>}
+                </div>
+                <button className="btn btn--primary req__submit-btn" disabled={busy || basket.size === 0}
                         onClick={() => void submitMrf()}>
-                  Raise request{basket.size > 0 ? ` · ${basket.size} item${basket.size === 1 ? '' : 's'}` : ''}
+                  Raise request
                 </button>
-                {estimate > 0 && (
-                  <span className="muted" style={{ fontSize: '.8rem' }}>
-                    ≈ {inr(estimate)} at catalogue rates — the lab confirms quantities and price on approval.
-                  </span>
-                )}
               </div>
             </div>
 
@@ -274,6 +288,7 @@ export function Requests() {
                                 onClick={() => void cancelMrf(m.id)}>Cancel</button>
                       )}
                     </div>
+                    <div className="req__tablewrap">
                     <table className="req__table">
                       <thead>
                         <tr><th>Item</th><th>Asked</th><th>Approved</th><th>Issued</th><th>Dispatch</th></tr>
@@ -293,6 +308,7 @@ export function Requests() {
                         ))}
                       </tbody>
                     </table>
+                    </div>
                     {m.approvedBy && <p className="muted req__foot">Approved by {m.approvedBy}</p>}
                   </div>
                 );
