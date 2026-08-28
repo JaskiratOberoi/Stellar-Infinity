@@ -108,26 +108,24 @@ public static class ClientRequestEndpoints
                 byId.TryGetValue(i.ItemId, out var item);
                 var rate = item?.Price ?? 0;
                 estimate += rate * i.Qty;
-                return $"<tr><td style='padding:4px 10px;border-bottom:1px solid #eee'>{Mailer.H(item?.Name ?? $"Item #{i.ItemId}")}</td>"
-                     + $"<td style='padding:4px 10px;border-bottom:1px solid #eee;text-align:right'>{i.Qty}</td>"
-                     + $"<td style='padding:4px 10px;border-bottom:1px solid #eee;text-align:right'>₹{rate:N2}</td></tr>";
+                return $"<tr><td style='padding:7px 10px 7px 0;border-bottom:1px solid #e2ecea'>{Mailer.H(item?.Name ?? $"Item #{i.ItemId}")}</td>"
+                     + $"<td style='padding:7px 0;border-bottom:1px solid #e2ecea;text-align:right;font-variant-numeric:tabular-nums'>{i.Qty}</td>"
+                     + $"<td style='padding:7px 0 7px 16px;border-bottom:1px solid #e2ecea;text-align:right;font-variant-numeric:tabular-nums'>₹{rate:N2}</td></tr>";
             }));
             mail.Send(
                 $"MRF #{r.Id} — {clientCode ?? body.Mcc.ToString()} — {body.Items.Count} item(s)",
-                $"<div style='font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222'>"
-                + $"<h2 style='margin:0 0 4px'>Material request #{r.Id}</h2>"
-                + $"<p style='margin:0 0 12px;color:#555'>Raised on Infinity by <b>{Mailer.H(who)}</b> for "
-                + $"<b>{Mailer.H(clientCode ?? $"centre {body.Mcc}")}</b> · {DateTime.Now:dd MMM yyyy, hh:mm tt}</p>"
-                + "<table style='border-collapse:collapse'>"
-                + "<tr><th style='padding:4px 10px;text-align:left;border-bottom:2px solid #ccc'>Item</th>"
-                + "<th style='padding:4px 10px;text-align:right;border-bottom:2px solid #ccc'>Qty</th>"
-                + "<th style='padding:4px 10px;text-align:right;border-bottom:2px solid #ccc'>Rate</th></tr>"
-                + lines
-                + $"<tr><td style='padding:6px 10px;font-weight:bold'>Estimate</td><td></td>"
-                + $"<td style='padding:6px 10px;text-align:right;font-weight:bold'>₹{estimate:N2}</td></tr>"
-                + "</table>"
-                + "<p style='color:#777;font-size:12px'>Approve and dispatch in the LIS as usual — this request is already in the inventory queue (status OPEN).</p>"
-                + "</div>");
+                Mailer.Wrap(
+                    $"Material request #{r.Id}",
+                    $"Raised on Infinity by <b>{Mailer.H(who)}</b> for <b>{Mailer.H(clientCode ?? $"centre {body.Mcc}")}</b> · {DateTime.Now:dd MMM yyyy, hh:mm tt}",
+                    "<table role='presentation' width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;font-size:14px'>"
+                    + "<tr><th style='padding:6px 10px 6px 0;text-align:left;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#5b7183;border-bottom:2px solid #0f766e'>Item</th>"
+                    + "<th style='padding:6px 0;text-align:right;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#5b7183;border-bottom:2px solid #0f766e'>Qty</th>"
+                    + "<th style='padding:6px 0 6px 16px;text-align:right;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#5b7183;border-bottom:2px solid #0f766e'>Rate</th></tr>"
+                    + lines
+                    + $"<tr><td style='padding:8px 10px 0 0;font-weight:700'>Estimate</td><td></td>"
+                    + $"<td style='padding:8px 0 0 16px;text-align:right;font-weight:700;color:#0f766e'>₹{estimate:N2}</td></tr>"
+                    + "</table>"
+                    + "<p style='margin:16px 0 0;font-size:12px;color:#7b8f9c'>Approve and dispatch in the LIS as usual — this request is already in the inventory queue (status OPEN).</p>"));
         }
         catch (Exception) when (!ct.IsCancellationRequested) { /* the request stands */ }
 
@@ -160,9 +158,10 @@ public static class ClientRequestEndpoints
             var clientCode = await catalog.ClientCodeAsync(body.Mcc, ct).ConfigureAwait(false);
             mail.Send(
                 $"MRF #{id} cancelled — {clientCode ?? body.Mcc.ToString()}",
-                $"<div style='font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222'>"
-                + $"<p><b>{Mailer.H(clientCode ?? $"centre {body.Mcc}")}</b> cancelled material request "
-                + $"<b>#{id}</b> before approval · {DateTime.Now:dd MMM yyyy, hh:mm tt}. Nothing to dispatch.</p></div>");
+                Mailer.Wrap(
+                    $"Material request #{id} cancelled",
+                    $"<b>{Mailer.H(clientCode ?? $"centre {body.Mcc}")}</b> · {DateTime.Now:dd MMM yyyy, hh:mm tt}",
+                    "<p style='margin:0'>The centre withdrew this request before approval. Nothing to dispatch.</p>"));
         }
         catch (Exception) when (!ct.IsCancellationRequested) { /* the cancel stands */ }
 
@@ -229,15 +228,13 @@ public static class ClientRequestEndpoints
             var clientCode = await catalog.ClientCodeAsync(body.Mcc, ct).ConfigureAwait(false);
             var who = principal.Username() ?? $"user #{userId}";
             mail.Send(
-                $"Help request #{r.Id} — {clientCode ?? body.Mcc.ToString()} — {Mailer.H(subject)}",
-                $"<div style='font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222'>"
-                + $"<h2 style='margin:0 0 4px'>{Mailer.H(subject)}</h2>"
-                + $"<p style='margin:0 0 10px;color:#555'>{(category == "technical" ? "Technical" : "General")} · "
-                + $"raised by <b>{Mailer.H(who)}</b> for <b>{Mailer.H(clientCode ?? $"centre {body.Mcc}")}</b> · "
-                + $"{DateTime.Now:dd MMM yyyy, hh:mm tt}</p>"
-                + (detail is null ? "" : $"<p style='white-space:pre-wrap'>{Mailer.H(detail)}</p>")
-                + "<p style='color:#777;font-size:12px'>Answer it on Infinity → Admin → Help desk; the centre sees the reply on their Requests page.</p>"
-                + "</div>");
+                $"Help request #{r.Id} — {clientCode ?? body.Mcc.ToString()} — {subject}",
+                Mailer.Wrap(
+                    Mailer.H(subject),
+                    $"{(category == "technical" ? "Technical" : "General")} · raised by <b>{Mailer.H(who)}</b> for <b>{Mailer.H(clientCode ?? $"centre {body.Mcc}")}</b> · {DateTime.Now:dd MMM yyyy, hh:mm tt}",
+                    (detail is null ? "<p style='margin:0;color:#5b7183'>No further detail was given.</p>"
+                        : $"<p style='margin:0;white-space:pre-wrap'>{Mailer.H(detail)}</p>")
+                    + "<p style='margin:16px 0 0;font-size:12px;color:#7b8f9c'>Answer it on Infinity → Admin → Help desk; the centre sees the reply on their Requests page.</p>"));
         }
         catch (Exception) when (!ct.IsCancellationRequested) { /* the ticket stands */ }
 

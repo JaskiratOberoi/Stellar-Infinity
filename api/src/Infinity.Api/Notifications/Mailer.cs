@@ -57,7 +57,7 @@ public sealed class Mailer(IOptions<MailOptions> options, ILogger<Mailer> logger
             try
             {
                 var msg = new MimeMessage();
-                msg.From.Add(new MailboxAddress("Stellar Infinity", _o.From));
+                msg.From.Add(new MailboxAddress("Genomics Infinity", _o.From));
                 foreach (var to in _o.NotifyTo.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                     msg.To.Add(MailboxAddress.Parse(to));
                 msg.Subject = subject;
@@ -89,4 +89,53 @@ public sealed class Mailer(IOptions<MailOptions> options, ILogger<Mailer> logger
     /// <summary>Minimal escaping for values interpolated into the HTML body.</summary>
     public static string H(string? s) =>
         System.Net.WebUtility.HtmlEncode(s ?? "");
+
+    /// <summary>
+    /// The branded envelope every notification ships in — Infinity's own
+    /// palette (ink #0f2233, the teal→blue accent) with Noble's mark on the
+    /// dark header band, all inline-styled tables because email clients parse
+    /// CSS like it is 2003. Callers hand over TITLE, a one-line META and the
+    /// CONTENT; the chrome stays identical across every mail so the inbox
+    /// learns to recognise the platform at a glance.
+    /// </summary>
+    public static string Wrap(string title, string metaHtml, string contentHtml) => $"""
+        <body style="margin:0;padding:0;background:#eef4f3">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef4f3;padding:24px 12px">
+        <tr><td align="center">
+          <table role="presentation" width="560" cellpadding="0" cellspacing="0"
+                 style="max-width:560px;width:100%;border-collapse:separate;border-spacing:0">
+            <tr><td style="background:#0a1018;border-radius:12px 12px 0 0;padding:16px 24px">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+                <td style="font-family:'Segoe UI',Arial,sans-serif;font-size:15px;font-weight:600;
+                           letter-spacing:.35em;color:#2dd4bf">INFINITY</td>
+                <td align="right"><img src="https://infinity.genomicslab.in/branding/noble-logo-ondark.png"
+                     alt="Noble Diagnostics" height="26" style="height:26px;display:block;border:0"></td>
+              </tr></table>
+            </td></tr>
+            <tr><td style="height:3px;background:#0f766e;background:linear-gradient(90deg,#0e7490,#0f766e,#1d4ed8);
+                           font-size:0;line-height:0">&nbsp;</td></tr>
+            <tr><td style="background:#ffffff;padding:22px 24px 6px;
+                           font-family:'Segoe UI',Arial,sans-serif;color:#0f2233">
+              <h1 style="margin:0 0 4px;font-size:19px;line-height:1.3">{title}</h1>
+              <p style="margin:0 0 14px;font-size:13px;color:#5b7183">{metaHtml}</p>
+            </td></tr>
+            <tr><td style="background:#ffffff;padding:0 24px 20px;
+                           font-family:'Segoe UI',Arial,sans-serif;font-size:14px;color:#0f2233">
+              {contentHtml}
+            </td></tr>
+            <tr><td style="background:#f6faf9;border-radius:0 0 12px 12px;border-top:1px solid #e2ecea;
+                           padding:12px 24px;font-family:'Segoe UI',Arial,sans-serif;
+                           font-size:11px;color:#7b8f9c">
+              Genomics Infinity · the Noble Diagnostics network platform ·
+              sent automatically — the request is already in the queue, no reply needed.
+            </td></tr>
+          </table>
+        </td></tr>
+        </table>
+        </body>
+        """;
+
+    /// <summary>A content table row, Infinity-styled.</summary>
+    public static string Tr(string cells) =>
+        $"<tr>{cells}</tr>";
 }
