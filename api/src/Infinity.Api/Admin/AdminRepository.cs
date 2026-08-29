@@ -234,6 +234,13 @@ public sealed class AdminRepository(NobleConnectionFactory db)
                     r.GetOrdinalString("source") ?? ""));
             }
 
+            // The reader is fully consumed, but `await using` would keep it
+            // OPEN until the method returns — and the grants query below needs
+            // this same connection, which allows one reader at a time. Close
+            // it now; the scope-exit dispose on an already-closed reader is a
+            // no-op. Without this, every Settings click answered 500.
+            await r.DisposeAsync().ConfigureAwait(false);
+
             // One extra round trip on a single-user admin screen, rather than a
             // fourth result set in procedure 61 — the procedure is shared and
             // this keeps the change to Infinity's own side.
