@@ -1,12 +1,15 @@
 /*
  * 24_usp_inf_admin_reset_password.sql
  *
- * Resets the password on an INFINITY-managed account.
+ * Resets the password on ANY account — Infinity is standing in for the LIS's
+ * own admin, so an admin resetting a password here is setting THE credential,
+ * the one that also works on the legacy LIS. That shared-column effect used to
+ * be the reason to refuse native LIS accounts; under the replacement plan it is
+ * the point. Native LIS accounts are now allowed.
  *
- * Refuses native LIS and Telo-managed accounts: the password column is shared
- * with the legacy LIS, so resetting it here would change the credential the
- * person uses to sign in to the LIS itself — a silent, confusing lockout.
- * Infinity only resets passwords for accounts it created.
+ * Telo-managed accounts are still refused: two systems writing one credential
+ * is a genuine conflict, not a feature, so that credential is changed in one
+ * place. The Super-Admin-only-touches-Super-Admin guard also stays.
  *
  * Bumps the session version, so every token issued under the old password dies
  * immediately. Without this a compromised session survives the reset that was
@@ -34,13 +37,6 @@ BEGIN
     BEGIN
         SELECT ok = CAST(0 AS BIT), error_code = 'NOT_FOUND',
                message = N'User not found';
-        RETURN;
-    END
-
-    IF NOT EXISTS (SELECT 1 FROM dbo.inf_account WHERE user_id = @userId)
-    BEGIN
-        SELECT ok = CAST(0 AS BIT), error_code = 'VALIDATION',
-               message = N'Passwords are reset by Infinity only for Infinity-created accounts. This credential is also the user''s LIS login.';
         RETURN;
     END
 

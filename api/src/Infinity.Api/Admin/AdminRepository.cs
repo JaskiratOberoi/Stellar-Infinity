@@ -400,6 +400,85 @@ public sealed class AdminRepository(NobleConnectionFactory db)
             return await ReadSpResultAsync(cmd, inner).ConfigureAwait(false);
         }, ct);
 
+    /// <summary>
+    /// Reveal the current (plaintext) password. Possible only because the LIS
+    /// credential column is plaintext; every reveal is audited by the caller.
+    /// Returns the password on the SpResult's Message-adjacent channel via a
+    /// dedicated column, so a null-but-ok answer is distinguishable from a
+    /// guard refusal.
+    /// </summary>
+    public Task<(SpResult Result, string? Password)> ViewPasswordAsync(
+        int userId, int actor, CancellationToken ct = default) =>
+        db.QueryAsync("admin.viewPassword", async (conn, inner) =>
+        {
+            await using var cmd = db.CreateWriteCommand(conn, "dbo.usp_inf_admin_view_password");
+            cmd.Parameters.Add("@userId", SqlDbType.Int).Value = userId;
+            cmd.Parameters.Add("@actor", SqlDbType.Int).Value = actor;
+
+            await using var r = await cmd.ExecuteReaderAsync(CommandBehavior.SingleResult, inner).ConfigureAwait(false);
+            if (!await r.ReadAsync(inner).ConfigureAwait(false))
+                return (new SpResult(false, "INTERNAL", "The operation returned no result."), (string?)null);
+            var result = new SpResult(r.GetOrdinalBool("ok"), r.GetOrdinalString("error_code"), r.GetOrdinalString("message"));
+            return (result, r.GetOrdinalString("password"));
+        }, ct);
+
+    public Task<SpResult> SetPermanentUnlockAsync(int mcc, bool enabled, int actor, CancellationToken ct = default) =>
+        db.QueryAsync("admin.setPermanentUnlock", async (conn, inner) =>
+        {
+            await using var cmd = db.CreateWriteCommand(conn, "dbo.usp_inf_admin_set_permanent_unlock");
+            cmd.Parameters.Add("@mcc", SqlDbType.Int).Value = mcc;
+            cmd.Parameters.Add("@enabled", SqlDbType.Bit).Value = enabled;
+            cmd.Parameters.Add("@actor", SqlDbType.Int).Value = actor;
+            return await ReadSpResultAsync(cmd, inner).ConfigureAwait(false);
+        }, ct);
+
+    public Task<(SpResult Result, DateTimeOffset? Expire)> GrantTempUnlockAsync(
+        int mcc, int hours, int actor, CancellationToken ct = default) =>
+        db.QueryAsync("admin.grantTempUnlock", async (conn, inner) =>
+        {
+            await using var cmd = db.CreateWriteCommand(conn, "dbo.usp_inf_admin_grant_temp_unlock");
+            cmd.Parameters.Add("@mcc", SqlDbType.Int).Value = mcc;
+            cmd.Parameters.Add("@hours", SqlDbType.Int).Value = hours;
+            cmd.Parameters.Add("@actor", SqlDbType.Int).Value = actor;
+
+            await using var r = await cmd.ExecuteReaderAsync(CommandBehavior.SingleResult, inner).ConfigureAwait(false);
+            if (!await r.ReadAsync(inner).ConfigureAwait(false))
+                return (new SpResult(false, "INTERNAL", "The operation returned no result."), (DateTimeOffset?)null);
+            var result = new SpResult(r.GetOrdinalBool("ok"), r.GetOrdinalString("error_code"), r.GetOrdinalString("message"));
+            return (result, r.GetOrdinalDateTimeOffset("expire_unlock"));
+        }, ct);
+
+    /// <summary>Lock posture for a set of centres (comma list of unit ids).</summary>
+    public Task<IReadOnlyList<CentreLockState>> CentreLockStatesAsync(
+        IEnumerable<int> mccIds, CancellationToken ct = default) =>
+        db.QueryAsync("admin.centreLockState", async (conn, inner) =>
+        {
+            var ids = string.Join(",", mccIds.Distinct());
+            var list = new List<CentreLockState>();
+            if (ids.Length == 0) return (IReadOnlyList<CentreLockState>)list;
+
+            await using var cmd = db.CreateWriteCommand(conn, "dbo.usp_inf_admin_centre_lock_state");
+            cmd.Parameters.Add("@mccIds", SqlDbType.NVarChar, -1).Value = ids;
+
+            await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);
+            while (await r.ReadAsync(inner).ConfigureAwait(false))
+            {
+                list.Add(new CentreLockState(
+                    r.GetOrdinalInt32("mcc_id") ?? 0,
+                    r.GetOrdinalString("code"),
+                    r.GetOrdinalString("name"),
+                    r.GetOrdinalBool("permanent"),
+                    r.GetOrdinalInt32("credit_limit"),
+                    // Convert.ToDecimal, not GetDecimal: the balance column is
+                    // not guaranteed to be a SQL decimal (ReportLockRepository
+                    // reads it the same defensive way).
+                    r.IsDBNull(r.GetOrdinal("current_balance"))
+                        ? null : Convert.ToDecimal(r.GetValue(r.GetOrdinal("current_balance"))),
+                    r.GetOrdinalDateTimeOffset("temp_expire")));
+            }
+            return (IReadOnlyList<CentreLockState>)list;
+        }, ct);
+
     private Task<SpResult> ExecToggleAsync(
         string proc, string flagParam, int userId, bool value, int actor, CancellationToken ct) =>
         db.QueryAsync($"admin.{proc}", async (conn, inner) =>

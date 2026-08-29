@@ -30,6 +30,15 @@ public static class AdminEndpoints
         admin.MapPut("/users/{userId:int}/capability-grant", SetCapabilityGrant)
              .WithName("SetCapabilityGrant");
         admin.MapPut("/users/{userId:int}/password", ResetPassword).WithName("ResetPassword");
+        // Reveal the current plaintext password. Audited on every call.
+        admin.MapGet("/users/{userId:int}/password", ViewPassword).WithName("ViewPassword");
+
+        // Centre balance-lock controls. Reached from a client account's
+        // settings (their own centre), but addressed by centre id because the
+        // lock is a property of the centre, not the user.
+        admin.MapGet("/centres/lock-state", GetCentreLockState).WithName("GetCentreLockState");
+        admin.MapPut("/centres/{mcc:int}/permanent-unlock", SetPermanentUnlock).WithName("SetPermanentUnlock");
+        admin.MapPost("/centres/{mcc:int}/temp-unlock", GrantTempUnlock).WithName("GrantTempUnlock");
 
         admin.MapGet("/roles", () => Results.Ok(
             InfinityRoles.All.Select(r => new
@@ -303,6 +312,86 @@ public static class AdminEndpoints
 
         var result = await repo.ResetPasswordAsync(userId, request.Password, actor, ct).ConfigureAwait(false);
         return result.Ok ? Results.NoContent() : MapFailure(result);
+    }
+
+    private static async Task<IResult> ViewPassword(
+        int userId,
+        AdminRepository repo,
+        ClaimsPrincipal principal,
+        Audit.AuditLog audit,
+        HttpContext http,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int actor) return Results.Unauthorized();
+
+        var (result, password) = await repo.ViewPasswordAsync(userId, actor, ct).ConfigureAwait(false);
+        if (!result.Ok) return MapFailure(result);
+
+        // The reveal is the sensitive act, so it is logged whether or not the
+        // admin then does anything with what they saw. The password itself is
+        // never put in the audit detail — only that it was viewed, and by whom.
+        audit.Log("admin.password.viewed", actor: actor, ip: Audit.AuditIp.From(http),
+            details: new { targetUserId = userId });
+
+        return Results.Ok(new { password });
+    }
+
+    private static async Task<IResult> GetCentreLockState(
+        AdminRepository repo, CancellationToken ct, string? mccIds = null)
+    {
+        var ids = (mccIds ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => int.TryParse(s, out var n) ? n : (int?)null)
+            .Where(n => n is > 0).Select(n => n!.Value)
+            .Distinct().Take(50).ToList();
+        if (ids.Count == 0) return Results.Ok(new { centres = Array.Empty<object>() });
+
+        var states = await repo.CentreLockStatesAsync(ids, ct).ConfigureAwait(false);
+        return Results.Ok(new { centres = states });
+    }
+
+    private static async Task<IResult> SetPermanentUnlock(
+        int mcc,
+        SetFlagRequest request,
+        AdminRepository repo,
+        ClaimsPrincipal principal,
+        Audit.AuditLog audit,
+        HttpContext http,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int actor) return Results.Unauthorized();
+
+        var result = await repo.SetPermanentUnlockAsync(mcc, request.Enabled, actor, ct).ConfigureAwait(false);
+        if (!result.Ok) return MapFailure(result);
+
+        // Real money implication — a permanently-unlocked centre is never
+        // balance-locked — so it goes in the trail with the new state.
+        audit.Log("centre.unlock.permanent", actor: actor, ip: Audit.AuditIp.From(http),
+            details: new { mcc, enabled = request.Enabled });
+
+        return Results.NoContent();
+    }
+
+    public sealed record TempUnlockRequest(int Hours);
+
+    private static async Task<IResult> GrantTempUnlock(
+        int mcc,
+        TempUnlockRequest request,
+        AdminRepository repo,
+        ClaimsPrincipal principal,
+        Audit.AuditLog audit,
+        HttpContext http,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int actor) return Results.Unauthorized();
+
+        var (result, expire) = await repo.GrantTempUnlockAsync(mcc, request.Hours, actor, ct).ConfigureAwait(false);
+        if (!result.Ok) return MapFailure(result);
+
+        audit.Log("centre.unlock.temp", actor: actor, ip: Audit.AuditIp.From(http),
+            details: new { mcc, hours = request.Hours, until = expire });
+
+        return Results.Ok(new { expire });
     }
 
     /// <summary>Map the procedures' error_code onto the right HTTP status.</summary>

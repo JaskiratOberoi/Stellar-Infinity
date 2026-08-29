@@ -52,6 +52,21 @@ public sealed record AdminUserDetail(
 
 public sealed record LisSecurityBits(bool Auth, bool ResultEntry, bool EditPatientTests, bool Discount);
 
+/// <summary>
+/// A centre's balance-lock posture, for the settings panel: whether it is
+/// permanently unlocked, on a live temporary unlock (and until when), and where
+/// its wallet sits against its credit floor. Read alongside the user's own
+/// centres so an admin can grant relief without leaving the account they are on.
+/// </summary>
+public sealed record CentreLockState(
+    int MccId,
+    string? Code,
+    string? Name,
+    bool Permanent,
+    int? CreditLimit,
+    decimal? CurrentBalance,
+    DateTimeOffset? TempExpire);
+
 public sealed record ClientCodeOption(int MccId, string ClientCode, string? ClientName, bool AlreadyMapped);
 
 public sealed record SetClientCodesResult(bool Ok, string? ErrorCode, string? Message, int Added, int Removed)

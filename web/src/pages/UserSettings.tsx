@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pager } from '../components/Pager';
-import { api, ApiError } from '../api/client';
-import { fmtDate } from '../lib/format';
+import { api, ApiError, csrfHeader } from '../api/client';
+import { fmtDate, fmtDateTime, inr } from '../lib/format';
 import { InfinityLoader } from '../components/InfinityLoader';
 
 interface MappedClientCode {
@@ -55,7 +55,17 @@ interface ClientCodeOption {
   alreadyMapped: boolean;
 }
 
-type Tab = 'profile' | 'access' | 'clients';
+interface CentreLockState {
+  mccId: number;
+  code: string | null;
+  name: string | null;
+  permanent: boolean;
+  creditLimit: number | null;
+  currentBalance: number | null;
+  tempExpire: string | null;
+}
+
+type Tab = 'profile' | 'credentials' | 'access' | 'clients' | 'lock';
 
 export function UserSettings({
   userId,
@@ -133,9 +143,14 @@ export function UserSettings({
             </div>
 
             <div className="tabs">
-              {(['profile', 'access', 'clients'] as Tab[]).map((t) => (
+              {(['profile', 'credentials', 'access', 'clients',
+                 ...(d.ownCentres.length > 0 ? ['lock'] : [])] as Tab[]).map((t) => (
                 <button key={t} className={`tab ${tab === t ? 'tab--on' : ''}`} onClick={() => setTab(t)}>
-                  {t === 'profile' ? 'Profile' : t === 'access' ? 'Role & access' : `Client access (${d.clientCodes.length})`}
+                  {t === 'profile' ? 'Profile'
+                    : t === 'credentials' ? 'Credentials'
+                    : t === 'access' ? 'Role & access'
+                    : t === 'clients' ? `Client access (${d.clientCodes.length})`
+                    : 'Report lock'}
                 </button>
               ))}
             </div>
@@ -144,8 +159,10 @@ export function UserSettings({
             {notice && <div className="alert alert--ok">{notice}</div>}
 
             {tab === 'profile' && <ProfileTab d={d} busy={busy} run={run} />}
+            {tab === 'credentials' && <CredentialsTab d={d} busy={busy} run={run} setError={setError} />}
             {tab === 'access' && <AccessTab d={d} roles={roles} busy={busy} run={run} />}
             {tab === 'clients' && <ClientsTab d={d} busy={busy} run={run} />}
+            {tab === 'lock' && <LockTab d={d} busy={busy} run={run} setError={setError} />}
 
             <div className="modal__actions">
               <button className="btn btn--ghost" onClick={onClose}>Close</button>
@@ -271,17 +288,200 @@ function AccessTab({ d, roles, busy, run }: { d: AdminUserDetail; roles: string[
           Set per LIS user type in the legacy system. Shown for context; Infinity uses its own role model.
         </p>
       </div>
+    </div>
+  );
+}
 
-      {d.managedBy === 'infinity' && (
-        <div>
-          <button className="btn btn--ghost btn--sm" disabled={busy} onClick={() => {
-            const pw = window.prompt(`New password for ${d.username}:`);
-            if (pw) void run(() => api.put(`/api/admin/users/${d.userId}/password`, { password: pw }), 'Password reset.');
-          }}>
-            Reset password
-          </button>
+/* ---------------- credentials ---------------- */
+
+function CredentialsTab({ d, busy, run, setError }:
+  { d: AdminUserDetail; busy: boolean;
+    run: (f: () => Promise<void>, ok: string) => Promise<void>;
+    setError: (m: string | null) => void }) {
+  const [revealed, setRevealed] = useState<string | null>(null);
+  const [revealing, setRevealing] = useState(false);
+  const [pw, setPw] = useState('');
+  const [showReset, setShowReset] = useState(false);
+
+  // Telo owns its own accounts' credentials; changing them here would fight the
+  // other system. Everything else — including native LIS accounts — is ours to
+  // reset now, since Infinity is replacing the LIS.
+  const teloOwned = d.managedBy === 'telo';
+
+  async function reveal() {
+    setRevealing(true);
+    setError(null);
+    try {
+      const r = await api.get<{ password: string | null }>(`/api/admin/users/${d.userId}/password`);
+      setRevealed(r.password ?? '');
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not read the password.');
+    } finally {
+      setRevealing(false);
+    }
+  }
+
+  return (
+    <div className="stack">
+      <div className="field">
+        <label>Username</label>
+        <input className="input mono" value={d.username} readOnly
+               onFocus={(e) => e.currentTarget.select()} />
+        <span className="muted" style={{ fontSize: '.7rem' }}>The login. It cannot be changed.</span>
+      </div>
+
+      <div className="card" style={{ padding: '.8rem .9rem' }}>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: '.82rem', fontWeight: 600 }}>Current password</div>
+            <div className="muted" style={{ fontSize: '.72rem' }}>
+              {revealed == null ? 'Hidden. Revealing it is recorded in the audit trail.' : 'Visible below — click hide when done.'}
+            </div>
+          </div>
+          {revealed == null ? (
+            <button className="btn btn--ghost btn--sm" disabled={revealing || teloOwned}
+                    onClick={() => void reveal()}>
+              {revealing ? 'Revealing…' : 'Reveal'}
+            </button>
+          ) : (
+            <button className="btn btn--ghost btn--sm" onClick={() => setRevealed(null)}>Hide</button>
+          )}
+        </div>
+        {revealed != null && (
+          <div className="row" style={{ marginTop: '.6rem', gap: '.4rem' }}>
+            <input className="input mono" readOnly value={revealed}
+                   style={{ flex: 1 }} onFocus={(e) => e.currentTarget.select()} />
+            <button className="btn btn--ghost btn--sm"
+                    onClick={() => void navigator.clipboard?.writeText(revealed).catch(() => {})}>
+              Copy
+            </button>
+          </div>
+        )}
+        {teloOwned && (
+          <div className="muted" style={{ fontSize: '.72rem', marginTop: '.4rem' }}>
+            This account is managed by Telo — its credential is controlled there.
+          </div>
+        )}
+      </div>
+
+      {!teloOwned && (
+        <div className="card" style={{ padding: '.8rem .9rem' }}>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '.82rem', fontWeight: 600 }}>Reset password</div>
+              <div className="muted" style={{ fontSize: '.72rem' }}>
+                Sets a new password and signs the user out of every current session.
+                {d.managedBy !== 'infinity' && ' This is also their legacy LIS login.'}
+              </div>
+            </div>
+            {!showReset && (
+              <button className="btn btn--ghost btn--sm" onClick={() => setShowReset(true)}>Change…</button>
+            )}
+          </div>
+          {showReset && (
+            <div className="row" style={{ marginTop: '.6rem', gap: '.4rem' }}>
+              <input className="input mono" placeholder="New password" value={pw} maxLength={50}
+                     onChange={(e) => setPw(e.target.value)} style={{ flex: 1 }} autoFocus />
+              <button className="btn btn--primary btn--sm" disabled={busy || pw.trim() === ''}
+                      onClick={() => void run(
+                        () => api.put(`/api/admin/users/${d.userId}/password`, { password: pw }),
+                        'Password reset — the user must sign in again.').then(() => { setPw(''); setShowReset(false); })}>
+                Save
+              </button>
+              <button className="btn btn--ghost btn--sm" disabled={busy}
+                      onClick={() => { setPw(''); setShowReset(false); }}>Cancel</button>
+            </div>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ---------------- report lock ---------------- */
+
+function LockTab({ d, busy, run, setError }:
+  { d: AdminUserDetail; busy: boolean;
+    run: (f: () => Promise<void>, ok: string) => Promise<void>;
+    setError: (m: string | null) => void }) {
+  const [states, setStates] = useState<CentreLockState[] | null>(null);
+  const [hours, setHours] = useState<Record<number, string>>({});
+  const mccIds = useMemo(() => d.ownCentres.map((c) => c.mccId).join(','), [d.ownCentres]);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await api.get<{ centres: CentreLockState[] }>(
+        `/api/admin/centres/lock-state?mccIds=${encodeURIComponent(mccIds)}`);
+      setStates(r.centres);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not load lock state.');
+    }
+  }, [mccIds, setError]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  // Credit limit is stored NEGATIVE ("may owe up to"); show it as a positive
+  // allowance. Balance below the floor is what locks a centre.
+  const floor = (limit: number | null) => (limit != null && limit < 0 ? -limit : 0);
+
+  return (
+    <div className="stack">
+      <p className="muted" style={{ fontSize: '.74rem', lineHeight: 1.6 }}>
+        A centre's reports are held while it owes more than its credit allowance. Grant a permanent
+        unlock to release it regardless of balance, or a temporary window for "pay tomorrow, send today".
+        Both are recorded in the audit trail.
+      </p>
+
+      {states == null ? (
+        <div className="center" style={{ minHeight: 80 }}><InfinityLoader /></div>
+      ) : states.length === 0 ? (
+        <p className="muted" style={{ fontSize: '.82rem' }}>No centre resolved for this account.</p>
+      ) : states.map((c) => {
+        const owed = c.currentBalance != null && c.currentBalance < 0 ? -c.currentBalance : 0;
+        const tempLive = c.tempExpire != null && new Date(c.tempExpire).getTime() > Date.now();
+        return (
+          <div key={c.mccId} className="card" style={{ padding: '.85rem .95rem' }}>
+            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <div>
+                <b className="mono">{c.code}</b>
+                <span className="muted" style={{ marginLeft: '.4rem', fontSize: '.8rem' }}>{c.name}</span>
+              </div>
+              <span className="muted" style={{ fontSize: '.76rem' }}>
+                Owes {inr(owed)} of {inr(floor(c.creditLimit))} allowance
+              </span>
+            </div>
+
+            <div className="grid2" style={{ marginTop: '.6rem' }}>
+              <Toggle label="Permanent unlock" on={c.permanent} disabled={busy}
+                      hint={c.permanent ? 'Never balance-locked' : 'Locked when over the allowance'}
+                      onClick={() => void run(
+                        () => api.put(`/api/admin/centres/${c.mccId}/permanent-unlock`, { enabled: !c.permanent }),
+                        c.permanent ? 'Permanent unlock removed.' : 'Permanently unlocked.').then(load)} />
+
+              <div className="card" style={{ padding: '.7rem .85rem' }}>
+                <div style={{ fontSize: '.82rem', fontWeight: 500 }}>Temporary unlock</div>
+                <div className="muted" style={{ fontSize: '.7rem', marginTop: '.25rem' }}>
+                  {tempLive ? `Active until ${fmtDateTime(c.tempExpire)}` : 'None active'}
+                </div>
+                <div className="row" style={{ marginTop: '.45rem', gap: '.35rem' }}>
+                  <input className="input" type="number" min={1} max={720} placeholder="Hours"
+                         value={hours[c.mccId] ?? ''} style={{ width: '5.5rem' }}
+                         onChange={(e) => setHours((h) => ({ ...h, [c.mccId]: e.target.value }))} />
+                  <button className="btn btn--ghost btn--sm"
+                          disabled={busy || !(Number(hours[c.mccId]) > 0)}
+                          onClick={() => void run(
+                            () => api.post(`/api/admin/centres/${c.mccId}/temp-unlock`,
+                                           { hours: Number(hours[c.mccId]) }, csrfHeader()),
+                            `Unlocked for ${hours[c.mccId]} hour(s).`)
+                            .then(() => { setHours((h) => ({ ...h, [c.mccId]: '' })); return load(); })}>
+                    Grant
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
