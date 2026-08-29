@@ -3506,6 +3506,17 @@ select.preview__layout { width: 11.25rem; flex: none; }
   border-top: 1px solid var(--line);
 }
 
+/* A pager placed INSIDE a table-wrap (the card lists put it there, after the
+   table) would otherwise sit flush against the container's rounded bottom and
+   side edges — the base rule only spaces its top. Give it the cell's own
+   horizontal inset and a matching bottom so it breathes like the rows above.
+   Pagers placed OUTSIDE a table-wrap (their own div) are untouched. */
+.table-wrap > .pager {
+  padding-left: .9rem;
+  padding-right: .9rem;
+  padding-bottom: .9rem;
+}
+
 .pager__range { font-size: .78rem; }
 
 .pager__size {
