@@ -289,8 +289,9 @@
   border: 0.75px solid #c4cdd8;
   border-radius: 5px;
 }
-/* padding-left 0 keeps the labels aligned with the left-inset-0 result cells. */
 .lr__cols-band > span { padding-right: 12px; font-weight: 600; color: #1f2937; }
+/* A small inset off the band's rounded left corner. */
+.lr__cols-band > span:first-child { padding-left: 3px; }
 .lr__cols-band > span:last-child { padding-right: 0; }
 
 /* ---------- department band ----------
@@ -328,7 +329,13 @@
 .lr__panel-row,
 .lr__group-row { break-inside: avoid; }
 
-.lr__c-name { padding: 2px 12px 2px 0; }
+/* Parameter names sit a touch in from the band's left edge (headings stay
+   flush, so they read as outdented over their params). */
+.lr__c-name { padding: 2px 12px 2px 5px; }
+/* This rule is later in the file than .lr__indent, so without it an indented
+   sub-parameter would fall back to the 5px base and lose its indent. The new
+   base rides on top: 5px + the 16px step. */
+.lr__c-name.lr__indent { padding-left: 21px; }
 .lr__c-name-inner { display: flex; align-items: flex-start; gap: 6px; }
 .lr__c-name-text { font-size: 12px; font-weight: 500; }
 .lr__c-value { padding: 2px 12px 2px 0; }
