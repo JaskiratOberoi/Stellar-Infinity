@@ -366,7 +366,17 @@
 }
 
 .lr__interp-img { break-inside: avoid; }
-.lr__interp-img img { margin: 0 auto; height: auto; max-width: 100%; display: block; }
+/* max-height as well as max-width: an interpretation panel taller than the
+   room a page offers would otherwise take break-inside:avoid at its word and
+   move WHOLE to a nearly-empty second page. 108mm keeps the HCV/HBV panels —
+   header block, one result row, End of Report and the footer reserve all on
+   the sheet with it — inside a single page in BOTH margin modes (the plain
+   40/40mm page is the tighter one). Small images are untouched; a tall one
+   scales down proportionally and stays centred. */
+.lr__interp-img img {
+  margin: 0 auto; height: auto; display: block;
+  max-width: 100%; max-height: 108mm;
+}
 
 /* ---------- notes ---------- */
 
