@@ -671,11 +671,14 @@ function EndOfReport() {
 }
 
 function Meta({
-  label, value, strong, mono,
-}: { label: string; value: string; strong?: boolean; mono?: boolean }) {
+  label, value, strong, mono, right,
+}: { label: string; value: string; strong?: boolean; mono?: boolean; right?: boolean }) {
   const cls = [strong ? 'lr__f-strong' : '', mono ? 'lr__f-mono' : ''].filter(Boolean).join(' ');
   return (
-    <div className="lr__f">
+    // `right` pins this field to the second column (with the grid's dense flow,
+    // the left cell backfills), so it can sit directly under another right-hand
+    // field regardless of whether the optional rows above it are present.
+    <div className="lr__f" style={right ? { gridColumn: 2 } : undefined}>
       <span className="lr__f-label">{label}</span>
       <span className="lr__f-sep">:</span>
       <span className={cls || undefined}>{value}</span>
@@ -719,6 +722,8 @@ function PatientMetaBlock({
               referred the patient. '—' when none, never the centre's code. */}
           <Meta label="Ref. Customer" value={row.refCustomer ?? '—'} />
           <Meta label="Ref. Doctor" value={row.refDoctor ?? 'Self'} />
+          {/* The centre that placed the order, directly under Ref. Doctor. */}
+          <Meta label="Ordered by" value={row.clientCode ?? '—'} right />
           {specimens.length > 0 && <Meta label="Specimen" value={specimens.join(', ')} />}
           <Meta label="Collected" value={fmtStamp(row.sampleDrawn)} />
           <Meta label="Registered" value={fmtStamp(row.registeredAt)} />

@@ -232,7 +232,9 @@
   padding: 8px 12px 9px;
   margin-bottom: 9px;
 }
-.lr__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 40px; row-gap: 0; }
+/* dense flow so a field pinned to column 2 (Ordered by, under Ref. Doctor)
+   lets the row's left cell backfill instead of leaving a gap. */
+.lr__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 40px; row-gap: 0; grid-auto-flow: row dense; }
 
 .lr__f { display: flex; align-items: baseline; gap: 8px; }
 .lr__f-label { width: 112px; flex: none; color: #374151; font-weight: 600; }
