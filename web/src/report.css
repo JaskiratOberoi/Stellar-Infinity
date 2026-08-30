@@ -218,7 +218,20 @@
 
 /* ---------- patient block ---------- */
 
-.lr__meta { border-bottom: 1px solid #d1d5db; padding-bottom: 4px; }
+/* A framed panel rather than a bare underline: the demographics are the
+   report's identity block, and a clean bordered card sets them apart from the
+   results without shouting. A 2px navy cap (the same #2b2b6b the department
+   bands use) gives it a branded edge; the fill is a barely-there slate so it
+   reads as a panel on both plain paper and letterhead. It lives in the repeating
+   <thead>, so the frame reprints at the top of every page the report spans. */
+.lr__meta {
+  border: 0.75px solid #c4cdd8;
+  border-top: 2px solid #2b2b6b;
+  border-radius: 3px;
+  background: #f8fafc;
+  padding: 8px 12px 9px;
+  margin-bottom: 9px;
+}
 .lr__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 40px; row-gap: 0; }
 
 .lr__f { display: flex; align-items: baseline; gap: 8px; }
