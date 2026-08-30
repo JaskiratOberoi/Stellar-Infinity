@@ -84,31 +84,12 @@ BEGIN
      * Capped at three. The letterhead's signature band fits three; a fourth
      * would print over the footer.
      */
-    -- The departments this report actually contains.
+    -- ord carries the print order through to the final SELECT.
     --
-    -- A temp table rather than a CTE or a table variable, for two reasons: it
-    -- is read twice (once to decide which configured signatory is entitled to
-    -- sign, once by the fallback), and a #temp is visible inside the nested
-    -- sp_executesql scope the fallback runs in, where a @variable would not be.
-    --
-    -- COLLATE DATABASE_DEFAULT is not decoration. A temp table takes
-    -- TEMPDB's collation, not this database's, and Noble is Latin1_General_CI_AI
-    -- against a tempdb of SQL_Latin1_General_CP1_CI_AS. Comparing this column
-    -- to a Noble column then fails outright with "Cannot resolve the collation
-    -- conflict", which is how the previous revision of this procedure took the
-    -- collection centre, the processed-at line AND every signature off the
-    -- printed report. The CTE this replaced never had the problem because a
-    -- CTE stays in the database's own collation.
-    CREATE TABLE #depts (dept NVARCHAR(200) COLLATE DATABASE_DEFAULT PRIMARY KEY);
-    INSERT INTO #depts (dept)
-    SELECT DISTINCT UPPER(LTRIM(RTRIM(d.Name)))
-    FROM dbo.tbl_med_mcc_patient_test_result r
-    LEFT JOIN dbo.tbl_med_test_master m ON m.id = r.testid
-    LEFT JOIN dbo.tbl_med_department_master d ON d.id = m.DepartmentId
-    WHERE r.vailid = @v AND d.Name IS NOT NULL;
-
-    -- ord carries the print order through to the final SELECT: the fallback
-    -- path below has no DOC_TYPE to sort by, only the order it inserted in.
+    -- COLLATE DATABASE_DEFAULT is not decoration. A temp table takes TEMPDB's
+    -- collation, not this database's, and Noble is Latin1_General_CI_AI against
+    -- a tempdb of SQL_Latin1_General_CP1_CI_AS. Comparing this column to a Noble
+    -- column then fails with "Cannot resolve the collation conflict".
     CREATE TABLE #signers (
         ord          INT IDENTITY(1,1),
         id           INT,
@@ -118,140 +99,138 @@ BEGIN
         signature    VARBINARY(MAX)
     );
 
-    ;WITH dept_signers AS (
-        SELECT sig_id = d.Fist_doctor,   dept = UPPER(LTRIM(RTRIM(d.Name)))
-        FROM dbo.tbl_med_department_master d WHERE d.Fist_doctor   IS NOT NULL
-        UNION
-        SELECT sig_id = d.Second_doctor, dept = UPPER(LTRIM(RTRIM(d.Name)))
-        FROM dbo.tbl_med_department_master d WHERE d.Second_doctor IS NOT NULL
-    ),
-    candidates AS (
+    /*
+     * ── SIGNATORY SELECTION: A FAITHFUL PORT OF THE LIS ───────────────────
+     *
+     * The old rule printed EVERY unit signatory not tied to a department — and
+     * most units tie none — so a unit with two DOC_TYPE=1 doctors and one
+     * DOC_TYPE=2 printed all THREE (the extra-third-signature bug: a head-office
+     * pathologist beside the unit's own consultant pathologist and
+     * microbiologist). It also mapped via tbl_med_department_master.Fist_doctor/
+     * Second_doctor, which are unset for most units.
+     *
+     * This resolves the PRIMARY and SECONDARY signatory exactly as the LIS's own
+     * report proc GET_PATIENT_REPORT_VAIL_ID does — the CASE expressions below
+     * are a direct transcription of its Expr1/Expr2/Expr3 (primary) and
+     * Doctorname/Designation/Signature (secondary) output columns, evaluated per
+     * result row and then taken distinct:
+     *
+     *   PRIMARY:   the unit's DOC_TYPE=1 signatory whose department_id matches
+     *              the test's department; else the unit's first DOC_TYPE=1; else
+     *              the department's Department_View_Sign primary (Expr1..3).
+     *              Head office (sample business_unit_id = 1) always uses the view.
+     *   SECONDARY: the unit's DOC_TYPE=2 signatory; else the department's
+     *              Department_View_Sign secondary. Dropped for the LIS's
+     *              microbiology case (dept 4 with its own DOC_TYPE=1) and unit 19.
+     *
+     * Keeping it byte-for-byte with the LIS is deliberate: a signature is a
+     * compliance surface and the two systems must name the same doctors on the
+     * same report. Verified against the LIS proc across a broad report sample.
+     */
+    ;WITH lis AS (
         SELECT
-            s.id,
-            doctor_name = NULLIF(LTRIM(RTRIM(s.Doctorname)), N''),
-            designation = NULLIF(LTRIM(RTRIM(s.Designation)), N''),
-            doc_type    = ISNULL(s.DOC_TYPE, 99),
-            -- Configured against any department at all?
-            is_mapped   = CASE WHEN EXISTS (
-                              SELECT 1 FROM dept_signers ds WHERE ds.sig_id = s.id)
-                          THEN 1 ELSE 0 END,
-            -- Configured against a department THIS report contains?
-            signs_here  = CASE WHEN EXISTS (
-                              SELECT 1 FROM dept_signers ds
-                              INNER JOIN #depts rd ON rd.dept = ds.dept
-                              WHERE ds.sig_id = s.id)
-                          THEN 1 ELSE 0 END
-        FROM dbo.tbl_med_signature_master s
-        WHERE s.Business_Unit_id = @businessUnitId
-          AND ISNULL(s.IsActive, 1) = 1
-          AND s.Signature IS NOT NULL
+            bu_code = u.BusinessUnitCode,
+            samp_bu = samp.business_unit_id,
+            dept_id = m.DepartmentId,
+            dvs_e1 = dv.Expr1, dvs_e2 = dv.Expr2, dvs_e3 = dv.Expr3,
+            dvs_dn = dv.Doctorname, dvs_dg = dv.Designation, dvs_sig = dv.Signature
+        FROM dbo.tbl_med_mcc_patient_test_result r
+        JOIN dbo.tbl_med_test_master m ON m.id = r.testid
+        JOIN dbo.tbl_med_mcc_patient_samples samp ON samp.vailid = r.vailid
+        JOIN dbo.tbl_med_mcc_patient_master p ON p.id = r.patientid
+        JOIN dbo.tbl_med_mcc_unit_master u ON u.id = p.mcc_code
+        LEFT JOIN dbo.tbl_med_department_master dm ON dm.id = m.DepartmentId
+        LEFT JOIN dbo.Department_View_Sign dv ON dv.id = dm.id
+        WHERE r.vailid = @v AND r.auth = 1
     ),
-    eligible AS (
-        SELECT * FROM candidates WHERE is_mapped = 0 OR signs_here = 1
+    -- Primary (tier 1) and secondary (tier 2), each pulled as ONE row so a
+    -- doctor's name, designation and signature always come from the SAME record.
+    -- The LIS emits these as independent TOP-1 subqueries per column, which can
+    -- pair one doctor's name with another's designation; taking a single row
+    -- fixes that while resolving the same doctor the LIS names. UNION ALL, not
+    -- UNION: the signature is varbinary(max) and cannot be a UNION operand, and
+    -- the per-name dedup below collapses the duplicates the report's rows make.
+    flat AS (
+        -- PRIMARY (LIS Expr1/Expr2/Expr3): unit's department-matched DOC_TYPE=1,
+        -- then any DOC_TYPE=1; head office (sample BU 1) and non-units use the
+        -- department's Department_View_Sign primary.
+        SELECT tier = 1, name = pr.nm, desig = pr.dg, sig = pr.sg
+        FROM lis l
+        OUTER APPLY (
+            SELECT TOP 1 nm, dg, sg FROM (
+                SELECT prio = 1, nm = s.Doctorname, dg = s.Designation, sg = s.Signature
+                FROM dbo.tbl_med_signature_master s
+                WHERE l.samp_bu <> 1 AND l.bu_code > 1 AND s.Business_Unit_id = l.bu_code
+                  AND s.IsActive = 1 AND s.DOC_TYPE = 1 AND s.department_id = l.dept_id
+                UNION ALL
+                SELECT prio = 2, s.Doctorname, s.Designation, s.Signature
+                FROM dbo.tbl_med_signature_master s
+                WHERE l.samp_bu <> 1 AND l.bu_code > 1 AND s.Business_Unit_id = l.bu_code
+                  AND s.IsActive = 1 AND s.DOC_TYPE = 1
+                UNION ALL
+                SELECT prio = 3, l.dvs_e1, l.dvs_e2, l.dvs_e3
+            ) c ORDER BY prio
+        ) pr
+        UNION ALL
+        -- SECONDARY (LIS Doctorname/Designation/Signature): unit's DOC_TYPE=2,
+        -- else the department's Department_View_Sign secondary. Dropped for the
+        -- microbiology case (dept 4 with its own DOC_TYPE=1) and for unit 19.
+        SELECT tier = 2, sc.nm, sc.dg, sc.sg
+        FROM lis l
+        OUTER APPLY (
+            SELECT TOP 1 nm, dg, sg FROM (
+                SELECT prio = 1, nm = s.Doctorname, dg = s.Designation, sg = s.Signature
+                FROM dbo.tbl_med_signature_master s
+                WHERE l.bu_code > 1 AND s.Business_Unit_id = l.bu_code
+                  AND s.IsActive = 1 AND s.DOC_TYPE = 2
+                  AND NOT (l.dept_id = 4 AND EXISTS (
+                      SELECT 1 FROM dbo.tbl_med_signature_master s2
+                      WHERE s2.Business_Unit_id = l.bu_code AND s2.IsActive = 1
+                        AND s2.DOC_TYPE = 1 AND s2.department_id = 4))
+                UNION ALL
+                SELECT prio = 2, l.dvs_dn, l.dvs_dg, l.dvs_sig
+                WHERE l.bu_code <> 19
+                  AND NOT (l.bu_code > 1 AND l.dept_id = 4 AND EXISTS (
+                      SELECT 1 FROM dbo.tbl_med_signature_master s2
+                      WHERE s2.Business_Unit_id = l.bu_code AND s2.IsActive = 1
+                        AND s2.DOC_TYPE = 1 AND s2.department_id = 4))
+                  AND NOT (l.bu_code > 1 AND EXISTS (
+                      SELECT 1 FROM dbo.tbl_med_signature_master s3
+                      WHERE s3.Business_Unit_id = l.bu_code AND s3.IsActive = 1
+                        AND s3.DOC_TYPE = 2))
+            ) c ORDER BY prio
+        ) sc
     ),
-    -- One row per person. Strip a leading "Dr" and any punctuation so the same
-    -- doctor spelled two ways collapses to one.
+    usable AS (
+        SELECT tier, name = NULLIF(LTRIM(RTRIM(name)), N''), desig, sig
+        FROM flat
+        WHERE NULLIF(LTRIM(RTRIM(name)), N'') IS NOT NULL
+          AND sig IS NOT NULL AND DATALENGTH(sig) > 0
+    ),
+    -- One row per person; the same doctor is the default for several departments.
     deduped AS (
         SELECT *, rn = ROW_NUMBER() OVER (
-            PARTITION BY LOWER(
-                REPLACE(REPLACE(REPLACE(REPLACE(
-                    CASE WHEN doctor_name LIKE N'Dr.%' THEN LTRIM(SUBSTRING(doctor_name, 4, 200))
-                         WHEN doctor_name LIKE N'Dr %'  THEN LTRIM(SUBSTRING(doctor_name, 3, 200))
-                         ELSE doctor_name END,
-                    N' ', N''), N'.', N''), N',', N''), N'-', N''))
-            -- The department-mapped configuration is the more specific one.
-            ORDER BY signs_here DESC, doc_type, id)
-        FROM eligible
+            PARTITION BY LOWER(REPLACE(REPLACE(REPLACE(REPLACE(
+                CASE WHEN name LIKE N'Dr.%' THEN LTRIM(SUBSTRING(name, 4, 200))
+                     WHEN name LIKE N'Dr %'  THEN LTRIM(SUBSTRING(name, 3, 200))
+                     ELSE name END,
+                N' ', N''), N'.', N''), N',', N''), N'-', N''))
+            ORDER BY tier)
+        FROM usable
     )
     INSERT INTO #signers (id, doctor_name, designation, doc_type, signature)
     SELECT TOP 3
-        d.id, d.doctor_name, d.designation, d.doc_type, s.Signature
-    FROM deduped d
-    INNER JOIN dbo.tbl_med_signature_master s ON s.id = d.id
-    WHERE d.rn = 1
-    ORDER BY d.doc_type, d.id;
-
-    /*
-     * ── THE FALLBACK, AND WHY A REPORT MUST NOT GO OUT WITHOUT ONE ─────────
-     *
-     * Not every business unit has signatories of its own. Where
-     * tbl_med_signature_master holds no usable row for the unit, everything
-     * above selects nothing and the report printed UNSIGNED.
-     *
-     * That is the one failure here a reader cannot see is a failure. A missing
-     * result is obvious; a missing signature is a sheet that looks complete
-     * with an empty space where a pathologist put their name, and it is not a
-     * report at all — it is a page of numbers nobody has taken responsibility
-     * for.
-     *
-     * The LIS does not do that. GET_PATIENT_REPORT_VAIL_ID falls back to
-     * Department_View_Sign, which carries each department's default PRIMARY
-     * (Expr1/Expr2/Expr3) and SECONDARY (Doctorname/Designation/Signature)
-     * doctor — the head-office signatories. Restricted to the departments on
-     * THIS report, so a microbiology report is signed by the microbiologist
-     * and a biochemistry one is not.
-     *
-     * Primaries before secondaries, mirroring the DOC_TYPE 1 → 2 ordering the
-     * configured path uses, so a given person lands on the same side of the QR
-     * whichever path found them. Ids are synthetic and NEGATIVE: these rows do
-     * not come from tbl_med_signature_master and must never be taken for a row
-     * that does.
-     *
-     * Ported from Telo's getDefaultSigners (db/read/signatures.ts).
-     *
-     * Wrapped in sp_executesql for the same reason the interpretation block
-     * below is: the view belongs to the LIS, and a deployment that lacks it
-     * should print an unsigned report rather than fail to render one at all.
-     */
-    IF NOT EXISTS (SELECT 1 FROM #signers)
-       AND OBJECT_ID('dbo.Department_View_Sign') IS NOT NULL
-    BEGIN
-        EXEC sp_executesql N'
-            ;WITH flat AS (
-                SELECT tier = 1,
-                       doctor_name = NULLIF(LTRIM(RTRIM(v.Expr1)), N''''),
-                       designation = NULLIF(LTRIM(RTRIM(v.Expr2)), N''''),
-                       signature   = v.Expr3
-                FROM dbo.Department_View_Sign v
-                WHERE UPPER(LTRIM(RTRIM(v.Name))) IN (SELECT dept FROM #depts)
-                UNION ALL
-                SELECT tier = 2,
-                       NULLIF(LTRIM(RTRIM(v.Doctorname)), N''''),
-                       NULLIF(LTRIM(RTRIM(v.Designation)), N''''),
-                       v.Signature
-                FROM dbo.Department_View_Sign v
-                WHERE UPPER(LTRIM(RTRIM(v.Name))) IN (SELECT dept FROM #depts)
-            ),
-            usable AS (
-                SELECT * FROM flat
-                WHERE doctor_name IS NOT NULL
-                  AND signature IS NOT NULL
-                  AND DATALENGTH(signature) > 0
-            ),
-            -- The same head-office doctor is the default for several
-            -- departments, so a three-department report would otherwise print
-            -- one signature three times.
-            ranked AS (
-                SELECT *, rn = ROW_NUMBER() OVER (
-                    PARTITION BY LOWER(REPLACE(doctor_name, N'' '', N''''))
-                    ORDER BY tier)
-                FROM usable
-            )
-            INSERT INTO #signers (id, doctor_name, designation, doc_type, signature)
-            SELECT TOP 3
-                   id = -ROW_NUMBER() OVER (ORDER BY tier, doctor_name),
-                   doctor_name, designation, doc_type = tier, signature
-            FROM ranked
-            WHERE rn = 1
-            ORDER BY tier, doctor_name;';
-    END
+        id = -ROW_NUMBER() OVER (ORDER BY tier, name),
+        name, NULLIF(LTRIM(RTRIM(desig)), N''), doc_type = tier, sig
+    FROM deduped
+    WHERE rn = 1
+    ORDER BY tier, name;
 
     SELECT id, doctor_name, designation, doc_type, signature
     FROM #signers
     ORDER BY ord;
 
     DROP TABLE #signers;
-    DROP TABLE #depts;
 
     /*
      * 4 ── profile-level interpretation
