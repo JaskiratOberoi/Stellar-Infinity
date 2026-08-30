@@ -88,6 +88,10 @@ CREATE OR ALTER PROCEDURE dbo.usp_inf_worksheet_list
     @department_id   INT           = NULL,
     @business_unit_id INT          = NULL,
     @test_code       NVARCHAR(50)  = NULL,
+    -- Comma-separated codes, OR-combined: a sample matches if it carries ANY
+    -- of them. Supersedes @test_code (kept for callers deployed before the
+    -- filter went multi-select).
+    @test_codes      NVARCHAR(1000) = NULL,
     @page            INT           = 1,
     @page_size       INT           = 100,
     -- Upper bound on modifieddate, pinned by the caller so that paging walks a
@@ -234,6 +238,26 @@ BEGIN
                     FROM dbo.tbl_med_mcc_patient_test_result r
                     WHERE r.vailid = S.vailid
                       AND (r.testcode = @test_code OR r.testname LIKE '%' + @test_code + '%')
+                )
+              )
+          -- The multi-select form: any one of the listed codes matching admits
+          -- the sample. Same per-code match as @test_code above.
+          AND (
+                @test_codes IS NULL
+                OR EXISTS (
+                    SELECT 1
+                    FROM STRING_SPLIT(@test_codes, ',') c
+                    CROSS APPLY (SELECT code = LTRIM(RTRIM(c.value))) t
+                    WHERE t.code <> ''
+                      AND (
+                            S.testcodes LIKE '%' + t.code + '%'
+                            OR EXISTS (
+                                SELECT 1
+                                FROM dbo.tbl_med_mcc_patient_test_result r
+                                WHERE r.vailid = S.vailid
+                                  AND (r.testcode = t.code OR r.testname LIKE '%' + t.code + '%')
+                            )
+                          )
                 )
               )
     )

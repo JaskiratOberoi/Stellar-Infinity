@@ -50,7 +50,8 @@ export interface SampleFilterValues {
   clientCode: string;
   departmentId: number | '';
   businessUnitId: number | '';
-  testCode: string;
+  /** Test codes, OR-combined: a sample matches if it carries ANY of them. */
+  testCodes: string[];
   pid: string;
   fromHour: number;
   toHour: number;
@@ -70,7 +71,7 @@ export const EMPTY_FILTERS: SampleFilterValues = {
   clientCode: '',
   departmentId: '',
   businessUnitId: '',
-  testCode: '',
+  testCodes: [],
   pid: '',
   fromHour: 0,
   toHour: 24,
@@ -99,7 +100,7 @@ export function initialFilters(fromDaysAgo: number): SampleFilterValues {
 export function hasNarrowingFilters(f: SampleFilterValues): boolean {
   return Boolean(
     f.patient.trim() || f.sid.trim() || f.statusId !== '' || f.clientCode
-    || f.departmentId !== '' || f.businessUnitId !== '' || f.testCode.trim()
+    || f.departmentId !== '' || f.businessUnitId !== '' || f.testCodes.length > 0
     || f.pid.trim() || f.fromHour !== 0 || f.toHour !== 24,
   );
 }
@@ -158,40 +159,55 @@ export function useFilterOptions(): FilterOptions {
   return options;
 }
 
-/** Human-readable labels for whatever filters are currently applied. */
+/**
+ * Human-readable labels for whatever filters are currently applied. Each chip
+ * carries its OWN clear patch — since tests became multi-select, one filter
+ * key can produce several chips, and removing one must subtract exactly that
+ * value rather than blanking the whole field.
+ */
 export function describeFilters(
   f: SampleFilterValues,
   options: FilterOptions,
   statusOptions?: { id: number; label: string }[],
-): { key: keyof SampleFilterValues; label: string }[] {
-  const out: { key: keyof SampleFilterValues; label: string }[] = [];
+): { id: string; label: string; clear: Partial<SampleFilterValues> }[] {
+  const out: { id: string; label: string; clear: Partial<SampleFilterValues> }[] = [];
 
   // Status leads: it is the filter that decides whether the list is a work
   // queue or an archive, and since it absorbed the old "Outstanding only"
   // checkbox it is the one most worth being able to see and undo from here.
   // '' is the page default and is not a narrowing, so it produces no chip.
   if (f.statusId === 'all') {
-    out.push({ key: 'statusId', label: 'Any status' });
+    out.push({ id: 'statusId', label: 'Any status', clear: { statusId: '' } });
   } else if (f.statusId !== '') {
     const s = statusOptions?.find((x) => x.id === f.statusId);
-    out.push({ key: 'statusId', label: s?.label ?? `Status ${f.statusId}` });
+    out.push({ id: 'statusId', label: s?.label ?? `Status ${f.statusId}`, clear: { statusId: '' } });
   }
 
-  if (f.clientCode) out.push({ key: 'clientCode', label: `Client ${f.clientCode}` });
+  if (f.clientCode) out.push({ id: 'clientCode', label: `Client ${f.clientCode}`, clear: { clientCode: '' } });
   if (f.departmentId !== '') {
     const d = options.departments.find((x) => x.id === f.departmentId);
-    out.push({ key: 'departmentId', label: d?.name ?? `Department ${f.departmentId}` });
+    out.push({ id: 'departmentId', label: d?.name ?? `Department ${f.departmentId}`, clear: { departmentId: '' } });
   }
   if (f.businessUnitId !== '') {
     const b = options.businessUnits.find((x) => x.id === f.businessUnitId);
-    out.push({ key: 'businessUnitId', label: b?.name ?? `Unit ${f.businessUnitId}` });
+    out.push({ id: 'businessUnitId', label: b?.name ?? `Unit ${f.businessUnitId}`, clear: { businessUnitId: '' } });
   }
-  if (f.testCode.trim()) out.push({ key: 'testCode', label: `Test ${f.testCode.trim()}` });
-  if (f.pid.trim()) out.push({ key: 'pid', label: `PID ${f.pid.trim()}` });
+  for (const code of f.testCodes) {
+    out.push({
+      id: `testCode:${code}`,
+      label: `Test ${code}`,
+      clear: { testCodes: f.testCodes.filter((c) => c !== code) },
+    });
+  }
+  if (f.pid.trim()) out.push({ id: 'pid', label: `PID ${f.pid.trim()}`, clear: { pid: '' } });
   // The two hours read as one range: "08:00–20:00" is the thing the operator
-  // set, not two independent facts.
+  // set, not two independent facts, so it clears as one.
   if (f.fromHour !== 0 || f.toHour !== 24) {
-    out.push({ key: 'fromHour', label: `${pad2(f.fromHour)}:00–${pad2(f.toHour)}:00` });
+    out.push({
+      id: 'fromHour',
+      label: `${pad2(f.fromHour)}:00–${pad2(f.toHour)}:00`,
+      clear: { fromHour: 0, toHour: 24 },
+    });
   }
 
   return out;
@@ -213,7 +229,9 @@ export function applyFilterParams(p: URLSearchParams, f: SampleFilterValues): vo
   if (f.clientCode) p.set('clientCode', f.clientCode);
   if (f.departmentId !== '') p.set('departmentId', String(f.departmentId));
   if (f.businessUnitId !== '') p.set('businessUnitId', String(f.businessUnitId));
-  if (f.testCode.trim()) p.set('testCode', f.testCode.trim());
+  // Comma-joined under the ORIGINAL param name: codes are short alphanumerics
+  // that never carry commas, and the server splits the list back out.
+  if (f.testCodes.length > 0) p.set('testCode', f.testCodes.join(','));
   if (f.pid.trim()) p.set('pid', f.pid.trim());
   if (f.fromHour !== 0) p.set('fromHour', String(f.fromHour));
   if (f.toHour !== 24) p.set('toHour', String(f.toHour));
@@ -238,16 +256,10 @@ export function ActiveFilterChips({
     <div className="row" style={{ flexWrap: 'wrap', gap: '.35rem', marginBottom: '.8rem' }}>
       {active.map((f) => (
         <button
-          key={f.key}
+          key={f.id}
           className="chip"
           title="Remove this filter"
-          onClick={() => onChange({
-            ...value,
-            // The hour pair is one filter to the operator, so it clears as one.
-            ...(f.key === 'fromHour'
-              ? { fromHour: 0, toHour: 24 }
-              : { [f.key]: EMPTY_FILTERS[f.key] }),
-          })}
+          onClick={() => onChange({ ...value, ...f.clear })}
         >
           {f.label} <span aria-hidden="true">×</span>
         </button>
@@ -318,9 +330,11 @@ export function SampleFilters({
       hint: (r.name as string | null) ?? null,
     }), []));
 
+  // No pinned selection: the combobox stays in "add" mode and the chosen
+  // tests live as chips under it, so there is nothing to keep displayed.
   const { options: testOptions, search: searchTests } = useRemoteOptions(
     '/api/reports/tests/search',
-    value.testCode,
+    '',
     useCallback((r: Record<string, unknown>) => ({
       value: String(r.code ?? ''), label: String(r.code ?? ''),
       hint: (r.name as string | null) ?? null,
@@ -511,17 +525,29 @@ export function SampleFilters({
           )}
 
           <label className="field">
-            <span>Test</span>
-            {/* Was free text, which only helped someone who already knew the code.
-                The filter still SENDS a code — the server matches on the sample's
-                stored codes — but you can now find it by the test's name. */}
+            <span>Test{value.testCodes.length > 1 ? `s (${value.testCodes.length})` : ''}</span>
+            {/* MULTI-select: each pick adds a chip below and the box resets to
+                "add another". Matches are OR-combined — a sample with ANY of
+                the chosen tests shows. Searchable by code or name, as before. */}
             <Combobox
-              value={value.testCode}
-              emptyLabel="Any test"
-              onChange={(v) => set('testCode', v)}
-              options={testOptions}
+              value=""
+              emptyLabel={value.testCodes.length === 0 ? 'Any test' : 'Add another test…'}
+              onChange={(v) => {
+                if (v && !value.testCodes.includes(v)) set('testCodes', [...value.testCodes, v]);
+              }}
+              options={testOptions.filter((o) => !value.testCodes.includes(o.value))}
               onQueryChange={searchTests}
             />
+            {value.testCodes.length > 0 && (
+              <span className="row" style={{ flexWrap: 'wrap', gap: '.3rem', marginTop: '.3rem' }}>
+                {value.testCodes.map((c) => (
+                  <button key={c} type="button" className="chip" title="Remove this test"
+                          onClick={() => set('testCodes', value.testCodes.filter((x) => x !== c))}>
+                    {c} <span aria-hidden="true">×</span>
+                  </button>
+                ))}
+              </span>
+            )}
           </label>
 
           {/* Not for a client account. Their reports are pinned to their own

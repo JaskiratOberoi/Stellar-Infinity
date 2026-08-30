@@ -371,7 +371,12 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
                     (object?)filters.DepartmentId ?? DBNull.Value;
                 cmd.Parameters.Add("@business_unit_id", SqlDbType.Int).Value =
                     (object?)filters.BusinessUnitId ?? DBNull.Value;
-                cmd.Parameters.Add("@test_code", SqlDbType.NVarChar, 50).Value =
+                // TestCode arrives from the web as a comma list since the
+                // filter went multi-select; a single code is a list of one.
+                // Always sent via @test_codes; @test_code stays NULL and
+                // exists in the procedure for callers older than this build.
+                cmd.Parameters.Add("@test_code", SqlDbType.NVarChar, 50).Value = DBNull.Value;
+                cmd.Parameters.Add("@test_codes", SqlDbType.NVarChar, 1000).Value =
                     string.IsNullOrWhiteSpace(filters.TestCode)
                         ? DBNull.Value : filters.TestCode.Trim();
 
