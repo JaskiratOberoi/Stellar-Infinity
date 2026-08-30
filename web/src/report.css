@@ -235,7 +235,7 @@
 .lr__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 40px; row-gap: 0; }
 
 .lr__f { display: flex; align-items: baseline; gap: 8px; }
-.lr__f-label { width: 112px; flex: none; color: #6b7280; }
+.lr__f-label { width: 112px; flex: none; color: #374151; font-weight: 600; }
 .lr__f-sep { color: #9ca3af; }
 .lr__f-strong { font-weight: 600; }
 .lr__f-mono {

@@ -714,10 +714,10 @@ function PatientMetaBlock({
           </div>
           <Meta label="SID" value={row.sid} mono strong />
           <Meta label="Patient Id" value={String(row.pid)} mono />
-          {/* The CODE, not the centre's full name: the name is already spelled
-              out under "Collected at", and repeating it here costs a line the
-              header cannot spare. */}
-          <Meta label="Ref. Customer" value={row.clientCode ?? '—'} />
+          {/* The referring customer, not the collection centre: the centre's
+              name is already under "Collected at", and this row is for who
+              referred the patient. '—' when none, never the centre's code. */}
+          <Meta label="Ref. Customer" value={row.refCustomer ?? '—'} />
           <Meta label="Ref. Doctor" value={row.refDoctor ?? 'Self'} />
           {specimens.length > 0 && <Meta label="Specimen" value={specimens.join(', ')} />}
           <Meta label="Collected" value={fmtStamp(row.sampleDrawn)} />
