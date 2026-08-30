@@ -267,13 +267,26 @@
   color: #6b7280;
 }
 
-/* ---------- column headers ---------- */
-
-.lr__cols { border-bottom: 1px solid #9ca3af; font-size: 12px; }
+/* ---------- column headers ----------
+   A tinted stripe so the column row reads as a header band, not just another
+   line of text. Light slate with a navy-leaning tint to sit in the same family
+   as the patient panel's cap and the department bands; the fill is on the
+   cells (some print engines drop a <tr> background) and a hairline top rule
+   closes the band against the panel above. */
+.lr__cols {
+  border-top: 0.75px solid #c4cdd8;
+  border-bottom: 1px solid #9ca3af;
+  font-size: 12px;
+}
+/* padding-left stays 0 so each header sits exactly over its column's data
+   (the result cells are left-inset by 0 too); the stripe still spans the full
+   width because the cell backgrounds tile edge to edge. */
 .lr__cols th {
-  padding: 2px 12px 2px 0;
+  padding: 4px 12px 4px 0;
   text-align: left;
   font-weight: 600;
+  color: #1f2937;
+  background: #e8edf5;
 }
 .lr__cols th:last-child { padding-right: 0; }
 
