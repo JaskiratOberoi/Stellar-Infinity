@@ -651,13 +651,21 @@ function ReportColgroup() {
 /** Repeats at the top of every page: a continuation sheet whose columns are
  *  unlabelled is a table you have to page back to read. */
 function ColumnHeaderRow() {
+  // One full-width cell with an inner grid, not five <th>: the results table
+  // collapses its borders, which defeats cell border-radius, so a rounded band
+  // has to be a single element. The grid columns mirror the colgroup widths
+  // (33/12/11/24/20) so each label still sits over its column's data.
   return (
     <tr className="lr__cols">
-      <th>Test Name</th>
-      <th>Value</th>
-      <th>Unit</th>
-      <th>Biological Ref Interval</th>
-      <th>Method</th>
+      <td colSpan={5} className="lr__cols-cell">
+        <div className="lr__cols-band">
+          <span>Test Name</span>
+          <span>Value</span>
+          <span>Unit</span>
+          <span>Biological Ref Interval</span>
+          <span>Method</span>
+        </div>
+      </td>
     </tr>
   );
 }

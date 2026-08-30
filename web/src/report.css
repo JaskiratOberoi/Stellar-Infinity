@@ -229,8 +229,8 @@
   border-top: 2px solid #2b2b6b;
   border-radius: 3px;
   background: #f8fafc;
-  padding: 8px 12px 9px;
-  margin-bottom: 9px;
+  padding: 4px 12px 5px;
+  margin-bottom: 5px;
 }
 /* dense flow so a field pinned to column 2 (Ordered by, under Ref. Doctor)
    lets the row's left cell backfill instead of leaving a gap. */
@@ -246,7 +246,7 @@
 }
 
 .lr__cc {
-  margin-top: 6px;
+  margin-top: 3px;
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -275,22 +275,23 @@
    as the patient panel's cap and the department bands; the fill is on the
    cells (some print engines drop a <tr> background) and a hairline top rule
    closes the band against the panel above. */
-.lr__cols {
-  border-top: 0.75px solid #c4cdd8;
-  border-bottom: 1px solid #9ca3af;
-  font-size: 12px;
-}
-/* padding-left stays 0 so each header sits exactly over its column's data
-   (the result cells are left-inset by 0 too); the stripe still spans the full
-   width because the cell backgrounds tile edge to edge. */
-.lr__cols th {
-  padding: 4px 12px 4px 0;
-  text-align: left;
-  font-weight: 600;
-  color: #1f2937;
+.lr__cols { font-size: 12px; }
+.lr__cols-cell { padding: 0; }
+/* The rounded band. A grid whose columns mirror the colgroup (33/12/11/24/20)
+   so every label sits over its column; a single element, so border-radius is
+   honoured where a collapsed table's cells would not be. */
+.lr__cols-band {
+  display: grid;
+  grid-template-columns: 33% 12% 11% 24% 20%;
+  box-sizing: border-box;
+  padding: 3px 0;
   background: #e8edf5;
+  border: 0.75px solid #c4cdd8;
+  border-radius: 5px;
 }
-.lr__cols th:last-child { padding-right: 0; }
+/* padding-left 0 keeps the labels aligned with the left-inset-0 result cells. */
+.lr__cols-band > span { padding-right: 12px; font-weight: 600; color: #1f2937; }
+.lr__cols-band > span:last-child { padding-right: 0; }
 
 /* ---------- department band ----------
    A band ACROSS the table, not a label floating above it: it names the block
