@@ -95,10 +95,19 @@ interface RequestOptions extends RequestInit {
    * has ended. Please sign in again." to someone who had never signed in.
    */
   isCredentialCheck?: boolean;
+  /**
+   * Per-call timeout override. `null` disables the client-side timeout
+   * entirely — for the searches an operator may legitimately run over months
+   * of data, where the 20s default was killing the request mid-flight. Only
+   * pair it with an abort `signal` and a visible Stop control, so a genuinely
+   * hung request still has a way out; the server's own SQL timeout remains
+   * the backstop.
+   */
+  timeoutMs?: number | null;
 }
 
 async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
-  const { isCredentialCheck = false, ...fetchInit } = init;
+  const { isCredentialCheck = false, timeoutMs = TIMEOUT_MS, ...fetchInit } = init;
   const headers = new Headers(fetchInit.headers);
   headers.set('Accept', 'application/json');
   if (fetchInit.body) headers.set('Content-Type', 'application/json');
@@ -111,6 +120,14 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
     if (csrf) headers.set(CSRF_HEADER, csrf);
   }
 
+  // The timeout and any caller-supplied abort signal (a Stop button) both end
+  // the request; whichever fires first wins. timeoutMs null = caller opted out
+  // of the timeout and their own signal is the only way to end it early.
+  const signals: AbortSignal[] = [];
+  if (fetchInit.signal) signals.push(fetchInit.signal);
+  if (timeoutMs != null) signals.push(AbortSignal.timeout(timeoutMs));
+  const signal = signals.length > 0 ? AbortSignal.any(signals) : undefined;
+
   let res: Response;
   try {
     res = await fetch(path, {
@@ -118,17 +135,19 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
       headers,
       // The session cookie only travels if this is set.
       credentials: 'include',
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal,
     });
   } catch (err) {
-    // Network-level failure: server down, DNS, CORS, or our own timeout.
-    // Distinguish it from an HTTP error so the message is actionable rather
-    // than a bare "failed to fetch".
+    // Network-level failure: server down, DNS, CORS, our own timeout, or the
+    // caller aborting. Distinguish them so the message is actionable rather
+    // than a bare "failed to fetch". A caller abort keeps the AbortError name
+    // so the caller can tell its own Stop from a real failure.
+    if (err instanceof DOMException && err.name === 'AbortError') throw err;
     const timedOut = err instanceof DOMException && err.name === 'TimeoutError';
     throw new ApiError(
       0,
       timedOut
-        ? `The server did not respond within ${TIMEOUT_MS / 1000}s.`
+        ? `The server did not respond within ${(timeoutMs ?? TIMEOUT_MS) / 1000}s.`
         : 'Cannot reach the Infinity API. Is it running?',
     );
   }
@@ -174,7 +193,8 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>(path),
+  get: <T>(path: string, init?: { signal?: AbortSignal; timeoutMs?: number | null }) =>
+    request<T>(path, init),
   post: <T>(path: string, body?: unknown, headers?: Record<string, string>) =>
     request<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined, headers }),
   put: <T>(path: string, body?: unknown) =>

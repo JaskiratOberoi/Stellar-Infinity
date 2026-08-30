@@ -267,7 +267,14 @@ export function Reports() {
     }
   };
 
+  // The in-flight search, so a new one cancels it and Stop can kill it.
+  const searchRef = useRef<AbortController | null>(null);
+  const stopSearch = useCallback(() => { searchRef.current?.abort(); }, []);
+
   const load = useCallback(async () => {
+    searchRef.current?.abort();
+    const ctrl = new AbortController();
+    searchRef.current = ctrl;
     setLoading(true);
     setError(null);
     try {
@@ -278,9 +285,11 @@ export function Reports() {
       // which reads as "that is all there is" when it is not. The worksheet
       // learned this the same way — see PENDING_STATUSES there.
       p.set('statusIds', REPORTABLE_STATUSES.join(','));
+      // No client timeout — a reconciliation over months of reports outlives
+      // the 20s default. Stop (or the server's SQL timeout) ends a long one.
       const r = await api.get<{
         rows: WorksheetRow[]; count: number; total: number; patients: number; scope: string;
-      }>(`/api/reports/?${p}`);
+      }>(`/api/reports/?${p}`, { signal: ctrl.signal, timeoutMs: null });
       setRows(r.rows);
       setScope(r.scope);
       setTotal(r.total);
@@ -295,9 +304,12 @@ export function Reports() {
         ).then((l) => setLocks(l.locks)).catch(() => { /* advisory only */ });
       }
     } catch (e) {
+      // Stopped or superseded is not a failure; the list stays as it was.
+      if (e instanceof DOMException && e.name === 'AbortError') return;
       setError(e instanceof Error ? e.message : 'Could not load the worksheet.');
     } finally {
-      setLoading(false);
+      // A superseded search leaves the spinner to its successor.
+      if (searchRef.current === ctrl) setLoading(false);
     }
   }, [filters, page]);
 
@@ -347,7 +359,10 @@ export function Reports() {
       {error && <div className="alert alert--error" style={{ marginBottom: '.9rem' }}>{error}</div>}
 
       {loading ? (
-        <div className="center"><InfinityLoader /><span className="muted">Loading worksheet…</span></div>
+        <div className="center">
+          <InfinityLoader /><span className="muted">Loading worksheet…</span>
+          <button className="btn btn--ghost btn--sm" onClick={stopSearch}>Stop search</button>
+        </div>
       ) : (
         <>
           {/* The batch bar. Present only once something is picked: an empty

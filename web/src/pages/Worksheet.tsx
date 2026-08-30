@@ -136,7 +136,15 @@ export function Worksheet() {
 
 
 
+  // The in-flight search, so a new one can cancel it and the Stop button can
+  // kill it. Without this, two overlapping searches raced to fill the list.
+  const searchRef = useRef<AbortController | null>(null);
+  const stopSearch = useCallback(() => { searchRef.current?.abort(); }, []);
+
   const load = useCallback(async () => {
+    searchRef.current?.abort();
+    const ctrl = new AbortController();
+    searchRef.current = ctrl;
     setLoading(true);
     setError(null);
     try {
@@ -156,10 +164,14 @@ export function Worksheet() {
       // snapshot, so the list is never stale without the operator asking for it.
       if (asOfRef.current && page > 1) p.set('asOf', asOfRef.current);
 
+      // No client timeout: a months-wide search legitimately outlives the 20s
+      // default, which was killing it mid-flight. The Stop button (and the
+      // server's own SQL timeout) is the way out of a search that is taking
+      // too long.
       const r = await api.get<{
         rows: WorksheetRow[]; count: number; total: number; patients: number;
         page: number; pageSize: number; pageCount: number; scope: string; asOf: string;
-      }>(`/api/reports/?${p}`);
+      }>(`/api/reports/?${p}`, { signal: ctrl.signal, timeoutMs: null });
 
       setRows(r.rows);
       setScope(r.scope);
@@ -167,9 +179,13 @@ export function Worksheet() {
       setPatients(r.patients ?? 0);
       if (page === 1) { asOfRef.current = r.asOf; setAsOf(r.asOf); }
     } catch (e) {
+      // Stopped (or superseded by a newer search) is not a failure; the list
+      // simply stays as it was. The finally below clears the spinner for a
+      // user Stop; a superseded search leaves it to its successor.
+      if (e instanceof DOMException && e.name === 'AbortError') return;
       setError(e instanceof Error ? e.message : 'Could not load the worklist.');
     } finally {
-      setLoading(false);
+      if (searchRef.current === ctrl) setLoading(false);
     }
   }, [adv, page, pageSize]);
 
@@ -366,7 +382,10 @@ export function Worksheet() {
       {pidError && <div className="alert alert--error" style={{ marginBottom: '.9rem' }}>{pidError}</div>}
 
       {loading ? (
-        <div className="center"><InfinityLoader /><span className="muted">Loading worklist…</span></div>
+        <div className="center">
+          <InfinityLoader /><span className="muted">Loading worklist…</span>
+          <button className="btn btn--ghost btn--sm" onClick={stopSearch}>Stop search</button>
+        </div>
       ) : (
         <>
           {/* --cards: below 880px every row re-lays as a card. Same markup,
