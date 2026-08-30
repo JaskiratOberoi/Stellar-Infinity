@@ -19,8 +19,21 @@ interface FiltersResponse {
  *
  * Scoped server-side to what the caller may reach, so this is not a filtered
  * copy of the full roster — a user restricted to two centres receives two.
+ *
+ * This lives at MODULE scope, so it survives a client-side sign-out (which does
+ * not reload the page). Without invalidation, signing out of one centre and
+ * into another in the same tab left this holding the FIRST centre's list — and
+ * a single-centre account auto-locks the order form to `clients[0]`, so the New
+ * Order form kept showing the previous centre's code until a hard refresh.
+ * clearClientCache() is called on every sign-in and sign-out (see AuthContext)
+ * so the next picker fetches the new session's own scope.
  */
 let cached: Promise<ClientOption[]> | null = null;
+
+/** Drop the shared client list. Called whenever the signed-in identity changes. */
+export function clearClientCache(): void {
+  cached = null;
+}
 
 export function loadClients(): Promise<ClientOption[]> {
   cached ??= api.get<FiltersResponse>('/api/reports/clients/search')

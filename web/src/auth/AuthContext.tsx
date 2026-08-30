@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { authApi, setUnauthorizedHandler, tokenStore, type AuthenticatedUser } from '../api/client';
 import { isOrphanedSession, markActivity, startSessionGuard } from './sessionGuard';
+import { clearClientCache } from '../components/ClientPicker';
 
 interface AuthState {
   user: AuthenticatedUser | null;
@@ -47,6 +48,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // session lifetime is the backstop.
     void authApi.logout().catch(() => { /* ignore */ });
     tokenStore.clear();
+    // Drop any in-memory state scoped to the account that is leaving, so the
+    // next login does not inherit it. The client list is the one that bit us:
+    // it is module-scoped and survives this (reload-free) sign-out, and a
+    // single-centre account auto-locks the order form to it. See ClientPicker.
+    clearClientCache();
     setUser(null);
     setEntering(false);
     setIdleSecondsLeft(null);
@@ -130,6 +136,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await authApi.login(username, password);
     return () => {
       // Nothing to store: the API set the session cookie on this response.
+      // Clear any client list left by a prior session in this tab — a sign-out
+      // already does, but a session that ended via a 401 (revoked, expired)
+      // never ran sign-out, so a fresh login clears it too. Belt and braces
+      // against the order form showing the previous account's centre.
+      clearClientCache();
       setUser(res.user);
       setEntering(true);
       setSignedOutReason(null);
