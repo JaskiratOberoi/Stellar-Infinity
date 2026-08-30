@@ -24,13 +24,16 @@
    PDF from one with it off.
    ========================================================= */
 
-/* The page box is the letterhead's CLEAR AREA, not the paper. 26mm at the head
-   and 34mm at the foot are Noble's pre-printed bands; ink inside them lands on
-   top of the branding. Puppeteer is told preferCSSPageSize with zero margins of
-   its own, so this is the only authority on where ink may land. */
+/* The page box's head/foot bands are reserved blank space. The DEFAULT here is
+   the plain-paper 40mm/40mm; for the PDF route PrintReport emits a later @page
+   that wins per mode — 40/40 on plain paper, the tighter 26mm/34mm that matches
+   Noble's pre-printed letterhead clear area when the letterhead is composited
+   under it. Puppeteer is told preferCSSPageSize with zero margins of its own,
+   so CSS @page is the only authority on where ink may land, and the render
+   service's page-number Y (server.mjs) tracks whichever foot band is in use. */
 @page {
   size: A4 portrait;
-  margin: 26mm 14mm 34mm 14mm;
+  margin: 40mm 14mm 40mm 14mm;
 }
 
 @media print {

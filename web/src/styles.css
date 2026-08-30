@@ -1011,7 +1011,7 @@ button, input, select { font: inherit; color: inherit; }
    Shares `.print` with the report — same paper, same theme-free literal
    colours, same rule that what is on screen is what prints.
 
-   It does NOT share the page box. The report's 26mm/34mm bands are Noble's
+   It does NOT share the page box. The report's 40mm head/foot bands are Noble's
    pre-printed letterhead, and an invoice issued in a CLIENT's name prints its
    own header on plain paper — inside those bands it would sit a third of the
    way down an empty sheet. A named page gives this route its own margins

@@ -156,7 +156,12 @@ async function renderContent(url, cookieHeader) {
  */
 async function compositeOntoLetterhead(contentPdf, opts = {}) {
   const headless = opts.headless === true;
-  const pageNumberY = opts.pageNumberY ?? 99;
+  // Baseline for "Page X of Y", in points from the paper bottom. It rides just
+  // above the @page foot band so it shares the footer's baseline — and the band
+  // depends on the mode (PrintQuery in the API): 40mm on plain paper, 34mm to
+  // match Noble's pre-printed letterhead clear area. 116pt ≈ 40.9mm for the
+  // former, 99pt ≈ 34.9mm for the latter.
+  const pageNumberY = opts.pageNumberY ?? (headless ? 116 : 99);
   const pageNumbers = opts.pageNumbers !== false;
 
   const out = await PDFDocument.create();
@@ -235,7 +240,7 @@ async function appendAttachment(reportBytes, { b64, mime }) {
  * through reads as a misprint. Same ink as compositeOntoLetterhead: 8pt
  * Helvetica, right-aligned to the 14mm margin, on the footer baseline.
  */
-async function stampPageNumbers(bytes, pageNumberY = 99) {
+async function stampPageNumbers(bytes, pageNumberY = 116) {
   const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const pages = doc.getPages();
@@ -326,7 +331,11 @@ const server = createServer(async (req, res) => {
       });
 
       let pdf = Buffer.from(await concat(rendered));
-      if (body.numberPages === true) pdf = Buffer.from(await stampPageNumbers(pdf));
+      if (body.numberPages === true) {
+        // The batch-level Y tracks the foot band the API laid out for (40mm
+        // plain / 34mm letterhead); default keeps the plain-paper baseline.
+        pdf = Buffer.from(await stampPageNumbers(pdf, body.numberPagesY ?? 116));
+      }
       console.log(`render ok reports=${reports.length} pages_in=${rendered.length} bytes=${pdf.length} ms=${Date.now() - started}`);
       res.writeHead(200, { 'content-type': 'application/pdf', 'content-length': pdf.length });
       return res.end(pdf);

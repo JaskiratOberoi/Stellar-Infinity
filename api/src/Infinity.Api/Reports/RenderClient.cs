@@ -52,7 +52,12 @@ public sealed class RenderClient(HttpClient http, ILogger<RenderClient> log)
     private sealed record Envelope(
         [property: JsonPropertyName("cookie")] string? Cookie,
         [property: JsonPropertyName("reports")] IReadOnlyList<ReportRequest> Reports,
-        [property: JsonPropertyName("numberPages")] bool NumberPages = false);
+        [property: JsonPropertyName("numberPages")] bool NumberPages = false,
+        // Baseline for the batch-level page number, when NumberPages is set. It
+        // tracks the foot band, which differs by mode (letterhead vs plain), so
+        // the caller passes it rather than the sidecar guessing from a batch
+        // whose entries may be cache hits carrying no mode.
+        [property: JsonPropertyName("numberPagesY")] double? NumberPagesY = null);
 
     /// <summary>
     /// Render one or more reports into a single PDF. A batch goes in one call
@@ -65,12 +70,13 @@ public sealed class RenderClient(HttpClient http, ILogger<RenderClient> log)
         CancellationToken ct = default,
         // After ct, unconventionally, so the existing call sites that pass ct
         // positionally keep meaning what they said. Named at the one caller.
-        bool numberPages = false)
+        bool numberPages = false,
+        double? numberPagesY = null)
     {
         if (reports.Count == 0) throw new ArgumentException("No reports to render.", nameof(reports));
 
         using var content = new StringContent(
-            JsonSerializer.Serialize(new Envelope(cookieHeader, reports, numberPages), Json),
+            JsonSerializer.Serialize(new Envelope(cookieHeader, reports, numberPages, numberPagesY), Json),
             System.Text.Encoding.UTF8,
             "application/json");
 

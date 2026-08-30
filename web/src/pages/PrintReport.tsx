@@ -499,6 +499,15 @@ export function PrintReport() {
 
   return (
     <div className={shell} data-print-ready={ready ? 'true' : 'false'}>
+      {/* The page box depends on the paper. Plain paper gets a full 40mm head
+          and foot; letterhead gets the tighter 26/34mm that matches Noble's
+          pre-printed clear area, so content lands under the printed header
+          rather than a hand's-width below it. Emitted only for the PDF route
+          (the API passes ?headless=0|1); later in document order than
+          report.css, so it is the winning @page rule. */}
+      {pdfMode && (
+        <style>{`@page{size:A4 portrait;margin:${headless ? '40mm' : '26mm'} 14mm ${headless ? '40mm' : '34mm'} 14mm}`}</style>
+      )}
       {error ? <p className="lr__error">{error}</p> : !row ? null : !signed ? (
         <p className="lr__error">
           This report has no signatory and cannot be issued. No doctor is
@@ -604,7 +613,7 @@ export function PrintReport() {
 
           {/* The one VISIBLE footer under the renderer, painted at the bottom of
               every printed page. Chromium positions a fixed element against the
-              @page CONTENT AREA — inside the 14mm sides and the 34mm foot — so
+              @page CONTENT AREA — inside the 14mm sides and the 40mm foot — so
               `left:0; right:0` already spans the report's exact width. A side
               inset here would double-count the page margins. The <tfoot> ghost
               above reserves this block's height so nothing flows under it. */}

@@ -117,7 +117,7 @@ public static class ReportPdfEndpoints
     /// it unchecked would be theirs to compose — this keeps the only thing that
     /// can appear there to digits and commas.
     /// </remarks>
-    private static string PrintQuery(bool? split, string? exclude, bool splitDept = false)
+    private static string PrintQuery(bool? split, string? exclude, bool splitDept = false, bool headless = false)
     {
         var ids = (exclude ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -132,6 +132,12 @@ public static class ReportPdfEndpoints
         if (splitDept) q += "&split=dept";
         else if (split == true) q += "&split=1";
         if (ids.Length > 0) q += "&exclude=" + string.Join(",", ids);
+        // The print page needs the mode to choose its @page margins: 40/40mm on
+        // plain paper, but the tighter 26/34mm that matches Noble's pre-printed
+        // letterhead clear area when the letterhead is composited under it. The
+        // render service still decides whether to composite; this only tells the
+        // page which margins to lay out for.
+        if (!headless) q += "&headless=0"; else q += "&headless=1";
         return q;
     }
 
@@ -259,7 +265,7 @@ public static class ReportPdfEndpoints
         // already digits-and-commas by the time PrintQuery is done with it.
         var graphFp = await GraphFingerprintAsync(graphs, sid, withGraph == true, ct).ConfigureAwait(false);
         var key = PdfCacheKey("report", sid, row!.LastModifiedAt,
-            $"s{(split == true ? 1 : 0)}h{(headless == true ? 1 : 0)}g{graphFp}x{PrintQuery(split, exclude)}");
+            $"s{(split == true ? 1 : 0)}h{(headless == true ? 1 : 0)}g{graphFp}x{PrintQuery(split, exclude, headless: headless == true)}");
 
         if (await cache.GetBytesAsync(key, ct).ConfigureAwait(false) is { } cached)
         {
@@ -273,7 +279,7 @@ public static class ReportPdfEndpoints
         {
             var pdf = await render.RenderAsync(
                 [new RenderClient.ReportRequest(
-                    Url: $"/print/report/{Uri.EscapeDataString(sid)}{PrintQuery(split, exclude)}",
+                    Url: $"/print/report/{Uri.EscapeDataString(sid)}{PrintQuery(split, exclude, headless: headless == true)}",
                     Attachments: attachments,
                     Headless: headless)],
                 http.Request.Headers.Cookie.ToString(),
@@ -392,7 +398,7 @@ public static class ReportPdfEndpoints
             // rendered individually below so ITS bytes land in the cache too —
             // the second pull of the same PID assembles without a browser.
             var graphFp = await GraphFingerprintAsync(graphs, sid, body!.WithGraph, ct).ConfigureAwait(false);
-            var query = PrintQuery(body.Split, null, body.SplitDept == true);
+            var query = PrintQuery(body.Split, null, body.SplitDept == true, body.Headless == true);
             // n0: rendered WITHOUT per-report page numbers, because the batch
             // is numbered as one document at the staple. Distinct from the
             // single route's cache, whose documents carry their own numbers.
@@ -463,7 +469,8 @@ public static class ReportPdfEndpoints
                 // marker at all; one at the foot of every sheet-run would put
                 // five "End of Report" lines inside a single report.
                 var query = $"?pdf=1&split=dept&dept={Uri.EscapeDataString(u.Department)}"
-                          + (last ? string.Empty : "&end=0");
+                          + (last ? string.Empty : "&end=0")
+                          + (body.Headless == true ? "&headless=1" : "&headless=0");
 
                 // A sample's graphs ride with the FIRST unit that sample appears
                 // in, so a tube whose tests span two departments does not carry
@@ -525,7 +532,8 @@ public static class ReportPdfEndpoints
                 http.Response.Headers["X-Report-Cache"] = $"{hits}/{deptDocs.Count}";
 
                 var patientPdf = await render.RenderAsync(
-                    deptDocs, cookie, ct, numberPages: true).ConfigureAwait(false);
+                    deptDocs, cookie, ct, numberPages: true,
+                    numberPagesY: body.Headless == true ? 116 : 99).ConfigureAwait(false);
 
                 if (skipped.Count > 0)
                     http.Response.Headers["X-Reports-Skipped"] = System.Text.Json.JsonSerializer.Serialize(skipped);
@@ -578,7 +586,8 @@ public static class ReportPdfEndpoints
 
             // The whole bundle numbered once, "Page 1 of 8" meaning the stack
             // in hand — graph sheets counted like any other sheet.
-            var pdf = await render.RenderAsync(included, cookieHeader, ct, numberPages: true).ConfigureAwait(false);
+            var pdf = await render.RenderAsync(included, cookieHeader, ct, numberPages: true,
+                numberPagesY: body.Headless == true ? 116 : 99).ConfigureAwait(false);
 
             // The skip list rides on a header: the body has to be the PDF, and a
             // silent short delivery ("I asked for 20, I got 19") is exactly the
