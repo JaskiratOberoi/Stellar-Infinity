@@ -22,7 +22,9 @@ namespace Infinity.Api.Reports;
 /// the same document and a range that differs between them is a different
 /// clinical claim about the same number.
 ///
-/// Read-only against existing LIS tables. Nothing here needs a migration.
+/// Read-only. Ranges come from existing LIS tables; the attachment read also
+/// consults dbo.inf_test_attachment_override (136_inf_test_attachment_override.sql),
+/// Infinity's own image per test, which wins over the shared LIS table.
 /// </remarks>
 public sealed partial class CatalogueDetailRepository(NobleConnectionFactory db, SqlRetry retry)
 {
@@ -105,9 +107,18 @@ public sealed partial class CatalogueDetailRepository(NobleConnectionFactory db,
                         : "SELECT TOP 0 CONVERT(int, NULL) AS testid, CONVERT(nvarchar(100), NULL) AS fnormal, CONVERT(nvarchar(100), NULL) AS tnormal, CONVERT(int, NULL) AS fage, CONVERT(int, NULL) AS tage;")
                         + $"""
 
-                           SELECT testid, attachment
-                           FROM dbo.tbl_med_test_master_attachment
-                           WHERE testid IN ({list});
+                           -- Infinity's own image wins over the shared table.
+                           -- The modern HCV/HBV panels live ONLY in the
+                           -- override (136_inf_test_attachment_override.sql):
+                           -- the legacy LIS prints straight from the shared
+                           -- table and mangles them, so that keeps its
+                           -- original images while Infinity shows the new.
+                           SELECT a.testid,
+                                  attachment = COALESCE(o.attachment, a.attachment)
+                           FROM dbo.tbl_med_test_master_attachment a
+                           LEFT JOIN dbo.inf_test_attachment_override o
+                             ON o.testid = a.testid
+                           WHERE a.testid IN ({list});
                            """;
 
                     await using var cmd = NobleConnectionFactory.CreateCommand(conn, sql);
