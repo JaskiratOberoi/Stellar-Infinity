@@ -454,6 +454,25 @@ public static class OrderEntryEndpoints
          */
         if (channel != B2b)
         {
+            /*
+             * At the MDCARE/MEDICARE walk-in counter the patient's mobile is
+             * how their result reaches them, so a blank one is a missing
+             * field, not a choice. Enforced HERE as well as in the form,
+             * because the form's copy is a courtesy. Resolved from the DB by
+             * mcc id — the browser never gets to say which client this is.
+             */
+            var b2cClientCode = await catalog.ClientCodeAsync(body.Mcc, ct).ConfigureAwait(false);
+            if (DiscountPolicy.IsB2cClientCode(b2cClientCode))
+            {
+                var mobile = (body.Mobile ?? "").Trim();
+                if (mobile.Length != 10 || !mobile.All(char.IsAsciiDigit))
+                {
+                    return Results.BadRequest(new
+                    {
+                        error = "A walk-in order here needs the patient's 10-digit mobile number.",
+                    });
+                }
+            }
             if (body.GoldCard)
             {
                 if (!DiscountPolicy.IsValidGoldCardNumber(body.GoldCardNumber)
@@ -474,7 +493,7 @@ public static class OrderEntryEndpoints
             }
             else if (body.DiscountAmount > 0)
             {
-                var clientCode = await catalog.ClientCodeAsync(body.Mcc, ct).ConfigureAwait(false);
+                var clientCode = b2cClientCode;
                 // The same per-client pricing read the preview uses, so the
                 // gate and the quote can never disagree about a line's value.
                 var priced = body.Items.Count > 0

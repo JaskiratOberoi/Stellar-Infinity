@@ -137,7 +137,13 @@ export function ClientPicker({
     [clients, activeOnly],
   );
 
-  const selected = value == null ? null : pool.find((c) => c.id === value) ?? null;
+  // Resolved from the FULL list, not the active-filtered pool. `activeOnly`
+  // governs what can be OFFERED; a value already held is a fact to read back.
+  // MDCARE — the busiest B2C centre — is flagged inactive in the LIS (the flag
+  // is not a liveness bit there), and resolving through the pool made
+  // `selected` null for it, so onClient reported null and the discount policy
+  // fell back to the 20% default instead of MDCARE's contractual 10%.
+  const selected = value == null ? null : clients.find((c) => c.id === value) ?? null;
 
   // Reported from an effect rather than inside onChange, so the caller also
   // hears about the selection the single-client auto-pick makes, and about

@@ -8,7 +8,7 @@ import { inr, plainText } from '../lib/format';
 import { InfinityLoader } from '../components/InfinityLoader';
 import { ClientPicker } from '../components/ClientPicker';
 import {
-  discountCapLabel, discountCapPct, discountableTotal,
+  discountCapLabel, discountCapPct, discountableTotal, isB2cClientCode,
   isValidGoldCardHolder, isValidGoldCardNumber,
 } from '../lib/discountPolicy';
 import { useAuth } from '../auth/AuthContext';
@@ -981,7 +981,13 @@ export function NewOrder() {
   // A half-typed number is a typo, not a phone number. Blank is fine —
   // hospital counters often have no reachable number — but six digits is
   // someone who was interrupted, and the LIS would keep it forever.
-  const mobileOk = patient.mobile.trim() === '' || patient.mobile.trim().length === 10;
+  // EXCEPT at the MDCARE/MEDICARE walk-in counter, where the patient is
+  // standing in front of the operator and the number is how their result
+  // reaches them: there a blank is a missing field, not a choice.
+  const mobileRequired = !isB2b && isB2cClientCode(clientCode);
+  const mobileOk = patient.mobile.trim() === ''
+    ? !mobileRequired
+    : patient.mobile.trim().length === 10;
 
   /*
    * Any patient detail at all — the gate the tests panel opens on. Not
@@ -1124,7 +1130,9 @@ export function NewOrder() {
             : cart.items.length === 0 ? 'Add at least one test.'
             : !patient.name.trim() ? 'A patient name is required.'
             : age === null ? 'An age is required — years and/or months.'
-            : !mobileOk ? 'The mobile number is incomplete.'
+            : !mobileOk ? (patient.mobile.trim() === ''
+                ? 'A mobile number is required for walk-in orders here.'
+                : 'The mobile number is incomplete.')
             : sidTaken ? 'A Sample ID is already in use — see the barcodes above.'
             : sidChecking ? 'Still checking a Sample ID…'
             : 'Some tests have no price for this client.'}
@@ -1559,8 +1567,12 @@ export function NewOrder() {
                      onChange={(e) => setPatient({ ...patient, mobile: e.target.value.replace(/\D/g, '') })} />
               <span className="muted" style={{ fontSize: '.7rem' }}>
                 {patient.mobile.trim() !== '' && patient.mobile.trim().length !== 10
-                  ? <b style={{ color: 'var(--danger)' }}>A mobile number is 10 digits — finish it or clear it.</b>
-                  : 'Optional · no mobile, no result history'}
+                  ? <b style={{ color: 'var(--danger)' }}>
+                      A mobile number is 10 digits — finish it{mobileRequired ? '' : ' or clear it'}.
+                    </b>
+                  : mobileRequired
+                    ? 'Required — walk-in results are sent to this number'
+                    : 'Optional · no mobile, no result history'}
               </span>
             </div>
 
