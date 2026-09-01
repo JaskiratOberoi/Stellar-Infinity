@@ -888,17 +888,21 @@ function PatientReportViewer({ pid, patientName, rows, onClose }: {
               Letterhead
             </label>
 
-            <label className="preview__dlopt"
-                   title="On: staple each sample's graph attachment after its report, as the LIS prints. Off: the reports alone.">
-              <input type="checkbox" checked={withGraph} disabled={busy}
-                     onChange={(e) => setWithGraph(e.target.checked)} />
-              <span className="preview__track preview__track--on" aria-hidden="true" />
-              + Graphs
-            </label>
-
-            <button className="btn btn--primary btn--sm" disabled={busy} onClick={() => void download()}>
-              {busy ? 'Preparing…' : 'Download complete report'}
-            </button>
+            {/* Joined to the button as one pill, exactly as the single viewer
+                draws it — .preview__dlopt's colours key off the pill's accent
+                background and go invisible against the plain toolbar. */}
+            <div className="preview__dl">
+              <label className="preview__dlopt"
+                     title="On: staple each sample's graph attachment after its report, as the LIS prints. Off: the reports alone.">
+                <input type="checkbox" checked={withGraph} disabled={busy}
+                       onChange={(e) => setWithGraph(e.target.checked)} />
+                <span className="preview__track preview__track--on" aria-hidden="true" />
+                + Graphs
+              </label>
+              <button className="btn btn--primary btn--sm" disabled={busy} onClick={() => void download()}>
+                {busy ? 'Preparing…' : 'Download complete report'}
+              </button>
+            </div>
 
             <button className="btn btn--ghost btn--sm" onClick={onClose} aria-label="Close preview">✕</button>
           </div>
