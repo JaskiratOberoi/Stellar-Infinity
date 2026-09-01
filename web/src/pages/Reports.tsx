@@ -584,17 +584,34 @@ export function Reports() {
                           sample is exactly when the lab still wants context.
                           The LIS offered this from its Sample Status screen;
                           here it lives beside the row it belongs to. */}
-                      <button
-                        className="btn btn--ghost btn--sm"
-                        title={cliHis.has(r.sid)
-                          ? 'Clinical history attached — view or replace'
-                          : 'Attach a clinical history PDF for the lab'}
-                        aria-label={`Clinical history for ${r.sid}`}
-                        style={cliHis.has(r.sid) ? { color: 'var(--teal)', fontWeight: 600 } : undefined}
-                        onClick={(e) => { e.stopPropagation(); setCliSid(r); }}
-                      >
-                        <ClipGlyph />{cliHis.has(r.sid) ? ' Hist.' : ''}
-                      </button>
+                      {(() => {
+                        /* Authorised = closed, the LIS's own sample lock. The
+                           clip stays for a row that HAS a file (view-only) and
+                           dims to a stub when there is nothing and nothing can
+                           be added — gone entirely would read as a missing
+                           feature, not a rule. */
+                        const rowLocked = REPORTABLE_STATUSES.includes(r.statusCode ?? -1);
+                        const rowHas = cliHis.has(r.sid);
+                        return (
+                          <button
+                            className="btn btn--ghost btn--sm"
+                            title={rowHas
+                              ? rowLocked
+                                ? 'Clinical history attached — report authorised, view only'
+                                : 'Clinical history attached — view or replace'
+                              : rowLocked
+                                ? 'Report authorised — the clinical history is closed'
+                                : 'Attach a clinical history PDF for the lab'}
+                            aria-label={`Clinical history for ${r.sid}`}
+                            style={rowHas
+                              ? { color: 'var(--teal)', fontWeight: 600 }
+                              : rowLocked ? { opacity: .38 } : undefined}
+                            onClick={(e) => { e.stopPropagation(); setCliSid(r); }}
+                          >
+                            <ClipGlyph />{rowHas ? ' Hist.' : ''}
+                          </button>
+                        );
+                      })()}
                       {!REPORTABLE_STATUSES.includes(r.statusCode ?? -1) ? (
                         /* No report yet — the pill says where it is; a View
                            button that opens an empty sheet reads as a bug. */
@@ -680,6 +697,7 @@ export function Reports() {
         <ClinicalHistoryModal
           row={cliSid}
           has={cliHis.has(cliSid.sid)}
+          locked={REPORTABLE_STATUSES.includes(cliSid.statusCode ?? -1)}
           onClose={() => setCliSid(null)}
           onChanged={(sid, nowHas) => {
             setCliHis((prev) => {
@@ -711,16 +729,25 @@ const ClipGlyph = () => (
  * of the LIS Sample Status upload, one dialog per row. The file lands where
  * the LEGACY worksheet already looks (clihis.ashx, SID-keyed), so a tech on
  * either system opens the same document.
+ *
+ * Once the report is signed out the history CLOSES — the same lock the LIS
+ * puts on the whole sample (WorksheetClass.CheckSampleEnable refuses 7 and 9;
+ * 8 sits between them and its omission there is a gap, not a rule). What a
+ * signatory signed against must not change under them, so a locked dialog
+ * still VIEWS but never edits, and the server refuses regardless.
  */
-function ClinicalHistoryModal({ row, has, onClose, onChanged }: {
+function ClinicalHistoryModal({ row, has, locked, onClose, onChanged }: {
   row: WorksheetRow;
   has: boolean;
+  locked: boolean;
   onClose: () => void;
   onChanged: (sid: string, nowHas: boolean) => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const pickerRef = useRef<HTMLInputElement>(null);
 
   const pick = (f: File | null) => {
     setErr(null);
@@ -784,35 +811,83 @@ function ClinicalHistoryModal({ row, has, onClose, onChanged }: {
           {row.patientName ? <> · {row.patientName}</> : null}
         </p>
         <p className="muted" style={{ fontSize: '.8rem', lineHeight: 1.6, marginTop: '.6rem' }}>
-          {has
-            ? 'A clinical history PDF is attached — the lab opens it from the worksheet. Uploading another replaces it.'
-            : 'Attach a PDF — referral notes, prescriptions, prior reports — and the lab sees it on the worksheet for this sample.'}
+          {locked
+            ? has
+              ? 'The report is authorised, so the clinical history is closed — it can still be viewed, exactly as it was signed against.'
+              : 'The report is authorised, so the clinical history is closed — no attachment can be added now.'
+            : has
+              ? 'A clinical history PDF is attached — the lab opens it from the worksheet. Uploading another replaces it.'
+              : 'Attach a PDF — referral notes, prescriptions, prior reports — and the lab sees it on the worksheet for this sample.'}
         </p>
 
-        <div className="field" style={{ marginTop: '.8rem' }}>
-          <input type="file" accept="application/pdf,.pdf" aria-label="Clinical history PDF"
-                 onChange={(e) => pick(e.target.files?.[0] ?? null)} />
-          <span className="muted" style={{ fontSize: '.72rem' }}>PDF, up to 10 MB.</span>
-        </div>
+        {!locked && (
+          <>
+            {/* A drop target that is also the browse button — one surface,
+                either gesture. The native input stays for the picker dialog
+                and the keyboard, visually replaced rather than removed. */}
+            <div
+              className={`filedrop${dragOver ? ' filedrop--over' : ''}${file ? ' filedrop--has' : ''}`}
+              role="button"
+              tabIndex={0}
+              aria-label="Choose or drop a clinical history PDF"
+              onClick={() => pickerRef.current?.click()}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickerRef.current?.click(); } }}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                pick(e.dataTransfer.files?.[0] ?? null);
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
+                   aria-hidden="true" className="filedrop__icon">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <path d="M14 2v6h6" />
+                <path d="M12 18v-6" />
+                <path d="m9 15 3 3 3-3" transform="rotate(180 12 15.5)" />
+              </svg>
+              {file ? (
+                <>
+                  <b className="filedrop__name">{file.name}</b>
+                  <span className="muted">{(file.size / 1024 / 1024).toFixed(file.size > 1024 * 1024 ? 1 : 2)} MB
+                    {' · '}click to choose a different file</span>
+                </>
+              ) : (
+                <>
+                  <b>Drop a PDF here</b>
+                  <span className="muted">or click to browse · up to 10 MB</span>
+                </>
+              )}
+              <input ref={pickerRef} type="file" accept="application/pdf,.pdf" hidden
+                     aria-hidden="true" tabIndex={-1}
+                     onChange={(e) => { pick(e.target.files?.[0] ?? null); e.target.value = ''; }} />
+            </div>
+          </>
+        )}
 
         {err && <p style={{ color: 'var(--danger)', fontSize: '.8rem', marginTop: '.5rem' }}>{err}</p>}
 
         <div className="modal__actions">
           {has && (
-            <>
-              <button className="btn btn--ghost" disabled={busy} onClick={() => void view()}>
-                View current
-              </button>
-              <button className="btn btn--ghost" disabled={busy} style={{ color: 'var(--danger)' }}
-                      onClick={() => void remove()}>
-                Remove
-              </button>
-            </>
+            <button className="btn btn--ghost" disabled={busy} onClick={() => void view()}>
+              View current
+            </button>
           )}
-          <button className="btn btn--ghost" disabled={busy} onClick={onClose}>Cancel</button>
-          <button className="btn btn--primary" disabled={busy || !file} onClick={() => void upload()}>
-            {busy ? 'Working…' : has ? 'Replace' : 'Attach'}
+          {has && !locked && (
+            <button className="btn btn--ghost" disabled={busy} style={{ color: 'var(--danger)' }}
+                    onClick={() => void remove()}>
+              Remove
+            </button>
+          )}
+          <button className="btn btn--ghost" disabled={busy} onClick={onClose}>
+            {locked ? 'Close' : 'Cancel'}
           </button>
+          {!locked && (
+            <button className="btn btn--primary" disabled={busy || !file} onClick={() => void upload()}>
+              {busy ? 'Working…' : has ? 'Replace' : 'Attach'}
+            </button>
+          )}
         </div>
       </div>
     </div>

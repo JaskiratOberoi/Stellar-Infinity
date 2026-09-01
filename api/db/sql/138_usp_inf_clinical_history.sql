@@ -34,13 +34,27 @@ BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
 
-    DECLARE @patientId INT =
-        (SELECT TOP 1 patient_id FROM dbo.tbl_med_mcc_patient_samples
-         WHERE vailid = @sid ORDER BY id DESC);
+    DECLARE @patientId INT, @status INT;
+    SELECT TOP 1 @patientId = patient_id, @status = sample_status
+    FROM dbo.tbl_med_mcc_patient_samples
+    WHERE vailid = @sid ORDER BY id DESC;
 
     IF @patientId IS NULL
     BEGIN
         SELECT ok = CAST(0 AS BIT), error = N'Unknown sample.';
+        RETURN;
+    END
+
+    /* The LIS locks a sample once its report is signed out —
+       WorksheetClass.CheckSampleEnable refuses status 7 (Authorised) and 9
+       (Printed). 8 (Partially Printed) sits BETWEEN those two in the flow and
+       its omission there is a gap, not a rule, so the whole authorised-and-
+       beyond set closes the history here: what a signatory signed against
+       must not change under them. */
+    IF @status IN (7, 8, 9)
+    BEGIN
+        SELECT ok = CAST(0 AS BIT),
+               error = N'This sample''s report is authorised — the clinical history is closed.';
         RETURN;
     END
 
@@ -74,9 +88,19 @@ BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
 
+    -- Same lock as the set: once the report is signed out, the history it was
+    -- signed against stays put.
+    IF EXISTS (SELECT 1 FROM dbo.tbl_med_mcc_patient_samples
+               WHERE vailid = @sid AND sample_status IN (7, 8, 9))
+    BEGIN
+        SELECT ok = CAST(0 AS BIT),
+               error = N'This sample''s report is authorised — the clinical history is closed.';
+        RETURN;
+    END
+
     DELETE FROM dbo.tbl_med_mcc_patient_clinicaldata
     WHERE filene = @sid AND filetype = 'HISTORY';
 
-    SELECT ok = CAST(1 AS BIT), removed = @@ROWCOUNT;
+    SELECT ok = CAST(1 AS BIT), error = CAST(NULL AS NVARCHAR(200));
 END
 GO

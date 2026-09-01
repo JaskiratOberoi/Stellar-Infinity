@@ -84,8 +84,9 @@ public sealed class ClinicalHistoryRepository(NobleConnectionFactory db, SqlRetr
         }, ct).ConfigureAwait(false);
     }
 
-    /// <summary>Remove. True regardless of whether a file was there.</summary>
-    public async Task<bool> DeleteAsync(string sid, int actor, CancellationToken ct = default)
+    /// <summary>Remove. False (with the reason) once the report is signed out.</summary>
+    public async Task<(bool Ok, string? Error)> DeleteAsync(
+        string sid, int actor, CancellationToken ct = default)
     {
         return await db.QueryAsync("reports.clihis.delete", async (conn, inner) =>
         {
@@ -93,7 +94,11 @@ public sealed class ClinicalHistoryRepository(NobleConnectionFactory db, SqlRetr
             cmd.Parameters.Add("@sid", SqlDbType.NVarChar, 50).Value = sid;
             cmd.Parameters.Add("@actor", SqlDbType.Int).Value = actor;
             await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);
-            return await r.ReadAsync(inner).ConfigureAwait(false) && r.GetBoolean(r.GetOrdinal("ok"));
+            if (!await r.ReadAsync(inner).ConfigureAwait(false)) return (false, "No response.");
+            var ok = r.GetBoolean(r.GetOrdinal("ok"));
+            var err = await r.IsDBNullAsync(r.GetOrdinal("error"), inner).ConfigureAwait(false)
+                ? null : r.GetString(r.GetOrdinal("error"));
+            return (ok, err);
         }, ct).ConfigureAwait(false);
     }
 }

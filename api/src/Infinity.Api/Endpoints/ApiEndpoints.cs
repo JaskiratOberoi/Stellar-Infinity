@@ -915,7 +915,8 @@ public static class ApiEndpoints
             return Results.NotFound();
         }
 
-        await clihis.DeleteAsync(sid.Trim(), userId, ct).ConfigureAwait(false);
+        var (ok, error) = await clihis.DeleteAsync(sid.Trim(), userId, ct).ConfigureAwait(false);
+        if (!ok) return Results.BadRequest(new { error = error ?? "The file could not be removed." });
         audit.Log("report.clinical_history.delete", actor: userId, sid: sid.Trim(), ip: Audit.AuditIp.From(http));
         return Results.Ok(new { ok = true });
     }

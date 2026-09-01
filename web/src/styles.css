@@ -2905,6 +2905,28 @@ select.preview__layout { width: 11.25rem; flex: none; }
 .modal__title { font-size: 1.1rem; font-weight: 400; letter-spacing: .03em; }
 .modal__actions { display: flex; gap: .6rem; justify-content: flex-end; margin-top: .3rem; }
 
+/* ---------- file drop zone ----------
+   One surface, either gesture: click to browse or drop a file on it. The
+   native input is hidden behind it, kept for the picker dialog and the
+   keyboard (the zone itself is focusable and Enter opens the picker). */
+.filedrop {
+  display: flex; flex-direction: column; align-items: center; gap: .3rem;
+  margin-top: .9rem; padding: 1.3rem 1rem;
+  border: 1.5px dashed var(--line); border-radius: 12px;
+  background: var(--accent-softer, transparent);
+  cursor: pointer; text-align: center; user-select: none;
+  font-size: .84rem;
+  transition: border-color .15s ease, background .15s ease;
+}
+.filedrop:hover, .filedrop:focus-visible { border-color: var(--teal); }
+.filedrop--over { border-color: var(--teal); background: var(--accent-soft); }
+.filedrop--has { border-style: solid; border-color: var(--teal); }
+.filedrop__icon { width: 26px; height: 26px; color: var(--teal); margin-bottom: .15rem; }
+.filedrop__name {
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.filedrop .muted { font-size: .74rem; }
+
 /*
  * Sample identity block in the worksheet modal — Listec's worksheet header,
  * which is eleven labelled fields, not the four this used to run together in a
