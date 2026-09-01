@@ -954,6 +954,33 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                   ? `${touchedCount} row${touchedCount === 1 ? '' : 's'} changed`
                   : 'No changes'}
               </span>
+              {/* The LIS's green Check: every VALUED row's auth box ticked in
+                  one press (empty rows are skipped — signing a blank is not a
+                  thing). Ticks are drafts, so nothing is signed until Save,
+                  and the same press untickes them all again while every
+                  valued row is ticked. The server still refuses each auth the
+                  caller has no right to. */}
+              {perms?.canAuthorize && !readOnly && (() => {
+                const valued = rows.filter((r) => !isHeading(r) && valueOf(r).trim() !== '');
+                const allOn = valued.length > 0 && valued.every((r) => authOf(r));
+                return (
+                  <button
+                    className="btn btn--ghost"
+                    disabled={saving || valued.length === 0}
+                    style={{ color: '#16a34a', borderColor: '#16a34a' }}
+                    title={allOn
+                      ? 'Untick the Authorise box on every result'
+                      : `Tick the Authorise box on all ${valued.length} result${valued.length === 1 ? '' : 's'} with a value — Save signs them`}
+                    onClick={() => {
+                      for (const r of valued) {
+                        if (authOf(r) !== !allOn) setDraft(r, { auth: !allOn });
+                      }
+                    }}
+                  >
+                    {allOn ? 'Unauthorise all' : '✓ Authorise all'}
+                  </button>
+                );
+              })()}
               <button className="btn btn--ghost" disabled={saving} onClick={onClose}>Close</button>
               <button
                 className="btn btn--primary"
