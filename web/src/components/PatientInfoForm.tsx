@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, worksheetApi, type WorksheetSampleHeader } from '../api/client';
 import { Combobox } from './Combobox';
+import { SpellChecked } from './SpellChecked';
 
 interface Referrer { id: number; code: string; name: string }
 
@@ -276,8 +277,11 @@ export function PatientInfoForm({ sid, header, onClose, onSaved }: {
 
           <div className="field field--full">
             <label htmlFor="pf-hist">Clinical history (this sample)</label>
-            <textarea id="pf-hist" className="input" rows={3} style={{ resize: 'vertical' }}
-                      value={history} onChange={(e) => setHistory(e.target.value)} />
+            {/* Autocorrected — prose. The name and referrer fields above stay
+                untouched: real names are not the dictionary's to fix. */}
+            <SpellChecked multiline id="pf-hist" className="input" rows={3}
+                          style={{ resize: 'vertical' }}
+                          value={history} onChange={setHistory} />
           </div>
         </div>
 

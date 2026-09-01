@@ -2586,13 +2586,24 @@ fieldset.bare {
 }
 
 /* Tinted, not flashing: this is a notification that something was helpful, and
-   a hard blink in the corner of the eye reads as an error. Teal because that
-   is this application's "we did something" colour; the danger palette would
-   say the correction was a problem. */
+   a hard blink in the corner of the eye reads as an error. GREEN, and a green
+   underline along the field's foot, because green-underline is Infinity's
+   "corrected by Infinity" mark — the same wavy green the rich editor draws
+   under the exact word. A form control cannot underline one word of its own
+   value, so the field wears the mark and the toast names the word. */
 @keyframes spellfix {
-  0%   { background-color: var(--accent-soft); box-shadow: 0 0 0 3px var(--accent-ring); }
-  70%  { background-color: var(--accent-soft); box-shadow: 0 0 0 3px transparent; }
-  100% { background-color: transparent;        box-shadow: 0 0 0 3px transparent; }
+  0%   { background-color: rgba(22, 163, 74, .12); box-shadow: inset 0 -2.5px 0 0 #16a34a; }
+  70%  { background-color: rgba(22, 163, 74, .12); box-shadow: inset 0 -2.5px 0 0 #16a34a; }
+  100% { background-color: transparent;            box-shadow: inset 0 -2.5px 0 0 transparent; }
+}
+
+/* The per-word mark, where the surface allows one (contentEditable): a green
+   wavy underline on exactly what Infinity corrected. Editing aid only — the
+   report sanitiser unwraps the span, so it never prints. */
+.inf-spellfix {
+  text-decoration: underline wavy #16a34a;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 2px;
 }
 
 /* Above the New order FAB (z 40) and clear of it horizontally, so the two do
@@ -2625,7 +2636,8 @@ fieldset.bare {
   border: 0;
   border-radius: 999px;
   padding: .3rem .8rem;
-  background: var(--teal);
+  /* The correction green, so the toast and the underline read as one voice. */
+  background: #16a34a;
   color: #fff;
   font: inherit;
   font-weight: 600;

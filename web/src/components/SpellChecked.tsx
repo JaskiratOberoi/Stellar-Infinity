@@ -47,6 +47,12 @@ function announce(correction: Correction, undo: () => void) {
   notify();
 }
 
+/** For OTHER editing surfaces (the rich text editor) to report a correction
+ *  through the same single toast. */
+export function announceCorrection(correction: Correction, undo: () => void) {
+  announce(correction, undo);
+}
+
 function dismiss(id?: number) {
   // The id guards against a stale timer clearing a NEWER correction: type fast
   // enough to trigger two, and the first one's timeout must not take the
@@ -61,6 +67,8 @@ type Props = {
   onChange: (next: string) => void;
   /** Rendered as a textarea rather than an input. */
   multiline?: boolean;
+  /** Textarea height, for multiline fields. */
+  rows?: number;
 } & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>;
 
 export function SpellChecked({ value, onChange, multiline, className, ...rest }: Props) {
@@ -90,11 +98,24 @@ export function SpellChecked({ value, onChange, multiline, className, ...rest }:
     setFlash(true);
 
     announce(result.correction, () => {
-      // Puts back exactly what was typed, caret included. Restoring the text
-      // alone would drop the operator's cursor to the end of the field, which
-      // on a long comment means finding their place again.
-      onChange(before);
-      caret.current = beforeCaret;
+      /*
+       * SURGICAL, not a snapshot. The undo has a three-second window and the
+       * operator keeps typing through it — restoring the whole field as it
+       * was at correction time would throw away everything typed since. So
+       * the corrected word alone is swapped back, read from the field's
+       * CURRENT text; if that spot no longer holds the correction (the
+       * operator edited it themselves), the snapshot is the honest fallback.
+       */
+      const { start, from, to } = result.correction;
+      const cur = ref.current?.value ?? '';
+      if (cur.slice(start, start + to.length) === to) {
+        onChange(cur.slice(0, start) + from + cur.slice(start + to.length));
+        const pos = ref.current?.selectionStart ?? cur.length;
+        caret.current = pos <= start ? pos : pos + (from.length - to.length);
+      } else {
+        onChange(before);
+        caret.current = beforeCaret;
+      }
       setFlash(false);
       ref.current?.focus();
     });

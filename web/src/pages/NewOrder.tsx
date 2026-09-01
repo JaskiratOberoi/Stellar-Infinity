@@ -15,6 +15,7 @@ import { useAuth } from '../auth/AuthContext';
 import { RateSourceBadge } from './Catalogue';
 import { Combobox } from '../components/Combobox';
 import { SidField, type SidStatus } from '../components/SidField';
+import { SpellChecked } from '../components/SpellChecked';
 
 interface PatientForm {
   name: string;
@@ -1544,8 +1545,10 @@ export function NewOrder() {
           <div className="grid2">
           <div className="field">
             <label htmlFor="p-hist">Clinical history</label>
-            <input id="p-hist" className="input" value={patient.clinicalHistory} maxLength={500}
-                   onChange={(e) => setPatient({ ...patient, clinicalHistory: e.target.value })} />
+            {/* Autocorrected: prose, unlike the name and referrer fields
+                around it, which carry real names no dictionary should touch. */}
+            <SpellChecked id="p-hist" className="input" value={patient.clinicalHistory} maxLength={500}
+                          onChange={(v) => setPatient((p) => ({ ...p, clinicalHistory: v }))} />
           </div>
 
           {/* The referral letter itself. Telo has carried this since its

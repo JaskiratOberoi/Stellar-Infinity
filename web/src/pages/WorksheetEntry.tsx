@@ -7,7 +7,7 @@ import {
 } from '../api/client';
 import { fmtDateTime, plainText } from '../lib/format';
 import { AttachClip, Attachments, RowAttachments, useAttachments } from '../components/Attachments';
-import { SpellChecked, SpellCheckUndo } from '../components/SpellChecked';
+import { SpellChecked } from '../components/SpellChecked';
 import { RichTextEditor } from '../components/RichTextEditor';
 import { WorksheetHistory } from './WorksheetHistory';
 import { PatientInfoForm } from '../components/PatientInfoForm';
@@ -660,13 +660,14 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                   <b>Reopening a signed-off sample.</b> The reason is recorded permanently against your name and
                   cannot be edited or removed afterwards.
                 </p>
-                <textarea
+                <SpellChecked
+                  multiline
                   className="input"
                   rows={2}
                   style={{ width: '100%', resize: 'vertical' }}
                   placeholder="Why is this being reopened? (at least 10 characters)"
                   value={reopenReason}
-                  onChange={(e) => setReopenReason(e.target.value)}
+                  onChange={setReopenReason}
                 />
                 <div className="row" style={{ justifyContent: 'flex-end', marginTop: '.5rem' }}>
                   <button className="btn btn--ghost btn--sm" onClick={() => { setReopening(false); setReopenReason(''); }}>
@@ -934,12 +935,12 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                   Reason for changing {amendedRows.length} existing result{amendedRows.length === 1 ? '' : 's'}
                   <span style={{ color: 'var(--danger)' }}> *</span>
                 </label>
-                <input
+                <SpellChecked
                   id="ws-reason"
                   className="input"
                   value={reason}
                   placeholder="e.g. re-run after clot detected"
-                  onChange={(e) => setReason(e.target.value)}
+                  onChange={setReason}
                 />
                 <span className="muted" style={{ fontSize: '.7rem' }}>
                   Recorded permanently against your name, alongside the previous value.
@@ -1012,10 +1013,8 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
         )}
       </div>
 
-      {/* One per screen, however many fields corrected. It portals to the body,
-          so where it sits in this tree does not matter — only that it is
-          mounted while the worksheet is open. */}
-      <SpellCheckUndo />
+      {/* The autocorrect undo toast is mounted once for the whole portal in
+          App.tsx now that every screen corrects. */}
     </div>
   );
 }

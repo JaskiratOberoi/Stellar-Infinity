@@ -5,6 +5,7 @@ import { useAuth } from './auth/AuthContext';
 import { Mark } from './components/Mark';
 import { SignInDraw } from './components/SignInDraw';
 import { NobleMark } from './components/NobleMark';
+import { SpellCheckUndo } from './components/SpellChecked';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { ClientHome } from './pages/ClientHome';
@@ -335,6 +336,9 @@ export function App() {
       <EnvBanner />
       {entering && <EnterVeil done={finishEntering} />}
       <IdleWarning />
+      {/* Autocorrect's undo toast, once for the whole portal — every screen's
+          SpellChecked fields and rich editors report through it. */}
+      <SpellCheckUndo />
       <header className="topbar">
         <Mark />
         <NobleMark />

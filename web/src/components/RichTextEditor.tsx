@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { isRichValue, sanitizeRich } from '../lib/richText';
+import { correctionFor } from '../lib/spellcheck';
+import { announceCorrection } from './SpellChecked';
 
 /**
  * The word-processor surface for descriptive results — the LIS's TinyMCE
@@ -42,6 +44,72 @@ const BLOCKS: { value: string; label: string }[] = [
 const COLOURS = ['#111827', '#dc2626', '#1d4ed8'];
 
 const PAGE_BREAK_HTML = '<div class="pagebreak"></div><p><br></p>';
+
+/** Ends a word — the same set spellcheck.ts uses, plus the &nbsp; editors emit. */
+const WORD_BOUNDARY = /[\s.,;:!?)\]}"'/\\ ]/;
+
+/**
+ * Autocorrect for the rich surface — and, because THIS surface can style a
+ * substring, the corrected word itself gets Infinity's green wavy underline
+ * (`.inf-spellfix`), not just a field flash. The span is an editing aid: the
+ * report sanitiser unwraps it, so the mark never prints.
+ *
+ * Same engine and same conservatism as the plain fields: only the curated
+ * non-word table fires, the toast names the substitution, and Undo puts back
+ * the exact text.
+ */
+function trySpellFix(root: HTMLElement, report: () => void): void {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return;
+  const node = sel.anchorNode;
+  if (!node || node.nodeType !== Node.TEXT_NODE || !root.contains(node)) return;
+  // Typing inside an already-corrected word must not stack another span.
+  if ((node.parentElement)?.closest('.inf-spellfix')) return;
+
+  const text = node.textContent ?? '';
+  const caret = sel.anchorOffset;
+  if (caret < 1 || !WORD_BOUNDARY.test(text[caret - 1])) return;
+
+  let end = caret - 1;
+  while (end > 0 && WORD_BOUNDARY.test(text[end - 1])) end--;
+  let start = end;
+  while (start > 0 && !WORD_BOUNDARY.test(text[start - 1])) start--;
+  if (start === end) return;
+
+  const word = text.slice(start, end);
+  const fixed = correctionFor(word);
+  if (!fixed) return;
+
+  const t = node as Text;
+  const range = document.createRange();
+  range.setStart(t, start);
+  range.setEnd(t, end);
+  const span = document.createElement('span');
+  span.className = 'inf-spellfix';
+  span.textContent = fixed;
+  range.deleteContents();
+  range.insertNode(span);
+
+  // The caret goes back to where the typist was: just after the boundary
+  // character, which now lives in the text node following the span.
+  const after = span.nextSibling;
+  if (after && after.nodeType === Node.TEXT_NODE) {
+    const offset = Math.min(caret - end, (after.textContent ?? '').length);
+    sel.collapse(after, offset);
+  } else {
+    sel.collapse(root, root.childNodes.length);
+  }
+  report();
+
+  announceCorrection({ from: word, to: fixed, start }, () => {
+    if (!span.isConnected) return;
+    const original = document.createTextNode(word);
+    span.replaceWith(original);
+    const s = window.getSelection();
+    s?.collapse(original, word.length);
+    report();
+  });
+}
 
 const TABLE_HTML =
   '<table style="border-collapse:collapse"><tbody>'
@@ -175,7 +243,10 @@ export function RichTextEditor({ value, readOnly, ariaLabel, minHeight, onChange
         aria-label={ariaLabel}
         aria-readonly={readOnly}
         style={minHeight ? { minHeight } : undefined}
-        onInput={report}
+        onInput={() => {
+          if (!readOnly && ref.current) trySpellFix(ref.current, report);
+          report();
+        }}
         onBlur={report}
       />
     </div>

@@ -3,6 +3,7 @@ import { api, csrfHeader } from '../api/client';
 import { inr, fmtDateTime } from '../lib/format';
 import { InfinityLoader } from '../components/InfinityLoader';
 import { useAuth } from '../auth/AuthContext';
+import { SpellChecked } from '../components/SpellChecked';
 
 /**
  * Requests — the two channels the legacy LIS grants a centre, rebuilt:
@@ -332,13 +333,14 @@ export function Requests() {
                     <option value="general">General</option>
                     <option value="technical">Technical</option>
                   </select>
-                  <input className="input" style={{ flex: 1, minWidth: '14rem' }} maxLength={200}
-                         placeholder="What do you need help with?"
-                         value={subject} onChange={(e) => setSubject(e.target.value)} />
+                  <SpellChecked className="input" style={{ flex: 1, minWidth: '14rem' }} maxLength={200}
+                                placeholder="What do you need help with?"
+                                value={subject} onChange={setSubject} />
                 </div>
-                <textarea className="input" rows={3} maxLength={2000} style={{ marginTop: '.6rem', width: '100%' }}
-                          placeholder="Anything that helps the lab act on it — sample IDs, bill numbers, what happened…"
-                          value={detail} onChange={(e) => setDetail(e.target.value)} />
+                <SpellChecked multiline className="input" rows={3} maxLength={2000}
+                              style={{ marginTop: '.6rem', width: '100%' }}
+                              placeholder="Anything that helps the lab act on it — sample IDs, bill numbers, what happened…"
+                              value={detail} onChange={setDetail} />
                 <div className="row" style={{ marginTop: '.6rem' }}>
                   <button className="btn btn--primary" disabled={busy || subject.trim() === ''}
                           onClick={() => void submitHelp()}>Raise request</button>
