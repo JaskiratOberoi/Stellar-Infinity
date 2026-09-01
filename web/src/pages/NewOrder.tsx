@@ -347,6 +347,8 @@ export function NewOrder() {
    * over the single pay mode whenever it has rows.
    */
   const [payments, setPayments] = useState<{ method: string; amount: string; ref: string }[]>([]);
+  /** Set the moment an operator edits any amount — the 50% prefill stops. */
+  const [payTouched, setPayTouched] = useState(false);
 
   /*
    * null means "follow the channel" — shown in B2C, behind a button in B2B.
@@ -577,6 +579,29 @@ export function NewOrder() {
   const appliedDiscount = goldApplied ? 0 : Math.min(Number(discount || 0), maxDiscount);
   const payable = Math.max(0, effectiveTotal - appliedDiscount);
 
+  // Telo's 50% floor, same figure the server gate computes: at least half of
+  // the (gold-halved, PRE-discount) total must be collected at the counter
+  // before a walk-in order can be placed. B2B takes no money here at all.
+  const minPaid = !isB2b && effectiveTotal > 0 ? Math.round(effectiveTotal / 2) : 0;
+  const belowMinPaid = minPaid > 0 && paidNow < minPaid;
+
+  /*
+   * The first payment line tracks the 50% floor until the operator touches an
+   * amount — Telo's register does exactly this, so the common case (patient
+   * pays the minimum now) is zero keystrokes and the floor is met by default.
+   * Touched money is never overwritten; the basket changing under a typed
+   * amount leaves the typed amount alone.
+   */
+  useEffect(() => {
+    if (isB2b || payTouched || minPaid <= 0) return;
+    const half = String(minPaid);
+    setPayments((ps) => {
+      if (ps.length === 0) return [{ method: 'Cash', amount: half, ref: '' }];
+      if (ps[0].amount === half) return ps;
+      return ps.map((x, i) => (i === 0 ? { ...x, amount: half } : x));
+    });
+  }, [isB2b, payTouched, minPaid]);
+
   /**
    * Read the chosen PDF into base64 for the order body.
    *
@@ -764,6 +789,7 @@ export function NewOrder() {
     // Back to the channel's starting state, not to empty — otherwise the
     // second walk-in of a run loses the Cash line the first one had.
     setDiscount(''); setDiscountOpen(null); setPayments(startingPayments(isB2b));
+    setPayTouched(false);
     setGold(false); setGoldNumber(''); setGoldHolder('');
     setClinicalFile(null); setFileError(null);
     setSids({});
@@ -852,7 +878,10 @@ export function NewOrder() {
       setGold(!!f.gold);
       setGoldNumber(f.goldNumber ?? '');
       setGoldHolder(f.goldHolder ?? '');
+      // A reopened draft's money is the operator's own saved figures — the
+      // 50% prefill must not overwrite them.
       setPayments(f.payments ?? []);
+      setPayTouched(true);
       setClinicalFile(f.clinicalFile ?? null);
       setEditingId(id);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1019,6 +1048,7 @@ export function NewOrder() {
     && mobileOk
     // A ticked Gold Card without plausible details is not yet a Gold Card.
     && (!goldApplied || goldDetailsOk)
+    && !belowMinPaid
     && (preview?.unpriced ?? 0) === 0
     // Barcodes are optional, but a barcode that is WRONG is not — the create
     // procedure would reject the order after the operator had typed all of it.
@@ -1141,6 +1171,7 @@ export function NewOrder() {
             : !mobileOk ? (patient.mobile.trim() === ''
                 ? 'A mobile number is required for walk-in orders here.'
                 : 'The mobile number is incomplete.')
+            : belowMinPaid ? `Collect at least ${inr(minPaid)} — half the bill — to place this order.`
             : sidTaken ? 'A Sample ID is already in use — see the barcodes above.'
             : sidChecking ? 'Still checking a Sample ID…'
             : 'Some tests have no price for this client.'}
@@ -2067,8 +2098,11 @@ export function NewOrder() {
 
                     <input className="input mono" inputMode="numeric" placeholder="0"
                            aria-label="Amount" value={p.amount}
-                           onChange={(e) => setPayments((ps) => ps.map((x, n) =>
-                             (n === i ? { ...x, amount: e.target.value.replace(/\D/g, '') } : x)))} />
+                           onChange={(e) => {
+                             setPayTouched(true);
+                             setPayments((ps) => ps.map((x, n) =>
+                               (n === i ? { ...x, amount: e.target.value.replace(/\D/g, '') } : x)));
+                           }} />
 
                     {/* Cash has no reference to keep, so the box goes away
                         rather than sitting there inviting one. */}
@@ -2092,11 +2126,17 @@ export function NewOrder() {
                             { method: 'Cash', amount: '', ref: '' }])}>
                     + Add payment
                   </button>
-                  {paidNow > 0 && (
-                    <span className="muted" style={{ fontSize: '.76rem' }}>
+                  {(paidNow > 0 || minPaid > 0) && (
+                    <span className="muted"
+                          style={{ fontSize: '.76rem',
+                                   color: belowMinPaid ? 'var(--danger)' : undefined,
+                                   fontWeight: belowMinPaid ? 600 : undefined }}>
                       Taking <b>{inr(paidNow)}</b> of {inr(payable)}
+                      {/* The floor is Telo's: half the bill up front, and the
+                          Place button holds until the sum reaches it. */}
+                      {minPaid > 0 && ` · min ${inr(minPaid)} (50%)`}
                       {paidNow > payable && ' — more than the bill'}
-                      {paidNow < payable && ` · ${inr(payable - paidNow)} left to pay`}
+                      {!belowMinPaid && paidNow < payable && ` · ${inr(payable - paidNow)} left to pay`}
                     </span>
                   )}
                 </div>

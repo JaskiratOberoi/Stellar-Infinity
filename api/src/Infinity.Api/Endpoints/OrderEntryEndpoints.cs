@@ -491,24 +491,52 @@ public static class OrderEntryEndpoints
                     });
                 }
             }
-            else if (body.DiscountAmount > 0)
+
+            // The same per-client pricing read the preview uses, so the gates
+            // and the quote can never disagree about a line's value. Priced for
+            // EVERY walk-in now, because the 50% floor below applies to all of
+            // them, not only to discounted orders.
+            var priced = body.Items.Count > 0
+                ? (await catalog.SearchAsync(body.Mcc, null, null, 1, 1000, ct, body.Items)
+                    .ConfigureAwait(false)).Rows
+                : [];
+            var lines = priced
+                .Select(p => (p.Code, Amount: (int)Math.Round(p.Rate ?? 0m)))
+                .ToList();
+            var customTotal = 0;
+            foreach (var l in body.CustomLines ?? [])
+            {
+                var t = await customTests.ResolveAsync(body.Mcc, l.CustomTestId, ct).ConfigureAwait(false);
+                if (t is not null) customTotal += t.Mrp * Math.Max(1, l.Qty);
+            }
+
+            /*
+             * Telo's 50% floor, ported verbatim (register.actions.ts): at
+             * least half of the resolved total — Gold Card halved per line,
+             * round half up, custom lines at full value, BEFORE the manual
+             * discount — must be collected at the counter. Enforced HERE as
+             * well as in the form, against server-resolved prices, so a
+             * tampered request cannot post receipts below the floor.
+             */
+            var effectiveTotal = lines.Sum(l => body.GoldCard
+                    ? (int)Math.Round(l.Amount / 2m, MidpointRounding.AwayFromZero)
+                    : l.Amount) + customTotal;
+            var paidNow = (body.Payments ?? []).Sum(p => Math.Max(0, p.Amount))
+                        + Math.Max(0, body.ReceiptAmount);
+            var minPaid = effectiveTotal > 0
+                ? (int)Math.Round(effectiveTotal / 2m, MidpointRounding.AwayFromZero)
+                : 0;
+            if (paidNow < minPaid)
+            {
+                return Results.BadRequest(new
+                {
+                    error = $"At least ₹{minPaid:N0} (50% of ₹{effectiveTotal:N0}) must be collected before a walk-in order is placed.",
+                });
+            }
+
+            if (!body.GoldCard && body.DiscountAmount > 0)
             {
                 var clientCode = b2cClientCode;
-                // The same per-client pricing read the preview uses, so the
-                // gate and the quote can never disagree about a line's value.
-                var priced = body.Items.Count > 0
-                    ? (await catalog.SearchAsync(body.Mcc, null, null, 1, 1000, ct, body.Items)
-                        .ConfigureAwait(false)).Rows
-                    : [];
-                var lines = priced
-                    .Select(p => (p.Code, Amount: (int)Math.Round(p.Rate ?? 0m)))
-                    .ToList();
-                var customTotal = 0;
-                foreach (var l in body.CustomLines ?? [])
-                {
-                    var t = await customTests.ResolveAsync(body.Mcc, l.CustomTestId, ct).ConfigureAwait(false);
-                    if (t is not null) customTotal += t.Mrp * Math.Max(1, l.Qty);
-                }
                 var total = lines.Sum(l => l.Amount) + customTotal;
                 var baseAmount = DiscountPolicy.DiscountableTotal(clientCode, lines, total);
                 var max = (int)Math.Round(baseAmount * DiscountPolicy.CapPct(clientCode));
