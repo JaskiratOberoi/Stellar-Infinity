@@ -34,6 +34,9 @@ export interface WorksheetRow {
   clinicalHistory: string | null;
   /** Specimen, e.g. "WB - EDTA". */
   sampleType?: string | null;
+  /** The lab's note on WHY a sample is where it is — rejection reason, QNS,
+   *  hold. tbl_med_mcc_patient_samples.Sample_Comments. */
+  sampleComments?: string | null;
   /** 1 EDTA · 2 fluoride · 3 serum · 4 urine · 5 the rest. */
   specimenRank?: number | null;
   /**
@@ -463,7 +466,9 @@ export function Reports() {
                     style={{ cursor: 'pointer' }}
                     onClick={() => {
                       if (!REPORTABLE_STATUSES.includes(r.statusCode ?? -1)) {
-                        showToast('This sample’s report is not ready yet — the status column tracks it.');
+                        showToast(r.sampleComments?.trim()
+                          ? `Not ready — the lab says: ${r.sampleComments.trim()}`
+                          : 'This sample’s report is not ready yet — the status column tracks it.');
                         return;
                       }
                       const l = locks[r.sid];
@@ -540,7 +545,20 @@ export function Reports() {
                     <td className="cell--body" data-label="Tests">
                       <TestList names={r.testNames} />
                     </td>
-                    <td className="cell--tag"><StatusBadge status={r.status} statusCode={r.statusCode} /></td>
+                    <td className="cell--tag">
+                      <StatusBadge status={r.status} statusCode={r.statusCode} />
+                      {/* The WHY under the pill, for a sample that is not a
+                          report yet — the rejection reason or hold note the
+                          lab wrote. A finished report keeps its comments on
+                          the report itself, where they always printed. */}
+                      {!REPORTABLE_STATUSES.includes(r.statusCode ?? -1) && r.sampleComments?.trim() && (
+                        <div className="muted" style={{ fontSize: '.7rem', marginTop: '.2rem',
+                                                        maxWidth: 220, lineHeight: 1.4 }}
+                             title={r.sampleComments}>
+                          {r.sampleComments.trim()}
+                        </div>
+                      )}
+                    </td>
                     <td className="muted cell--meta" data-label="Registered" style={{ fontSize: '.78rem' }}>
                       {fmtDateTime(r.registeredAt)}
                     </td>

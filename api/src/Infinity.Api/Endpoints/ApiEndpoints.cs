@@ -346,6 +346,9 @@ public static class ApiEndpoints
                 // draw. An explicit projection swallows new fields silently,
                 // which is exactly what happened to these two at first.
                 r.SampleType, r.SpecimenRank,
+                // WHY a pending sample is pending — the rejection reason or
+                // hold note the lab wrote in Sample_Comments.
+                r.SampleComments,
                 SmartReport = smartPids.Contains(r.Pid),
             }),
             // count is this page; total is the whole filtered set. Both are

@@ -98,7 +98,14 @@ public sealed record WorksheetRow(
     /// <summary>Specimen, e.g. "WB - EDTA". List rows only.</summary>
     string? SampleType = null,
     /// <summary>1 EDTA · 2 fluoride · 3 serum · 4 urine · 5 the rest. List rows only.</summary>
-    int? SpecimenRank = null);
+    int? SpecimenRank = null,
+    /// <summary>
+    /// tbl_med_mcc_patient_samples.Sample_Comments — where the lab writes WHY
+    /// a sample is where it is: the rejection reason (RejectSample stores it
+    /// here, status 3), a QNS/recollect note, a hold. Surfaced so a centre
+    /// watching a pending sample sees the reason, not just the status.
+    /// </summary>
+    string? SampleComments = null);
 
 public sealed record WorksheetPage(IReadOnlyList<WorksheetRow> Rows, int Count);
 
@@ -435,7 +442,8 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
                         // procedure redeploy, and the API must not 500 against
                         // the old procedure in the window between the two.
                         SampleType: TryStr(reader, "sample_type"),
-                        SpecimenRank: TryInt(reader, "specimen_rank")));
+                        SpecimenRank: TryInt(reader, "specimen_rank"),
+                        SampleComments: TryStr(reader, "sample_comments")));
                 }
 
                 return new WorksheetListPage(rows, total, pageNo, size, NobleTime.ToIst(snapshot), patients);
