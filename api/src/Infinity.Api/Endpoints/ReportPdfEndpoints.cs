@@ -174,6 +174,23 @@ public static class ReportPdfEndpoints
         var row = await repo.GetBySidAsync(scope.ClientCodes, sid, ct).ConfigureAwait(false);
         if (row is null) return (false, Results.NotFound(), null);
 
+        /*
+         * A report EXISTS only from authorisation onward. A registered,
+         * tested or held (Pending) sample has nothing issued to hand out —
+         * with the list's status filter widened to Any, the PID download was
+         * stapling an empty unit for a pending urine sample into an
+         * otherwise finished report. 425 Too Early, so the bulk route can
+         * name the skip for what it is.
+         */
+        if (row.StatusCode is not (7 or 8 or 9))
+        {
+            return (false, Results.Json(new
+            {
+                error = "REPORT_NOT_READY",
+                message = "This sample’s report is not ready yet — it has not been authorised.",
+            }, statusCode: 425), null);
+        }
+
         var lockState = await locks.GetAsync(sid, ct).ConfigureAwait(false);
         if (lockState.Locked)
         {
@@ -375,6 +392,7 @@ public static class ReportPdfEndpoints
                         ? s.StatusCode switch
                         {
                             StatusCodes.Status423Locked => "balance",
+                            425 => "not ready",
                             StatusCodes.Status409Conflict => "unsigned",
                             StatusCodes.Status503ServiceUnavailable => "unsigned",
                             _ => "unavailable",

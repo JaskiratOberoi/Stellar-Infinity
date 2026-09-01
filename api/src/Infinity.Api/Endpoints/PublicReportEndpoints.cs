@@ -76,6 +76,10 @@ public static class PublicReportEndpoints
         var row = await repo.GetBySidAsync([], sid, ct).ConfigureAwait(false);
         if (row is null) return Results.NotFound();
 
+        // No report exists before authorisation, and the public route reveals
+        // nothing about why — the same 404 as an unknown SID.
+        if (row.StatusCode is not (7 or 8 or 9)) return Results.NotFound();
+
         var lockState = await locks.GetAsync(sid, ct).ConfigureAwait(false);
         if (lockState.Locked) return Results.NotFound();
 
@@ -144,6 +148,9 @@ public static class PublicReportEndpoints
         // read, so the scope check has nothing left to narrow.
         var row = await repo.GetBySidAsync([], sid, ct).ConfigureAwait(false);
         if (row is null) return Results.NotFound();
+
+        // Same rule as the JSON route above: nothing issued, nothing served.
+        if (row.StatusCode is not (7 or 8 or 9)) return Results.NotFound();
 
         var lockState = await locks.GetAsync(sid, ct).ConfigureAwait(false);
         // 404, not 423. The signed-in route says "clear the balance" because a

@@ -90,14 +90,13 @@ const LockGlyph = () => (
 export function Reports() {
   const { user } = useAuth();
   /*
-   * A CLIENT sees every sample, not only finished reports — this page is
-   * their port of the LIS's Sample Status screen, where a centre watches a
-   * sample move Registered → Tested → Printed and attaches clinical history
-   * along the way. View/Smart still appear only once a report exists; the
-   * pill carries the tracking. Lab staff keep the reports-only view — their
-   * pending work already lives on the worksheet.
+   * This page is also the client's port of the LIS's Sample Status screen:
+   * the Status control reaches every sample — Registered, Tested, Rejected,
+   * Pending with its reason — with clinical history attachable along the way.
+   * It OPENS on Reports ready for every account, because most visits are for
+   * finished reports; tracking is one dropdown pick away. View/Smart appear
+   * only once a report exists, whatever the filter shows.
    */
-  const isClient = user?.role === 'client';
   const [rows, setRows] = useState<WorksheetRow[]>([]);
   const [scope, setScope] = useState<string>('');
   const [page, setPage] = useState(1);
@@ -305,12 +304,13 @@ export function Reports() {
       // learned this the same way — see PENDING_STATUSES there.
       //
       // Three cases, one control, mirroring the worksheet: a chosen status
-      // wins; 'all' asks for everything; '' is the page's own default — the
-      // reportable set for lab staff, EVERYTHING for a client, whose page is
-      // also their Sample Status tracker.
+      // wins; 'all' asks for everything; '' is the page's default — the
+      // reportable set for EVERYONE. A client tracking a pending sample picks
+      // Any status (or the status itself) from the dropdown; the page opens
+      // on finished reports, which is what most visits are for.
       if (filters.statusId === 'all') { /* no status filter */ }
       else if (filters.statusId !== '') p.set('statusIds', String(filters.statusId));
-      else if (!isClient) p.set('statusIds', REPORTABLE_STATUSES.join(','));
+      else p.set('statusIds', REPORTABLE_STATUSES.join(','));
       // No client timeout — a reconciliation over months of reports outlives
       // the 20s default. Stop (or the server's SQL timeout) ends a long one.
       const r = await api.get<{
@@ -343,7 +343,7 @@ export function Reports() {
       // A superseded search leaves the spinner to its successor.
       if (searchRef.current === ctrl) setLoading(false);
     }
-  }, [filters, page, isClient]);
+  }, [filters, page]);
 
   useEffect(() => {
     const id = setTimeout(() => void load(), 300);
@@ -382,13 +382,10 @@ export function Reports() {
 
       <SampleFilters value={filters} options={options} onChange={setFilters}
                      statusOptions={SAMPLE_STATUSES}
-                     // '' is this page's default set. For staff that is the
-                     // reportable statuses, so the default needs a name and
-                     // 'Any status' becomes an explicit choice; for a client
-                     // the default already IS every status, so the plain
-                     // empty label says exactly that and no extra option is
-                     // added.
-                     defaultStatusLabel={isClient ? undefined : 'Reports ready'}
+                     // '' is this page's default — the reportable set, for
+                     // every account — so the default carries its name and
+                     // 'Any status' is the explicit way to see the rest.
+                     defaultStatusLabel="Reports ready"
                      lockClientCode={user?.role === 'client'} />
 
       {scope === 'none' && (
@@ -528,12 +525,22 @@ export function Reports() {
                               ? `Download all ${groupSize} of this patient's reports on this page as one PDF`
                               : "Download this patient's report"
                           }
-                          onDownload={(lh) => void downloadPatient(
-                            r.pid,
-                            (grouped.find((g) => g.rows.some((x) => x.sid === r.sid))?.rows ?? [r])
-                              .map((x) => x.sid),
-                            lh,
-                          )}
+                          onDownload={(lh) => {
+                            /* Only samples a report EXISTS for. With the
+                               status filter on Any, the group can hold
+                               pending or tested samples — the server skips
+                               those regardless (425), but sending them just
+                               produces a document quieter than the list
+                               implied. Same eligibility as Review & edit. */
+                            const eligible = (grouped.find((g) => g.rows.some((x) => x.sid === r.sid))?.rows ?? [r])
+                              .filter((x) => REPORTABLE_STATUSES.includes(x.statusCode ?? -1) && !locks[x.sid])
+                              .map((x) => x.sid);
+                            if (eligible.length === 0) {
+                              showToast('None of this patient’s reports are ready to download yet.');
+                              return;
+                            }
+                            void downloadPatient(r.pid, eligible, lh);
+                          }}
                           onPreview={() => {
                             const all = grouped.find((g) => g.rows.some((x) => x.sid === r.sid))?.rows ?? [r];
                             // Only samples a report exists for and that are not

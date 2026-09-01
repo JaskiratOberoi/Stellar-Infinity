@@ -649,6 +649,18 @@ public static class ApiEndpoints
         var row = await repo.GetBySidAsync(scope.ClientCodes, sid, ct).ConfigureAwait(false);
         if (row is null) return Results.NotFound();
 
+        // A report exists only from authorisation onward — the list hides the
+        // View button on earlier statuses, and this is what makes that true
+        // for a typed URL as well. In-progress data belongs to the worksheet.
+        if (row.StatusCode is not (7 or 8 or 9))
+        {
+            return Results.Json(new
+            {
+                error = "REPORT_NOT_READY",
+                message = "This sample’s report is not ready yet — it has not been authorised.",
+            }, statusCode: 425);
+        }
+
         /*
          * The balance lock gates the VIEW, not just the download. It always
          * did in Telo — "a report cannot be viewed or printed while there is
@@ -946,6 +958,18 @@ public static class ApiEndpoints
 
         var row = await repo.GetBySidAsync(scope.ClientCodes, sid, ct).ConfigureAwait(false);
         if (row is null) return Results.NotFound();
+
+        // A report exists only from authorisation onward — the list hides the
+        // View button on earlier statuses, and this is what makes that true
+        // for a typed URL as well. In-progress data belongs to the worksheet.
+        if (row.StatusCode is not (7 or 8 or 9))
+        {
+            return Results.Json(new
+            {
+                error = "REPORT_NOT_READY",
+                message = "This sample’s report is not ready yet — it has not been authorised.",
+            }, statusCode: 425);
+        }
 
         /*
          * The balance lock gates the VIEW, not just the download. It always
