@@ -176,6 +176,195 @@ function matchCase(typed: string, replacement: string): string | null {
   return replacement;
 }
 
+/* ── THE DICTIONARY LAYER ────────────────────────────────────────────────────
+ * The tables above encode INTENT and fire instantly; everything they miss —
+ * "recived", "blader", the browser's whole red-squiggle set — falls through to
+ * a real Hunspell en-GB dictionary, loaded lazily so the main bundle stays
+ * lean (the .dic is half a megabyte before gzip).
+ *
+ * The original fear about dictionaries stands — "Klebsiella" must never become
+ * something else — so the layer is fenced three ways:
+ *
+ *   1. MEDICAL below is both a shield and a magnet: a word in it is never
+ *      treated as a misspelling, and when a typo sits at equal distance from a
+ *      medical word and an everyday one, the medical word wins — "blader" is a
+ *      bladder, not a blade, in this building.
+ *   2. Only close corrections fire: edit distance 1, or 2 for words of eight
+ *      letters and up. A rare organism or drug name has no close neighbour and
+ *      is left alone (the browser's red underline still marks it for a human).
+ *   3. The existing guards hold: digits, compounds, ALL-CAPS and short words
+ *      are never touched, and the case of what was typed is preserved.
+ */
+const MEDICAL = new Set([
+  // anatomy & specimens
+  'bladder', 'gall', 'gallbladder', 'kidney', 'ureter', 'urethra', 'prostate',
+  'cervix', 'uterus', 'ovary', 'testis', 'thyroid', 'liver', 'spleen',
+  'pancreas', 'appendix', 'colon', 'rectum', 'oesophagus', 'stomach',
+  'duodenum', 'ileum', 'jejunum', 'larynx', 'pharynx', 'trachea', 'bronchus',
+  'pleura', 'peritoneum', 'omentum', 'lymph', 'node', 'marrow', 'serum',
+  'plasma', 'sputum', 'urine', 'stool', 'biopsy', 'aspirate', 'swab',
+  'tissue', 'lesion', 'polyp', 'cyst', 'nodule', 'ulcer', 'mucosa',
+  'stroma', 'septum', 'follicle', 'papilla', 'villi', 'crypt',
+  // cells & haematology
+  'erythrocyte', 'erythrocytes', 'leucocyte', 'leucocytes', 'leukocyte',
+  'leukocytes', 'lymphocyte', 'lymphocytes', 'monocyte', 'monocytes',
+  'neutrophil', 'neutrophils', 'eosinophil', 'eosinophils', 'basophil',
+  'basophils', 'platelet', 'platelets', 'reticulocyte', 'reticulocytes',
+  'blast', 'blasts', 'myelocyte', 'metamyelocyte', 'normoblast',
+  'poikilocytosis', 'anisocytosis', 'rouleaux', 'haemolysis', 'haemolysed',
+  'hypochromia', 'microcytic', 'macrocytic', 'normocytic', 'normochromic',
+  // micro & path
+  'klebsiella', 'pseudomonas', 'staphylococcus', 'streptococcus',
+  'escherichia', 'coli', 'enterococcus', 'proteus', 'salmonella', 'shigella',
+  'candida', 'aspergillus', 'trichomonas', 'giardia', 'entamoeba',
+  'plasmodium', 'mycobacterium', 'acinetobacter', 'citrobacter',
+  'enterobacter', 'serratia', 'morganella', 'gardnerella', 'neisseria',
+  'haemophilus', 'brucella', 'leptospira', 'rickettsia', 'chlamydia',
+  'mycoplasma', 'gonococcus', 'meningococcus', 'pneumococcus',
+  'hyphae', 'spores', 'mycelium', 'trophozoite', 'trophozoites',
+  'gametocyte', 'gametocytes', 'schizont', 'ova', 'cysts', 'flagellate',
+  'bacilli', 'cocci', 'diplococci', 'spirochaete', 'agglutination',
+  'inoculated', 'subculture', 'sensitivity', 'resistant', 'intermediate',
+  'colonies', 'colony', 'haemolytic', 'lactose', 'fermenter', 'motile',
+  'oxidase', 'catalase', 'coagulase', 'urease', 'indole',
+  // chemistry & tests
+  'bilirubin', 'creatinine', 'urea', 'uric', 'glucose', 'cholesterol',
+  'triglycerides', 'haemoglobin', 'glycated', 'albumin', 'globulin',
+  'fibrinogen', 'prothrombin', 'thromboplastin', 'amylase', 'lipase',
+  'phosphatase', 'transaminase', 'aminotransferase', 'dehydrogenase',
+  'ferritin', 'transferrin', 'folate', 'cortisol', 'prolactin',
+  'testosterone', 'oestrogen', 'progesterone', 'thyroxine', 'calcium',
+  'phosphorus', 'magnesium', 'sodium', 'potassium', 'chloride',
+  'bicarbonate', 'lactate', 'ammonia', 'osmolality', 'electrophoresis',
+  'immunoassay', 'chemiluminescence', 'nephelometry', 'turbidimetry',
+  'urobilinogen', 'ketones', 'nitrites', 'leucocyturia', 'proteinuria',
+  'haematuria', 'glycosuria', 'microalbumin',
+  // common report words
+  'reactive', 'nonreactive', 'positive', 'negative', 'equivocal',
+  'malignancy', 'metastasis', 'metastatic', 'carcinoma', 'adenoma',
+  'sarcoma', 'lymphoma', 'leukaemia', 'dysplasia', 'hyperplasia',
+  'metaplasia', 'atypia', 'atypical', 'benign', 'malignant', 'infiltrate',
+  'infiltration', 'inflammation', 'inflammatory', 'granuloma',
+  'granulomatous', 'necrosis', 'necrotic', 'fibrosis', 'oedema',
+  'congestion', 'haemorrhage', 'received', 'specimen', 'sections',
+  'histopathology', 'cytology', 'impression', 'microscopy', 'gross',
+]);
+
+/**
+ * Everyday words a lab actually types, preferred over an obscure dictionary
+ * neighbour at the same distance — "paitent" is a patient, not a patent, and
+ * "wieght" is a weight, not a wight. Second tier after MEDICAL.
+ */
+const COMMON = new Set([
+  'patient', 'patients', 'sample', 'samples', 'report', 'reports', 'result',
+  'results', 'weight', 'height', 'blood', 'pressure', 'advised', 'advise',
+  'suggested', 'suggest', 'repeat', 'repeated', 'review', 'reviewed',
+  'clinical', 'correlation', 'correlate', 'history', 'present', 'presence',
+  'absent', 'absence', 'normal', 'abnormal', 'within', 'limits', 'range',
+  'value', 'values', 'increased', 'decreased', 'raised', 'reduced', 'mild',
+  'moderate', 'severe', 'trace', 'occasional', 'numerous', 'plenty', 'few',
+  'seen', 'noted', 'observed', 'examination', 'examined', 'collection',
+  'collected', 'processed', 'reported', 'requested', 'required', 'kindly',
+  'please', 'doctor', 'centre', 'laboratory', 'morning', 'fasting', 'random',
+]);
+
+type Dict = { correct(word: string): boolean; suggest(word: string): string[] };
+let dict: Dict | null = null;
+
+// Kicked off at module load, awaited by nobody: until the half-megabyte
+// dictionary chunk lands, the tables above carry corrections alone, which is
+// exactly what they did before this layer existed.
+void (async () => {
+  try {
+    // Vendored into assets: the dictionary package's exports map does not
+    // expose its raw files to the bundler. Its licence rides alongside.
+    const [{ default: nspell }, aff, dic] = await Promise.all([
+      import('nspell'),
+      import('../assets/en-gb.aff?raw'),
+      import('../assets/en-gb.dic?raw'),
+    ]);
+    dict = nspell(aff.default, dic.default);
+  } catch {
+    /* No dictionary is a quieter portal, not a broken one. */
+  }
+})();
+
+/**
+ * Damerau–Levenshtein (adjacent transpositions cost 1), capped: distances
+ * past `max` all read as max+1. Transposition matters here — "wieght" is one
+ * slip from "weight", not two, and counting it as two let "wight" win.
+ */
+function editDistance(a: string, b: string, max: number): number {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev2: number[] | null = null;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    let rowMin = i;
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(
+        prev[j] + 1,
+        cur[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+      if (prev2 && i > 1 && j > 1
+          && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        cur[j] = Math.min(cur[j], prev2[j - 2] + 1);
+      }
+      if (cur[j] < rowMin) rowMin = cur[j];
+    }
+    if (rowMin > max) return max + 1;
+    prev2 = prev;
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/** A correction from the dictionary, under the fences described above. */
+function dictionaryCorrection(word: string): string | null {
+  if (!dict) return null;
+  // Short strings are where abbreviations and codes live; leave them to the
+  // curated table, which knows the ones worth fixing ("teh", "adn").
+  if (word.length < 4) return null;
+
+  const lower = word.toLowerCase();
+  if (MEDICAL.has(lower) || COMMON.has(lower)) return null;
+  if (dict.correct(word) || dict.correct(lower)) return null;
+
+  const typedLower = word[0] === word[0].toLowerCase();
+  const maxD = lower.length >= 8 ? 2 : 1;
+  const ranked: { s: string; d: number }[] = [];
+  for (const raw of dict.suggest(word)) {
+    let s = raw;
+    // A lowercase typo must not become a proper noun — "sampel" is a sample,
+    // never a Samuel. A capitalised suggestion for lowercase input survives
+    // only if its lowercase form is a word in its own right.
+    if (typedLower && s[0] !== s[0].toLowerCase()) {
+      const low = s.toLowerCase();
+      if (!dict.correct(low) && !MEDICAL.has(low) && !COMMON.has(low)) continue;
+      s = low;
+    }
+    const d = editDistance(lower, s.toLowerCase(), maxD);
+    if (d <= maxD) ranked.push({ s, d });
+  }
+  if (ranked.length === 0) return null;
+
+  const minD = Math.min(...ranked.map((c) => c.d));
+  const atMin = ranked.filter((c) => c.d === minD);
+  // Tie-breaks, in order: the lab's own vocabulary; then a candidate made of
+  // the SAME letters as the typo — a transposition is the commonest slip, so
+  // "thier" is their (same letters), not thief; then the everyday-word tier;
+  // then Hunspell's own ranking.
+  const letters = [...lower].sort().join('');
+  const pick =
+    atMin.find((c) => MEDICAL.has(c.s.toLowerCase()))?.s
+    ?? atMin.find((c) => [...c.s.toLowerCase()].sort().join('') === letters)?.s
+    ?? atMin.find((c) => COMMON.has(c.s.toLowerCase()))?.s
+    ?? atMin[0].s;
+
+  return matchCase(word, pick);
+}
+
 /** The intended spelling of `word`, or null to leave it alone. */
 export function correctionFor(word: string): string | null {
   // Too short to be worth it, and short strings are where abbreviations live.
@@ -188,9 +377,7 @@ export function correctionFor(word: string): string | null {
 
   const lower = word.toLowerCase();
   const fixed = MISSPELLINGS[lower] ?? US_TO_UK[lower];
-  if (!fixed) return null;
-
-  const cased = matchCase(word, fixed);
+  const cased = fixed ? matchCase(word, fixed) : dictionaryCorrection(word);
   // A correction that changes nothing is not a correction.
   return cased && cased !== word ? cased : null;
 }
