@@ -71,6 +71,14 @@ public static class ApiEndpoints
         reports.MapGet("/{sid}/smart", GetSmartReport).WithName("GetSmartReport");
         // POST because a page of fifty SIDs does not fit a query string.
         reports.MapPost("/locks", GetReportLocks).WithName("GetReportLocks");
+        // The per-sample clinical-history PDF — the LIS's Sample Status upload,
+        // living on the Reporting tab here. Stored SID-keyed exactly as the
+        // legacy worksheet reads it, so the lab tech sees an Infinity upload
+        // through the LIS with no LIS change.
+        reports.MapPost("/clinical-history/flags", GetClinicalHistoryFlags).WithName("GetClinicalHistoryFlags");
+        reports.MapGet("/{sid}/clinical-history", GetClinicalHistory).WithName("GetClinicalHistory");
+        reports.MapPut("/{sid}/clinical-history", PutClinicalHistory).WithName("PutClinicalHistory");
+        reports.MapDelete("/{sid}/clinical-history", DeleteClinicalHistory).WithName("DeleteClinicalHistory");
     }
 
     /// <summary>
@@ -756,6 +764,157 @@ public static class ApiEndpoints
         }
 
         return Results.Ok(new { locks = found });
+    }
+
+    /* ---------------------------------------------------------------------
+     * The per-sample clinical-history PDF — the LIS's Sample Status upload
+     * (Pcc/SampleStatus.aspx), ported onto the Reporting tab. A centre
+     * attaches context to a sample it already sent; the lab tech opens it
+     * from the worksheet. Stored SID-keyed in the exact shape the legacy
+     * worksheet's clihis.ashx reads, so the two systems see one file.
+     * ------------------------------------------------------------------- */
+
+    public sealed record ClinicalHistoryFlagsRequest(IReadOnlyList<string>? Sids);
+    public sealed record ClinicalHistorySetRequest(string? FileBase64);
+
+    /// <summary>Is this SID inside the caller's report scope? Null when not.</summary>
+    private static async Task<SampleHeader?> InReportScopeAsync(
+        int userId,
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
+        SampleHeaderRepository headers,
+        string sid,
+        CancellationToken ct)
+    {
+        var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
+        if (scope.IsDenied) return null;
+        var header = await headers.GetAsync(sid, ct).ConfigureAwait(false);
+        if (header is null) return null;
+        if (!scope.IsUnrestricted
+            && !scope.ClientCodes.Contains(header.ClientCode ?? "", StringComparer.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+        return header;
+    }
+
+    /// <summary>Which of a page's SIDs carry an attached history PDF.</summary>
+    private static async Task<IResult> GetClinicalHistoryFlags(
+        ClinicalHistoryFlagsRequest body,
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
+        Reports.ClinicalHistoryRepository clihis,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+
+        var sids = (body.Sids ?? [])
+            .Where(s => !string.IsNullOrWhiteSpace(s) && s.Trim().Length <= 50)
+            .Select(s => s.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(60)
+            .ToList();
+        if (sids.Count == 0) return Results.Ok(new { sids = Array.Empty<string>() });
+
+        // Existence only — no per-SID header lookups. A flag leaks nothing a
+        // scoped list has not already shown, and the file itself stays behind
+        // the scope-checked GET below.
+        var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
+        if (scope.IsDenied) return Results.Ok(new { sids = Array.Empty<string>() });
+
+        var found = await clihis.ExistsManyAsync(sids, ct).ConfigureAwait(false);
+        return Results.Ok(new { sids = found.ToArray() });
+    }
+
+    private static async Task<IResult> GetClinicalHistory(
+        string sid,
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
+        SampleHeaderRepository headers,
+        Reports.ClinicalHistoryRepository clihis,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+        if (string.IsNullOrWhiteSpace(sid) || sid.Length > 50) return Results.NotFound();
+
+        if (await InReportScopeAsync(userId, principal, scopes, headers, sid.Trim(), ct)
+                .ConfigureAwait(false) is null)
+        {
+            return Results.NotFound();
+        }
+
+        var bytes = await clihis.GetAsync(sid.Trim(), ct).ConfigureAwait(false);
+        if (bytes is null) return Results.NotFound();
+        // Magic bytes on the way out: this column has held non-PDF content in
+        // its long life, and mislabelling it as PDF just breaks the viewer.
+        var isPdf = bytes.Length > 4 && bytes[0] == 0x25 && bytes[1] == 0x50 && bytes[2] == 0x44 && bytes[3] == 0x46;
+        return Results.File(bytes,
+            isPdf ? "application/pdf" : "application/octet-stream",
+            $"clinical-history-{sid.Trim()}{(isPdf ? ".pdf" : ".bin")}");
+    }
+
+    private static async Task<IResult> PutClinicalHistory(
+        string sid,
+        ClinicalHistorySetRequest body,
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
+        SampleHeaderRepository headers,
+        Reports.ClinicalHistoryRepository clihis,
+        Audit.AuditLog audit,
+        HttpContext http,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+        if (string.IsNullOrWhiteSpace(sid) || sid.Length > 50) return Results.NotFound();
+
+        // Size gate BEFORE decoding — base64 inflates by a third. Same 10 MB
+        // cap as the order form's PDF, so the same file passes both doors.
+        var b64 = body.FileBase64 ?? "";
+        if (b64.Length == 0) return Results.BadRequest(new { error = "A PDF is required." });
+        if (b64.Length / 4 * 3 > Infinity.Api.Orders.OrderWriteRepository.ClinicalFileMaxBytes)
+            return Results.BadRequest(new { error = "The clinical history PDF is larger than 10 MB." });
+
+        byte[] bytes;
+        try { bytes = Convert.FromBase64String(b64); }
+        catch (FormatException) { return Results.BadRequest(new { error = "The file could not be read." }); }
+        if (bytes.Length < 5 || bytes[0] != 0x25 || bytes[1] != 0x50 || bytes[2] != 0x44 || bytes[3] != 0x46)
+            return Results.BadRequest(new { error = "Only PDF files can be attached." });
+
+        if (await InReportScopeAsync(userId, principal, scopes, headers, sid.Trim(), ct)
+                .ConfigureAwait(false) is null)
+        {
+            return Results.NotFound();
+        }
+
+        var (ok, error) = await clihis.SetAsync(sid.Trim(), bytes, userId, ct).ConfigureAwait(false);
+        if (!ok) return Results.BadRequest(new { error = error ?? "The file could not be attached." });
+
+        audit.Log("report.clinical_history.set", actor: userId, sid: sid.Trim(), ip: Audit.AuditIp.From(http));
+        return Results.Ok(new { ok = true });
+    }
+
+    private static async Task<IResult> DeleteClinicalHistory(
+        string sid,
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
+        SampleHeaderRepository headers,
+        Reports.ClinicalHistoryRepository clihis,
+        Audit.AuditLog audit,
+        HttpContext http,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+        if (string.IsNullOrWhiteSpace(sid) || sid.Length > 50) return Results.NotFound();
+
+        if (await InReportScopeAsync(userId, principal, scopes, headers, sid.Trim(), ct)
+                .ConfigureAwait(false) is null)
+        {
+            return Results.NotFound();
+        }
+
+        await clihis.DeleteAsync(sid.Trim(), userId, ct).ConfigureAwait(false);
+        audit.Log("report.clinical_history.delete", actor: userId, sid: sid.Trim(), ip: Audit.AuditIp.From(http));
+        return Results.Ok(new { ok = true });
     }
 
     /// <summary>

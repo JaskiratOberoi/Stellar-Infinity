@@ -85,6 +85,15 @@ const LockGlyph = () => (
 
 export function Reports() {
   const { user } = useAuth();
+  /*
+   * A CLIENT sees every sample, not only finished reports — this page is
+   * their port of the LIS's Sample Status screen, where a centre watches a
+   * sample move Registered → Tested → Printed and attaches clinical history
+   * along the way. View/Smart still appear only once a report exists; the
+   * pill carries the tracking. Lab staff keep the reports-only view — their
+   * pending work already lives on the worksheet.
+   */
+  const isClient = user?.role === 'client';
   const [rows, setRows] = useState<WorksheetRow[]>([]);
   const [scope, setScope] = useState<string>('');
   const [page, setPage] = useState(1);
@@ -102,6 +111,10 @@ export function Reports() {
    * the old behaviour, never a leaked report.
    */
   const [locks, setLocks] = useState<Record<string, RowLock>>({});
+  /** SIDs on this page that carry an attached clinical-history PDF. */
+  const [cliHis, setCliHis] = useState<Set<string>>(new Set());
+  /** The row whose clinical-history dialog is open. */
+  const [cliSid, setCliSid] = useState<WorksheetRow | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<number | undefined>(undefined);
   const showToast = (msg: string) => {
@@ -284,7 +297,9 @@ export function Reports() {
       // fact would make a page of 50 arrive as 6 rows with a dead Next button,
       // which reads as "that is all there is" when it is not. The worksheet
       // learned this the same way — see PENDING_STATUSES there.
-      p.set('statusIds', REPORTABLE_STATUSES.join(','));
+      // Clients get NO status filter — every sample, tracked by its pill,
+      // like the LIS Sample Status screen they came from.
+      if (!isClient) p.set('statusIds', REPORTABLE_STATUSES.join(','));
       // No client timeout — a reconciliation over months of reports outlives
       // the 20s default. Stop (or the server's SQL timeout) ends a long one.
       const r = await api.get<{
@@ -298,10 +313,16 @@ export function Reports() {
       // waits on fifty balance checks. Until they land (or if they fail) the
       // buttons behave as before, and the server's 423 still guards.
       setLocks({});
+      setCliHis(new Set());
       if (r.rows.length > 0) {
         void api.post<{ locks: Record<string, RowLock> }>(
           '/api/reports/locks', { sids: r.rows.map((x) => x.sid) },
         ).then((l) => setLocks(l.locks)).catch(() => { /* advisory only */ });
+        // Which rows already carry a clinical-history PDF, so the paperclip
+        // can say so. Advisory the same way the locks are.
+        void api.post<{ sids: string[] }>(
+          '/api/reports/clinical-history/flags', { sids: r.rows.map((x) => x.sid) },
+        ).then((f) => setCliHis(new Set(f.sids))).catch(() => { /* advisory only */ });
       }
     } catch (e) {
       // Stopped or superseded is not a failure; the list stays as it was.
@@ -311,7 +332,7 @@ export function Reports() {
       // A superseded search leaves the spinner to its successor.
       if (searchRef.current === ctrl) setLoading(false);
     }
-  }, [filters, page]);
+  }, [filters, page, isClient]);
 
   useEffect(() => {
     const id = setTimeout(() => void load(), 300);
@@ -441,6 +462,10 @@ export function Reports() {
                     ].filter(Boolean).join(' ')}
                     style={{ cursor: 'pointer' }}
                     onClick={() => {
+                      if (!REPORTABLE_STATUSES.includes(r.statusCode ?? -1)) {
+                        showToast('This sample’s report is not ready yet — the status column tracks it.');
+                        return;
+                      }
                       const l = locks[r.sid];
                       if (l) showToast(lockMsg(l)); else setOpenSid(r.sid);
                     }}
@@ -522,7 +547,26 @@ export function Reports() {
                     {/* The gap between the two buttons is cell--action's job now,
                         so that on a card they can split the foot evenly. */}
                     <td className="cell--action">
-                      {locks[r.sid] ? (
+                      {/* Clinical history rides on EVERY row — a pending
+                          sample is exactly when the lab still wants context.
+                          The LIS offered this from its Sample Status screen;
+                          here it lives beside the row it belongs to. */}
+                      <button
+                        className="btn btn--ghost btn--sm"
+                        title={cliHis.has(r.sid)
+                          ? 'Clinical history attached — view or replace'
+                          : 'Attach a clinical history PDF for the lab'}
+                        aria-label={`Clinical history for ${r.sid}`}
+                        style={cliHis.has(r.sid) ? { color: 'var(--teal)', fontWeight: 600 } : undefined}
+                        onClick={(e) => { e.stopPropagation(); setCliSid(r); }}
+                      >
+                        <ClipGlyph />{cliHis.has(r.sid) ? ' Hist.' : ''}
+                      </button>
+                      {!REPORTABLE_STATUSES.includes(r.statusCode ?? -1) ? (
+                        /* No report yet — the pill says where it is; a View
+                           button that opens an empty sheet reads as a bug. */
+                        null
+                      ) : locks[r.sid] ? (
                         /* A HELD report offers no viewer at all — not a modal
                            that opens and then refuses. One lock stands in for
                            both View and Smart (they answer the same 423), and
@@ -599,7 +643,145 @@ export function Reports() {
         />
       )}
       {smartSid && <SmartReportModal sid={smartSid} onClose={() => setSmartSid(null)} />}
+      {cliSid && (
+        <ClinicalHistoryModal
+          row={cliSid}
+          has={cliHis.has(cliSid.sid)}
+          onClose={() => setCliSid(null)}
+          onChanged={(sid, nowHas) => {
+            setCliHis((prev) => {
+              const next = new Set(prev);
+              if (nowHas) next.add(sid); else next.delete(sid);
+              return next;
+            });
+            showToast(nowHas
+              ? 'Clinical history attached — the lab sees it on the worksheet.'
+              : 'Clinical history removed.');
+            setCliSid(null);
+          }}
+        />
+      )}
       {toast && <div className="toast" role="status">{toast}</div>}
+    </div>
+  );
+}
+
+const ClipGlyph = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       strokeWidth="2.1" aria-hidden="true" style={{ verticalAlign: '-2px' }}>
+    <path d="M21.4 11.05 12.25 20.2a6 6 0 0 1-8.49-8.49l8.57-8.57a4 4 0 1 1 5.66 5.66l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+  </svg>
+);
+
+/**
+ * Attach / view / replace / remove a sample's clinical-history PDF — the port
+ * of the LIS Sample Status upload, one dialog per row. The file lands where
+ * the LEGACY worksheet already looks (clihis.ashx, SID-keyed), so a tech on
+ * either system opens the same document.
+ */
+function ClinicalHistoryModal({ row, has, onClose, onChanged }: {
+  row: WorksheetRow;
+  has: boolean;
+  onClose: () => void;
+  onChanged: (sid: string, nowHas: boolean) => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const pick = (f: File | null) => {
+    setErr(null);
+    if (!f) { setFile(null); return; }
+    if (!/\.pdf$/i.test(f.name)) { setErr('Only PDF files can be attached.'); setFile(null); return; }
+    if (f.size > 10 * 1024 * 1024) { setErr('That PDF is larger than 10 MB.'); setFile(null); return; }
+    setFile(f);
+  };
+
+  const upload = async () => {
+    if (!file) return;
+    setBusy(true); setErr(null);
+    try {
+      const b64 = await new Promise<string>((resolve, reject) => {
+        const rd = new FileReader();
+        rd.onerror = () => reject(new Error('The file could not be read.'));
+        rd.onload = () => resolve(String(rd.result).split(',')[1] ?? '');
+        rd.readAsDataURL(file);
+      });
+      await api.put(`/api/reports/${encodeURIComponent(row.sid)}/clinical-history`, { fileBase64: b64 });
+      onChanged(row.sid, true);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'The file could not be attached.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const view = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch(`/api/reports/${encodeURIComponent(row.sid)}/clinical-history`, { credentials: 'include' });
+      if (!r.ok) throw new Error('The file could not be opened.');
+      const blob = await r.blob();
+      window.open(URL.createObjectURL(blob), '_blank', 'noopener');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'The file could not be opened.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    setBusy(true); setErr(null);
+    try {
+      await api.delete(`/api/reports/${encodeURIComponent(row.sid)}/clinical-history`);
+      onChanged(row.sid, false);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'The file could not be removed.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={busy ? undefined : onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <h2 className="modal__title">Clinical history</h2>
+        <p className="muted" style={{ fontSize: '.82rem', marginTop: '.2rem' }}>
+          Sample <b className="mono">{row.sid}</b>
+          {row.patientName ? <> · {row.patientName}</> : null}
+        </p>
+        <p className="muted" style={{ fontSize: '.8rem', lineHeight: 1.6, marginTop: '.6rem' }}>
+          {has
+            ? 'A clinical history PDF is attached — the lab opens it from the worksheet. Uploading another replaces it.'
+            : 'Attach a PDF — referral notes, prescriptions, prior reports — and the lab sees it on the worksheet for this sample.'}
+        </p>
+
+        <div className="field" style={{ marginTop: '.8rem' }}>
+          <input type="file" accept="application/pdf,.pdf" aria-label="Clinical history PDF"
+                 onChange={(e) => pick(e.target.files?.[0] ?? null)} />
+          <span className="muted" style={{ fontSize: '.72rem' }}>PDF, up to 10 MB.</span>
+        </div>
+
+        {err && <p style={{ color: 'var(--danger)', fontSize: '.8rem', marginTop: '.5rem' }}>{err}</p>}
+
+        <div className="modal__actions">
+          {has && (
+            <>
+              <button className="btn btn--ghost" disabled={busy} onClick={() => void view()}>
+                View current
+              </button>
+              <button className="btn btn--ghost" disabled={busy} style={{ color: 'var(--danger)' }}
+                      onClick={() => void remove()}>
+                Remove
+              </button>
+            </>
+          )}
+          <button className="btn btn--ghost" disabled={busy} onClick={onClose}>Cancel</button>
+          <button className="btn btn--primary" disabled={busy || !file} onClick={() => void upload()}>
+            {busy ? 'Working…' : has ? 'Replace' : 'Attach'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

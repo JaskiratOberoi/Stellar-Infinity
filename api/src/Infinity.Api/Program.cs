@@ -42,6 +42,7 @@ builder.Services.AddSingleton<Infinity.Api.Orders.OrderDraftRepository>();
 builder.Services.AddSingleton<Infinity.Api.Orders.CustomTestRepository>();
 builder.Services.AddSingleton<Infinity.Api.Orders.AccessionRepository>();
 builder.Services.AddSingleton<Infinity.Api.Reports.ReportExtrasRepository>();
+builder.Services.AddSingleton<Infinity.Api.Reports.ClinicalHistoryRepository>();
 builder.Services.AddSingleton<Infinity.Api.Reports.CatalogueDetailRepository>();
 builder.Services.AddSingleton<Infinity.Api.Reports.SmartReportAccessRepository>();
 builder.Services.AddSingleton<Infinity.Api.Reports.ReportLink>();
