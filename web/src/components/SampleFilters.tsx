@@ -96,6 +96,23 @@ export function initialFilters(fromDaysAgo: number): SampleFilterValues {
   return { ...EMPTY_FILTERS, from: daysAgo(fromDaysAgo), to: daysAgo(0) };
 }
 
+/**
+ * The LIS's sample statuses, in bench order with the two dead-ends last —
+ * the one list both the worksheet's and the reporting page's Status control
+ * draw from, labelled the way the pills already spell them.
+ */
+export const SAMPLE_STATUSES: { id: number; label: string }[] = [
+  { id: 2, label: 'Registered' },
+  { id: 4, label: 'Partially tested' },
+  { id: 5, label: 'Tested' },
+  { id: 6, label: 'Partially authorised' },
+  { id: 7, label: 'Authorised' },
+  { id: 8, label: 'Partially printed' },
+  { id: 9, label: 'Printed' },
+  { id: 3, label: 'Rejected' },
+  { id: 10, label: 'Pending' },
+];
+
 /** True when anything beyond the date window is narrowing the list. */
 export function hasNarrowingFilters(f: SampleFilterValues): boolean {
   return Boolean(

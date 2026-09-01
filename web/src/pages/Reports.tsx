@@ -8,8 +8,8 @@ import { Pager } from '../components/Pager';
 import { useAuth } from '../auth/AuthContext';
 import { TestList } from '../components/TestList';
 import {
-  SampleFilters, useFilterOptions, applyFilterParams,
-  initialFilters, type SampleFilterValues,
+  SampleFilters, ActiveFilterChips, useFilterOptions, applyFilterParams,
+  initialFilters, SAMPLE_STATUSES, type SampleFilterValues,
 } from '../components/SampleFilters';
 import { LetterheadToggle, useLetterhead } from '../components/LetterheadToggle';
 import { PidReportButton } from '../components/PidReportButton';
@@ -300,9 +300,14 @@ export function Reports() {
       // fact would make a page of 50 arrive as 6 rows with a dead Next button,
       // which reads as "that is all there is" when it is not. The worksheet
       // learned this the same way — see PENDING_STATUSES there.
-      // Clients get NO status filter — every sample, tracked by its pill,
-      // like the LIS Sample Status screen they came from.
-      if (!isClient) p.set('statusIds', REPORTABLE_STATUSES.join(','));
+      //
+      // Three cases, one control, mirroring the worksheet: a chosen status
+      // wins; 'all' asks for everything; '' is the page's own default — the
+      // reportable set for lab staff, EVERYTHING for a client, whose page is
+      // also their Sample Status tracker.
+      if (filters.statusId === 'all') { /* no status filter */ }
+      else if (filters.statusId !== '') p.set('statusIds', String(filters.statusId));
+      else if (!isClient) p.set('statusIds', REPORTABLE_STATUSES.join(','));
       // No client timeout — a reconciliation over months of reports outlives
       // the 20s default. Stop (or the server's SQL timeout) ends a long one.
       const r = await api.get<{
@@ -363,14 +368,24 @@ export function Reports() {
 
       </div>
 
-      {/* One filter area, the same component the worksheet uses. No status
-          control: this page pins the reportable set, so offering a choice it
-          would override would be a control that lies. */}
+      {/* One filter area, the same component the worksheet uses — status
+          control included, now that the page tracks pending samples too. */}
       {/* A centre's reports are its own by definition, so the client filter is
           pinned rather than offered. The API resolves the scope from the
           session on every request regardless — this stops the control implying
           a choice that does not exist. */}
+      <ActiveFilterChips value={filters} options={options} onChange={setFilters}
+                         statusOptions={SAMPLE_STATUSES} />
+
       <SampleFilters value={filters} options={options} onChange={setFilters}
+                     statusOptions={SAMPLE_STATUSES}
+                     // '' is this page's default set. For staff that is the
+                     // reportable statuses, so the default needs a name and
+                     // 'Any status' becomes an explicit choice; for a client
+                     // the default already IS every status, so the plain
+                     // empty label says exactly that and no extra option is
+                     // added.
+                     defaultStatusLabel={isClient ? undefined : 'Reports ready'}
                      lockClientCode={user?.role === 'client'} />
 
       {scope === 'none' && (

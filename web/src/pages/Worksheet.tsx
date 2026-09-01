@@ -8,26 +8,17 @@ import { Pager } from '../components/Pager';
 import { InfinityLoader } from '../components/InfinityLoader';
 import {
   SampleFilters, ActiveFilterChips, useFilterOptions, applyFilterParams,
-  initialFilters, type SampleFilterValues,
+  initialFilters, SAMPLE_STATUSES, type SampleFilterValues,
 } from '../components/SampleFilters';
 import { PidReportButton } from '../components/PidReportButton';
 import { TestList } from '../components/TestList';
 
 /**
- * LIS sample statuses. Verified against tbl_med_mcc_patient_samples_status_master.
- * Status 1 (Sample Sent) never reaches the worksheet — the procedure excludes it.
+ * LIS sample statuses, shared with the reporting page. Verified against
+ * tbl_med_mcc_patient_samples_status_master. Status 1 (Sample Sent) never
+ * reaches the worksheet — the procedure excludes it.
  */
-const STATUSES: { id: number; label: string }[] = [
-  { id: 2, label: 'Registered' },
-  { id: 4, label: 'Partially tested' },
-  { id: 5, label: 'Tested' },
-  { id: 6, label: 'Partially authorised' },
-  { id: 7, label: 'Authorised' },
-  { id: 8, label: 'Partially printed' },
-  { id: 9, label: 'Printed' },
-  { id: 3, label: 'Rejected' },
-  { id: 10, label: 'Pending' },
-];
+const STATUSES = SAMPLE_STATUSES;
 
 /**
  * The statuses "Outstanding only" means: registered, partially tested, tested,
