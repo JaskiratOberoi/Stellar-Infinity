@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, csrfHeader } from '../api/client';
 import { downloadFile, fmtDateTime } from '../lib/format';
 import { useAuth } from '../auth/AuthContext';
-import { StatusBadge, type WorksheetRow } from './Reports';
+import { StatusBadge, REPORTABLE_STATUSES, type WorksheetRow } from './Reports';
 import { WorksheetEntry } from './WorksheetEntry';
 import { Pager } from '../components/Pager';
 import { InfinityLoader } from '../components/InfinityLoader';
@@ -470,7 +470,20 @@ export function Worksheet() {
                       <td className="cell--body" data-label="Tests">
                         <TestList names={r.testNames} />
                       </td>
-                      <td className="cell--tag"><StatusBadge status={r.status} statusCode={r.statusCode} /></td>
+                      <td className="cell--tag">
+                        <StatusBadge status={r.status} statusCode={r.statusCode} />
+                        {/* The WHY under the pill, same as Reporting: the
+                            rejection reason or hold note the lab wrote in
+                            Sample_Comments — which on this page is often the
+                            tech's own note back to themselves. */}
+                        {!REPORTABLE_STATUSES.includes(r.statusCode ?? -1) && r.sampleComments?.trim() && (
+                          <div className="muted" style={{ fontSize: '.7rem', marginTop: '.2rem',
+                                                          maxWidth: 220, lineHeight: 1.4 }}
+                               title={r.sampleComments}>
+                            {r.sampleComments.trim()}
+                          </div>
+                        )}
+                      </td>
                       <td className="muted cell--meta" data-label="Registered" style={{ fontSize: '.78rem' }}>
                         {fmtDateTime(r.registeredAt)}
                       </td>

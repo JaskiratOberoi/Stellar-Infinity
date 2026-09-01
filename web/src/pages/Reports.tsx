@@ -69,7 +69,7 @@ export interface WorksheetRow {
  * still unsigned, so there is no finished report to look at yet; it belongs on
  * the worksheet, where it is already listed as outstanding work.
  */
-const REPORTABLE_STATUSES = [7, 8, 9];
+export const REPORTABLE_STATUSES = [7, 8, 9];
 
 /** What one balance lock looks like, as /api/reports/locks reports it. */
 interface RowLock { reason: 'patient' | 'client' | null; dueAmount: number }
