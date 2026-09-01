@@ -8,10 +8,11 @@ namespace Infinity.Api.Orders;
 /// while typing instead of at submit.
 ///
 /// Default ceiling 20% of the bill. MDCARE / MEDICARE are contractually
-/// capped at 10%, and for them a set of floor-priced tests takes no discount
-/// at all: their line value drops out of the discountable base, so the cap is
-/// a % of the OTHER lines only. Custom (external) lines stay discountable.
-/// An order made up entirely of excluded tests allows no discount.
+/// capped at 10%, and for them a set of floor-priced tests poisons the
+/// discount outright: ANY of them on the order means no discount on any of
+/// it — not a reduced base. (Until 2026-09 the rule was softer — the line
+/// dropped out of the base and the rest stayed discountable — and the lab
+/// tightened it.)
 /// </summary>
 public static class DiscountPolicy
 {
@@ -76,8 +77,10 @@ public static class DiscountPolicy
         && NonDiscountableCodes.Contains(testCode.Trim());
 
     /// <summary>
-    /// <paramref name="total"/> minus the value of any non-discountable lines
-    /// for this client. Never negative.
+    /// The discountable base: <paramref name="total"/> — or ZERO the moment
+    /// any floor-priced test is on the order. Membership is checked by code,
+    /// not by line value, so a zero-rated contract line still kills the
+    /// discount.
     /// </summary>
     public static int DiscountableTotal(
         string? clientCode,
@@ -85,13 +88,12 @@ public static class DiscountPolicy
         int total)
     {
         if (!HasExclusions(clientCode)) return total;
-        var excluded = 0;
-        foreach (var (code, amount) in lines)
+        foreach (var (code, _) in lines)
         {
             if (code is not null && NonDiscountableCodes.Contains(code.Trim()))
-                excluded += amount;
+                return 0;
         }
-        return Math.Max(0, total - excluded);
+        return total;
     }
 
     // ── Gold Card details — same leniency as Telo's lib/gold-card.ts ───────

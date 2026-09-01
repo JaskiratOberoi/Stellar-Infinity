@@ -549,9 +549,10 @@ export function NewOrder() {
    *   customTotal external items bill at a fixed amount × qty; never halved,
    *               always discountable.
    *   discount    capped at the client's policy % of the discountable base
-   *               (MDCARE/MEDICARE 10%, default 20%), where that client's
-   *               contract-priced tests drop out of the base. Never stacks
-   *               with a Gold Card — the card IS the discount.
+   *               (MDCARE/MEDICARE 10%, default 20%) — and ZERO the moment
+   *               any of that client's contract-priced tests is on the
+   *               order. Never stacks with a Gold Card — the card IS the
+   *               discount.
    */
   const goldApplied = gold && !isB2b;
   const goldDetailsOk = isValidGoldCardNumber(goldNumber) && isValidGoldCardHolder(goldHolder);
@@ -2070,11 +2071,10 @@ export function NewOrder() {
                         : maxDiscount > 0
                           ? `Up to ${inr(maxDiscount)} (${discountPctLabel}% of the discountable total).`
                           : hasBillable
-                            ? 'These tests are contract-priced — no discount applies.'
+                            ? hasExcludedLines
+                              ? 'A contract-priced test is on this order — no discount applies to any of it.'
+                              : 'These tests are contract-priced — no discount applies.'
                             : ''}
-                      {!goldApplied && hasExcludedLines && maxDiscount > 0 && (
-                        <> Contract-priced tests on this order take no discount.</>
-                      )}
                     </span>
                   </div>
                 ) : (

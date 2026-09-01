@@ -545,7 +545,7 @@ public static class OrderEntryEndpoints
                     return Results.BadRequest(new
                     {
                         error = baseAmount == 0
-                            ? "These tests are contract-priced for this client and take no discount."
+                            ? "A contract-priced test is on this order — no discount applies to any of it."
                             : $"The discount cannot exceed {DiscountPolicy.CapLabel(clientCode)}% of the discountable total — up to ₹{max:N0} on this order.",
                     });
                 }

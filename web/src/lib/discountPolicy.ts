@@ -5,9 +5,10 @@
  * exists so the operator sees the ceiling while typing instead of at submit.
  *
  * Default ceiling 20% of the bill. MDCARE / MEDICARE are contractually capped
- * at 10%, and for them a set of floor-priced tests takes no discount at all:
- * their line value drops out of the discountable base, so the cap is a % of
- * the OTHER lines only. Custom (external) lines stay discountable.
+ * at 10%, and for them a set of floor-priced tests poisons the discount
+ * outright: ANY of them on the order means no discount on any of it — not a
+ * reduced base. (Until 2026-09 the rule was softer — the line dropped out of
+ * the base and the rest stayed discountable — and the lab tightened it.)
  */
 
 export const DEFAULT_DISCOUNT_CAP_PCT = 0.2;
@@ -67,7 +68,9 @@ export function nonDiscountableTestCodes(
   return NON_DISCOUNTABLE_BY_CLIENT[code] ?? EMPTY;
 }
 
-/** `total` minus the value of any non-discountable lines. Never negative. */
+/** The discountable base: `total` — or ZERO the moment any floor-priced test
+ *  is on the order. Membership is checked by code, not by line value, so a
+ *  zero-rated contract line still kills the discount. */
 export function discountableTotal(
   clientCode: string | null | undefined,
   lines: { code: string | null | undefined; amount: number }[],
@@ -75,11 +78,10 @@ export function discountableTotal(
 ): number {
   const excl = nonDiscountableTestCodes(clientCode);
   if (excl.size === 0) return total;
-  let excluded = 0;
   for (const l of lines) {
-    if (excl.has((l.code ?? '').trim().toUpperCase())) excluded += l.amount || 0;
+    if (excl.has((l.code ?? '').trim().toUpperCase())) return 0;
   }
-  return Math.max(0, total - excluded);
+  return total;
 }
 
 // ── Gold Card details, same leniency as Telo's lib/gold-card.ts ────────────
