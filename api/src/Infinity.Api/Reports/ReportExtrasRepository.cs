@@ -8,7 +8,12 @@ namespace Infinity.Api.Reports;
 public sealed record CollectionCentre(
     string Code, string? Name, string? Address, string? City, string? Phone, string? Email);
 
-public sealed record ProcessingUnit(int Id, string? Name, string? Address, string? City, string? Phone);
+/// <param name="Accreditation">
+/// Printed ahead of the Processed-at line, e.g. "MC-2547 NABL Accredited" for
+/// Delhi. From inf_business_unit_footer; null for units with no accreditation.
+/// </param>
+public sealed record ProcessingUnit(
+    int Id, string? Name, string? Address, string? City, string? Phone, string? Accreditation);
 
 /// <param name="SignatureDataUrl">
 /// The signature image, inlined as a data URI. Inlined rather than served from
@@ -68,7 +73,8 @@ public sealed class ReportExtrasRepository(NobleConnectionFactory db, SqlRetry r
                     && await r.ReadAsync(inner).ConfigureAwait(false))
                 {
                     unit = new ProcessingUnit(
-                        r.Int("id"), r.Str("name"), r.Str("address"), r.Str("city"), r.Str("phone"));
+                        r.Int("id"), r.Str("name"), r.Str("address"), r.Str("city"), r.Str("phone"),
+                        r.Str("accreditation"));
                 }
 
                 var signers = new List<ReportSigner>();

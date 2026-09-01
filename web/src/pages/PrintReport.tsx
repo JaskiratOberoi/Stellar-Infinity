@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } f
 import { useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import nobleLogo from '../assets/noble-logo.png';
+import nablLogo from '../assets/nabl.png';
 import { notesForCodes } from '../lib/reportNotes';
 import {
   ageLabel, fmtDob, fmtStamp, formatRange, genderLabel, splitInterp,
@@ -802,6 +803,11 @@ function ReportFooterBlock({ row, printedAt }: { row: FullRow; printedAt: string
   const left = signers.slice(0, leftCount);
   const right = signers.slice(leftCount);
 
+  // The LIS prints the NABL medallion at the foot of any page carrying an
+  // accredited result. Infinity's signature block prints once, at the end,
+  // so the medallion joins it whenever the report has accredited content.
+  const hasNabl = (row.results ?? []).some((r) => r.nabl);
+
   const Sig = (s: FullRow['signers'][number]) => (
     <div key={s.id} className="lr__sign">
       {s.signatureDataUrl && <img src={s.signatureDataUrl} alt={s.doctorName ?? 'Signature'} />}
@@ -812,9 +818,14 @@ function ReportFooterBlock({ row, printedAt }: { row: FullRow; printedAt: string
 
   return (
     <>
-      {(signers.length > 0 || row.qr) && (
+      {(signers.length > 0 || row.qr || hasNabl) && (
         <div className="lr__signs">
           <div className="lr__signs-left">{left.map(Sig)}</div>
+          {hasNabl && (
+            <div className="lr__nabl-foot">
+              <img src={nablLogo} alt="NABL accredited" />
+            </div>
+          )}
           {row.qr && (
             <div className="lr__qr">
               <img src={row.qr} alt="Scan to download / verify this report" />
@@ -827,6 +838,7 @@ function ReportFooterBlock({ row, printedAt }: { row: FullRow; printedAt: string
       <div className="lr__legal">
         {processedAtLine && (
           <p>
+            {row.processedAt?.accreditation && <b>{row.processedAt.accreditation} — </b>}
             <b>Processed at:</b> {processedAtLine}
             {row.processedAt?.phone ? ` — Ph: ${row.processedAt.phone}` : ''}
           </p>
@@ -1002,6 +1014,7 @@ function GroupBlock({
               disabled={disabled}
             />
           )}
+          {group.nabl && <img className="lr__nabl" src={nablLogo} alt="NABL accredited" />}
           <span className="lr__title-text">{group.title ?? ''}</span>
         </span>
       </td>
@@ -1107,6 +1120,7 @@ function ResultRow({
         <td className={`lr__c-name${indent ? ' lr__indent' : ''}`}>
           <div className="lr__c-name-inner">
             {lead}
+            {row.nabl && <img className="lr__nabl" src={nablLogo} alt="NABL accredited" />}
             <div className="lr__c-name-text">{row.name ?? '—'}</div>
           </div>
         </td>

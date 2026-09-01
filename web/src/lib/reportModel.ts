@@ -38,6 +38,9 @@ export interface ReportRow {
   comments: string | null;
   /** The result row's own id — the unit the tick boxes and ?exclude= use. */
   resultId: number;
+  /** NABL medallion beside the name — set on a Delhi-processed sample's
+   *  accredited standalone tests, never on Param analytes. */
+  nabl: boolean;
 }
 
 /**
@@ -73,6 +76,8 @@ export interface ReportGroup {
   interpretation: string | null;
   /** An interpretation held as a picture, inlined as a data URI. */
   interpretationImage: string | null;
+  /** NABL medallion beside the heading, from the Head row's flag. */
+  nabl: boolean;
   rows: ReportRow[];
   /** Set when this group is a Culture & Sensitivity result — the report then
    *  draws the antibiogram instead of `rows`. */
@@ -259,6 +264,7 @@ export function buildSampleReport(results: readonly TestResult[]): SampleReport 
     abnormal: t.abnormal === true,
     comments: clean(t.comments),
     resultId: t.resultId,
+    nabl: t.nabl === true,
   });
 
   /*
@@ -353,6 +359,7 @@ export function buildSampleReport(results: readonly TestResult[]): SampleReport 
         method: clean(t.method),
         interpretation: cleanMultiline(t.interpretation),
         interpretationImage: t.interpretationImage ?? null,
+        nabl: t.nabl === true,
         rows: [],
       };
       if (inPanel) {

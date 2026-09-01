@@ -62,6 +62,10 @@ BEGIN
             P.id AS pid,
             U.MCCUnitCode AS client_code,
             BU.BusinessUnitCode AS business_unit,
+            -- Numeric processing-unit id, for the NABL rule below. NOT
+            -- BU.BusinessUnitCode, which is a STRING here ('QUGEN') — the
+            -- numeric column of that name lives on the MCC table.
+            S.business_unit_id AS bu_id,
             /*
              * Salutation + name, as the legacy report prints it. The title
              * lives in its own column (initial: 'Mrs', 'Dr', ...) and the
@@ -210,7 +214,25 @@ BEGIN
                 -- from row order alone, which is right until a profile's rows
                 -- are not contiguous.
                 r.profile_id,
-                sm.Sampletype AS specimen
+                sm.Sampletype AS specimen,
+                /*
+                 * NABL medallion, as the legacy LIS prints it: a Delhi-processed
+                 * sample (business unit 1 — the NABL-accredited lab) marks every
+                 * accredited test's own row and its section headings, never the
+                 * Param analytes and never the Profile banner. Ported from the
+                 * GET_PATIENT_REPORT_* family's
+                 *     CASE WHEN BusinessUnitCode = 1 AND Nabl_Logo = 1
+                 *           AND testtype IN ('Test','Head') THEN 1 ELSE 0 END
+                 * with one correction verified against the LIS's own printed
+                 * output: the deployed print keys on the SAMPLE's processing
+                 * unit, not the collection centre's home unit — a BU-17 centre's
+                 * sample processed in Delhi (SID 9293660) prints the medallions.
+                 * Accreditation belongs to the lab that ran the test.
+                 */
+                CONVERT(bit, CASE WHEN H.bu_id = 1
+                                   AND m.Nabl_Logo = 1
+                                   AND r.testtype IN (N'Test', N'Head')
+                                  THEN 1 ELSE 0 END) AS nabl
             FROM dbo.tbl_med_mcc_patient_test_result r
             LEFT JOIN dbo.tbl_med_test_master m ON r.testid = m.id
             LEFT JOIN dbo.tbl_med_department_master d ON m.DepartmentId = d.id

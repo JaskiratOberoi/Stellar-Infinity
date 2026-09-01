@@ -51,14 +51,28 @@ BEGIN
     WHERE MCCUnitCode = @clientCode;
 
     -- 2 ── which lab processed it -------------------------------------------
+    -- Infinity's own footer identity wins over the shared row: BU 1 (Delhi)
+    -- carries placeholder data there ("QUGEN PATHLABS"), which the legacy LIS
+    -- never prints — its Crystal footer is hardcoded. inf_business_unit_footer
+    -- (137) holds what Infinity prints instead, plus the accreditation line
+    -- ("MC-2547 NABL Accredited") the LISTEC portal shows for Delhi.
+    -- A footer row REPLACES the identity outright — including a NULL phone,
+    -- so Delhi prints exactly what the old portal prints, with no stray
+    -- "Ph:" tail from the placeholder row.
     SELECT TOP 1
-        id      = id,
-        name    = NULLIF(LTRIM(RTRIM(BusinessUnitName)), N''),
-        address = NULLIF(LTRIM(RTRIM(address)), N''),
-        city    = NULLIF(LTRIM(RTRIM(city)), N''),
-        phone   = NULLIF(LTRIM(RTRIM(phone)), N'')
-    FROM dbo.tbl_med_business_unit_master
-    WHERE id = @businessUnitId;
+        id            = b.id,
+        name          = CASE WHEN f.business_unit_id IS NOT NULL THEN f.display_name
+                             ELSE NULLIF(LTRIM(RTRIM(b.BusinessUnitName)), N'') END,
+        address       = CASE WHEN f.business_unit_id IS NOT NULL THEN f.address
+                             ELSE NULLIF(LTRIM(RTRIM(b.address)), N'') END,
+        city          = CASE WHEN f.business_unit_id IS NOT NULL THEN f.city
+                             ELSE NULLIF(LTRIM(RTRIM(b.city)), N'') END,
+        phone         = CASE WHEN f.business_unit_id IS NOT NULL THEN f.phone
+                             ELSE NULLIF(LTRIM(RTRIM(b.phone)), N'') END,
+        accreditation = f.accreditation
+    FROM dbo.tbl_med_business_unit_master b
+    LEFT JOIN dbo.inf_business_unit_footer f ON f.business_unit_id = b.id
+    WHERE b.id = @businessUnitId;
 
     /*
      * 3 ── who signs it

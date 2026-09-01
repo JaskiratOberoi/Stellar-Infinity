@@ -444,6 +444,13 @@
 .lr__qr img { margin: 0 auto; height: 48px; width: 48px; display: block; }
 .lr__qr p { margin-top: 2px; line-height: 1.25; }
 
+/* ---------- NABL medallion ----------
+   Beside accredited section headings and standalone tests, and at the foot of
+   a Delhi-processed report next to the QR — placed as the LIS prints it. */
+.lr__nabl { height: 12px; width: auto; flex: none; align-self: center; }
+.lr__nabl-foot { flex: none; break-inside: avoid; }
+.lr__nabl-foot img { height: 44px; width: auto; display: block; margin: 0 auto; }
+
 .lr__legal {
   margin-top: 4px;
   border-top: 1px solid #d1d5db;

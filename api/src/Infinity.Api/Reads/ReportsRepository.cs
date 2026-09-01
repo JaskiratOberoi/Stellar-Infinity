@@ -53,7 +53,14 @@ public sealed record TestResult(
     /// An interpretation held as a picture — the HBV and HCV graphs — inlined
     /// as a data URI. Some tests carry ONLY this and no interpretation text.
     /// </summary>
-    [property: JsonPropertyName("interpretationImage")] string? InterpretationImage = null);
+    [property: JsonPropertyName("interpretationImage")] string? InterpretationImage = null,
+    /// <summary>
+    /// Print the NABL medallion beside this row — a Delhi-processed sample's
+    /// accredited test and its section headings, per the legacy LIS rule
+    /// ported into usp_inf_report_by_sid. Always false on the search path,
+    /// whose shared procedure does not carry the column.
+    /// </summary>
+    [property: JsonPropertyName("nabl")] bool Nabl = false);
 
 public sealed record WorksheetRow(
     string Sid,
@@ -833,7 +840,8 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
                     Interpretation: GetString(el, "interpretation"),
                     ProfileId: GetNullableInt(el, "profile_id"),
                     Specimen: GetString(el, "specimen"),
-                    TestId: GetNullableInt(el, "test_id")));
+                    TestId: GetNullableInt(el, "test_id"),
+                    Nabl: GetBool(el, "nabl")));
             }
 
             // Restore DOCUMENT order.

@@ -44,6 +44,9 @@ export interface TestResult {
    * the API as a data URI. Some tests carry ONLY this and no text.
    */
   interpretationImage: string | null;
+  /** Print the NABL medallion beside this row: a Delhi-processed sample's
+   *  accredited test and its section headings, per the legacy LIS rule. */
+  nabl: boolean;
 }
 
 /** Where the sample was taken — the centre a patient rings, not the lab. */
@@ -63,6 +66,9 @@ export interface ProcessingUnit {
   address: string | null;
   city: string | null;
   phone: string | null;
+  /** Printed ahead of the Processed-at line — "MC-2547 NABL Accredited" for
+   *  Delhi. Null for units with no accreditation on file. */
+  accreditation: string | null;
 }
 
 export interface ReportSigner {
