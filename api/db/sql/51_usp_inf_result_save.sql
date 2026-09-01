@@ -90,7 +90,15 @@ CREATE OR ALTER PROCEDURE dbo.usp_inf_result_save
     -- Sample-level free text. NULL leaves each alone. Deliberately does not
     -- touch sample_status (defect 2 above).
     @sample_comments          VARCHAR(500) = NULL,
-    @sample_clinical_history  VARCHAR(500) = NULL
+    @sample_clinical_history  VARCHAR(500) = NULL,
+
+    -- Manual abnormal marks, honoured ONLY where the derivation below cannot
+    -- judge (non-numeric value, or no resolved numeric range). For a
+    -- range-checkable result the arithmetic stays authoritative and a row
+    -- here is ignored. A row must also appear in @edits to take effect —
+    -- overrides ride the ordinary save, never a side channel. Omitted by
+    -- older callers, which arrives as an empty table.
+    @abnormal_overrides dbo.InfAbnormalOverride READONLY
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -177,6 +185,9 @@ BEGIN
 
         old_abnormal  BIT,
         new_abnormal  BIT,
+        -- 1 when new_abnormal came from the operator's manual mark rather
+        -- than the range arithmetic — audited as such.
+        ab_overridden BIT DEFAULT 0,
 
         range_low     DECIMAL(18,6),
         range_high    DECIMAL(18,6),
@@ -267,19 +278,30 @@ BEGIN
     WHERE r.vailid = @sid;          -- an edit naming a row from another sample is ignored
 
     ------------------------------------------------------------------
-    -- Derive the abnormal flag. Never accepted from the caller.
+    -- Derive the abnormal flag. For a range-checkable result it is never
+    -- accepted from the caller; where the arithmetic cannot judge — a
+    -- qualitative value, or no resolved numeric range — the operator's
+    -- manual mark from @abnormal_overrides decides, and with neither the
+    -- stored flag is preserved (asserting "normal" by default is the
+    -- legacy checkbox's own bug).
     ------------------------------------------------------------------
-    UPDATE #work
+    UPDATE w
     SET new_abnormal =
         CASE
-            WHEN numeric_value IS NULL OR range_low IS NULL OR range_high IS NULL
-                -- Not range-checkable: preserve whatever was already recorded
-                -- rather than asserting "normal", which is what binding the
-                -- checkbox to a literal false does in the legacy UI.
-                THEN old_abnormal
-            WHEN numeric_value < range_low OR numeric_value > range_high THEN 1
+            WHEN w.numeric_value IS NULL OR w.range_low IS NULL OR w.range_high IS NULL
+                THEN COALESCE(o.abnormal, w.old_abnormal)
+            WHEN w.numeric_value < w.range_low OR w.numeric_value > w.range_high THEN 1
             ELSE 0
-        END;
+        END,
+        ab_overridden =
+        CASE
+            WHEN (w.numeric_value IS NULL OR w.range_low IS NULL OR w.range_high IS NULL)
+                 AND o.abnormal IS NOT NULL AND o.abnormal <> w.old_abnormal
+                THEN 1
+            ELSE 0
+        END
+    FROM #work w
+    LEFT JOIN @abnormal_overrides o ON o.result_id = w.result_id;
 
     ------------------------------------------------------------------
     -- Permission gates. Checked across the WHOLE batch before any write, so a
@@ -417,13 +439,16 @@ BEGIN
         FROM #work w
         WHERE w.auto_auth = 1;
 
-        -- The abnormal flag is computed, not asserted, so it is logged as
-        -- 'derive'. Recording it as an amendment would misattribute an
-        -- arithmetic consequence to the operator.
+        -- A computed flag is logged as 'derive' — recording it as an
+        -- amendment would misattribute an arithmetic consequence to the
+        -- operator. A MANUAL mark is the operator's own act and is logged as
+        -- 'override', so the audit trail says who bolded a qualitative
+        -- result, not that arithmetic did.
         INSERT INTO dbo.inf_result_audit
             (result_id, vailid, patient_id, test_code, action, field, old_value, new_value,
              actor_user_id, actor_username, actor_ip, actor_user_agent, source, origin)
-        SELECT w.result_id, @sid, @patient_id, w.testcode, 'derive', 'abnormal',
+        SELECT w.result_id, @sid, @patient_id, w.testcode,
+               CASE WHEN w.ab_overridden = 1 THEN 'override' ELSE 'derive' END, 'abnormal',
                CONVERT(NVARCHAR(1), w.old_abnormal), CONVERT(NVARCHAR(1), w.new_abnormal),
                @actor_user_id, @actor_username, @actor_ip, @actor_agent, 'ui', @origin
         FROM #work w

@@ -106,6 +106,9 @@ interface Draft {
   value?: string;
   comments?: string;
   auth?: boolean;
+  /** The manual abnormal mark — offered only where the range arithmetic
+   *  cannot judge, which is also the only place the server honours it. */
+  abnormal?: boolean;
 }
 
 /**
@@ -191,6 +194,31 @@ function positionOf(row: WorksheetResultRow, raw: string | null | undefined): Ra
 
 /** Head and Profile rows carry no value — they are headings in the printed report. */
 const isHeading = (r: WorksheetResultRow) => r.testType === 'Head' || r.testType === 'Profile';
+
+/**
+ * The manual abnormal mark — the LIS worksheet's AB checkbox, offered only
+ * where the range arithmetic cannot judge. Marked, the value prints bold red
+ * on the report exactly as a derived H/L does.
+ */
+function AbnormalMark({ on, disabled, testName, onToggle }: {
+  on: boolean; disabled: boolean; testName: string; onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`flag flag--ab${on ? ' flag--ab-on' : ''}`}
+      disabled={disabled}
+      aria-pressed={on}
+      aria-label={`Mark ${testName} as abnormal`}
+      title={on
+        ? 'Marked abnormal — the value prints bold red on the report. Click to unmark.'
+        : 'No numeric range to judge this result against. Click to mark it abnormal — it will print bold red on the report.'}
+      onClick={onToggle}
+    >
+      AB
+    </button>
+  );
+}
 
 export function WorksheetEntry({ sid, onClose, onSaved }: {
   sid: string;
@@ -302,8 +330,9 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
       const valueSame = next.value === undefined || next.value === (r.value ?? '');
       const commentsSame = next.comments === undefined || next.comments === (r.comments ?? '');
       const authSame = next.auth === undefined || next.auth === r.authorized;
+      const abSame = next.abnormal === undefined || next.abnormal === r.abnormal;
 
-      if (valueSame && commentsSame && authSame) {
+      if (valueSame && commentsSame && authSame && abSame) {
         const { [r.resultId]: _dropped, ...rest } = d;
         return rest;
       }
@@ -334,6 +363,7 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
           comments: d.comments,
           setAuth: d.auth === undefined || d.auth === row?.authorized ? null : d.auth,
           reason: isAmend ? reason.trim() : null,
+          abnormal: d.abnormal === undefined || d.abnormal === row?.abnormal ? null : d.abnormal,
         };
       });
 
@@ -582,6 +612,16 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                     const value = valueOf(r);
                     const pos = positionOf(r, value);
                     const touched = drafts[r.resultId] !== undefined;
+                    /*
+                     * The manual AB mark — the LIS worksheet's checkbox, kept
+                     * ONLY for the rows where the range arithmetic cannot
+                     * judge: a qualitative value or a test with no numeric
+                     * range. Everywhere else the derived H/L flag is the
+                     * truth and a manual mark would be a way to contradict
+                     * it, which is the legacy defect this replaced.
+                     */
+                    const abManual = pos === 'unknown' && value.trim() !== '';
+                    const abOn = drafts[r.resultId]?.abnormal ?? r.abnormal;
                     const willSign = willAutoAuthorize.some((x) => x.resultId === r.resultId);
                     const label = plainText(r.testName) || r.testCode || '—';
                     const clipped = attachments.countFor(r.resultId);
@@ -613,17 +653,24 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
 
                         <td className="cell--body" data-label="Result">
                           {r.codedOptions.length > 0 ? (
-                            <select
-                              className="input input--sm"
-                              data-value-input
-                              disabled={readOnly}
-                              value={value}
-                              onKeyDown={onValueKeyDown}
-                              onChange={(e) => setDraft(r, { value: e.target.value })}
-                            >
-                              <option value="">—</option>
-                              {r.codedOptions.map((o) => <option key={o} value={o}>{o}</option>)}
-                            </select>
+                            <div className="row" style={{ gap: '.3rem', alignItems: 'center' }}>
+                              <select
+                                className="input input--sm"
+                                data-value-input
+                                disabled={readOnly}
+                                value={value}
+                                onKeyDown={onValueKeyDown}
+                                onChange={(e) => setDraft(r, { value: e.target.value })}
+                              >
+                                <option value="">—</option>
+                                {r.codedOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+                              </select>
+                              {abManual && (
+                                <AbnormalMark on={abOn} disabled={readOnly}
+                                              testName={plainText(r.testName) || r.testCode || 'this result'}
+                                              onToggle={() => setDraft(r, { abnormal: !abOn })} />
+                              )}
+                            </div>
                           ) : (
                             <div className="row" style={{ gap: '.3rem', alignItems: 'center' }}>
                               <input
@@ -637,6 +684,11 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                               />
                               {pos === 'high' && <span className="flag flag--high" title="Above reference range">H</span>}
                               {pos === 'low' && <span className="flag flag--low" title="Below reference range">L</span>}
+                              {abManual && (
+                                <AbnormalMark on={abOn} disabled={readOnly}
+                                              testName={plainText(r.testName) || r.testCode || 'this result'}
+                                              onToggle={() => setDraft(r, { abnormal: !abOn })} />
+                              )}
                               {/* Descriptive results — histopathology, cytology,
                                   culture — are prose in the same `value` column
                                   a numeric result uses, and a 200px single-line

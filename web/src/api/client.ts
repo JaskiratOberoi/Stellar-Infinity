@@ -401,6 +401,10 @@ export interface ResultEdit {
   comments?: string | null;
   setAuth?: boolean | null;
   reason?: string | null;
+  /** The manual abnormal mark — honoured by the server ONLY where its own
+   *  range derivation cannot judge (qualitative value, or no numeric range).
+   *  Null/omitted = not touched. */
+  abnormal?: boolean | null;
 }
 
 export interface SaveResultsOutcome {

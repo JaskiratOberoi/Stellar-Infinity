@@ -122,14 +122,19 @@ public sealed record WorksheetSample(
 /// "clear it". A grid save posts every visible row, so collapsing the two would
 /// let an untouched row wipe a value someone else entered since the page loaded.
 ///
-/// There is deliberately no Abnormal field. The flag is derived server-side.
+/// <see cref="Abnormal"/> is the one deliberate exception to "the flag is
+/// derived server-side": it is the operator's manual mark for results the
+/// derivation cannot judge — a qualitative value, or a test with no resolved
+/// numeric range. The procedure honours it ONLY there; for a range-checkable
+/// result the arithmetic stays authoritative and this field is ignored.
 /// </summary>
 public sealed record ResultEdit(
     int ResultId,
     string? Value,
     string? Comments,
     bool? SetAuth,
-    string? Reason);
+    string? Reason,
+    bool? Abnormal = null);
 
 public sealed record SaveResultsRequest(
     IReadOnlyList<ResultEdit> Edits,

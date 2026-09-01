@@ -59,6 +59,13 @@ public sealed class ResultWriteRepository(NobleConnectionFactory db, ILogger<Res
             cmd.Parameters.Add("@edits", SqlDbType.Structured).Value = BuildEditTable(request.Edits);
             cmd.Parameters["@edits"].TypeName = "dbo.InfResultEdit";
 
+            // The manual abnormal marks ride a second TVP so the edit type —
+            // which cannot be altered — stays as it is. The procedure honours
+            // them only where its own derivation cannot judge.
+            cmd.Parameters.Add("@abnormal_overrides", SqlDbType.Structured).Value =
+                BuildAbnormalTable(request.Edits);
+            cmd.Parameters["@abnormal_overrides"].TypeName = "dbo.InfAbnormalOverride";
+
             cmd.Parameters.Add("@actor_user_id", SqlDbType.Int).Value = userId;
             cmd.Parameters.Add("@actor_ip", SqlDbType.VarChar, 64).Value = (object?)actor.Ip ?? DBNull.Value;
             cmd.Parameters.Add("@actor_agent", SqlDbType.NVarChar, 256).Value = Truncate(actor.UserAgent, 256);
@@ -161,6 +168,24 @@ public sealed class ResultWriteRepository(NobleConnectionFactory db, ILogger<Res
                 (object?)e.Comments ?? DBNull.Value,
                 (object?)e.SetAuth ?? DBNull.Value,
                 (object?)Trim(e.Reason, 500) ?? DBNull.Value);
+        }
+
+        return t;
+    }
+
+    /// <summary>
+    /// The manual abnormal marks — only the edits that carry one. An empty
+    /// table is the common case and arrives as such.
+    /// </summary>
+    private static DataTable BuildAbnormalTable(IReadOnlyList<ResultEdit> edits)
+    {
+        var t = new DataTable();
+        t.Columns.Add("result_id", typeof(int));
+        t.Columns.Add("abnormal", typeof(bool));
+
+        foreach (var e in edits.GroupBy(e => e.ResultId).Select(g => g.Last()))
+        {
+            if (e.Abnormal is bool ab) t.Rows.Add(e.ResultId, ab);
         }
 
         return t;

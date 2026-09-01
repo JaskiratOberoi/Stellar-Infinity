@@ -3145,6 +3145,21 @@ select.preview__layout { width: 11.25rem; flex: none; }
 .flag--low  { transform: rotate(0deg); }
 .flag--high { transform: rotate(0deg); }
 
+/* The manual abnormal mark — a control, unlike the derived H/L, and drawn as
+   one: hollow until pressed, then in the same danger colours the derived
+   flags carry, because on the report the two mean the same thing. */
+.flag--ab {
+  cursor: pointer;
+  color: var(--ink-dim); background: transparent;
+  border: 1px dashed var(--line);
+}
+.flag--ab:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+.flag--ab:disabled { cursor: not-allowed; opacity: .45; }
+.flag--ab-on {
+  color: var(--danger); background: var(--danger-soft);
+  border: 1px solid var(--danger-line);
+}
+
 .worksheet-grid td { padding: .4rem .6rem; }
 
 /* Head and Profile rows are the printed report's section headings, not data. */
