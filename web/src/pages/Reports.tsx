@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api, csrfHeader } from '../api/client';
 import { downloadFile, fmtDateTime } from '../lib/format';
 import { ReportViewer } from './ReportViewer';
@@ -118,6 +119,8 @@ export function Reports() {
   const [cliHis, setCliHis] = useState<Set<string>>(new Set());
   /** The row whose clinical-history dialog is open. */
   const [cliSid, setCliSid] = useState<WorksheetRow | null>(null);
+  /** The patient whose complete report is open for review & edit. */
+  const [pidView, setPidView] = useState<{ pid: number; name: string | null; rows: WorksheetRow[] } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<number | undefined>(undefined);
   const showToast = (msg: string) => {
@@ -531,6 +534,19 @@ export function Reports() {
                               .map((x) => x.sid),
                             lh,
                           )}
+                          onPreview={() => {
+                            const all = grouped.find((g) => g.rows.some((x) => x.sid === r.sid))?.rows ?? [r];
+                            // Only samples a report exists for and that are not
+                            // balance-held — the same ones the download would
+                            // actually include rather than skip.
+                            const eligible = all.filter((x) =>
+                              REPORTABLE_STATUSES.includes(x.statusCode ?? -1) && !locks[x.sid]);
+                            if (eligible.length === 0) {
+                              showToast('None of this patient’s reports can be opened yet.');
+                              return;
+                            }
+                            setPidView({ pid: r.pid, name: r.patientName, rows: eligible });
+                          }}
                         />
                       ) : (
                         // Inside a group the column is left TRULY empty — null,
@@ -693,6 +709,14 @@ export function Reports() {
         />
       )}
       {smartSid && <SmartReportModal sid={smartSid} onClose={() => setSmartSid(null)} />}
+      {pidView && (
+        <PatientReportViewer
+          pid={pidView.pid}
+          patientName={pidView.name}
+          rows={pidView.rows}
+          onClose={() => setPidView(null)}
+        />
+      )}
       {cliSid && (
         <ClinicalHistoryModal
           row={cliSid}
@@ -714,6 +738,216 @@ export function Reports() {
       )}
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
+  );
+}
+
+/**
+ * Review & edit the COMPLETE patient report before downloading it.
+ *
+ * The complete report is one dept-major document stapled server-side, so it
+ * cannot itself carry tick boxes — instead this walks the patient's samples
+ * through the same interactive preview the single-report viewer uses, one
+ * frame at a time, and remembers what was unticked on each. The download then
+ * sends the whole selection to the bulk route, which renders each department
+ * unit minus its cuts. Switching back to an edited sample reopens it with its
+ * ticks as they were left (the excludes ride the frame URL).
+ */
+function PatientReportViewer({ pid, patientName, rows, onClose }: {
+  pid: number;
+  patientName: string | null;
+  rows: WorksheetRow[];
+  onClose: () => void;
+}) {
+  const sids = useMemo(() => rows.map((r) => r.sid), [rows]);
+  const [activeSid, setActiveSid] = useState(sids[0]);
+  const [headless, setHeadless] = useState(true);
+  const [withGraph, setWithGraph] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [frameLoading, setFrameLoading] = useState(true);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // What was unticked, per sample. A ref, not state: the frame reports every
+  // tick and re-rendering the modal (which would recompute the frame URL and
+  // reboot the report) on each one is exactly the loop to avoid. The counts
+  // are state because the tabs and the download guard draw from them.
+  const excludesRef = useRef<Record<string, number[]>>({});
+  const [counts, setCounts] = useState<Record<string, { total: number; remaining: number }>>({});
+
+  // Frozen per activation: the stored cuts ride the URL so a revisited sample
+  // reopens exactly as it was left.
+  const src = useMemo(() => {
+    const q = new URLSearchParams({ split: '1', headless: '1' });
+    const ex = excludesRef.current[activeSid];
+    if (ex?.length) q.set('exclude', ex.join(','));
+    return `/print/report/${encodeURIComponent(activeSid)}?${q}`;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSid]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  // The frame reports its selection; same-origin only, and only OUR samples.
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      const d = e.data;
+      if (!d || d.type !== 'infinity:report-selection' || !sids.includes(d.sid)) return;
+      if (Array.isArray(d.excluded)) {
+        excludesRef.current[d.sid] =
+          d.excluded.filter((n: unknown): n is number => typeof n === 'number');
+      }
+      if (typeof d.total === 'number' && typeof d.remaining === 'number') {
+        setCounts((prev) => ({ ...prev, [d.sid]: { total: d.total, remaining: d.remaining } }));
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [sids]);
+
+  // Push the letterhead choice into the loaded frame, as the single viewer does.
+  useEffect(() => {
+    if (frameLoading) return;
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: 'infinity:report-display', sid: activeSid, split: true, headless },
+      window.location.origin,
+    );
+  }, [frameLoading, headless, activeSid]);
+
+  const cutOf = (sid: string) => {
+    const c = counts[sid];
+    return c ? c.total - c.remaining : 0;
+  };
+  const totalCut = sids.reduce((s, x) => s + cutOf(x), 0);
+
+  const download = async () => {
+    const emptied = sids.find((s) => {
+      const c = counts[s];
+      return c && c.total > 0 && c.remaining === 0;
+    });
+    if (emptied) {
+      setError(`Every test on ${emptied} is unticked — tick at least one back on, or leave that sample as it was.`);
+      setActiveSid(emptied);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const excludes: Record<string, number[]> = {};
+      for (const [s, ids] of Object.entries(excludesRef.current)) {
+        if (ids.length > 0) excludes[s] = ids;
+      }
+      await downloadFile('/api/reports/pdf/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...csrfHeader() },
+        body: JSON.stringify({
+          sids, withGraph, splitDept: true, deptMajor: true, headless, excludes,
+        }),
+        fallbackName: `Reports_PID_${pid}.pdf`,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'The download failed.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return createPortal(
+    <div className="modal-backdrop preview-backdrop" onClick={onClose}>
+      <div className="preview" onClick={(e) => e.stopPropagation()}
+           role="dialog" aria-modal="true" aria-label={`Complete report for patient ${pid}`}>
+
+        <div className="preview__bar">
+          <div className="preview__who">
+            <p className="preview__name">
+              {patientName || 'Complete report'} <span className="mono muted">· PID {pid}</span>
+            </p>
+            {error && <p className="preview__err">{error}</p>}
+            {!error && (
+              <p className="muted" style={{ fontSize: '.72rem' }}>
+                {sids.length} sample{sids.length === 1 ? '' : 's'} in one document
+                {totalCut > 0 && ` · ${totalCut} test${totalCut === 1 ? '' : 's'} unticked`}
+              </p>
+            )}
+          </div>
+
+          <div className="preview__tools">
+            <label className="preview__switch"
+                   title="On: include Noble's header and footer, for plain paper or email. Off (default): the same margins with no header or footer, for printing onto pre-printed letterhead.">
+              <input type="checkbox" checked={!headless}
+                     onChange={(e) => setHeadless(!e.target.checked)} />
+              <span className="preview__track" aria-hidden="true" />
+              Letterhead
+            </label>
+
+            <label className="preview__dlopt"
+                   title="On: staple each sample's graph attachment after its report, as the LIS prints. Off: the reports alone.">
+              <input type="checkbox" checked={withGraph} disabled={busy}
+                     onChange={(e) => setWithGraph(e.target.checked)} />
+              <span className="preview__track preview__track--on" aria-hidden="true" />
+              + Graphs
+            </label>
+
+            <button className="btn btn--primary btn--sm" disabled={busy} onClick={() => void download()}>
+              {busy ? 'Preparing…' : 'Download complete report'}
+            </button>
+
+            <button className="btn btn--ghost btn--sm" onClick={onClose} aria-label="Close preview">✕</button>
+          </div>
+        </div>
+
+        {/* One sample on screen at a time; the strip is the map of the whole
+            document. A pill that carries cuts says so, so nothing edited is
+            out of sight at download time. */}
+        {sids.length > 1 && (
+          <div className="preview__tabs" role="tablist" aria-label="Samples in this report">
+            {rows.map((r) => {
+              const cut = cutOf(r.sid);
+              return (
+                <button
+                  key={r.sid}
+                  role="tab"
+                  aria-selected={r.sid === activeSid}
+                  className={`preview__tab${r.sid === activeSid ? ' preview__tab--on' : ''}`}
+                  title={r.testNames ?? undefined}
+                  onClick={() => { if (r.sid !== activeSid) { setFrameLoading(true); setActiveSid(r.sid); } }}
+                >
+                  <span className="mono">{r.sid}</span>
+                  {cut > 0 && <span className="preview__tab-cut">−{cut}</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="preview__stage">
+          {frameLoading && (
+            <div className="preview__loading">
+              <span className="preview__spin" aria-hidden="true" />
+              Preparing report…
+            </div>
+          )}
+          <iframe
+            key={src}
+            ref={iframeRef}
+            title={`Report ${activeSid}`}
+            src={src}
+            onLoad={() => setFrameLoading(false)}
+            className="preview__frame"
+            style={{ opacity: frameLoading ? 0 : 1 }}
+          />
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 

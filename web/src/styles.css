@@ -2782,6 +2782,28 @@ fieldset.bare {
   padding: .6rem .75rem;
   border-bottom: 1px solid var(--line);
 }
+
+/* ---- the complete report's sample strip ----
+   One pill per sample; the active one is the frame below, and a pill carrying
+   cuts (−N) keeps edited samples visible from anywhere in the document. */
+.preview__tabs {
+  display: flex; flex-wrap: wrap; gap: .35rem; flex: none;
+  padding: .45rem .75rem;
+  border-bottom: 1px solid var(--line);
+}
+.preview__tab {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .22rem .6rem; font-size: .74rem;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: transparent; color: inherit; cursor: pointer;
+}
+.preview__tab:hover { border-color: var(--teal); }
+.preview__tab--on {
+  background: var(--accent-soft); border-color: var(--teal); font-weight: 600;
+}
+.preview__tab-cut {
+  font-size: .68rem; font-weight: 700; color: var(--warn);
+}
 /* Shrinks before the controls do, and never below a legible stub. */
 .preview__who { flex: 1 1 9rem; min-width: 0; }
 .preview__name {

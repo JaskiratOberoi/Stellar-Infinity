@@ -457,8 +457,19 @@ public static class ReportPdfEndpoints
                 return Results.BadRequest(new { error = "None of the selected reports can be released.", skipped });
 
             var deptDocs = new List<RenderClient.ReportRequest>();
-            var deptMisses = new List<(int Index, string Key)>();
+            // Key is null for a unit that must not be cached (custom excludes).
+            var deptMisses = new List<(int Index, string? Key)>();
             var graphed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            // The operator's unticks from the Review & edit preview, cleaned:
+            // positive ids, deduplicated, bounded.
+            var excludesBySid = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (k, v) in body!.Excludes ?? new Dictionary<string, IReadOnlyList<int>>())
+            {
+                var ids = (v ?? []).Where(i => i > 0).Distinct().Take(500).ToList();
+                if (ids.Count > 0 && !string.IsNullOrWhiteSpace(k))
+                    excludesBySid[k.Trim()] = string.Join(",", ids);
+            }
 
             for (var i = 0; i < units.Count; i++)
             {
@@ -468,9 +479,11 @@ public static class ReportPdfEndpoints
                 // Only the LAST unit closes the document. The LIS prints no end
                 // marker at all; one at the foot of every sheet-run would put
                 // five "End of Report" lines inside a single report.
+                excludesBySid.TryGetValue(u.Sid, out var excl);
                 var query = $"?pdf=1&split=dept&dept={Uri.EscapeDataString(u.Department)}"
                           + (last ? string.Empty : "&end=0")
-                          + (body.Headless == true ? "&headless=1" : "&headless=0");
+                          + (body.Headless == true ? "&headless=1" : "&headless=0")
+                          + (excl is null ? string.Empty : $"&exclude={Uri.EscapeDataString(excl)}");
 
                 // A sample's graphs ride with the FIRST unit that sample appears
                 // in, so a tube whose tests span two departments does not carry
@@ -483,10 +496,13 @@ public static class ReportPdfEndpoints
                 var graphFp = carriesGraphs
                     ? await GraphFingerprintAsync(graphs, u.Sid, body.WithGraph, ct).ConfigureAwait(false)
                     : "0";
-                var key = PdfCacheKey("reportdept", u.Sid, rowStamps.GetValueOrDefault(u.Sid),
-                    $"{u.Department}|e{(last ? 1 : 0)}h{(body.Headless == true ? 1 : 0)}g{graphFp}");
+                var key = excl is null
+                    ? PdfCacheKey("reportdept", u.Sid, rowStamps.GetValueOrDefault(u.Sid),
+                        $"{u.Department}|e{(last ? 1 : 0)}h{(body.Headless == true ? 1 : 0)}g{graphFp}")
+                    : null;
 
-                if (await cache.GetBytesAsync(key, ct).ConfigureAwait(false) is { } cachedUnit)
+                if (key is not null
+                    && await cache.GetBytesAsync(key, ct).ConfigureAwait(false) is { } cachedUnit)
                 {
                     hits++;
                     deptDocs.Add(new RenderClient.ReportRequest(
@@ -518,7 +534,8 @@ public static class ReportPdfEndpoints
                         try
                         {
                             var one = await render.RenderAsync([deptDocs[m.Index]], cookie, ct).ConfigureAwait(false);
-                            await cache.SetBytesAsync(m.Key, one, PdfCacheTtl, ct).ConfigureAwait(false);
+                            if (m.Key is not null)
+                                await cache.SetBytesAsync(m.Key, one, PdfCacheTtl, ct).ConfigureAwait(false);
                             deptDocs[m.Index] = new RenderClient.ReportRequest(
                                 Url: null, PdfB64: Convert.ToBase64String(one));
                         }
@@ -679,7 +696,16 @@ public static class ReportPdfEndpoints
     /// the worksheet's multi-select merge stays a stack of per-sample reports,
     /// because there the samples are the point and need not share a patient.
     /// </param>
+    /// <param name="Excludes">
+    /// Per-SID result-row ids to LEAVE OUT of the complete report — what the
+    /// operator unticked in the Review &amp; edit preview. Honoured on the
+    /// dept-major path only, where the preview offers the ticks. A unit with
+    /// exclusions bypasses the PDF cache in both directions: a custom
+    /// selection is a one-off document, and caching it would hand the next
+    /// full download somebody else's cuts.
+    /// </param>
     public sealed record BulkPdfRequest(
         IReadOnlyList<string>? Sids, bool WithGraph = true, bool? Headless = null, bool? Split = null,
-        bool? SplitDept = null, bool? DeptMajor = null);
+        bool? SplitDept = null, bool? DeptMajor = null,
+        IReadOnlyDictionary<string, IReadOnlyList<int>>? Excludes = null);
 }

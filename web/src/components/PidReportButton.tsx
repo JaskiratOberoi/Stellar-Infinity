@@ -17,7 +17,7 @@ import { createPortal } from 'react-dom';
  * of opening, and any scroll closes the menu rather than letting it drift
  * away from its row.
  */
-export function PidReportButton({ pid, busy, disabled, title, count, onDownload }: {
+export function PidReportButton({ pid, busy, disabled, title, count, onDownload, onPreview }: {
   pid: number;
   /** THIS patient's download is being prepared. */
   busy: boolean;
@@ -27,6 +27,8 @@ export function PidReportButton({ pid, busy, disabled, title, count, onDownload 
   /** Sample count suffix (×N) when the patient has several on this page. */
   count?: number;
   onDownload: (letterhead: boolean) => void;
+  /** Open the complete report to review and untick tests before downloading. */
+  onPreview?: () => void;
 }) {
   const [at, setAt] = useState<{ x: number; y: number; up: boolean } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -37,8 +39,8 @@ export function PidReportButton({ pid, busy, disabled, title, count, onDownload 
   const toggle = () => {
     if (at) { close(); return; }
     const r = btnRef.current!.getBoundingClientRect();
-    // Two rows of menu need ~90px; open upward when the row sits lower.
-    const up = window.innerHeight - r.bottom < 110;
+    // Three rows of menu need ~130px; open upward when the row sits lower.
+    const up = window.innerHeight - r.bottom < 150;
     setAt({ x: r.left, y: up ? r.top : r.bottom, up });
   };
 
@@ -107,8 +109,19 @@ export function PidReportButton({ pid, busy, disabled, title, count, onDownload 
             ? { left: at.x, bottom: window.innerHeight - at.y + 4 }
             : { left: at.x, top: at.y + 4 }}
         >
+          {onPreview && (
+            <button type="button" role="menuitem" onClick={() => { close(); onPreview(); }}
+                    title="Open the complete report on screen — review each sample and untick anything that should stay out of the PDF.">
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M1.8 8s2.3-4.2 6.2-4.2S14.2 8 14.2 8s-2.3 4.2-6.2 4.2S1.8 8 1.8 8Z"
+                      fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                <circle cx="8" cy="8" r="1.9" fill="none" stroke="currentColor" strokeWidth="1.3" />
+              </svg>
+              Review &amp; edit…
+            </button>
+          )}
           <button type="button" role="menuitem" onClick={() => pick(true)}
-                  title="The PDF carries the letterhead artwork — for plain paper and digital copies.">
+                  title="Download now, with Noble's header and footer in the PDF — for plain paper and digital copies.">
             <svg viewBox="0 0 16 16" aria-hidden="true">
               <rect x="3" y="2" width="10" height="12" rx="1.2" fill="none"
                     stroke="currentColor" strokeWidth="1.3" />
@@ -116,17 +129,17 @@ export function PidReportButton({ pid, busy, disabled, title, count, onDownload 
               <path d="M5.5 8h5M5.5 10.5h3.5" stroke="currentColor" strokeWidth="1.1"
                     strokeLinecap="round" />
             </svg>
-            With letterhead
+            Download · letterhead
           </button>
           <button type="button" role="menuitem" onClick={() => pick(false)}
-                  title="No artwork — for pre-printed stationery that already has the header.">
+                  title="Download now, with no artwork — for pre-printed stationery that already carries the header.">
             <svg viewBox="0 0 16 16" aria-hidden="true">
               <rect x="3" y="2" width="10" height="12" rx="1.2" fill="none"
                     stroke="currentColor" strokeWidth="1.3" />
               <path d="M5.5 8h5M5.5 10.5h3.5" stroke="currentColor" strokeWidth="1.1"
                     strokeLinecap="round" />
             </svg>
-            Plain paper
+            Download · plain paper
           </button>
         </span>,
         document.body,
