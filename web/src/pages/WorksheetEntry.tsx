@@ -8,6 +8,7 @@ import {
 import { fmtDateTime, plainText } from '../lib/format';
 import { AttachClip, Attachments, RowAttachments, useAttachments } from '../components/Attachments';
 import { SpellChecked, SpellCheckUndo } from '../components/SpellChecked';
+import { RichTextEditor } from '../components/RichTextEditor';
 import { WorksheetHistory } from './WorksheetHistory';
 import { PatientInfoForm } from '../components/PatientInfoForm';
 import { InfinityLoader } from '../components/InfinityLoader';
@@ -53,13 +54,12 @@ function DescEditor({ title, value, readOnly, onChange, onClose }: {
   onChange: (v: string) => void;
   onClose: () => void;
 }) {
-  const [text, setText] = useState(value);
-  const ref = useRef<HTMLTextAreaElement | null>(null);
-
-  useEffect(() => { ref.current?.focus(); }, []);
+  // The editor is uncontrolled; this ref mirrors its latest report so the
+  // commit reads what was actually typed, not a stale render.
+  const textRef = useRef(value);
 
   const commit = () => {
-    if (!readOnly && text !== value) onChange(text);
+    if (!readOnly && textRef.current !== value) onChange(textRef.current);
     onClose();
   };
 
@@ -83,18 +83,88 @@ function DescEditor({ title, value, readOnly, onChange, onClose }: {
         <p className="muted" style={{ fontSize: '.78rem', marginTop: '.2rem' }}>
           {readOnly
             ? 'This sample is locked, so the text is shown for reading only.'
-            : 'Saved with the rest of the worksheet — close this and use Save on the grid.'}
+            : 'Formatting prints as written. Saved with the rest of the worksheet — close this and use Save on the grid.'}
         </p>
-        <textarea
-          ref={ref}
-          className="input descedit"
+        <RichTextEditor
+          value={value}
           readOnly={readOnly}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
+          ariaLabel={`Long-form result for ${title}`}
+          minHeight="16rem"
+          onChange={(html) => { textRef.current = html; }}
         />
         <div className="modal__actions">
           <button className="btn btn--ghost" onClick={onClose}>Discard</button>
           <button className="btn" disabled={readOnly} onClick={commit}>Keep text</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The SAMPLE-level descriptive editor — the LIS's "Desc Report" button
+ * (Worksheet/IHCReport.aspx), which stacks every analyte with its own
+ * formatting toolbar so a multi-part histopathology or IHC report is written
+ * in one sitting instead of row by row.
+ *
+ * Same contract as the per-row editor: everything lands in the DRAFTS and
+ * goes out through the worksheet's ordinary Save with its reason and audit
+ * rows — the legacy page's separate Save button is exactly the side channel
+ * this modal exists to avoid.
+ */
+function DescReportModal({ rows, valueOf, readOnly, onEdit, onClose }: {
+  rows: WorksheetResultRow[];
+  valueOf: (r: WorksheetResultRow) => string;
+  readOnly: boolean;
+  onEdit: (r: WorksheetResultRow, html: string) => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopPropagation(); onClose(); }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [onClose]);
+
+  const editable = rows.filter((r) => !isHeading(r));
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal modal--wide" onClick={(e) => e.stopPropagation()}
+           role="dialog" aria-modal="true" aria-label="Descriptive report editor"
+           style={{ maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}>
+        <h2 className="modal__title">Descriptive report</h2>
+        <p className="muted" style={{ fontSize: '.78rem', marginTop: '.2rem' }}>
+          {readOnly
+            ? 'This sample is locked, so the text is shown for reading only.'
+            : 'Every result on the sample, written long-form. Formatting prints as written; changes save with the worksheet’s Save.'}
+        </p>
+
+        <div style={{ overflowY: 'auto', marginTop: '.6rem', display: 'flex',
+                      flexDirection: 'column', gap: '.9rem', paddingRight: '.2rem' }}>
+          {editable.map((r) => (
+            <div key={r.resultId}>
+              <p style={{ fontWeight: 600, fontSize: '.84rem', marginBottom: '.3rem' }}>
+                {plainText(r.testName) || r.testCode || '—'}
+                {r.unit && <span className="muted" style={{ fontWeight: 400 }}> · {r.unit}</span>}
+              </p>
+              <RichTextEditor
+                value={valueOf(r)}
+                readOnly={readOnly}
+                ariaLabel={`Result for ${plainText(r.testName) || r.testCode || 'test'}`}
+                minHeight="7rem"
+                onChange={(html) => onEdit(r, html)}
+              />
+            </div>
+          ))}
+          {editable.length === 0 && (
+            <p className="muted" style={{ fontSize: '.82rem' }}>This sample has no result rows.</p>
+          )}
+        </div>
+
+        <div className="modal__actions" style={{ marginTop: '.7rem' }}>
+          <button className="btn btn--primary" onClick={onClose}>Done</button>
         </div>
       </div>
     </div>
@@ -239,6 +309,8 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
   const [editingPatient, setEditingPatient] = useState(false);
   /** Which analyte has the long-form editor open. One at a time. */
   const [descRow, setDescRow] = useState<number | null>(null);
+  /** The sample-level descriptive editor — every analyte, one screen. */
+  const [showDescReport, setShowDescReport] = useState(false);
 
   // Shared by the panel at the foot and by every row's clip, so an upload from
   // either place refreshes both. See useAttachments.
@@ -473,6 +545,13 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                     Edit patient info
                   </button>
                 )}
+                {/* The LIS's "Desc Report": the whole sample long-form, for
+                    histopathology and friends. Offered whenever results can
+                    be read — locked, it opens for reading. */}
+                <button className="btn btn--ghost btn--sm" onClick={() => setShowDescReport(true)}
+                        title="Write every result long-form, with formatting — the descriptive report editor">
+                  Desc report
+                </button>
                 <button className="btn btn--ghost btn--sm" onClick={() => setShowHistory(true)}>
                   History
                 </button>
@@ -851,6 +930,16 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
         )}
 
         {showHistory && <WorksheetHistory sid={sid} onClose={() => setShowHistory(false)} />}
+
+        {showDescReport && (
+          <DescReportModal
+            rows={rows}
+            valueOf={valueOf}
+            readOnly={readOnly}
+            onEdit={(r, html) => setDraft(r, { value: html })}
+            onClose={() => setShowDescReport(false)}
+          />
+        )}
 
         {descRow !== null && (() => {
           const r = rows.find((x) => x.resultId === descRow);

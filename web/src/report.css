@@ -366,6 +366,29 @@
 }
 
 .lr__interp-img { break-inside: avoid; }
+
+/* ---------- rich descriptive results ----------
+   The Desc Report editor's output: real paragraphs, lists and emphasis,
+   printed full-width under the test name instead of crammed into the value
+   column. Sizes sit with the interpretation text — prose, not figures. */
+.lr__rich-row td { padding: 2px 0 6px; }
+.lr__rich {
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: #111827;
+}
+.lr__rich p, .lr__rich div { margin: 0 0 4px; }
+.lr__rich ul, .lr__rich ol { margin: 0 0 4px; padding-left: 18px; }
+.lr__rich li { margin-bottom: 1px; }
+.lr__rich h1, .lr__rich h2, .lr__rich h3, .lr__rich h4 {
+  font-size: 11px; font-weight: 700; margin: 4px 0 2px;
+}
+.lr__rich table { border-collapse: collapse; margin: 2px 0 4px; }
+.lr__rich td, .lr__rich th { border: .75px solid #9ca3af; padding: 2px 6px; }
+/* An abnormal descriptive result carries the same weight a flagged number
+   does — the class rides the wrapper. */
+.lr__rich.lr__abnormal { color: inherit; }
+.lr__rich.lr__abnormal p:first-child { font-weight: 600; }
 /* max-height as well as max-width: an interpretation panel taller than the
    room a page offers would otherwise take break-inside:avoid at its word and
    move WHOLE to a nearly-empty second page. 108mm keeps the HCV/HBV panels —

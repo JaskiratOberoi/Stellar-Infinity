@@ -3145,6 +3145,36 @@ select.preview__layout { width: 11.25rem; flex: none; }
 .flag--low  { transform: rotate(0deg); }
 .flag--high { transform: rotate(0deg); }
 
+/* ---------- rich text editor ----------
+   The word-processor surface for descriptive results. The bar is one row of
+   flat buttons over a bordered writing area; both take the app's tokens so
+   the editor holds in either theme. */
+.richtext { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.richtext__bar {
+  display: flex; align-items: center; gap: .15rem; flex-wrap: wrap;
+  padding: .3rem .4rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--accent-softer, transparent);
+}
+.richtext__btn {
+  min-width: 26px; height: 24px; padding: 0 .35rem;
+  border: 0; border-radius: 6px;
+  background: transparent; color: inherit;
+  font-size: .74rem; cursor: pointer;
+}
+.richtext__btn:hover:not(:disabled) { background: var(--accent-soft); }
+.richtext__btn:disabled { opacity: .4; cursor: not-allowed; }
+.richtext__sep { width: 1px; height: 16px; background: var(--line); margin: 0 .25rem; }
+.richtext__area {
+  min-height: 10rem; padding: .6rem .75rem;
+  font-size: .86rem; line-height: 1.5;
+  outline: none; overflow-y: auto; max-height: 46vh;
+}
+.richtext__area:focus-visible { box-shadow: inset 0 0 0 2px var(--accent-soft); }
+.richtext__area p, .richtext__area div { margin: 0 0 .35rem; }
+.richtext__area ul, .richtext__area ol { margin: 0 0 .35rem; padding-left: 1.3rem; }
+.richtext__area[contenteditable="false"] { background: var(--accent-softer, transparent); }
+
 /* The manual abnormal mark — a control, unlike the derived H/L, and drawn as
    one: hollow until pressed, then in the same danger colours the derived
    flags carry, because on the report the two mean the same thing. */

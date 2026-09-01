@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import nobleLogo from '../assets/noble-logo.png';
 import nablLogo from '../assets/nabl.png';
+import { isRichValue, sanitizeRich } from '../lib/richText';
 import { notesForCodes } from '../lib/reportNotes';
 import {
   ageLabel, fmtDob, fmtStamp, formatRange, genderLabel, splitInterp,
@@ -1114,6 +1115,14 @@ function ResultRow({
   row, dim, lead, indent,
 }: { row: ReportRow; dim?: boolean; lead?: ReactNode; indent?: boolean }) {
   const off = dim ? ' lr__off' : '';
+  /*
+   * A descriptive result — the Desc Report editor writes real HTML, and here
+   * the presentation IS the result. It gets the page, not the 12% value
+   * column: the name row keeps its place in the table and the prose renders
+   * full-width beneath it, sanitised through the one gate that may hand LIS
+   * markup to dangerouslySetInnerHTML.
+   */
+  const rich = isRichValue(row.valueRaw);
   return (
     <>
       <tr className={`lr__row${off}`}>
@@ -1124,13 +1133,27 @@ function ResultRow({
             <div className="lr__c-name-text">{row.name ?? '—'}</div>
           </div>
         </td>
-        <td className="lr__c-value">
-          <span className={row.abnormal ? 'lr__abnormal' : undefined}>{row.value ?? '—'}</span>
-        </td>
-        <td className="lr__c-unit">{row.unit ?? '—'}</td>
-        <td className="lr__c-range"><RangeCell range={row.range} /></td>
-        <td className="lr__c-method">{row.method ?? '—'}</td>
+        {rich ? (
+          <td className="lr__c-value" colSpan={4} />
+        ) : (
+          <>
+            <td className="lr__c-value">
+              <span className={row.abnormal ? 'lr__abnormal' : undefined}>{row.value ?? '—'}</span>
+            </td>
+            <td className="lr__c-unit">{row.unit ?? '—'}</td>
+            <td className="lr__c-range"><RangeCell range={row.range} /></td>
+            <td className="lr__c-method">{row.method ?? '—'}</td>
+          </>
+        )}
       </tr>
+      {rich && (
+        <tr className={`lr__rich-row${off}`}>
+          <td colSpan={5}>
+            <div className={`lr__rich${row.abnormal ? ' lr__abnormal' : ''}`}
+                 dangerouslySetInnerHTML={{ __html: sanitizeRich(row.valueRaw!) }} />
+          </td>
+        </tr>
+      )}
       {row.comments && (
         <tr className={`lr__note-row${off}`}>
           <td colSpan={5}>

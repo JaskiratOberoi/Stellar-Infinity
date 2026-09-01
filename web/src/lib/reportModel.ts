@@ -41,6 +41,13 @@ export interface ReportRow {
   /** NABL medallion beside the name — set on a Delhi-processed sample's
    *  accredited standalone tests, never on Param analytes. */
   nabl: boolean;
+  /**
+   * The value EXACTLY as stored, markup included. `value` above is cleaned
+   * for the tabular cells; a rich descriptive result (the Desc Report editor
+   * writes real HTML) renders from this instead, sanitised — see
+   * lib/richText and the rich branch in PrintReport's ResultRow.
+   */
+  valueRaw: string | null;
 }
 
 /**
@@ -265,6 +272,7 @@ export function buildSampleReport(results: readonly TestResult[]): SampleReport 
     comments: clean(t.comments),
     resultId: t.resultId,
     nabl: t.nabl === true,
+    valueRaw: t.value ?? null,
   });
 
   /*
