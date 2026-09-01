@@ -610,6 +610,14 @@ export function NewOrder() {
   // Same value as isB2b above, kept under the name the table markup already
   // uses so the two cannot drift apart.
   const b2b = isB2b;
+  /*
+   * The MDCARE/MEDICARE counter sells at the ATTACHED RATE LIST, and that list
+   * IS the patient's price — the catalogue MRP column is a different product's
+   * number there (CBC's catalogue MRP is ₹70 against a ₹350 list price), and
+   * showing both made every order look ₹280 "above MRP". For these brands the
+   * basket shows ONE price column, headed MRP, carrying the billed rate.
+   */
+  const b2cBrand = !b2b && isB2cClientCode(clientCode);
 
   // ---- sample ids ----
   // The tubes the server says this basket needs. Read off the preview for the
@@ -1742,10 +1750,14 @@ export function NewOrder() {
                           priced above MRP made the margin look impossible:
                           ₹90 / ₹90 / −₹20 — the −₹20 was real (MRP ₹70), the
                           columns were not. */}
-                      <th style={{ textAlign: 'right' }}>{b2b ? 'Patient pays' : 'MRP'}</th>
-                      <th style={{ textAlign: 'right' }}>{b2b ? 'Client pays' : 'Rate'}</th>
+                      {!b2cBrand && (
+                        <th style={{ textAlign: 'right' }}>{b2b ? 'Patient pays' : 'MRP'}</th>
+                      )}
+                      <th style={{ textAlign: 'right' }}>
+                        {b2b ? 'Client pays' : b2cBrand ? 'MRP' : 'Rate'}
+                      </th>
                       {b2b && <th style={{ textAlign: 'right' }}>Margin</th>}
-                      <th>Source</th>
+                      {!b2cBrand && <th>Source</th>}
                       <th />
                     </tr>
                   </thead>
@@ -1753,10 +1765,12 @@ export function NewOrder() {
                     {preview.lines.map((l) => (
                       <tr key={`${l.kind}:${l.id}`}>
                         <td className="cell--lead">{plainText(l.name) || l.code}</td>
-                        <td className="mono muted cell--meta"
-                            data-label={b2b ? 'Patient pays' : 'MRP'} style={{ textAlign: 'right' }}>
-                          {l.mrp != null && l.mrp > 0 ? inr(l.mrp) : '—'}
-                        </td>
+                        {!b2cBrand && (
+                          <td className="mono muted cell--meta"
+                              data-label={b2b ? 'Patient pays' : 'MRP'} style={{ textAlign: 'right' }}>
+                            {l.mrp != null && l.mrp > 0 ? inr(l.mrp) : '—'}
+                          </td>
+                        )}
                         <td className="mono cell--tag" style={{ textAlign: 'right', fontWeight: 600 }}>
                           {l.rate != null && l.rate > 0
                             ? inr(l.rate)
@@ -1774,7 +1788,9 @@ export function NewOrder() {
                             {l.margin != null ? inr(l.margin) : '—'}
                           </td>
                         )}
-                        <td className="cell--tag"><RateSourceBadge source={l.rateSource} /></td>
+                        {!b2cBrand && (
+                          <td className="cell--tag"><RateSourceBadge source={l.rateSource} /></td>
+                        )}
                         {/* An icon, not the word. "Remove" repeated down the
                             column was the widest thing in it and pushed a
                             five-column table into a horizontal scroll, on the
@@ -1802,8 +1818,10 @@ export function NewOrder() {
                 </span>
 
                 {/* Stated with its basis — a bare margin figure is something
-                    somebody eventually prices a contract off. */}
-                {preview.margin.comparableLines > 0 && (
+                    somebody eventually prices a contract off. Suppressed for
+                    the B2C brands, whose single MRP column has nothing to be
+                    compared against. */}
+                {preview.margin.comparableLines > 0 && !b2cBrand && (
                   <span className="muted" style={{ fontSize: '.8rem' }}>
                     {b2b
                       ? <>Centre keeps <b>{inr(preview.margin.amount)}</b> · owes the lab{' '}
