@@ -96,6 +96,16 @@ async function renderContent(url, cookieHeader) {
   const b = await browser();
   const page = await b.newPage();
   try {
+    /*
+     * The browser is long-lived (see above), so its HTTP cache outlives
+     * deploys — and it bit: the HTML shell had no Cache-Control, entries are
+     * per-URL, and a print URL first visited under an older deploy kept
+     * rendering that deploy's bundle for weeks (heuristic freshness), while
+     * never-visited URLs rendered the new one. nginx now marks the shells
+     * no-cache; this is the belt to that suspender. The refetch cost is a few
+     * assets over the compose network, invisible next to the render itself.
+     */
+    await page.setCacheEnabled(false);
     const jar = cookiesFor(cookieHeader, target.hostname);
     if (jar.length) await page.setCookie(...jar);
 
