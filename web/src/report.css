@@ -389,6 +389,8 @@
    does — the class rides the wrapper. */
 .lr__rich.lr__abnormal { color: inherit; }
 .lr__rich.lr__abnormal p:first-child { font-weight: 600; }
+/* The editor's page-break marker: invisible ink, a hard break in print. */
+.lr__rich .pagebreak { break-after: page; height: 0; }
 /* max-height as well as max-width: an interpretation panel taller than the
    room a page offers would otherwise take break-inside:avoid at its word and
    move WHOLE to a nearly-empty second page. 108mm keeps the HCV/HBV panels —

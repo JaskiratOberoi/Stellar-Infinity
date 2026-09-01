@@ -112,13 +112,20 @@ function DescEditor({ title, value, readOnly, onChange, onClose }: {
  * rows — the legacy page's separate Save button is exactly the side channel
  * this modal exists to avoid.
  */
-function DescReportModal({ rows, valueOf, readOnly, onEdit, onClose }: {
+function DescReportModal({ sid, rows, valueOf, abnormalOf, readOnly, attachments, onEdit, onAbnormal, onClose }: {
+  sid: string;
   rows: WorksheetResultRow[];
   valueOf: (r: WorksheetResultRow) => string;
+  abnormalOf: (r: WorksheetResultRow) => boolean;
   readOnly: boolean;
+  attachments: ReturnType<typeof useAttachments>;
   onEdit: (r: WorksheetResultRow, html: string) => void;
+  onAbnormal: (r: WorksheetResultRow, on: boolean) => void;
   onClose: () => void;
 }) {
+  /** Which row's attachment drawer is open. One at a time, like the grid. */
+  const [openAttach, setOpenAttach] = useState<number | null>(null);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { e.stopPropagation(); onClose(); }
@@ -138,26 +145,55 @@ function DescReportModal({ rows, valueOf, readOnly, onEdit, onClose }: {
         <p className="muted" style={{ fontSize: '.78rem', marginTop: '.2rem' }}>
           {readOnly
             ? 'This sample is locked, so the text is shown for reading only.'
-            : 'Every result on the sample, written long-form. Formatting prints as written; changes save with the worksheet’s Save.'}
+            : 'Every result on the sample, written long-form. Formatting prints as written; text saves with the worksheet’s Save, attachments upload immediately.'}
         </p>
 
         <div style={{ overflowY: 'auto', marginTop: '.6rem', display: 'flex',
                       flexDirection: 'column', gap: '.9rem', paddingRight: '.2rem' }}>
-          {editable.map((r) => (
-            <div key={r.resultId}>
-              <p style={{ fontWeight: 600, fontSize: '.84rem', marginBottom: '.3rem' }}>
-                {plainText(r.testName) || r.testCode || '—'}
-                {r.unit && <span className="muted" style={{ fontWeight: 400 }}> · {r.unit}</span>}
-              </p>
-              <RichTextEditor
-                value={valueOf(r)}
-                readOnly={readOnly}
-                ariaLabel={`Result for ${plainText(r.testName) || r.testCode || 'test'}`}
-                minHeight="7rem"
-                onChange={(html) => onEdit(r, html)}
-              />
-            </div>
-          ))}
+          {editable.map((r) => {
+            const label = plainText(r.testName) || r.testCode || '—';
+            const value = valueOf(r);
+            /* Same rule as the grid: the manual mark exists only where the
+               range arithmetic cannot judge — which for prose is always. */
+            const abManual = positionOf(r, value) === 'unknown' && value.trim() !== '';
+            const clipped = attachments.countFor(r.resultId);
+            const drawerOpen = openAttach === r.resultId;
+            return (
+              <div key={r.resultId}>
+                <div className="row" style={{ gap: '.5rem', alignItems: 'center', marginBottom: '.3rem' }}>
+                  <p style={{ fontWeight: 600, fontSize: '.84rem', margin: 0 }}>
+                    {label}
+                    {r.unit && <span className="muted" style={{ fontWeight: 400 }}> · {r.unit}</span>}
+                  </p>
+                  {abManual && (
+                    <AbnormalMark on={abnormalOf(r)} disabled={readOnly} testName={label}
+                                  onToggle={() => onAbnormal(r, !abnormalOf(r))} />
+                  )}
+                  <span style={{ marginLeft: 'auto' }}>
+                    <AttachClip
+                      count={clipped}
+                      open={drawerOpen}
+                      testName={label}
+                      onToggle={() => setOpenAttach(drawerOpen ? null : r.resultId)}
+                    />
+                  </span>
+                </div>
+                {drawerOpen && (
+                  <div style={{ marginBottom: '.4rem' }}>
+                    <RowAttachments sid={sid} resultId={r.resultId} testName={label}
+                                    canEdit={!readOnly} state={attachments} />
+                  </div>
+                )}
+                <RichTextEditor
+                  value={value}
+                  readOnly={readOnly}
+                  ariaLabel={`Result for ${label}`}
+                  minHeight="7rem"
+                  onChange={(html) => onEdit(r, html)}
+                />
+              </div>
+            );
+          })}
           {editable.length === 0 && (
             <p className="muted" style={{ fontSize: '.82rem' }}>This sample has no result rows.</p>
           )}
@@ -933,10 +969,14 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
 
         {showDescReport && (
           <DescReportModal
+            sid={sid}
             rows={rows}
             valueOf={valueOf}
+            abnormalOf={(r) => drafts[r.resultId]?.abnormal ?? r.abnormal}
             readOnly={readOnly}
+            attachments={attachments}
             onEdit={(r, html) => setDraft(r, { value: html })}
+            onAbnormal={(r, on) => setDraft(r, { abnormal: on })}
             onClose={() => setShowDescReport(false)}
           />
         )}

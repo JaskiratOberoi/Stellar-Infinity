@@ -3165,6 +3165,18 @@ select.preview__layout { width: 11.25rem; flex: none; }
 .richtext__btn:hover:not(:disabled) { background: var(--accent-soft); }
 .richtext__btn:disabled { opacity: .4; cursor: not-allowed; }
 .richtext__sep { width: 1px; height: 16px; background: var(--line); margin: 0 .25rem; }
+.richtext__pick {
+  height: 24px; padding: 0 .3rem;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: transparent; color: inherit;
+  font-size: .72rem; cursor: pointer; max-width: 7.5rem;
+}
+.richtext__pick:disabled { opacity: .4; cursor: not-allowed; }
+.richtext__swatch { display: inline-flex; align-items: center; justify-content: center; }
+.richtext__swatch span {
+  width: 12px; height: 12px; border-radius: 3px; display: block;
+  border: 1px solid var(--line);
+}
 .richtext__area {
   min-height: 10rem; padding: .6rem .75rem;
   font-size: .86rem; line-height: 1.5;
@@ -3174,6 +3186,13 @@ select.preview__layout { width: 11.25rem; flex: none; }
 .richtext__area p, .richtext__area div { margin: 0 0 .35rem; }
 .richtext__area ul, .richtext__area ol { margin: 0 0 .35rem; padding-left: 1.3rem; }
 .richtext__area[contenteditable="false"] { background: var(--accent-softer, transparent); }
+/* The page-break marker, visible while writing so it can be selected and
+   deleted like anything else; on the report it becomes a real break. */
+.richtext__area .pagebreak {
+  border-top: 2px dashed var(--teal); margin: .55rem 0; height: 0;
+}
+.richtext__area table { border-collapse: collapse; }
+.richtext__area td, .richtext__area th { border: 1px solid var(--line); padding: 2px 8px; min-width: 2rem; }
 
 /* The manual abnormal mark — a control, unlike the derived H/L, and drawn as
    one: hollow until pressed, then in the same danger colours the derived

@@ -25,13 +25,26 @@ export function isRichValue(s: string | null | undefined): boolean {
 const ALLOWED = new Set([
   'B', 'I', 'U', 'EM', 'STRONG', 'P', 'DIV', 'BR', 'UL', 'OL', 'LI',
   'SUB', 'SUP', 'TABLE', 'TBODY', 'THEAD', 'TR', 'TD', 'TH', 'H1', 'H2', 'H3', 'H4',
+  // execCommand's fontName/fontSize/foreColor speak <font> — legacy markup,
+  // but it is what every browser's editing engine still emits.
+  'FONT',
 ]);
 
 /** Removed WITH their content — nothing inside these is result text. */
 const POISON = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'FORM', 'INPUT', 'BUTTON']);
 
 /** The inline styles the editor emits and the report honours. */
-const STYLE_KEEP = ['text-align', 'font-weight', 'font-style', 'text-decoration'];
+const STYLE_KEEP = [
+  'text-align', 'font-weight', 'font-style', 'text-decoration',
+  'color', 'background-color', 'font-size', 'font-family',
+];
+
+/** <font>'s own presentational attributes — value-checked, not just named. */
+const FONT_ATTRS: Record<string, RegExp> = {
+  size: /^[1-7]$/,
+  color: /^(#[0-9a-f]{3,8}|[a-z]+|rgb\([\d ,]+\))$/i,
+  face: /^[\w \-,'"]+$/,
+};
 
 function scrub(node: Element, doc: Document): void {
   for (const child of [...node.children]) {
@@ -46,16 +59,26 @@ function scrub(node: Element, doc: Document): void {
       child.remove();
       continue;
     }
-    // Attributes are rebuilt, never trusted: only the whitelisted style
-    // properties survive, and nothing else does — no handlers, no ids, no
-    // classes riding in from the LIS editor.
+    // Attributes are rebuilt, never trusted: the whitelisted style
+    // properties, <font>'s value-checked presentational trio, and the one
+    // marker class the page-break tool writes. Nothing else — no handlers,
+    // no ids, nothing riding in from outside.
     const style = child.getAttribute('style') ?? '';
+    const isBreak = child.tagName === 'DIV' && child.getAttribute('class') === 'pagebreak';
+    const fontKeep = child.tagName === 'FONT'
+      ? Object.keys(FONT_ATTRS)
+          .map((a) => [a, child.getAttribute(a)] as const)
+          .filter(([a, v]) => v != null && FONT_ATTRS[a].test(v))
+      : [];
     for (const a of [...child.attributes]) child.removeAttribute(a.name);
+    if (isBreak) child.setAttribute('class', 'pagebreak');
+    for (const [a, v] of fontKeep) child.setAttribute(a, v!);
     if (style) {
       const kept = style
         .split(';')
         .map((d) => d.trim())
-        .filter((d) => STYLE_KEEP.some((k) => d.toLowerCase().startsWith(`${k}:`)))
+        .filter((d) => STYLE_KEEP.some((k) => d.toLowerCase().startsWith(`${k}:`))
+                    && !/url\s*\(|expression\s*\(/i.test(d))
         .join('; ');
       if (kept) child.setAttribute('style', kept);
     }
