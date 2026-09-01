@@ -859,10 +859,13 @@ button, input, select { font: inherit; color: inherit; }
   .topbar__nav > a, .navdrop__btn { padding: .45rem .7rem; letter-spacing: .08em; }
 }
 
-/* The lab's identity is the more expendable of the two: Infinity's own mark is
-   what tells someone which application they are in. */
+/* When the bar runs out of room, Infinity's own mark is the one that yields:
+   the lab's branding stays in view at all times — this is Noble's system, and
+   the people using it should always see Noble's name on it. The divider goes
+   with the Infinity mark, since there is nothing left to divide from. */
 @media (max-width: 1075px) {
-  .noble-mark { display: none; }
+  .topbar > .mark { display: none; }
+  .noble-mark { border-left: 0; padding-left: 0; }
 }
 
 /* The name goes before any navigation does. Someone knows who they are signed
