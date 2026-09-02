@@ -207,11 +207,15 @@ const startingPayments = (b2b: boolean) =>
  * as it used to, that the order has no Sample IDs.
  *
  * ── THE CHANNEL IS THE FIRST DECISION, NOT A SETTING ───────────────────────
- * B2C bills the basket at the client's own rate. B2B bills it at catalogue
- * MRP, because the patient pays the collection centre MRP and the centre owes
- * the lab its rate-list price separately. Same basket, two different bills, so
- * the choice sits at the top of the form and the preview is re-quoted whenever
- * it changes.
+ * Both channels bill the basket at the CLIENT'S rate (B2B carries
+ * @priceAtClientRate); the difference is who settles and when. B2C is a
+ * walk-in: the patient pays at the counter, so a receipt and the 50% floor
+ * apply. B2B is a client order: nothing is collected here, the charge posts
+ * to the centre's wallet, and the centre bills its own patient MRP outside
+ * Infinity. (An earlier model billed B2B at MRP — no longer true; measured, a
+ * ₹100-MRP test bills the centre ₹15, its rate.) The preview re-quotes on a
+ * channel change because the surrounding money rules differ even when the
+ * line price does not.
  *
  * Until now this screen always sent billAtMrp:false — every order Infinity has
  * ever raised was priced B2C — while these comments described it as the B2B
@@ -1204,7 +1208,13 @@ export function NewOrder() {
           <h1 className="page__title">New order</h1>
           <p className="page__sub">
             {isB2b
-              ? 'Client order · billed at MRP, the centre keeps the margin'
+              // B2B is TAGGED at MRP in the LIS but PRICED at the client's
+              // rate (@priceAtClientRate) — the centre is billed what it owes
+              // the lab, not the MRP its own patient pays it. Measured: a
+              // ₹100-MRP test bills the centre ₹15, its rate. The old "billed
+              // at MRP" copy described a model that no longer exists and read
+              // as B2C to a franchise reading it.
+              ? "Client order · billed to the centre at its rate with the lab"
               : "Walk-in · billed at this client's own rate"}
           </p>
         </div>
