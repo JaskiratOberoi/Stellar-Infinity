@@ -714,7 +714,11 @@ function PatientMetaBlock({
     <>
       <div className="lr__meta">
         <div className="lr__grid">
+          {/* Row 1: Name | SID. Row 2: Age/Gender | Patient Id. SID sits in
+              the top-right cell beside the name — the two identifiers a
+              reader reaches for first — with Age/Gender directly below. */}
           <Meta label="Name" value={row.patientName ?? '—'} strong />
+          <Meta label="SID" value={row.sid} mono strong />
           <div className="lr__f">
             <span className="lr__f-label">Age / Gender</span>
             <span className="lr__f-sep">:</span>
@@ -725,7 +729,6 @@ function PatientMetaBlock({
               )}
             </span>
           </div>
-          <Meta label="SID" value={row.sid} mono strong />
           <Meta label="Patient Id" value={String(row.pid)} mono />
           {/* The referring customer, not the collection centre: the centre's
               name is already under "Collected at", and this row is for who
