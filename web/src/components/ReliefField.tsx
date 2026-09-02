@@ -86,12 +86,6 @@ export function ReliefField() {
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
-    // Pointer lean, read live in the loop — the camera pans a few world units
-    // toward the pointer so the field has the same parallax the aurora does.
-    let px = 0;
-    const onMove = (e: PointerEvent) => { px = e.clientX / window.innerWidth - 0.5; };
-    window.addEventListener('pointermove', onMove);
-
     let W = 0, H = 0, dpr = 1;
     const resize = () => {
       dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -122,7 +116,6 @@ export function ReliefField() {
       const focal = H * 0.92;
       const cx = W / 2;
       const cy = H * 0.46;              // horizon a touch above centre
-      const panX = px * 3.6;            // camera pan in world units
 
       ctx.clearRect(0, 0, W, H);
       ctx.globalCompositeOperation = dark ? 'lighter' : 'source-over';
@@ -133,11 +126,11 @@ export function ReliefField() {
         const depth = (z - Z_NEAR) / (Z_FAR - Z_NEAR);   // 0 near … 1 far
         const zPhase = z - t * ROLL;                     // advection = rolling
         for (let c = 0; c < COLS; c++) {
-          const x = -SPAN + (2 * SPAN) * (c / (COLS - 1)) + panX;
+          const x = -SPAN + (2 * SPAN) * (c / (COLS - 1));
           const h = noise(x * NOISE_XY, zPhase * NOISE_XY);   // ~[0,1)
           const y = AMP * (h - 0.5) * 2;                       // centre on 0
 
-          const sx = cx + focal * (x - panX * 0.4) / z;
+          const sx = cx + focal * x / z;
           const sy = cy + focal * (CAM_Y - y) / z;
           if (sy < -20 || sy > H + 20 || sx < -20 || sx > W + 20) continue;
 
@@ -177,7 +170,6 @@ export function ReliefField() {
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', resize);
-      window.removeEventListener('pointermove', onMove);
       themeObserver.disconnect();
     };
   }, []);
