@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext';
 import { Mark } from '../components/Mark';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { InfinityLoader } from '../components/InfinityLoader';
+import { ReliefField } from '../components/ReliefField';
 
 /**
  * Time-of-day greeting. Computed once per mount — a login page is looked at
@@ -151,6 +152,10 @@ export function Login() {
         <span className="login__orb login__orb--b" />
         <span className="login__orb login__orb--c" />
       </div>
+
+      {/* RELIEF — the rolling dot-matrix topography over the aurora. Its own
+          canvas layer, above the colour wash and below the card. */}
+      <ReliefField />
 
       {/* Available before sign-in too — someone on a night shift should not
           have to authenticate through a white flash to reach the toggle. */}

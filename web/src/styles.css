@@ -234,6 +234,16 @@ button, input, select { font: inherit; color: inherit; }
    periods (26/32/38s) so the composition never visibly repeats. Transforms
    only — compositor work, no layout or paint — and the global
    prefers-reduced-motion rule at the bottom of this file freezes them. */
+/* RELIEF — the dot-matrix topography canvas. Sits at z-0 like the sky but
+   later in the DOM, so its dots ride over the aurora wash; the card at z-1
+   stays above both and its backdrop-blur softens whatever passes behind it.
+   A gentle top/bottom fade keeps the field from hard-cutting at the edges. */
+.login__relief {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 18%, #000 82%, transparent);
+          mask-image: linear-gradient(180deg, transparent, #000 18%, #000 82%, transparent);
+}
+
 .login__sky {
   position: absolute; inset: 0; z-index: 0; pointer-events: none;
   /* Pointer parallax — the vars are set from React on the root. `translate`
