@@ -645,6 +645,14 @@ export function NewOrder() {
    * basket shows ONE price column, headed MRP, carrying the billed rate.
    */
   const b2cBrand = !b2b && isB2cClientCode(clientCode);
+  /*
+   * A sub-franchise login books orders BLIND to money, as the LIS has it: the
+   * API already strips every figure from the catalogue, the preview and the
+   * extras for this role, and this flag removes the columns and totals those
+   * figures would have filled — a table of dashes says "broken", not
+   * "withheld". The bill still writes the real rates server-side.
+   */
+  const hidePrices = user?.role === 'sub_client';
 
   // ---- sample ids ----
   // The tubes the server says this basket needs. Read off the preview for the
@@ -1135,8 +1143,8 @@ export function NewOrder() {
           {draftBusy
             ? 'Saving…'
             : editingId != null
-              ? `Save changes · ${inr(payable)}`
-              : `Add to list · ${inr(payable)}`}
+              ? hidePrices ? 'Save changes' : `Save changes · ${inr(payable)}`
+              : hidePrices ? 'Add to list' : `Add to list · ${inr(payable)}`}
         </button>
       ) : (
         /* A walk-in is one person at the counter and its receipt is the next
@@ -1273,7 +1281,7 @@ export function NewOrder() {
                 <span className="muted">
                   {d.sids} of {d.tubes} tube{d.tubes === 1 ? '' : 's'}
                 </span>
-                <span className="mono">{inr(d.total)}</span>
+                {!hidePrices && <span className="mono">{inr(d.total)}</span>}
                 {/* The reason the last Submit All left this one behind, on the
                     row itself: a toast would have gone by the time the
                     operator got to fixing it. */}
@@ -1750,7 +1758,9 @@ export function NewOrder() {
                         padding: '.35rem .7rem', cursor: 'pointer',
                         background: on ? 'var(--accent-soft)' : 'transparent',
                       }}
-                      title={`${t.name} — billed at ${inr(t.mrp)}, not performed in the lab`}
+                      title={hidePrices
+                        ? `${t.name} — billed by the lab, not performed in it`
+                        : `${t.name} — billed at ${inr(t.mrp)}, not performed in the lab`}
                     >
                       <input
                         type="checkbox"
@@ -1762,7 +1772,7 @@ export function NewOrder() {
                         })}
                       />
                       <span style={{ fontSize: '.8rem', fontWeight: 600 }}>{t.name}</span>
-                      <span className="muted" style={{ fontSize: '.74rem' }}>{inr(t.mrp)}</span>
+                      {!hidePrices && <span className="muted" style={{ fontSize: '.74rem' }}>{inr(t.mrp)}</span>}
                     </label>
                   );
                 })}
@@ -1785,14 +1795,16 @@ export function NewOrder() {
                           priced above MRP made the margin look impossible:
                           ₹90 / ₹90 / −₹20 — the −₹20 was real (MRP ₹70), the
                           columns were not. */}
-                      {!b2cBrand && (
+                      {!b2cBrand && !hidePrices && (
                         <th style={{ textAlign: 'right' }}>{b2b ? 'Patient pays' : 'MRP'}</th>
                       )}
-                      <th style={{ textAlign: 'right' }}>
-                        {b2b ? 'Client pays' : b2cBrand ? 'MRP' : 'Rate'}
-                      </th>
-                      {b2b && <th style={{ textAlign: 'right' }}>Margin</th>}
-                      {!b2cBrand && <th>Source</th>}
+                      {!hidePrices && (
+                        <th style={{ textAlign: 'right' }}>
+                          {b2b ? 'Client pays' : b2cBrand ? 'MRP' : 'Rate'}
+                        </th>
+                      )}
+                      {b2b && !hidePrices && <th style={{ textAlign: 'right' }}>Margin</th>}
+                      {!b2cBrand && !hidePrices && <th>Source</th>}
                       <th />
                     </tr>
                   </thead>
@@ -1800,18 +1812,20 @@ export function NewOrder() {
                     {preview.lines.map((l) => (
                       <tr key={`${l.kind}:${l.id}`}>
                         <td className="cell--lead">{plainText(l.name) || l.code}</td>
-                        {!b2cBrand && (
+                        {!b2cBrand && !hidePrices && (
                           <td className="mono muted cell--meta"
                               data-label={b2b ? 'Patient pays' : 'MRP'} style={{ textAlign: 'right' }}>
                             {l.mrp != null && l.mrp > 0 ? inr(l.mrp) : '—'}
                           </td>
                         )}
-                        <td className="mono cell--tag" style={{ textAlign: 'right', fontWeight: 600 }}>
-                          {l.rate != null && l.rate > 0
-                            ? inr(l.rate)
-                            : <span className="muted">{b2b ? 'no rate — bills at ₹0' : 'no price'}</span>}
-                        </td>
-                        {b2b && (
+                        {!hidePrices && (
+                          <td className="mono cell--tag" style={{ textAlign: 'right', fontWeight: 600 }}>
+                            {l.rate != null && l.rate > 0
+                              ? inr(l.rate)
+                              : <span className="muted">{b2b ? 'no rate — bills at ₹0' : 'no price'}</span>}
+                          </td>
+                        )}
+                        {b2b && !hidePrices && (
                           <td className="mono cell--meta" data-label="Margin" style={{
                             textAlign: 'right',
                             // A negative margin is the centre selling below what
@@ -1823,7 +1837,7 @@ export function NewOrder() {
                             {l.margin != null ? inr(l.margin) : '—'}
                           </td>
                         )}
-                        {!b2cBrand && (
+                        {!b2cBrand && !hidePrices && (
                           <td className="cell--tag"><RateSourceBadge source={l.rateSource} /></td>
                         )}
                         {/* An icon, not the word. "Remove" repeated down the
@@ -1846,17 +1860,19 @@ export function NewOrder() {
               </div>
 
               <div className="row" style={{ marginTop: '.8rem', flexWrap: 'wrap', gap: '1.2rem' }}>
-                <span style={{ fontSize: '1.05rem' }}>
-                  {/* preview.total sums the BILLED rates — in B2B that is the
-                      client's number, not the patient's. */}
-                  {b2b ? 'Bill total' : 'Total'} <b>{inr(preview.total)}</b>
-                </span>
+                {!hidePrices && (
+                  <span style={{ fontSize: '1.05rem' }}>
+                    {/* preview.total sums the BILLED rates — in B2B that is the
+                        client's number, not the patient's. */}
+                    {b2b ? 'Bill total' : 'Total'} <b>{inr(preview.total)}</b>
+                  </span>
+                )}
 
                 {/* Stated with its basis — a bare margin figure is something
                     somebody eventually prices a contract off. Suppressed for
                     the B2C brands, whose single MRP column has nothing to be
                     compared against. */}
-                {preview.margin.comparableLines > 0 && !b2cBrand && (
+                {preview.margin.comparableLines > 0 && !b2cBrand && !hidePrices && (
                   <span className="muted" style={{ fontSize: '.8rem' }}>
                     {b2b
                       ? <>Centre keeps <b>{inr(preview.margin.amount)}</b> · owes the lab{' '}

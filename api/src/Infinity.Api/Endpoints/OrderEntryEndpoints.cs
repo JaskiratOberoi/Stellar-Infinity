@@ -228,6 +228,15 @@ public static class OrderEntryEndpoints
             .SearchAsync(mcc, null, null, 1, 1000, ct, cart.Items)
             .ConfigureAwait(false);
         var byKey = priced.Rows.ToDictionary(r => (r.Kind, r.Id));
+        /*
+         * A sub-franchise login never sees a price — the LIS shows these
+         * accounts the order form with every figure blank, because the money
+         * is the PARENT's business. The pricing still runs (unpriced/
+         * billedAtZero come from it, and the procedure bills the real rates
+         * regardless); only the figures are withheld from the response, so a
+         * curious network tab learns nothing the screen would not show.
+         */
+        var hidePrices = principal.Role() == InfinityRoles.SubClient;
         var lines = cart.Items.Select(i =>
         {
             byKey.TryGetValue((i.Kind, i.Id), out var p);
@@ -255,17 +264,17 @@ public static class OrderEntryEndpoints
                 id = i.Id,
                 code = p?.Code ?? i.Code,
                 name = p?.Name ?? i.Name,
-                mrp,
-                rate = charge,
+                mrp = hidePrices ? null : mrp,
+                rate = hidePrices ? null : charge,
                 // What the centre owes the lab. Now the SAME number as 
                 // in B2B, since the bill is the client rate - kept as its own
                 // field so the UI need not know that, and so the day the two
                 // diverge again nothing silently reads one as the other.
-                clientCost = b2b ? clientRate : null,
+                clientCost = b2b && !hidePrices ? clientRate : null,
                 // The centre's margin on this line, and null rather than zero
                 // when either side is unknown — a missing price is not a
                 // margin of nothing.
-                margin = b2b && mrp is not null && clientRate is not null ? mrp - clientRate : null,
+                margin = b2b && !hidePrices && mrp is not null && clientRate is not null ? mrp - clientRate : null,
                 // 'none' means the catalogue has no price for this client at
                 // all. Surfaced per line so the operator sees WHICH item is
                 // unpriced rather than only that the total looks wrong.
@@ -324,8 +333,10 @@ public static class OrderEntryEndpoints
             unpriced = lines.Count(l => l.rateSource == "none"),
             // B2B only, and the number that must not be ignored: these lines
             // would go onto the bill at zero, because MRP is what B2B charges
-            // and they have none.
-            billedAtZero = b2b ? lines.Count(l => l.mrp is null or 0m) : 0,
+            // and they have none. Zeroed for the price-hidden role — its
+            // stripped lines would otherwise ALL count, and the figure is
+            // commercial information it must not see anyway.
+            billedAtZero = b2b && !hidePrices ? lines.Count(l => l.mrp is null or 0m) : 0,
             // ── B2B LINES THAT LOSE THE CENTRE MONEY ──────────────────────
             // MRP is not reliably above the client's rate. Measured on ABC01's
             // catalogue: of 1,000 items, 755 price MRP exactly AT the client
@@ -337,7 +348,7 @@ public static class OrderEntryEndpoints
             // correct here, so the order is allowed. But it is surfaced as its
             // own count rather than buried in a net margin, where 91 losses
             // hide inside 150 gains and the total still looks positive.
-            belowCost = b2b ? lines.Count(l => l.margin is < 0m) : 0,
+            belowCost = b2b && !hidePrices ? lines.Count(l => l.margin is < 0m) : 0,
         });
     }
     // ---- channels ------------------------------------------------------------
@@ -410,7 +421,12 @@ public static class OrderEntryEndpoints
         // and at what price, is not another client's to read.
         if (!await InScopeAsync(scopes, userId, mcc, ct).ConfigureAwait(false))
             return Results.NotFound();
-        return Results.Ok(await repo.ForMccAsync(mcc, ct).ConfigureAwait(false));
+        var items = await repo.ForMccAsync(mcc, ct).ConfigureAwait(false);
+        // The sub-franchise price veil covers the extras too; the placement
+        // re-prices from the catalogue regardless, so zero here is display.
+        if (principal.Role() == InfinityRoles.SubClient)
+            items = items.Select(t => t with { Mrp = 0 }).ToList();
+        return Results.Ok(items);
     }
     /// <summary>
     /// Place the order. This is the real write: a patient, a bill, a bill

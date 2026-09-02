@@ -26,6 +26,17 @@ public static class InfinityRoles
     /// <summary>A client login that only READS — reports and its own account.
     /// Telo calls the same shape client_reporting.</summary>
     public const string ClientReporting = "client_reporting";
+    /// <summary>
+    /// A sub-franchise login (LIS usertype 7, sub_pcc_id set) — a child centre
+    /// under a parent client code, e.g. UP0014A under UP0014. The LIS gives
+    /// these three things and nothing else: raise an order (with every price
+    /// hidden), read their own reports, and pay Noble. No sales, no accounts,
+    /// no rate list — the money is the PARENT's business, since a child's
+    /// charges post to the parent's wallet. The missing BillingView is what
+    /// enforces most of that; the price stripping on the order routes does the
+    /// rest.
+    /// </summary>
+    public const string SubClient = "sub_client";
     public const string Viewer = "viewer";
 
     /// <summary>
@@ -36,7 +47,8 @@ public static class InfinityRoles
     /// </summary>
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
-        SuperAdmin, Admin, LabManager, Technician, Reporting, Client, ClientB2c, ClientReporting, Viewer,
+        SuperAdmin, Admin, LabManager, Technician, Reporting, Client, ClientB2c, ClientReporting,
+        SubClient, Viewer,
     };
 
     public static bool IsValid(string? role) => role is not null && All.Contains(role);
@@ -146,6 +158,17 @@ public static class InfinityRoles
                 Capabilities.ReportView,
                 Capabilities.BillingView),
 
+            // The Client shape MINUS the money: no BillingView, so sales,
+            // accounts, the rate list and the billing dashboards are all out
+            // of reach; the order routes additionally strip prices for this
+            // role. Paying Noble needs no capability — the payment routes are
+            // session-gated only, exactly so a child can settle up.
+            [SubClient] = Caps(
+                Capabilities.OrderCreate, Capabilities.OrderView,
+                Capabilities.OrderB2b,
+                Capabilities.PatientCreate, Capabilities.PatientView,
+                Capabilities.ReportView),
+
             [Viewer] = Caps(
                 Capabilities.OrderView, Capabilities.PatientView,
                 Capabilities.BillingView, Capabilities.AnalyticsView),
@@ -165,7 +188,7 @@ public static class InfinityRoles
         [32] = Admin,       // SALES ADMIN
 
         [2] = Client,       // Client
-        [7] = Client,       // Sub Client
+        [7] = SubClient,    // Sub Client — a child code under a parent client
         [12] = Client,      // CLIENT INVOICE
 
         [29] = LabManager,  // WALKIN CODES

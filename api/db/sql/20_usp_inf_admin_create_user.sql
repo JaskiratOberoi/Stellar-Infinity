@@ -52,7 +52,7 @@ BEGIN
        add a role in code, deploy this procedure too. */
     IF @infinityRole NOT IN (N'super_admin', N'admin', N'lab_manager',
                              N'technician', N'reporting', N'client',
-                     N'client_b2c', N'client_reporting', N'viewer')
+                     N'client_b2c', N'client_reporting', N'sub_client', N'viewer')
     BEGIN
         SELECT ok = CAST(0 AS BIT), error_code = 'VALIDATION',
                message = N'Unknown Infinity role',

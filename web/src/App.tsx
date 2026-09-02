@@ -9,6 +9,7 @@ import { SpellCheckUndo } from './components/SpellChecked';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { ClientHome } from './pages/ClientHome';
+import { SubClientHome } from './pages/SubClientHome';
 import { Orders } from './pages/Orders';
 import { NewOrder } from './pages/NewOrder';
 import { Accessioning } from './pages/Accessioning';
@@ -149,7 +150,7 @@ const NAV: NavEntry[] = [
       // to do is raise an order, so the link goes straight there.
       {
         to: '/orders/new', label: 'Patient orders', icon: 'orders',
-        cap: 'order:create', onlyForRole: 'client',
+        cap: 'order:create', onlyForRoles: ['client', 'sub_client'],
       },
       // The transit scan desk. It was kept OUT of the flat bar because a
       // fourteenth pill put a horizontal scrollbar on every full-width role;
@@ -171,13 +172,16 @@ const NAV: NavEntry[] = [
       // The roster the order form books against — Pcc/Doctors.aspx and
       // Pcc/Customers.aspx, rebuilt as one page. order:view like the roster
       // read itself; the page hides its write controls without order:create.
-      { to: '/referrers', label: 'Referrers', icon: 'orders', cap: 'order:view' },
+      // Hidden from sub-franchise logins along with the catalogue below: the
+      // LIS gives a child code the order form, its reports and the pay
+      // option — the roster and the rate list stay the parent's.
+      { to: '/referrers', label: 'Referrers', icon: 'orders', cap: 'order:view', hideForRoles: ['sub_client'] },
     ],
   },
   {
     label: 'Billing',
     items: [
-      { to: '/catalogue', label: 'Catalogue', icon: 'orders', cap: 'order:view' },
+      { to: '/catalogue', label: 'Catalogue', icon: 'orders', cap: 'order:view', hideForRoles: ['sub_client'] },
       { to: '/accounts', label: 'Accounts', icon: 'orders', cap: 'billing:view' },
       // Sales data is per client; /sales resolves WHOSE — a single-account
       // visitor lands directly on their own, anyone else picks. See SalesHome.
@@ -385,7 +389,13 @@ export function App() {
             their balance and payments. Keyed on the capability rather than on
             the role name, so anyone without analytics gets something useful
             rather than an explanation of what they lack. */}
-        <Route path="/" element={can('analytics:view') ? <Dashboard /> : <ClientHome />} />
+        <Route path="/" element={
+          can('analytics:view') ? <Dashboard />
+          // A sub-franchise gets the three-door home — order, reports, pay —
+          // with none of the money ClientHome shows, because that money is
+          // the parent's. The API refuses those reads regardless.
+          : user.role === 'sub_client' ? <SubClientHome />
+          : <ClientHome />} />
         <Route path="/orders" element={can('order:view') ? <Orders /> : <Navigate to="/" replace />} />
         {/* order:create, not order:view — booking is a stronger act than
             reading, and the API enforces the same distinction independently. */}

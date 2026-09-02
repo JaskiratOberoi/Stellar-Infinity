@@ -97,8 +97,18 @@ public sealed class ScopeRepository(
             ELSE IF @ut IN (2, 7, 8, 10, 12)
             BEGIN
                 WITH own AS (
+                    /*
+                     * On a SUB-FRANCHISE login the LIS sets PCC_Id to the
+                     * PARENT and sub_pcc_id to the child's own unit — and
+                     * locks the login to the child (SampleStatus.aspx.cs:
+                     * sub_pcc_id wins, the picker is disabled). Including
+                     * PCC_Id here handed every sub login its parent AND, via
+                     * the roll-up below, all of its siblings. The parent
+                     * column therefore counts only when sub_pcc_id is unset.
+                     */
                     SELECT u.PCC_Id AS id FROM dbo.tbl_med_user_master u
                     WHERE u.id = @uid AND u.PCC_Id IS NOT NULL AND u.PCC_Id > 0
+                      AND ISNULL(u.sub_pcc_id, 0) = 0
                     UNION
                     SELECT u.sub_pcc_id FROM dbo.tbl_med_user_master u
                     WHERE u.id = @uid AND u.sub_pcc_id IS NOT NULL AND u.sub_pcc_id > 0
@@ -114,12 +124,17 @@ public sealed class ScopeRepository(
             ELSE IF @restricted = 1
             BEGIN
                 WITH own AS (
+                    -- Same sub-franchise fences as the report scope: a login
+                    -- with sub_pcc_id set is locked to that unit alone.
                     SELECT DISTINCT m.mcc_code AS id
                     FROM dbo.tbl_med_user_sales_mcc_mapping m
                     WHERE m.user_id = @uid AND m.mcc_code IS NOT NULL
+                      AND NOT EXISTS (SELECT 1 FROM dbo.tbl_med_user_master u2
+                                      WHERE u2.id = @uid AND ISNULL(u2.sub_pcc_id, 0) > 0)
                     UNION
                     SELECT u.PCC_Id FROM dbo.tbl_med_user_master u
                     WHERE u.id = @uid AND u.PCC_Id IS NOT NULL AND u.PCC_Id > 0
+                      AND ISNULL(u.sub_pcc_id, 0) = 0
                     UNION
                     SELECT u.sub_pcc_id FROM dbo.tbl_med_user_master u
                     WHERE u.id = @uid AND u.sub_pcc_id IS NOT NULL AND u.sub_pcc_id > 0
@@ -195,12 +210,27 @@ public sealed class ScopeRepository(
             IF @restricted = 1 OR @ut IN (2, 7, 8, 10, 12)
             BEGIN
                 WITH own AS (
+                    /*
+                     * A sub-franchise login (sub_pcc_id set) is LOCKED to its
+                     * own unit, full stop — the LIS pins such logins to
+                     * sub_pcc_id and reads nothing else. Its PCC_Id names the
+                     * PARENT, and in the wild its sales-mapping rows name the
+                     * whole family (UP0014A carries rows for its parent and
+                     * every sibling) — honouring either handed each child the
+                     * family's reports. Both arms are therefore fenced on
+                     * sub_pcc_id being unset. The mapping arm still serves the
+                     * users it was written for (CLIENT REPORTING and friends),
+                     * none of whom carry a sub_pcc_id.
+                     */
                     SELECT DISTINCT m.mcc_code AS id
                     FROM dbo.tbl_med_user_sales_mcc_mapping m
                     WHERE m.user_id = @uid AND m.mcc_code IS NOT NULL
+                      AND NOT EXISTS (SELECT 1 FROM dbo.tbl_med_user_master u2
+                                      WHERE u2.id = @uid AND ISNULL(u2.sub_pcc_id, 0) > 0)
                     UNION
                     SELECT u.PCC_Id FROM dbo.tbl_med_user_master u
                     WHERE u.id = @uid AND u.PCC_Id IS NOT NULL AND u.PCC_Id > 0
+                      AND ISNULL(u.sub_pcc_id, 0) = 0
                     UNION
                     SELECT u.sub_pcc_id FROM dbo.tbl_med_user_master u
                     WHERE u.id = @uid AND u.sub_pcc_id IS NOT NULL AND u.sub_pcc_id > 0
