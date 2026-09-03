@@ -231,10 +231,18 @@
   background: #f8fafc;
   padding: 4px 12px 5px;
   margin-bottom: 5px;
+  /* Text on the left, the vertical SID barcode pinned to the right edge. */
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
-/* dense flow so a field pinned to column 2 (Ordered by, under Ref. Doctor)
-   lets the row's left cell backfill instead of leaving a gap. */
-.lr__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 40px; row-gap: 0; grid-auto-flow: row dense; }
+.lr__metamain { flex: 1 1 auto; min-width: 0; }
+
+/* Two independent stacks — identity/referral on the left, ids/timeline on the
+   right — rather than a row-major grid, so each column reads top to bottom the
+   way the bench sheet lays it out. */
+.lr__grid { display: flex; align-items: flex-start; column-gap: 40px; }
+.lr__col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
 
 .lr__f { display: flex; align-items: baseline; gap: 8px; }
 .lr__f-label { width: 112px; flex: none; color: #374151; font-weight: 600; }
@@ -259,6 +267,20 @@
 
 .lr__history { margin-top: 4px; font-size: 11px; color: #4b5563; }
 .lr__history b { font-weight: 600; }
+
+/* The SID barcode strip, pinned to the right edge of the header. The SVG is
+   authored horizontally and turned a quarter turn here, so it stands vertical
+   against the block's right side; the fixed width reserves room for the rotated
+   bars so the demographics never run under them. */
+.lr__barcode {
+  flex: 0 0 auto;
+  width: 53px;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lr__barcode-svg { transform: rotate(90deg); }
 
 /* Preview only — there is no tick box on paper to explain. */
 .lr__tickhint {

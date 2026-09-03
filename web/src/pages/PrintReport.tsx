@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import nobleLogo from '../assets/noble-logo.png';
 import nablLogo from '../assets/nabl.png';
 import { isRichValue, sanitizeRich } from '../lib/richText';
+import { code128 } from '../lib/code128';
 import { notesForCodes } from '../lib/reportNotes';
 import {
   ageLabel, fmtDob, fmtStamp, formatRange, genderLabel, splitInterp,
@@ -501,14 +502,14 @@ export function PrintReport() {
 
   return (
     <div className={shell} data-print-ready={ready ? 'true' : 'false'}>
-      {/* The page box depends on the paper. Plain paper gets a full 40mm head
-          and foot; letterhead gets the tighter 26/34mm that matches Noble's
-          pre-printed clear area, so content lands under the printed header
-          rather than a hand's-width below it. Emitted only for the PDF route
-          (the API passes ?headless=0|1); later in document order than
+      {/* The page box depends on the paper. Plain paper gets a 30mm head and a
+          full 40mm foot; letterhead gets the tighter 26/34mm that matches
+          Noble's pre-printed clear area, so content lands under the printed
+          header rather than a hand's-width below it. Emitted only for the PDF
+          route (the API passes ?headless=0|1); later in document order than
           report.css, so it is the winning @page rule. */}
       {pdfMode && (
-        <style>{`@page{size:A4 portrait;margin:${headless ? '40mm' : '26mm'} 14mm ${headless ? '40mm' : '34mm'} 14mm}`}</style>
+        <style>{`@page{size:A4 portrait;margin:${headless ? '30mm' : '26mm'} 14mm ${headless ? '40mm' : '34mm'} 14mm}`}</style>
       )}
       {error ? <p className="lr__error">{error}</p> : !row ? null : !signed ? (
         <p className="lr__error">
@@ -696,6 +697,36 @@ function Meta({
   );
 }
 
+/** The SID as a Code 128 barcode, drawn down the right edge of the header so a
+ *  scanner reads the sample straight off the sheet. The symbol is generated
+ *  horizontally and rotated a quarter turn by the stylesheet, so the bars stay
+ *  crisp at whatever the printer's resolution is. */
+function SidBarcode({ value }: { value: string }) {
+  const enc = useMemo(() => code128(value), [value]);
+  if (!enc) return null;
+
+  const MODULE = 1.32;             // px per module — the barcode's narrow bar
+  const BAR = 48;                  // bar length; the strip's width once rotated
+  const width = enc.width * MODULE; // full length; the strip's height once rotated
+
+  return (
+    <div className="lr__barcode" aria-hidden="true" title={`SID ${value}`}>
+      <svg
+        className="lr__barcode-svg"
+        width={width}
+        height={BAR}
+        viewBox={`0 0 ${width} ${BAR}`}
+        shapeRendering="crispEdges"
+      >
+        <rect x={0} y={0} width={width} height={BAR} fill="#fff" />
+        {enc.bars.map((b, i) => (
+          <rect key={i} x={b.x * MODULE} y={0} width={b.w * MODULE} height={BAR} fill="#111" />
+        ))}
+      </svg>
+    </div>
+  );
+}
+
 /** Demographics, "Collected at" and the clinical history — one header block,
  *  closed by a single rule that marks where the header ends. */
 function PatientMetaBlock({
@@ -713,54 +744,63 @@ function PatientMetaBlock({
   return (
     <>
       <div className="lr__meta">
-        <div className="lr__grid">
-          {/* Row 1: Name | SID. Row 2: Age/Gender | Patient Id. SID sits in
-              the top-right cell beside the name — the two identifiers a
-              reader reaches for first — with Age/Gender directly below. */}
-          <Meta label="Name" value={row.patientName ?? '—'} strong />
-          <Meta label="SID" value={row.sid} mono strong />
-          <div className="lr__f">
-            <span className="lr__f-label">Age / Gender</span>
-            <span className="lr__f-sep">:</span>
-            <span>
-              {`${ageLabel(row.age, row.ageUnit)} / ${genderLabel(row.sex)}`}
-              {fmtDob(row.dob) && (
-                <span className="lr__cc-contact"> · DOB {fmtDob(row.dob)}</span>
-              )}
-            </span>
-          </div>
-          <Meta label="Patient Id" value={String(row.pid)} mono />
-          {/* The referring customer, not the collection centre: the centre's
-              name is already under "Collected at", and this row is for who
-              referred the patient. '—' when none, never the centre's code. */}
-          <Meta label="Ref. Customer" value={row.refCustomer ?? '—'} />
-          <Meta label="Ref. Doctor" value={row.refDoctor ?? 'Self'} />
-          {/* The centre that placed the order, directly under Ref. Doctor. */}
-          <Meta label="Ordered by" value={row.clientCode ?? '—'} right />
-          {specimens.length > 0 && <Meta label="Specimen" value={specimens.join(', ')} />}
-          <Meta label="Collected" value={fmtStamp(row.sampleDrawn)} />
-          <Meta label="Registered" value={fmtStamp(row.registeredAt)} />
-          <Meta label="Reported" value={fmtStamp(row.lastModifiedAt)} />
-          {/* When this SHEET was produced, as distinct from when the result was
-              reported. A reissued report is otherwise indistinguishable from
-              the original. */}
-          <Meta label="Printed" value={fmtStamp(printedAt)} />
-          {/* Passport / Aadhaar, placed here so it flows into the right column
-              directly under "Reported". Shown only for a GENUINE id — see
-              genuineTravelId. The LIS stores this in MRNID, which for the vast
-              majority of patients is the own patient-id backfilled by the order
-              form (never a passport) or, for a stray few, another patient-id-
-              like number; printing either under a "Passport" label would be
-              wrong, so the guard keeps the row hidden until a real passport or
-              aadhaar is entered. Omitted rather than blanked, like Specimen and
-              Bill No. */}
-          {genuineTravelId(row.passportNo) && (
-            <Meta label="Passport / Aadhaar" value={row.passportNo!.trim()} mono />
-          )}
-          {row.billNumber && <Meta label="Bill No." value={row.billNumber} mono />}
-        </div>
+        {/* Two stacked columns beside a vertical SID barcode, laid out to match
+            the bench sheet: identity and referral on the left, ids and the
+            sample's timeline on the right, the scannable SID down the right
+            edge. Labels are unchanged from the fields they name — only the
+            arrangement moved. */}
+        <div className="lr__metamain">
+          <div className="lr__grid">
+            <div className="lr__col">
+              <Meta label="Name" value={row.patientName ?? '—'} strong />
+              <div className="lr__f">
+                <span className="lr__f-label">Age / Gender</span>
+                <span className="lr__f-sep">:</span>
+                <span>
+                  {`${ageLabel(row.age, row.ageUnit)} / ${genderLabel(row.sex)}`}
+                  {fmtDob(row.dob) && (
+                    <span className="lr__cc-contact"> · DOB {fmtDob(row.dob)}</span>
+                  )}
+                </span>
+              </div>
+              {/* The centre that placed the order. */}
+              <Meta label="Ordered by" value={row.clientCode ?? '—'} />
+              {/* The referring customer, not the collection centre: the centre's
+                  name is already under "Collected at", and this row is for who
+                  referred the patient. '—' when none, never the centre's code. */}
+              <Meta label="Ref. Customer" value={row.refCustomer ?? '—'} />
+              <Meta label="Ref. Doctor" value={row.refDoctor ?? 'Self'} />
+              {specimens.length > 0 && <Meta label="Specimen" value={specimens.join(', ')} />}
+            </div>
 
-        {cc && (
+            <div className="lr__col">
+              <Meta label="Patient Id" value={String(row.pid)} mono />
+              {/* SID sits with the ids the reader reaches for first, and is the
+                  value the barcode down the edge encodes. */}
+              <Meta label="SID" value={row.sid} mono strong />
+              <Meta label="Collected" value={fmtStamp(row.sampleDrawn)} />
+              <Meta label="Registered" value={fmtStamp(row.registeredAt)} />
+              <Meta label="Reported" value={fmtStamp(row.lastModifiedAt)} />
+              {/* When this SHEET was produced, as distinct from when the result
+                  was reported. A reissued report is otherwise indistinguishable
+                  from the original. */}
+              <Meta label="Printed" value={fmtStamp(printedAt)} />
+              {/* Passport / Aadhaar. Shown only for a GENUINE id — see
+                  genuineTravelId. The LIS stores this in MRNID, which for the
+                  vast majority of patients is the own patient-id backfilled by
+                  the order form (never a passport) or, for a stray few, another
+                  patient-id-like number; printing either under a "Passport"
+                  label would be wrong, so the guard keeps the row hidden until a
+                  real passport or aadhaar is entered. Omitted rather than
+                  blanked, like Specimen and Bill No. */}
+              {genuineTravelId(row.passportNo) && (
+                <Meta label="Passport / Aadhaar" value={row.passportNo!.trim()} mono />
+              )}
+              {row.billNumber && <Meta label="Bill No." value={row.billNumber} mono />}
+            </div>
+          </div>
+
+          {cc && (
           <div className="lr__cc">
             <span className="lr__f-label">Collected at</span>
             <span className="lr__f-sep">:</span>
@@ -779,9 +819,12 @@ function PatientMetaBlock({
           </div>
         )}
 
-        {row.clinicalHistory && (
-          <p className="lr__history"><b>Clinical history:</b> {row.clinicalHistory}</p>
-        )}
+          {row.clinicalHistory && (
+            <p className="lr__history"><b>Clinical history:</b> {row.clinicalHistory}</p>
+          )}
+        </div>
+
+        <SidBarcode value={row.sid} />
       </div>
 
       {interactive && totalLeaves > 0 && (
