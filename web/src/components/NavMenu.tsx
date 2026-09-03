@@ -46,6 +46,10 @@ export interface NavItem {
   /** Hidden without it. Cosmetic only — the API enforces every capability
    *  independently on its own routes. */
   cap?: string;
+  /** Hidden WITH it — the inverse of `cap`. The Catalogue uses it for
+   *  rate:hidden: an account veiled from prices should not see the price
+   *  list. Cosmetic like the rest; the catalogue route strips figures too. */
+  hideForCap?: string;
   /** Plural forms of the two above, for entries several roles share or shun. */
   hideForRoles?: string[];
   onlyForRoles?: string[];

@@ -45,7 +45,7 @@ BEGIN
         CONSTRAINT UQ_inf_user_capability_grant UNIQUE (user_id, capability),
         -- THE guard. See the remarks above before adding to this list.
         CONSTRAINT CK_inf_user_capability_grant_cap
-            CHECK (capability IN ('order:b2c'))
+            CHECK (capability IN ('order:b2c', 'rate:hidden'))
     );
 
     -- The read is always "everything this user holds", on every token mint.
@@ -56,4 +56,20 @@ BEGIN
 END
 ELSE
     PRINT 'dbo.inf_user_capability_grant already present.';
+GO
+
+/* Widen the grantable set on an already-deployed table: rate:hidden joins
+   order:b2c. Drop-and-recreate because a CHECK cannot be altered in place;
+   guarded so a re-run is a no-op. */
+IF EXISTS (SELECT 1 FROM sys.check_constraints
+           WHERE name = 'CK_inf_user_capability_grant_cap'
+             AND OBJECT_NAME(parent_object_id) = 'inf_user_capability_grant'
+             AND definition NOT LIKE '%rate:hidden%')
+BEGIN
+    ALTER TABLE dbo.inf_user_capability_grant DROP CONSTRAINT CK_inf_user_capability_grant_cap;
+    ALTER TABLE dbo.inf_user_capability_grant
+        ADD CONSTRAINT CK_inf_user_capability_grant_cap
+            CHECK (capability IN ('order:b2c', 'rate:hidden'));
+    PRINT 'Widened CK_inf_user_capability_grant_cap to include rate:hidden.';
+END
 GO

@@ -242,6 +242,9 @@ export interface AdminUserRow {
   sessionVersion: number;
   /** Walk-in ordering granted to this user individually. */
   walkInGranted: boolean;
+  /** The price veil (rate:hidden) granted to this user individually — order
+   *  form, preview and catalogue hide every rate. */
+  ratesHidden: boolean;
 }
 
 export interface AdminUserPage {
@@ -642,6 +645,13 @@ export const adminApi = {
     api.put<{ ok: boolean; message?: string }>(
       `/api/admin/users/${userId}/capability-grant`,
       { capability: 'order:b2c', granted }),
+
+  /** Hide every test rate from this account — order form, preview, catalogue.
+   *  The same whitelisted capability-grant channel as walk-in. */
+  setRatesHidden: (userId: number, granted: boolean) =>
+    api.put<{ ok: boolean; message?: string }>(
+      `/api/admin/users/${userId}/capability-grant`,
+      { capability: 'rate:hidden', granted }),
   resetPassword: (userId: number, password: string) =>
     api.put<void>(`/api/admin/users/${userId}/password`, { password }),
 };

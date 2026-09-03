@@ -112,6 +112,7 @@ export function AdminUsers() {
                 <th>Infinity login</th>
                 <th>LIS access</th>
                 <th title="Walk-in ordering, for a client account that also takes its own patients">Walk-in</th>
+                <th title="Hide every test rate — order form, preview and catalogue — for this account">Hide rates</th>
                 <th />
               </tr>
             </thead>
@@ -200,6 +201,34 @@ export function AdminUsers() {
                       )}
                     </td>
 
+                    {/* Hide rates. A per-account veil for a client the lab
+                        wants ordering blind to price — the order form,
+                        preview and catalogue drop every figure. Offered for
+                        client roles; a sub_client already carries it from its
+                        role, so it reads as a fact there, not a toggle. */}
+                    <td className="cell--meta" data-label="Hide rates">
+                      {r.effectiveRole === 'client' || r.effectiveRole === 'client_b2c' ? (
+                        <div className="row">
+                          <button
+                            className={`toggle ${r.ratesHidden ? 'toggle--on' : ''}`}
+                            disabled={busy}
+                            title="Hide every test rate from this account — the order form, preview and catalogue. The bill is still written at the real rate."
+                            onClick={() =>
+                              act(r.userId, async () => { await adminApi.setRatesHidden(r.userId, !r.ratesHidden); },
+                                `Rates ${r.ratesHidden ? 'shown to' : 'hidden from'} ${r.username}. They must sign in again.`)
+                            }
+                          />
+                          <span className="muted" style={{ fontSize: '.72rem' }}>
+                            {r.ratesHidden ? 'hidden' : 'shown'}
+                          </span>
+                        </div>
+                      ) : r.effectiveRole === 'sub_client' ? (
+                        <span className="muted" title="A sub-franchise never sees rates — part of the role">hidden</span>
+                      ) : (
+                        <span className="muted" title="Rates are shown to lab and admin roles">—</span>
+                      )}
+                    </td>
+
                     <td className="cell--meta" data-label="LIS access">
                       {isInfinity ? (
                         <div className="row">
@@ -238,7 +267,7 @@ export function AdminUsers() {
               })}
 
               {rows.length === 0 && (
-                <tr><td colSpan={7} className="muted" style={{ textAlign: 'center', padding: '2rem' }}>No users match that search.</td></tr>
+                <tr><td colSpan={8} className="muted" style={{ textAlign: 'center', padding: '2rem' }}>No users match that search.</td></tr>
               )}
             </tbody>
           </table>

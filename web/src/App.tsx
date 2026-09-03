@@ -181,7 +181,7 @@ const NAV: NavEntry[] = [
   {
     label: 'Billing',
     items: [
-      { to: '/catalogue', label: 'Catalogue', icon: 'orders', cap: 'order:view', hideForRoles: ['sub_client'] },
+      { to: '/catalogue', label: 'Catalogue', icon: 'orders', cap: 'order:view', hideForCap: 'rate:hidden' },
       { to: '/accounts', label: 'Accounts', icon: 'orders', cap: 'billing:view' },
       // Sales data is per client; /sales resolves WHOSE — a single-account
       // visitor lands directly on their own, anyone else picks. See SalesHome.
@@ -324,6 +324,7 @@ export function App() {
   // sheet takes the flat leaves — see NavMenu for why it stays a flat grid.
   const visible = (i: NavItem) =>
     (!i.cap || can(i.cap))
+      && !(i.hideForCap && can(i.hideForCap))
       && i.hideForRole !== user.role
       && !(i.hideForRoles?.includes(user.role))
       && (!i.onlyForRole || i.onlyForRole === user.role)
@@ -413,7 +414,9 @@ export function App() {
         {/* order:view to look at the scan log; the scan box inside additionally
             needs order:accession, which the API enforces independently. */}
         <Route path="/inward" element={can('order:view') ? <Inward /> : <Navigate to="/" replace />} />
-        <Route path="/catalogue" element={can('order:view') ? <Catalogue /> : <Navigate to="/" replace />} />
+        {/* rate:hidden veils the price list outright — a typed URL lands home
+            rather than on a catalogue the account is not meant to price. */}
+        <Route path="/catalogue" element={can('order:view') && !can('rate:hidden') ? <Catalogue /> : <Navigate to="/" replace />} />
         <Route path="/accounts" element={can('billing:view') ? <ClientAccounts /> : <Navigate to="/" replace />} />
         {/* Sales grew out of a tab on the account modal — nine columns of
             itemised lines want a page, and a reconciliation wants a URL it

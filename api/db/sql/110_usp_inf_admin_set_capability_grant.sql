@@ -39,7 +39,7 @@ BEGIN
     /* Named explicitly rather than deferred to the CHECK: a constraint
        violation would surface as a 500 with a SQL message, and the caller
        deserves to be told which capability is grantable. */
-    IF @capability NOT IN ('order:b2c')
+    IF @capability NOT IN ('order:b2c', 'rate:hidden')
     BEGIN
         SELECT ok = CAST(0 AS BIT), error_code = 'VALIDATION',
                message = N'That capability cannot be granted to an individual user.';

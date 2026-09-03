@@ -229,14 +229,13 @@ public static class OrderEntryEndpoints
             .ConfigureAwait(false);
         var byKey = priced.Rows.ToDictionary(r => (r.Kind, r.Id));
         /*
-         * A sub-franchise login never sees a price — the LIS shows these
-         * accounts the order form with every figure blank, because the money
-         * is the PARENT's business. The pricing still runs (unpriced/
+         * Some accounts order BLIND to price — a sub-franchise always, and any
+         * client granted rate:hidden. The pricing still runs (unpriced/
          * billedAtZero come from it, and the procedure bills the real rates
          * regardless); only the figures are withheld from the response, so a
          * curious network tab learns nothing the screen would not show.
          */
-        var hidePrices = principal.Role() == InfinityRoles.SubClient;
+        var hidePrices = principal.HasCapability(Capabilities.RateHidden);
         var lines = cart.Items.Select(i =>
         {
             byKey.TryGetValue((i.Kind, i.Id), out var p);
@@ -422,9 +421,9 @@ public static class OrderEntryEndpoints
         if (!await InScopeAsync(scopes, userId, mcc, ct).ConfigureAwait(false))
             return Results.NotFound();
         var items = await repo.ForMccAsync(mcc, ct).ConfigureAwait(false);
-        // The sub-franchise price veil covers the extras too; the placement
-        // re-prices from the catalogue regardless, so zero here is display.
-        if (principal.Role() == InfinityRoles.SubClient)
+        // The price veil covers the extras too; the placement re-prices from
+        // the catalogue regardless, so zero here is display only.
+        if (principal.HasCapability(Capabilities.RateHidden))
             items = items.Select(t => t with { Mrp = 0 }).ToList();
         return Results.Ok(items);
     }

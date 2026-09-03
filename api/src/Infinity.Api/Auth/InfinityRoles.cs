@@ -167,7 +167,10 @@ public static class InfinityRoles
                 Capabilities.OrderCreate, Capabilities.OrderView,
                 Capabilities.OrderB2b,
                 Capabilities.PatientCreate, Capabilities.PatientView,
-                Capabilities.ReportView),
+                Capabilities.ReportView,
+                // The price veil is a capability now, so a sub carries it the
+                // same way a per-user grant would — one code path hides rates.
+                Capabilities.RateHidden),
 
             [Viewer] = Caps(
                 Capabilities.OrderView, Capabilities.PatientView,
@@ -339,4 +342,14 @@ public static class Capabilities
     /// </summary>
     public const string RateManage = "rate:manage";
     public const string AnalyticsView = "analytics:view";
+
+    /// <summary>
+    /// Hide every test price from this account — the order form, the preview
+    /// and the catalogue page. Not a power but a VEIL: the sub_client role
+    /// carries it (a franchise child never sees the money), and an admin can
+    /// grant it to any client the lab wants ordering blind to rates. The
+    /// server strips the figures for anyone holding it; the bill is written
+    /// at the real rate regardless. Grantable per-user, like order:b2c.
+    /// </summary>
+    public const string RateHidden = "rate:hidden";
 }

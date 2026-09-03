@@ -29,7 +29,14 @@ public sealed record AdminUserRow(
     /// the effective capability, because a lab role holds order:b2c anyway and
     /// the panel must show a toggle, not a coincidence.
     /// </summary>
-    bool WalkInGranted);
+    bool WalkInGranted,
+    /// <summary>
+    /// The price veil (rate:hidden) granted to this user individually — the
+    /// order form, preview and catalogue hide every rate. Reported as the
+    /// grant, like WalkInGranted, so the panel shows a toggle rather than a
+    /// coincidence (the sub_client role holds it inherently).
+    /// </summary>
+    bool RatesHidden = false);
 
 public sealed record AdminUserPage(IReadOnlyList<AdminUserRow> Users, int TotalCount);
 
@@ -70,6 +77,7 @@ public sealed class AdminRepository(NobleConnectionFactory db)
             var rows = new List<AdminUserRow>();
             var total = 0;
             var walkIn = new HashSet<int>();
+            var ratesHidden = new HashSet<int>();
 
             while (await reader.ReadAsync(inner).ConfigureAwait(false))
             {
@@ -115,17 +123,26 @@ public sealed class AdminRepository(NobleConnectionFactory db)
             if (rows.Count > 0)
             {
                 var ids = string.Join(",", rows.Select(r => r.UserId));
+                // Both per-user grants for the page in one pass — same table,
+                // same id list, two capabilities.
                 await using var g = new SqlCommand(
-                    "SELECT user_id FROM dbo.inf_user_capability_grant " +
-                    "WHERE capability = 'order:b2c' AND user_id IN (" + ids + ")", conn);
+                    "SELECT user_id, capability FROM dbo.inf_user_capability_grant " +
+                    "WHERE capability IN ('order:b2c', 'rate:hidden') AND user_id IN (" + ids + ")", conn);
                 await using var gr = await g.ExecuteReaderAsync(inner).ConfigureAwait(false);
-                while (await gr.ReadAsync(inner).ConfigureAwait(false)) walkIn.Add(gr.GetInt32(0));
+                while (await gr.ReadAsync(inner).ConfigureAwait(false))
+                {
+                    var uid = gr.GetInt32(0);
+                    if (gr.GetString(1) == "rate:hidden") ratesHidden.Add(uid); else walkIn.Add(uid);
+                }
             }
 
             for (var i = 0; i < rows.Count; i++)
             {
-                if (walkIn.Contains(rows[i].UserId))
-                    rows[i] = rows[i] with { WalkInGranted = true };
+                rows[i] = rows[i] with
+                {
+                    WalkInGranted = walkIn.Contains(rows[i].UserId),
+                    RatesHidden = ratesHidden.Contains(rows[i].UserId),
+                };
             }
 
             return new AdminUserPage(rows, total);

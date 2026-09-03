@@ -400,10 +400,11 @@ public static class ApiEndpoints
 
         var result = await repo.SearchAsync(mcc, search, kind, page, pageSize, ct).ConfigureAwait(false);
 
-        // A sub-franchise login sees the catalogue without a single figure —
-        // the LIS shows these accounts what can be ordered, never what it
-        // costs. Stripped HERE so the network response matches the screen.
-        var rows = principal.Role() == InfinityRoles.SubClient
+        // An account holding rate:hidden (a sub-franchise, or any client the
+        // lab granted it) sees the catalogue without a single figure — what
+        // can be ordered, never what it costs. Stripped HERE so the network
+        // response matches the screen.
+        var rows = principal.HasCapability(Capabilities.RateHidden)
             ? result.Rows.Select(r => r with { Mrp = null, Rate = null }).ToList()
             : result.Rows;
 

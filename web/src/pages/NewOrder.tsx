@@ -650,13 +650,14 @@ export function NewOrder() {
    */
   const b2cBrand = !b2b && isB2cClientCode(clientCode);
   /*
-   * A sub-franchise login books orders BLIND to money, as the LIS has it: the
-   * API already strips every figure from the catalogue, the preview and the
-   * extras for this role, and this flag removes the columns and totals those
-   * figures would have filled — a table of dashes says "broken", not
-   * "withheld". The bill still writes the real rates server-side.
+   * Some accounts book orders BLIND to money — a sub-franchise always, and
+   * any client the lab granted rate:hidden. The API already strips every
+   * figure from the catalogue, preview and extras for these; this flag
+   * removes the columns and totals those figures would have filled, because
+   * a table of dashes says "broken", not "withheld". The bill still writes
+   * the real rates server-side.
    */
-  const hidePrices = user?.role === 'sub_client';
+  const hidePrices = can('rate:hidden');
 
   // ---- sample ids ----
   // The tubes the server says this basket needs. Read off the preview for the
