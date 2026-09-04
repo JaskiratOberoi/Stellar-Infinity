@@ -25,6 +25,17 @@ public static class ReportPdfEndpoints
     /// </summary>
     private const int MaxBulkReports = 50;
 
+    /// <summary>
+    /// The one exclusion that is not a result id: the header's "Collected at"
+    /// line, which the preview offers a tick box for like any analyte. It rides
+    /// the same exclude list as the result ids so every path that carries
+    /// unticks — the single route, the Review &amp; edit bundle, the frozen
+    /// preview URL — carries this without a second channel. Negative so it can
+    /// never collide with a real id; the only non-positive value let through.
+    /// Mirrored by COLLECTED_AT_KEY in the SPA's reportModel.ts.
+    /// </summary>
+    private const int CollectedAtKey = -1;
+
     public static void MapReportPdfEndpoints(this WebApplication app)
     {
         var reports = app.MapGroup("/api/reports")
@@ -121,8 +132,8 @@ public static class ReportPdfEndpoints
     {
         var ids = (exclude ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(s => int.TryParse(s, out var n) && n > 0 ? n : 0)
-            .Where(n => n > 0)
+            .Select(s => int.TryParse(s, out var n) && (n > 0 || n == CollectedAtKey) ? n : 0)
+            .Where(n => n != 0)
             // A duplicate changes nothing but lengthens a URL that a very wide
             // report can already make long.
             .Distinct()
@@ -495,7 +506,7 @@ public static class ReportPdfEndpoints
             var excludesBySid = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var (k, v) in body!.Excludes ?? new Dictionary<string, IReadOnlyList<int>>())
             {
-                var ids = (v ?? []).Where(i => i > 0).Distinct().Take(500).ToList();
+                var ids = (v ?? []).Where(i => i > 0 || i == CollectedAtKey).Distinct().Take(500).ToList();
                 if (ids.Count > 0 && !string.IsNullOrWhiteSpace(k))
                     excludesBySid[k.Trim()] = string.Join(",", ids);
             }

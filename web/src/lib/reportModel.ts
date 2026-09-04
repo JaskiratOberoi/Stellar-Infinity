@@ -260,6 +260,16 @@ function dedupeAntibiogram(c: CultureReport): void {
 /* ------------------------------------------------------------------ walk -- */
 
 /**
+ * The one tickable thing on a report that is not a result: the header's
+ * "Collected at" line. It travels in the same exclude set as the result ids —
+ * through the preview's selection message, the download query, the Review &
+ * edit bundle and the frozen preview URL — so no second channel had to be
+ * built for one line. Negative, so it can never be a real result id; the API
+ * lets exactly this non-positive value through (CollectedAtKey there).
+ */
+export const COLLECTED_AT_KEY = -1;
+
+/**
  * A Head with no parameters of its own — the "report name" heading a
  * multi-part test prints above its sub-groups (COMPLETE BLOOD COUNT over
  * Automated 5 Part Analyzer / Differential Counts). It has nothing to tick and

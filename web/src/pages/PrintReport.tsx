@@ -10,7 +10,7 @@ import {
   ageLabel, fmtDob, fmtStamp, formatRange, genderLabel, splitInterp,
 } from '../lib/reportFormat';
 import {
-  buildSampleReport, isTitleHead,
+  buildSampleReport, isTitleHead, COLLECTED_AT_KEY,
   type CultureReport, type ReportBlock,
   type ReportGroup, type ReportItem, type ReportPanel, type ReportRow,
 } from '../lib/reportModel';
@@ -141,7 +141,8 @@ function paperFromParams(params: URLSearchParams): Paper {
 function parseExcluded(raw: string | null): Set<number> {
   if (!raw) return new Set();
   return new Set(
-    raw.split(',').map((s) => Number(s.trim())).filter((n) => Number.isInteger(n) && n > 0),
+    raw.split(',').map((s) => Number(s.trim()))
+      .filter((n) => Number.isInteger(n) && (n > 0 || n === COLLECTED_AT_KEY)),
   );
 }
 
@@ -520,6 +521,9 @@ export function PrintReport() {
               printedAt={printedAt}
               interactive={interactive}
               totalLeaves={counts.total}
+              excluded={excluded}
+              onToggle={toggle}
+              pdf={pdfMode}
             />
           </td>
         </tr>
@@ -646,6 +650,9 @@ export function PrintReport() {
                       printedAt={printedAt}
                       interactive={interactive}
                       totalLeaves={counts.total}
+                      excluded={excluded}
+                      onToggle={toggle}
+                      pdf={pdfMode}
                     />
                   </td>
                 </tr>
@@ -806,16 +813,24 @@ function SidBarcode({ value }: { value: string }) {
 /** Demographics, "Collected at" and the clinical history — one header block,
  *  closed by a single rule that marks where the header ends. */
 function PatientMetaBlock({
-  row, specimens, printedAt, interactive, totalLeaves,
+  row, specimens, printedAt, interactive, totalLeaves, excluded, onToggle, pdf,
 }: {
   row: FullRow;
   specimens: string[];
   printedAt: string;
   interactive: boolean;
   totalLeaves: number;
+  /** The same exclude set the analytes use; "Collected at" keys on COLLECTED_AT_KEY. */
+  excluded: Set<number>;
+  onToggle: (id: number) => void;
+  pdf: boolean;
 }) {
   const cc = row.collectedAt;
   const ccAddress = cc ? [cc.address, cc.city].filter(Boolean).join(', ') : '';
+  // Tickable like an analyte: a client printing on its own letterhead does
+  // not always want the collecting centre's name and phone on the sheet.
+  // Unticked it dims in the preview and is gone from the PDF.
+  const ccOff = excluded.has(COLLECTED_AT_KEY);
 
   return (
     <>
@@ -876,8 +891,15 @@ function PatientMetaBlock({
             </div>
           </div>
 
-          {cc && (
-          <div className="lr__cc">
+          {cc && !(pdf && ccOff) && (
+          <div className={`lr__cc${ccOff ? ' lr__off' : ''}`}>
+            {interactive && (
+              <IncludeToggle
+                label="the collecting centre line"
+                excluded={ccOff}
+                onToggle={() => onToggle(COLLECTED_AT_KEY)}
+              />
+            )}
             <span className="lr__f-label">Collected at</span>
             <span className="lr__f-sep">:</span>
             <span>
