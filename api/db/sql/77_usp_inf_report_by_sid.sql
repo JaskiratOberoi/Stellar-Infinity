@@ -207,6 +207,15 @@ BEGIN
                 -- them. See nameOf() in PrintReport.tsx.
                 m.ReportTestname AS report_test_name,
                 m.Method AS method,
+                -- The PARAMETER's own method, from the parameter master, where
+                -- the row has one. m.Method above is the TEST's — one string
+                -- for the whole CBC ("Automated 5 Part Analyzer, DLC
+                -- Flowcytometry") — and printing it on every analyte named the
+                -- instrument, not the method. Haemoglobin is Colorimetry, RBC
+                -- is Electrical Impedance, MCV is Calculated; the differential
+                -- sub-heads carry theirs and their analytes fall back to it.
+                -- Resolution order lives in reportModel.ts.
+                pm.Method AS param_method,
                 -- NVARCHAR(MAX): Interpretation is a text/ntext column on the
                 -- legacy schema and FOR JSON will not serialise it untouched.
                 CAST(m.Interpretation AS NVARCHAR(MAX)) AS interpretation,
@@ -235,6 +244,7 @@ BEGIN
                                   THEN 1 ELSE 0 END) AS nabl
             FROM dbo.tbl_med_mcc_patient_test_result r
             LEFT JOIN dbo.tbl_med_test_master m ON r.testid = m.id
+            LEFT JOIN dbo.tbl_med_parameter_master pm ON pm.id = r.paramid
             LEFT JOIN dbo.tbl_med_department_master d ON m.DepartmentId = d.id
             LEFT JOIN dbo.tbl_med_sample_master sm ON sm.id = m.SampleId
             WHERE r.vailid = H.sid

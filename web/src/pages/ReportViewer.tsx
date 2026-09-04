@@ -25,6 +25,12 @@ export interface TestResult {
   reportTestName: string | null;
   /** How it was measured — CLIA, ELISA. A printed report names its method. */
   method: string | null;
+  /**
+   * The PARAMETER's own method, where the row has one. `method` is the test's,
+   * shared by every row under it — so a printed analyte prefers this, then its
+   * sub-heading's, then the test's. See methodOf() in reportModel.ts.
+   */
+  paramMethod?: string | null;
   /** Clinical significance from the catalogue, printed under the test. */
   interpretation: string | null;
   /** The profile this row belongs to. Null on roughly a sixth of the rows. */

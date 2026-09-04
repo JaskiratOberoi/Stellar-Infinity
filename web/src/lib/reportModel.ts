@@ -271,11 +271,42 @@ export function isTitleHead(group: ReportGroup): boolean {
   return group.culture == null && group.rows.length === 0;
 }
 
+/**
+ * A method string from the parameter master, as it should print. The master
+ * was typed by hand over years: "RBC : Electrical Impedance Method.", "TLC :
+ * Electrical Impedance Method.", "Calculated.", and a bare "." where somebody
+ * had to put something. The analyte's own name in front of its method is
+ * noise on a row that already names the analyte, and a trailing full stop is
+ * not how the other rows end — so both go, and the placeholder reads as blank.
+ */
+export function tidyMethod(v: string | null | undefined): string | null {
+  const s = clean(v);
+  if (!s || s === '.') return null;
+  const t = s
+    .replace(/^[A-Za-z]{2,12}\s*:\s*(?=\S)/, '')
+    .replace(/\s*\.\s*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return t || null;
+}
+
+/**
+ * What the Method column prints for a row: the parameter's own method, else
+ * the sub-heading's it sits under, else the test's. A CBC's test method is the
+ * instrument ("Automated 5 Part Analyzer, DLC Flowcytometry"), and printing
+ * that against Haemoglobin named the machine where the reference report names
+ * Colorimetry — the parameter master has the real one for each analyte, and
+ * the differential sub-heads carry "Flowcytometry/ Microscopy" for theirs.
+ */
+export function methodOf(t: TestResult, headMethod: string | null = null): string | null {
+  return tidyMethod(t.paramMethod) ?? headMethod ?? tidyMethod(t.method);
+}
+
 export function buildSampleReport(results: readonly TestResult[]): SampleReport {
-  const toRow = (t: TestResult): ReportRow => ({
+  const toRow = (t: TestResult, headMethod: string | null = null): ReportRow => ({
     code: t.testCode ? t.testCode.trim().toUpperCase() : null,
     name: clean(t.testName),
-    method: clean(t.method),
+    method: methodOf(t, headMethod),
     value: clean(t.value),
     unit: clean(t.unit),
     // Bands keep their own lines; formatRange finishes the job at render time.
@@ -329,7 +360,9 @@ export function buildSampleReport(results: readonly TestResult[]): SampleReport 
   // The open profile panel, and inside it (or at top level) the open Head
   // collecting its Param rows.
   let panel: { dept: string; pid: number; item: ReportItem } | null = null;
-  let head: { tid: number | null; group: ReportGroup } | null = null;
+  // `method`: the Head's own parameter-master method, the fallback for an
+  // analyte beneath it that has none — see methodOf.
+  let head: { tid: number | null; group: ReportGroup; method: string | null } | null = null;
 
   for (const t of results) {
     const dept = clean(t.departmentName) ?? 'OTHER';
@@ -388,12 +421,12 @@ export function buildSampleReport(results: readonly TestResult[]): SampleReport 
         panel = null;
         pushItem(dept, { kind: 'group', group });
       }
-      head = { tid: t.testId ?? null, group };
+      head = { tid: t.testId ?? null, group, method: tidyMethod(t.paramMethod) };
       continue;
     }
 
     if (type === 'Param' && head) {
-      head.group.rows.push(toRow(t));
+      head.group.rows.push(toRow(t, head.method));
       addInterp(head.group, cleanMultiline(t.interpretation));
       const hadCulture = head.group.culture != null;
       applyCultureField(head.group, t);

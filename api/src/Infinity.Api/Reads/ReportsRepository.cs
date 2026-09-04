@@ -29,6 +29,13 @@ public sealed record TestResult(
     [property: JsonPropertyName("reportTestName")] string? ReportTestName = null,
     /// <summary>How it was measured — CLIA, ELISA. A printed report names its method.</summary>
     [property: JsonPropertyName("method")] string? Method = null,
+    /// <summary>
+    /// The PARAMETER's own method from the parameter master, where the row has
+    /// one. <see cref="Method"/> is the test's, shared by every row under it —
+    /// the whole CBC says "Automated 5 Part Analyzer" — so a printed analyte
+    /// prefers this. Resolution order is the print model's.
+    /// </summary>
+    [property: JsonPropertyName("paramMethod")] string? ParamMethod = null,
     /// <summary>Clinical significance, from the catalogue. Printed under the test.</summary>
     [property: JsonPropertyName("interpretation")] string? Interpretation = null,
     /// <summary>
@@ -845,6 +852,7 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
                     DepartmentName: GetString(el, "department_name"),
                     ReportTestName: GetString(el, "report_test_name"),
                     Method: GetString(el, "method"),
+                    ParamMethod: GetString(el, "param_method"),
                     Interpretation: GetString(el, "interpretation"),
                     ProfileId: GetNullableInt(el, "profile_id"),
                     Specimen: GetString(el, "specimen"),
