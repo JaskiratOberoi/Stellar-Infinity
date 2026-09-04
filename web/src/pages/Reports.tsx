@@ -471,12 +471,11 @@ export function Reports() {
                 </tr>
               </thead>
               <tbody>
-                {tableRows.map(({ row: r, band, indexInGroup: i, groupSize, isGroupStart, isGroupEnd }) => (
+                {tableRows.map(({ row: r, indexInGroup: i, groupSize, isGroupStart, isGroupEnd }) => (
                   <tr
                     key={r.sid}
                     className={[
                       statusRowClass(r.statusCode, r.status),
-                      `band-${band}`,
                       groupSize > 1 ? 'pid-group' : '',
                       groupSize > 1 && isGroupStart ? 'pid-group--first' : '',
                       groupSize > 1 && isGroupEnd ? 'pid-group--last' : '',

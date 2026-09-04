@@ -3867,14 +3867,15 @@ select.preview__paper { width: 11.75rem; flex: none; }
    patient, and CSS cannot see where a patient's samples begin. See tableRows
    in Worksheet.tsx.
 
-   The tint is deliberately faint. On a dense worklist the banding is there to
-   keep the eye on a line across eight columns and to show where one patient
-   ends — not to compete with the status badges, which are the thing being
-   scanned for. */
+   The alternating TINT is gone: once rows carried their status colour (see
+   "status-coloured rows" below) a second, unrelated shading underneath read
+   as a third status. What remains of the banding is the group bracket — the
+   rules under a patient's first and last row — which is what said "these
+   belong together" in the first place. The rows no longer carry band-0 /
+   band-1 classes; the group index still exists in tableRows for the bracket
+   logic. */
 
-tbody tr.band-1 > td { background: var(--band); }
-
-/* A patient's samples are banded together and separated from the next
+/* A patient's samples are bracketed together and separated from the next
    patient, so several rows sharing a name read as one person rather than
    as accidental duplicates. Inside a group the row dividers are dropped: the
    shared band already says these belong together. */
@@ -3887,11 +3888,9 @@ tbody tr.band-1 > td { background: var(--band); }
    cannot be left to the tint alone. */
 .pid-group--last > td { border-bottom: 1px solid var(--line-soft); }
 
-/* Hover has to beat the band, and a td background paints over the tr one — so
-   the generic `tbody tr:hover` rule above cannot reach a banded row. Scoped to
-   banded rows only, to leave every other table's hover exactly as it was. */
-tbody tr.band-0:hover > td,
-tbody tr.band-1:hover > td { background: var(--accent-ring); }
+/* Hover: with no band tint on the cells, the generic `tbody tr:hover` rule
+   above reaches these rows again; status-coloured rows deepen their own tint
+   on hover instead (see below). */
 
 /* ---------- the PID as a control ----------
    The reporting list leads with the PID, and clicking it downloads the whole
@@ -4406,10 +4405,6 @@ td.cell--value [aria-label] { font-size: .8em; vertical-align: .12em; }
   /* Row-level tints were painted on the cells, because on a table a <td>
      background covers the <tr>'s. A card has one surface, so they move to it —
      otherwise the tint shows as detached blocks with gaps between them. */
-  .table-wrap--cards tbody tr.band-0 > td,
-  .table-wrap--cards tbody tr.band-1 > td,
-  .table-wrap--cards tbody tr.band-0:hover > td,
-  .table-wrap--cards tbody tr.band-1:hover > td,
   .table-wrap--cards tbody tr.worksheet-grid__touched > td { background: none; }
 
   .table-wrap--cards tbody tr.worksheet-grid__touched {
@@ -5054,26 +5049,23 @@ html:has(.rcpt), body:has(.rcpt) {
    rows read as phases at a glance. Neither is loud enough to fight the
    figures in the row, which is what the LIS's saturated red and magenta did.
 
-   Tint strength is a variable so the existing PID banding survives on top
-   of it (band-1 is a shade deeper), hover deepens it again, and dark mode
-   raises every step because a 9% mix into #131f31 is invisible.
+   Tint strength is a variable: hover deepens it, and dark mode raises every
+   step because a 9% mix into #131f31 is invisible. There is deliberately no
+   second shading under it — the alternating patient band that used to sit
+   beneath read as a third status once the rows had colour of their own.
 
    Registered / Sample Sent rows (row-status--quiet) get the accent only —
    the LIS left them white — so the coloured phases stand out against them.
    ========================================================= */
 
 tbody tr.row-status { --tint: 9%; }
-tbody tr.row-status.band-1 { --tint: 13%; }
 tbody tr.row-status:hover { --tint: 24%; }
 tbody tr.row-status--quiet,
-tbody tr.row-status--quiet.band-1 { --tint: 0%; }
 tbody tr.row-status--quiet:hover { --tint: 0%; }
 
 .dark tbody tr.row-status { --tint: 16%; }
-.dark tbody tr.row-status.band-1 { --tint: 21%; }
 .dark tbody tr.row-status:hover { --tint: 30%; }
 .dark tbody tr.row-status--quiet,
-.dark tbody tr.row-status--quiet.band-1,
 .dark tbody tr.row-status--quiet:hover { --tint: 0%; }
 
 /* After the banding block, at the same specificity, so these win. A quiet
