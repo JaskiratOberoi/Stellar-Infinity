@@ -329,6 +329,11 @@
 /* A small inset off the band's rounded left corner. */
 .lr__cols-band > span:first-child { padding-left: 3px; }
 .lr__cols-band > span:last-child { padding-right: 0; }
+/* Unit and Biological Ref Interval are centred, label and cells alike: a
+   unit is a short token and a range a short pair, and centred they read as
+   belonging to their column rather than hugging the value to their left. */
+.lr__cols-band > span:nth-child(3),
+.lr__cols-band > span:nth-child(4) { text-align: center; padding-right: 0; }
 
 /* ---------- department band ----------
    A band ACROSS the table, not a label floating above it: it names the block
@@ -377,8 +382,8 @@
 .lr__c-name-inner { display: flex; align-items: flex-start; gap: 6px; }
 .lr__c-name-text { font-size: 12px; font-weight: 500; }
 .lr__c-value { padding: 2px 12px 2px 0; }
-.lr__c-unit { padding: 2px 12px 2px 0; }
-.lr__c-range { padding: 2px 0; font-size: 10px; line-height: 1.25; color: #374151; }
+.lr__c-unit { padding: 2px 6px; text-align: center; }
+.lr__c-range { padding: 2px 6px; font-size: 10px; line-height: 1.25; color: #374151; text-align: center; }
 /* padding 1px, not the 2px of its neighbours: a two-line method ("Automated 5
    Part Analyzer, DLC Flowcytometry") is what sets a result row's height, and
    at 2px it made every CBC row 24px — 2px taller than the name beside it needs.
@@ -633,6 +638,9 @@
 .lr__weeks-grid {
   display: grid;
   grid-template-columns: auto auto auto;
+  /* The range cell is centred; the grid follows, and its columns keep their
+     own right/left alignment so the numbers still line up on the dash. */
+  justify-content: center;
   align-items: baseline;
   column-gap: 6px;
   row-gap: 1.5px;
@@ -640,6 +648,6 @@
 }
 .lr__weeks-no { text-align: right; font-weight: 500; color: #6b7280; }
 .lr__weeks-lo { text-align: right; color: #1f2937; }
-.lr__weeks-hi { color: #1f2937; }
+.lr__weeks-hi { text-align: left; color: #1f2937; }
 
 .lr__pre { white-space: pre-line; }
