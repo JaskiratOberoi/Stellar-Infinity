@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, csrfHeader } from '../api/client';
 import { downloadFile, fmtDateTime } from '../lib/format';
 import { useAuth } from '../auth/AuthContext';
-import { StatusBadge, REPORTABLE_STATUSES, type WorksheetRow } from './Reports';
+import { StatusBadge, StatusLegend, statusRowClass, REPORTABLE_STATUSES, type WorksheetRow } from './Reports';
 import { WorksheetEntry } from './WorksheetEntry';
 import { Pager } from '../components/Pager';
 import { InfinityLoader } from '../components/InfinityLoader';
@@ -384,6 +384,7 @@ export function Worksheet() {
               one stylesheet block — see "Rows as cards" in styles.css. Half the
               people opening this screen are on a phone at a collection centre,
               and an eight-column table is a sideways drag on one. */}
+          <StatusLegend />
           <div className="table-wrap table-wrap--cards">
             <table>
               <thead>
@@ -403,6 +404,7 @@ export function Worksheet() {
                     <tr
                       key={r.sid}
                       className={[
+                        statusRowClass(r.statusCode, r.status),
                         `band-${band}`,
                         groupByPid && groupSize > 1 ? 'pid-group' : '',
                         groupByPid && groupSize > 1 && isGroupStart ? 'pid-group--first' : '',

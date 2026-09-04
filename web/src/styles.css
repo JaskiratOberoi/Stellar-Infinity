@@ -5038,3 +5038,89 @@ html:has(.rcpt), body:has(.rcpt) {
   .runlist--queue .runlist__rows li { grid-template-columns: 1fr auto auto; }
   .runlist__acts { grid-column: 1 / -1; }
 }
+
+/* =========================================================
+   Status-coloured rows
+
+   The LIS painted every worklist row in its status colour — the whole
+   GridView row took .status_auth / .status_tested / … from
+   SampleWorksheet.aspx.cs, pale fills under black text: orange for tested,
+   green for authorised, blue for printed, red rejected, magenta pending, and
+   white or near-white for sent and registered. Everyone who has used it
+   reads a list by those bands, so Infinity keeps the bands and modernises the
+   ink: the same hue FAMILIES the badges already use (.status--*), laid under
+   the row as a faint tint and concentrated in a 3px accent at the left edge.
+   The accent carries the recognition; the tint is what makes a column of
+   rows read as phases at a glance. Neither is loud enough to fight the
+   figures in the row, which is what the LIS's saturated red and magenta did.
+
+   Tint strength is a variable so the existing PID banding survives on top
+   of it (band-1 is a shade deeper), hover deepens it again, and dark mode
+   raises every step because a 9% mix into #131f31 is invisible.
+
+   Registered / Sample Sent rows (row-status--quiet) get the accent only —
+   the LIS left them white — so the coloured phases stand out against them.
+   ========================================================= */
+
+tbody tr.row-status { --tint: 9%; }
+tbody tr.row-status.band-1 { --tint: 13%; }
+tbody tr.row-status:hover { --tint: 24%; }
+tbody tr.row-status--quiet,
+tbody tr.row-status--quiet.band-1 { --tint: 0%; }
+tbody tr.row-status--quiet:hover { --tint: 0%; }
+
+.dark tbody tr.row-status { --tint: 16%; }
+.dark tbody tr.row-status.band-1 { --tint: 21%; }
+.dark tbody tr.row-status:hover { --tint: 30%; }
+.dark tbody tr.row-status--quiet,
+.dark tbody tr.row-status--quiet.band-1,
+.dark tbody tr.row-status--quiet:hover { --tint: 0%; }
+
+/* After the banding block, at the same specificity, so these win. A quiet
+   row keeps the ordinary band and hover: its td rules are left to them. */
+tbody tr.row-status:not(.row-status--quiet) > td,
+tbody tr.row-status:not(.row-status--quiet):hover > td {
+  background: color-mix(in srgb, var(--status-ink) var(--tint), var(--surface));
+}
+tbody tr.row-status > td:first-child {
+  box-shadow: inset 3px 0 0 var(--status-ink);
+}
+/* The quiet accent, dialled back: a full-strength grey bar on every
+   registered row would be most of the column on a busy morning. */
+tbody tr.row-status--quiet > td:first-child {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--status-ink) 45%, transparent);
+}
+
+/* The key above the list: one swatch per status, drawn exactly as a row is
+   (tint plus accent), so the legend IS the thing it explains. */
+.slegend {
+  display: flex; flex-wrap: wrap; gap: .3rem .85rem;
+  margin: .1rem 0 .55rem;
+  font-size: .7rem; letter-spacing: .02em; color: var(--ink-dim);
+}
+.slegend__item { display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap; }
+.slegend__swatch {
+  display: inline-block; width: 1rem; height: .8rem; border-radius: 3px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--status-ink) 14%, var(--surface));
+  box-shadow: inset 3px 0 0 var(--status-ink);
+}
+.dark .slegend__swatch { background: color-mix(in srgb, var(--status-ink) 22%, var(--surface)); }
+.slegend__item.status--neutral .slegend__swatch {
+  background: var(--surface);
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--status-ink) 45%, transparent);
+}
+
+/* Cards (below 880px): the tint goes on the card and the accent on its
+   left edge; the td-level paint above is for a table and is switched off. */
+@media (max-width: 880px) {
+  .table-wrap--cards tbody tr.row-status > td,
+  .table-wrap--cards tbody tr.row-status:hover > td { background: none; box-shadow: none; }
+  .table-wrap--cards tbody tr.row-status:not(.row-status--quiet) {
+    background: color-mix(in srgb, var(--status-ink) var(--tint), var(--surface));
+    border-left: 3px solid var(--status-ink);
+  }
+  .table-wrap--cards tbody tr.row-status--quiet {
+    border-left: 3px solid color-mix(in srgb, var(--status-ink) 45%, transparent);
+  }
+}

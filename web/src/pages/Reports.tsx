@@ -444,6 +444,7 @@ export function Reports() {
 
           {mergeError && <div className="alert alert--error" style={{ marginBottom: '.8rem' }}>{mergeError}</div>}
 
+          <StatusLegend />
           <div className="table-wrap table-wrap--cards">
             <table>
               <thead>
@@ -474,6 +475,7 @@ export function Reports() {
                   <tr
                     key={r.sid}
                     className={[
+                      statusRowClass(r.statusCode, r.status),
                       `band-${band}`,
                       groupSize > 1 ? 'pid-group' : '',
                       groupSize > 1 && isGroupStart ? 'pid-group--first' : '',
@@ -1180,10 +1182,47 @@ function hueFromLabel(status: string): string | undefined {
   return undefined;
 }
 
+/** The hue family for a status — by code first, by label as a fallback. */
+export function statusHue(statusCode?: number | null, status?: string | null): string | undefined {
+  return (statusCode != null ? STATUS_HUE[statusCode] : undefined)
+    ?? (status ? hueFromLabel(status) : undefined);
+}
+
+/**
+ * The row classes that colour a worklist line by its status — the LIS's
+ * whole-row fill (gridViewRow.Attributes.Add("Class", "status_auth") in
+ * SampleWorksheet.aspx.cs), brought over as a faint tint of the same hue
+ * family under the row plus a 3px accent at its left edge. The accent is
+ * where the recognition lives; the tint is there so a glance down the list
+ * sees the phases as bands, the way it did on the LIS. Registered and Sample
+ * Sent are white and near-white there, and stay untinted here: only the
+ * accent marks them, so the coloured phases stand out against them.
+ * See "status-coloured rows" in styles.css.
+ */
+export function statusRowClass(statusCode?: number | null, status?: string | null): string {
+  const hue = statusHue(statusCode, status);
+  if (!hue) return '';
+  return hue === 'neutral' ? 'status--neutral row-status row-status--quiet' : `status--${hue} row-status`;
+}
+
+/** The colour key, so the tints teach themselves — one swatch per status, in bench order. */
+export function StatusLegend() {
+  return (
+    <div className="slegend" role="list" aria-label="Status colours">
+      {SAMPLE_STATUSES.map((s) => (
+        <span key={s.id} role="listitem" className={`slegend__item status--${STATUS_HUE[s.id] ?? 'neutral'}`}>
+          <i className="slegend__swatch" aria-hidden="true" />
+          {s.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export function StatusBadge({ status, statusCode }: { status: string | null; statusCode?: number | null }) {
   if (!status) return <span className="muted">—</span>;
 
-  const hue = (statusCode != null ? STATUS_HUE[statusCode] : undefined) ?? hueFromLabel(status);
+  const hue = statusHue(statusCode, status);
   if (!hue) return <span className="badge badge--lis">{status}</span>;
 
   return <span className={`badge badge--lis-status status--${hue}`}>{status}</span>;
