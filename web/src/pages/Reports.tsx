@@ -160,7 +160,9 @@ export function Reports() {
 
   // The same filter set the worksheet offers. Reporting reads the same endpoint,
   // which accepts the same filters, so there is no reason for it to offer fewer.
-  const [filters, setFilters] = useState<SampleFilterValues>(() => initialFilters(7));
+  // Opens on TODAY: the day's reports are what a visit is for, and the quick
+  // ranges (7 days, 30 days) are one click away for anything older.
+  const [filters, setFilters] = useState<SampleFilterValues>(() => initialFilters(0));
   const options = useFilterOptions();
 
   const toggle = (sid: string) =>

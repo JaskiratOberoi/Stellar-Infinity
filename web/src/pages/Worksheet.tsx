@@ -122,8 +122,9 @@ export function Worksheet() {
   const [error, setError] = useState<string | null>(null);
   const [openSid, setOpenSid] = useState<string | null>(null);
 
-  /** Every filter is on screen; there is no hidden set to track a count for. */
-  const [adv, setAdv] = useState<SampleFilterValues>(() => initialFilters(1));
+  /** Every filter is on screen; there is no hidden set to track a count for.
+   *  Opens on TODAY, like Reporting: the bench works the day's samples. */
+  const [adv, setAdv] = useState<SampleFilterValues>(() => initialFilters(0));
   const options = useFilterOptions();
 
 
