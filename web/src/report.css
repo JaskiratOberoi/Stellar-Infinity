@@ -542,7 +542,19 @@
   accent-color: #2b2b6b;
 }
 .lr__tick:disabled { cursor: not-allowed; opacity: 0.5; }
-@media print { .lr__tick, .lr__tickhint { display: none; } }
+@media print {
+  .lr__tick, .lr__tickhint { display: none; }
+
+  /* Two pixels short of the page area, on purpose. Chromium lays the page
+     area out a pixel wider than the rectangle it paints into, so a box that
+     spans 100% has its right border drawn a pixel past the clip and loses it:
+     the patient box and the column band printed with a left edge and no right
+     one. Isolated in a bare test page — a plain block with a 1.25px border
+     kept 0.05mm of its right border; the same block at calc(100% - 1px) kept
+     all of it. Two, not one, so the corner radius has room too. The left
+     margin is untouched, so the asymmetry is a quarter of a millimetre. */
+  .lr { width: calc(100% - 2px); }
+}
 
 /* Dimmed rather than removed, because the operator has to be able to put it
    back. The renderer never sees this state — there an unticked row is gone. */
