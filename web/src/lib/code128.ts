@@ -1,10 +1,17 @@
 /**
- * A dependency-free Code 128 (subset B) encoder, enough to draw a scannable
- * barcode for a SID on the printed report. The LIS prints the same symbology on
- * its sheets, so a scanner at the bench reads either report the same way.
+ * A dependency-free Code 128 encoder, enough to draw a scannable barcode for a
+ * SID on the printed report. The LIS prints the same symbology on its sheets,
+ * so a scanner at the bench reads either report the same way.
  *
  * Subset B covers ASCII 32–126, which is all a SID ever holds (digits, and the
  * odd letter). Characters outside that range are dropped rather than mis-encoded.
+ *
+ * An all-digit SID — which is nearly every SID — is encoded in subset C, two
+ * digits per symbol, so a nine-digit SID is eight symbols instead of eleven.
+ * The symbol stands on its side in the report header, and its length is the
+ * header block's height: shorter here is what keeps a long SID from growing
+ * the block on every page. An odd digit count opens in B for its first digit
+ * and switches to C for the rest, as the standard allows.
  */
 
 // The 107 element-width patterns, indexed by symbol value. Each is a run of
@@ -24,7 +31,9 @@ const PATTERNS = [
   '114131', '311141', '411131', '211412', '211214', '211232', '2331112',
 ];
 
+const CODE_C = 99;
 const START_B = 104;
+const START_C = 105;
 const STOP = 106;
 
 /** A single black bar: its left edge and width, in modules. */
@@ -39,13 +48,27 @@ export function code128(text: string, quiet = 10): { bars: Bar[]; width: number 
   });
   if (chars.length === 0) return null;
 
-  const codes = [START_B];
-  let checksum = START_B;
-  chars.forEach((c, i) => {
-    const v = c.charCodeAt(0) - 32;
-    codes.push(v);
-    checksum += v * (i + 1);
-  });
+  const codes: number[] = [];
+  if (chars.every((c) => c >= '0' && c <= '9')) {
+    // Subset C: a symbol per digit pair. An odd count spends one subset-B
+    // symbol on the leading digit, then switches.
+    let i = 0;
+    if (chars.length % 2 === 1) {
+      codes.push(START_B, chars[0].charCodeAt(0) - 32, CODE_C);
+      i = 1;
+    } else {
+      codes.push(START_C);
+    }
+    for (; i < chars.length; i += 2) codes.push(Number(chars[i] + chars[i + 1]));
+  } else {
+    codes.push(START_B);
+    for (const c of chars) codes.push(c.charCodeAt(0) - 32);
+  }
+
+  // The check symbol: start value plus each following symbol weighted by its
+  // position, mod 103 — a subset shift counts as a symbol like any other.
+  let checksum = codes[0];
+  for (let k = 1; k < codes.length; k++) checksum += codes[k] * k;
   codes.push(checksum % 103);
   codes.push(STOP);
 

@@ -269,18 +269,19 @@
 .lr__history b { font-weight: 600; }
 
 /* The SID barcode strip, pinned to the right edge of the header. The SVG is
-   authored horizontally and turned a quarter turn here, so it stands vertical
-   against the block's right side; the fixed width reserves room for the rotated
-   bars so the demographics never run under them. */
+   authored vertically (SidBarcode says why), so the strip is simply as wide as
+   the bars are long; the fixed width reserves that room so the demographics
+   never run under them, and the SVG itself is told not to shrink — it was the
+   strip's own flex that squeezed the symbol to two-fifths. */
 .lr__barcode {
   flex: 0 0 auto;
-  width: 53px;
+  width: 64px;
   align-self: stretch;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.lr__barcode-svg { transform: rotate(90deg); }
+.lr__barcode-svg { flex: none; display: block; }
 
 /* Preview only — there is no tick box on paper to explain. */
 .lr__tickhint {
@@ -346,10 +347,12 @@
 /* A tall row — a multi-line value like "LOW RISK FOR TRISOMIES 13, 18 AND 21",
    or a gestational weeks table — moves to the next page whole. Half of one
    flowing over a break reads as stray text. A heading is kept whole for the
-   same reason, and so that it is not parted from the rule above it. */
+   same reason, and so that it is not parted from the rule above it — nor from
+   the first row UNDER it: a heading alone at the foot of a page, its
+   parameters overleaf, reads as a test with no result. */
 .lr__row { vertical-align: top; break-inside: avoid; }
 .lr__panel-row,
-.lr__group-row { break-inside: avoid; }
+.lr__group-row { break-inside: avoid; break-after: avoid; }
 
 /* Parameter names sit a touch in from the band's left edge (headings stay
    flush, so they read as outdented over their params). */
@@ -363,7 +366,12 @@
 .lr__c-value { padding: 2px 12px 2px 0; }
 .lr__c-unit { padding: 2px 12px 2px 0; }
 .lr__c-range { padding: 2px 0; font-size: 10px; line-height: 1.25; color: #374151; }
-.lr__c-method { padding: 2px 0; font-size: 8px; line-height: 1.25; color: #4b5563; }
+/* padding 1px, not the 2px of its neighbours: a two-line method ("Automated 5
+   Part Analyzer, DLC Flowcytometry") is what sets a result row's height, and
+   at 2px it made every CBC row 24px — 2px taller than the name beside it needs.
+   At 1px the row is 22px and a full CBC with ESR stays on one sheet with its
+   End of Report; the text sits a pixel higher, which nobody can see. */
+.lr__c-method { padding: 1px 0; font-size: 8px; line-height: 1.25; color: #4b5563; }
 
 /* Red and bold, not a letter flag: this is the mark Telo prints and the one
    the LIS printed before it, and a report is read against the last one. */

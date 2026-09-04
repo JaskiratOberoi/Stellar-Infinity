@@ -259,6 +259,18 @@ function dedupeAntibiogram(c: CultureReport): void {
 
 /* ------------------------------------------------------------------ walk -- */
 
+/**
+ * A Head with no parameters of its own — the "report name" heading a
+ * multi-part test prints above its sub-groups (COMPLETE BLOOD COUNT over
+ * Automated 5 Part Analyzer / Differential Counts). It has nothing to tick and
+ * nothing to print but its name, so the "no rows survive → not printed" rule
+ * that governs a real group must not apply to it; it prints for as long as a
+ * sub-group after it does.
+ */
+export function isTitleHead(group: ReportGroup): boolean {
+  return group.culture == null && group.rows.length === 0;
+}
+
 export function buildSampleReport(results: readonly TestResult[]): SampleReport {
   const toRow = (t: TestResult): ReportRow => ({
     code: t.testCode ? t.testCode.trim().toUpperCase() : null,

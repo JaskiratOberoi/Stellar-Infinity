@@ -10,7 +10,7 @@ import {
   ageLabel, fmtDob, fmtStamp, formatRange, genderLabel, splitInterp,
 } from '../lib/reportFormat';
 import {
-  buildSampleReport,
+  buildSampleReport, isTitleHead,
   type CultureReport, type ReportBlock,
   type ReportGroup, type ReportItem, type ReportPanel, type ReportRow,
 } from '../lib/reportModel';
@@ -102,6 +102,33 @@ function genuineTravelId(v: string | null | undefined): boolean {
   const t = (v ?? '').trim();
   if (!t) return false;
   return /[A-Za-z]/.test(t) || /^\d{12}$/.test(t);
+}
+
+/**
+ * A title-only Head (COMPLETE BLOOD COUNT) prints only while a sub-group it
+ * introduces prints — the run of groups of the same test that follows it.
+ * Returns the survival list with such titles switched off where every
+ * sub-group after them is gone, so an operator who unticks all of a CBC is
+ * not left with its name over nothing.
+ */
+function pruneOrphanTitles<T>(
+  items: readonly T[],
+  groupOf: (item: T) => ReportGroup | null,
+  alive: boolean[],
+): boolean[] {
+  const out = [...alive];
+  for (let i = 0; i < items.length; i++) {
+    const g = groupOf(items[i]);
+    if (!out[i] || !g || !isTitleHead(g)) continue;
+    let any = false;
+    for (let j = i + 1; j < items.length; j++) {
+      const n = groupOf(items[j]);
+      if (!n || n.testId !== g.testId || isTitleHead(n)) break;
+      if (out[j]) { any = true; break; }
+    }
+    out[i] = any;
+  }
+  return out;
 }
 
 /** `?paper=` wins; the older `?headless=1` still means a client's 40mm sheet. */
@@ -322,6 +349,9 @@ export function PrintReport() {
       }
       if (item.kind === 'group' && item.group) {
         if (item.group.culture) return true;
+        // A title-only Head has no rows to survive by; whether it prints is
+        // settled by the sub-groups after it — see pruneOrphanTitles.
+        if (isTitleHead(item.group)) return true;
         return item.group.rows.some((r) => !excluded.has(r.resultId));
       }
       return true;
@@ -335,8 +365,10 @@ export function PrintReport() {
       // master and this route reads it off the result rows.
       if (wanted && dept.name.trim().toUpperCase() !== wanted) continue;
 
+      const alive = pruneOrphanTitles(
+        dept.items, (it) => (it.kind === 'group' ? it.group ?? null : null), dept.items.map(survives));
       const entries = dept.items
-        .filter(survives)
+        .filter((_, i) => alive[i])
         .map((item) => ({ item, key: keyOf(item) }));
       if (entries.length === 0) continue;
 
@@ -712,29 +744,39 @@ function Meta({
 }
 
 /** The SID as a Code 128 barcode, drawn down the right edge of the header so a
- *  scanner reads the sample straight off the sheet. The symbol is generated
- *  horizontally and rotated a quarter turn by the stylesheet, so the bars stay
- *  crisp at whatever the printer's resolution is. */
+ *  scanner reads the sample straight off the sheet.
+ *
+ *  Drawn VERTICALLY in the SVG itself, not horizontally and rotated by CSS. A
+ *  transform does not change the layout box, and the flex strip the symbol
+ *  sits in shrank that unrotated box to its own width — the whole symbol
+ *  scaled to two-fifths and printed 5mm by 13mm. Laid out the way it is
+ *  drawn, the strip is exactly the bar length wide and the symbol's length
+ *  tall, and nothing has a reason to shrink it. */
 function SidBarcode({ value }: { value: string }) {
   const enc = useMemo(() => code128(value), [value]);
   if (!enc) return null;
 
-  const MODULE = 1.32;             // px per module — the barcode's narrow bar
-  const BAR = 48;                  // bar length; the strip's width once rotated
-  const width = enc.width * MODULE; // full length; the strip's height once rotated
+  // The narrow bar, in px: 1.32 (0.35mm) where the symbol fits the header
+  // block's height, and narrower for a longer SID rather than growing the
+  // block on every page — 136px is the block's own height with its six
+  // demographic rows and the collecting centre under them. A nine-digit SID
+  // lands at 0.30mm, still well inside what a bench scanner reads.
+  const MODULE = Math.min(1.32, 136 / enc.width);
+  const BAR = 58;                    // bar length (across); the strip's width
+  const length = enc.width * MODULE; // symbol length (down); the strip's height
 
   return (
     <div className="lr__barcode" aria-hidden="true" title={`SID ${value}`}>
       <svg
         className="lr__barcode-svg"
-        width={width}
-        height={BAR}
-        viewBox={`0 0 ${width} ${BAR}`}
+        width={BAR}
+        height={length}
+        viewBox={`0 0 ${BAR} ${length}`}
         shapeRendering="crispEdges"
       >
-        <rect x={0} y={0} width={width} height={BAR} fill="#fff" />
+        <rect x={0} y={0} width={BAR} height={length} fill="#fff" />
         {enc.bars.map((b, i) => (
-          <rect key={i} x={b.x * MODULE} y={0} width={b.w * MODULE} height={BAR} fill="#111" />
+          <rect key={i} x={0} y={b.x * MODULE} width={BAR} height={b.w * MODULE} fill="#111" />
         ))}
       </svg>
     </div>
@@ -950,18 +992,22 @@ function PanelBlock({
 }) {
   const panelOff = excluded.has(panel.resultId);
 
-  const visible = pdf
+  let visible = pdf
     ? panel.children.filter((child) => {
         if (panelOff) return false;
         if (child.kind === 'group' && child.group) {
           if (excluded.has(child.group.resultId)) return false;
           if (child.group.culture) return true;
+          if (isTitleHead(child.group)) return true;
           // A group whose parameters are all unticked vanishes with them.
           return child.group.rows.some((r) => !excluded.has(r.resultId));
         }
         return child.row != null && !excluded.has(child.row.resultId);
       })
     : panel.children;
+  const childAlive = pruneOrphanTitles(
+    visible, (c) => (c.kind === 'group' ? c.group ?? null : null), visible.map(() => true));
+  visible = visible.filter((_, i) => childAlive[i]);
 
   if (pdf && visible.length === 0) return null;
 
@@ -1096,7 +1142,9 @@ function GroupBlock({
 
   const rowOff = (r: ReportRow) => groupOff || excluded.has(r.resultId);
   const visible = pdf ? group.rows.filter((r) => !rowOff(r)) : group.rows;
-  if (pdf && visible.length === 0) return null;
+  if (pdf && groupOff) return null;
+  // A title-only Head has no rows to lose; its fate was settled upstream.
+  if (pdf && visible.length === 0 && !isTitleHead(group)) return null;
 
   const includedCodes = group.rows.filter((r) => !rowOff(r)).map((r) => r.code);
 
