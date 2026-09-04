@@ -164,6 +164,9 @@ async function renderContent(url, cookieHeader) {
  * pre-printed letterhead. The margins stay, so the content still lands under
  * the paper's printed header.
  */
+/** Millimetres to PDF points. */
+const mm = (v) => (v / 25.4) * 72;
+
 async function compositeOntoLetterhead(contentPdf, opts = {}) {
   const headless = opts.headless === true;
   // Baseline for "Page X of Y", in points from the paper bottom. It rides just
@@ -172,6 +175,11 @@ async function compositeOntoLetterhead(contentPdf, opts = {}) {
   // match Noble's pre-printed letterhead clear area. 116pt ≈ 40.9mm for the
   // former, 99pt ≈ 34.9mm for the latter.
   const pageNumberY = opts.pageNumberY ?? (headless ? 116 : 99);
+  // Inset from the paper's right edge, in points: the @page side margin, which
+  // is 10mm on Noble's paper and 14mm on a client's 40mm sheet. The API passes
+  // it per paper; the default covers the public route, which is always the
+  // composited letterhead.
+  const pageNumberRight = opts.pageNumberRight ?? mm(headless ? 14 : 10);
   const pageNumbers = opts.pageNumbers !== false;
 
   const out = await PDFDocument.create();
@@ -198,14 +206,13 @@ async function compositeOntoLetterhead(contentPdf, opts = {}) {
 
     page.drawPage(await out.embedPage(src), { x: 0, y: 0, width, height });
 
-    // NABL wants every page numbered. Right-aligned to the 14mm content margin,
+    // NABL wants every page numbered. Right-aligned to the content margin,
     // on the footer's own baseline rather than a line of its own.
     if (!pageNumbers) continue;
     const label = `Page ${i + 1} of ${pages.length}`;
     const size = 8;
-    const rightMargin = (14 / 25.4) * 72;
     page.drawText(label, {
-      x: width - rightMargin - font.widthOfTextAtSize(label, size),
+      x: width - pageNumberRight - font.widthOfTextAtSize(label, size),
       y: pageNumberY,
       size,
       font,
@@ -248,18 +255,17 @@ async function appendAttachment(reportBytes, { b64, mime }) {
  * per-report stamping is turned OFF and the merged bundle is numbered as one
  * document instead: an eight-sheet stack that says "Page 1 of 2" halfway
  * through reads as a misprint. Same ink as compositeOntoLetterhead: 8pt
- * Helvetica, right-aligned to the 14mm margin, on the footer baseline.
+ * Helvetica, right-aligned to the paper's side margin, on the footer baseline.
  */
-async function stampPageNumbers(bytes, pageNumberY = 116) {
+async function stampPageNumbers(bytes, pageNumberY = 116, pageNumberRight = mm(14)) {
   const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const pages = doc.getPages();
-  const rightMargin = (14 / 25.4) * 72;
   for (let i = 0; i < pages.length; i++) {
     const page = pages[i];
     const label = `Page ${i + 1} of ${pages.length}`;
     page.drawText(label, {
-      x: page.getWidth() - rightMargin - font.widthOfTextAtSize(label, 8),
+      x: page.getWidth() - pageNumberRight - font.widthOfTextAtSize(label, 8),
       y: pageNumberY,
       size: 8,
       font,
@@ -334,7 +340,7 @@ const server = createServer(async (req, res) => {
 
         let doc = await compositeOntoLetterhead(
           await renderContent(r.url, body.cookie ?? null),
-          { headless: r.headless, pageNumbers: r.pageNumbers, pageNumberY: r.pageNumberY },
+          { headless: r.headless, pageNumbers: r.pageNumbers, pageNumberY: r.pageNumberY, pageNumberRight: r.pageNumberRight },
         );
         for (const a of r.attachments ?? []) doc = await appendAttachment(doc, a);
         return doc;
@@ -344,7 +350,7 @@ const server = createServer(async (req, res) => {
       if (body.numberPages === true) {
         // The batch-level Y tracks the foot band the API laid out for (40mm
         // plain / 34mm letterhead); default keeps the plain-paper baseline.
-        pdf = Buffer.from(await stampPageNumbers(pdf, body.numberPagesY ?? 116));
+        pdf = Buffer.from(await stampPageNumbers(pdf, body.numberPagesY ?? 116, body.numberPagesRight ?? mm(14)));
       }
       console.log(`render ok reports=${reports.length} pages_in=${rendered.length} bytes=${pdf.length} ms=${Date.now() - started}`);
       res.writeHead(200, { 'content-type': 'application/pdf', 'content-length': pdf.length });

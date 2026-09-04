@@ -230,7 +230,7 @@ public static class ReportPdfEndpoints
      * horizon for the one thing the key cannot see: a redeploy that changes
      * the print layout itself. Bump the version to orphan everything at once.
      * ------------------------------------------------------------------- */
-    private const string PdfCacheV = "2";
+    private const string PdfCacheV = "3";
     private static readonly TimeSpan PdfCacheTtl = TimeSpan.FromMinutes(45);
 
     private static string PdfCacheKey(
@@ -305,7 +305,8 @@ public static class ReportPdfEndpoints
                 [new RenderClient.ReportRequest(
                     Url: $"/print/report/{Uri.EscapeDataString(sid)}{query}",
                     Attachments: attachments,
-                    Headless: sheet.Headless)],
+                    Headless: sheet.Headless,
+                    PageNumberRight: sheet.PageNumberRight)],
                 http.Request.Headers.Cookie.ToString(),
                 ct).ConfigureAwait(false);
 
@@ -452,6 +453,7 @@ public static class ReportPdfEndpoints
                 Url: $"/print/report/{Uri.EscapeDataString(sid)}{query}",
                 Attachments: await CollectGraphsAsync(graphs, sid, body.WithGraph, ct).ConfigureAwait(false),
                 Headless: sheet.Headless,
+                PageNumberRight: sheet.PageNumberRight,
                 PageNumbers: false));
             misses.Add((included.Count - 1, key));
         }
@@ -577,7 +579,7 @@ public static class ReportPdfEndpoints
 
                 var patientPdf = await render.RenderAsync(
                     deptDocs, cookie, ct, numberPages: true,
-                    numberPagesY: sheet.PageNumberY).ConfigureAwait(false);
+                    numberPagesY: sheet.PageNumberY, numberPagesRight: sheet.PageNumberRight).ConfigureAwait(false);
 
                 if (skipped.Count > 0)
                     http.Response.Headers["X-Reports-Skipped"] = System.Text.Json.JsonSerializer.Serialize(skipped);
@@ -631,7 +633,7 @@ public static class ReportPdfEndpoints
             // The whole bundle numbered once, "Page 1 of 8" meaning the stack
             // in hand — graph sheets counted like any other sheet.
             var pdf = await render.RenderAsync(included, cookieHeader, ct, numberPages: true,
-                numberPagesY: sheet.PageNumberY).ConfigureAwait(false);
+                numberPagesY: sheet.PageNumberY, numberPagesRight: sheet.PageNumberRight).ConfigureAwait(false);
 
             // The skip list rides on a header: the body has to be the PDF, and a
             // silent short delivery ("I asked for 20, I got 19") is exactly the

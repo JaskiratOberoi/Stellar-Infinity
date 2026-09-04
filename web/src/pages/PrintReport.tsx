@@ -556,7 +556,12 @@ export function PrintReport() {
           is the winning @page rule. */}
       {pdfMode && (
         <style>{[
-          `@page{size:A4 portrait;margin:${paper === 'plain' ? '40mm' : '26mm'} 14mm ${paper === 'plain' ? '40mm' : '34mm'} 14mm}`,
+          /* Sides: 10mm on Noble's paper (with or without the artwork), 14mm
+             on a client's 40mm sheet. The render sidecar right-aligns the
+             page number to the same figure — ReportPaper.SideMm. */
+          paper === 'plain'
+            ? '@page{size:A4 portrait;margin:40mm 14mm 40mm 14mm}'
+            : '@page{size:A4 portrait;margin:26mm 10mm 34mm 10mm}',
           /* A client's 40mm stationery leaves 217mm for content where Noble's
              leaves 237mm, and a full CBC with ESR is built to fill the latter.
              Rather than a second, tighter layout for the smaller box, the SAME

@@ -42,6 +42,9 @@ public sealed class RenderClient(HttpClient http, ILogger<RenderClient> log)
         [property: JsonPropertyName("headless")] bool? Headless = null,
         [property: JsonPropertyName("pageNumbers")] bool? PageNumbers = null,
         [property: JsonPropertyName("pageNumberY")] double? PageNumberY = null,
+        // The stamp's inset from the paper's right edge, in points: the @page side
+        // margin, 10mm on Noble's paper and 14mm on a client's 40mm sheet.
+        [property: JsonPropertyName("pageNumberRight")] double? PageNumberRight = null,
         [property: JsonPropertyName("pdfB64")] string? PdfB64 = null);
 
     /// <summary>A graph or image to staple after a report's own pages.</summary>
@@ -57,7 +60,8 @@ public sealed class RenderClient(HttpClient http, ILogger<RenderClient> log)
         // tracks the foot band, which differs by mode (letterhead vs plain), so
         // the caller passes it rather than the sidecar guessing from a batch
         // whose entries may be cache hits carrying no mode.
-        [property: JsonPropertyName("numberPagesY")] double? NumberPagesY = null);
+        [property: JsonPropertyName("numberPagesY")] double? NumberPagesY = null,
+        [property: JsonPropertyName("numberPagesRight")] double? NumberPagesRight = null);
 
     /// <summary>
     /// Render one or more reports into a single PDF. A batch goes in one call
@@ -71,12 +75,13 @@ public sealed class RenderClient(HttpClient http, ILogger<RenderClient> log)
         // After ct, unconventionally, so the existing call sites that pass ct
         // positionally keep meaning what they said. Named at the one caller.
         bool numberPages = false,
-        double? numberPagesY = null)
+        double? numberPagesY = null,
+        double? numberPagesRight = null)
     {
         if (reports.Count == 0) throw new ArgumentException("No reports to render.", nameof(reports));
 
         using var content = new StringContent(
-            JsonSerializer.Serialize(new Envelope(cookieHeader, reports, numberPages, numberPagesY), Json),
+            JsonSerializer.Serialize(new Envelope(cookieHeader, reports, numberPages, numberPagesY, numberPagesRight), Json),
             System.Text.Encoding.UTF8,
             "application/json");
 
