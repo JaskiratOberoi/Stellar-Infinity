@@ -381,6 +381,9 @@
 .lr__c-name.lr__indent { padding-left: 21px; }
 .lr__c-name-inner { display: flex; align-items: flex-start; gap: 6px; }
 .lr__c-name-text { font-size: 12px; font-weight: 500; }
+/* The flagged analyte's name, in the value's ink and weight but at the
+   name's own size, so the row reads as one flagged line end to end. */
+.lr__c-name-text--abnormal { font-weight: 700; color: #b91c1c; }
 .lr__c-value { padding: 2px 12px 2px 0; }
 .lr__c-unit { padding: 2px 6px; text-align: center; }
 .lr__c-range { padding: 2px 6px; font-size: 10px; line-height: 1.25; color: #374151; text-align: center; }

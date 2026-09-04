@@ -1286,7 +1286,12 @@ function ResultRow({
           <div className="lr__c-name-inner">
             {lead}
             {row.nabl && <img className="lr__nabl" src={nablLogo} alt="NABL accredited" />}
-            <div className="lr__c-name-text">{row.name ?? '—'}</div>
+            {/* Out of range: the NAME goes bold red with the value, so the eye
+                running down the left column catches the flagged analytes
+                without having to cross to the figure. */}
+            <div className={`lr__c-name-text${row.abnormal ? ' lr__c-name-text--abnormal' : ''}`}>
+              {row.name ?? '—'}
+            </div>
           </div>
         </td>
         {rich ? (
