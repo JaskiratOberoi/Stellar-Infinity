@@ -714,7 +714,10 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                 <thead>
                   <tr>
                     <th style={{ minWidth: 200 }}>Test</th>
-                    <th style={{ width: 150 }}>Result</th>
+                    {/* 240, not 150: the box shares its cell with the AB mark and
+                        the Desc button, and at 150 it was left ~55px — "NEGATIVE"
+                        clipped to "NEGAT" while the Test column carried the slack. */}
+                    <th style={{ width: 240 }}>Result</th>
                     <th style={{ width: 70 }}>Unit</th>
                     <th style={{ width: 150 }}>Reference</th>
                     <th style={{ width: 180 }}>Comment</th>
