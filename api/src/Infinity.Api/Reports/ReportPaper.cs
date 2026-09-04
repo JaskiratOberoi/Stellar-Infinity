@@ -9,8 +9,8 @@ namespace Infinity.Api.Reports;
 /// <remarks>
 /// <list type="bullet">
 /// <item><c>letterhead</c> — Noble's artwork composited into the PDF, for
-/// plain paper and digital copies. 26/10/34/10mm.</item>
-/// <item><c>noble</c> — NO artwork, the same 26/10/34/10mm: pre-printed Noble
+/// plain paper and digital copies. 23/10/28/10mm.</item>
+/// <item><c>noble</c> — NO artwork, the same 23/10/28/10mm: pre-printed Noble
 /// stationery, which already carries the header and footer. Before this mode
 /// existed a desk printing on Noble paper had only <c>plain</c>, and its report
 /// started 14mm below the printed header.</item>
@@ -28,8 +28,11 @@ namespace Infinity.Api.Reports;
 /// </remarks>
 public readonly record struct ReportPaper(string Key, bool Artwork, double PageNumberY, double SideMm)
 {
-    public static readonly ReportPaper Letterhead = new("letterhead", Artwork: true, PageNumberY: 99, SideMm: 10);
-    public static readonly ReportPaper Noble = new("noble", Artwork: false, PageNumberY: 99, SideMm: 10);
+    // 82pt ≈ 28.9mm: just above the 28mm foot band the print route lays out
+    // for Noble's paper, on the footer's own baseline. 116pt ≈ 40.9mm for the
+    // client's 40mm sheet.
+    public static readonly ReportPaper Letterhead = new("letterhead", Artwork: true, PageNumberY: 82, SideMm: 10);
+    public static readonly ReportPaper Noble = new("noble", Artwork: false, PageNumberY: 82, SideMm: 10);
     public static readonly ReportPaper Plain = new("plain", Artwork: false, PageNumberY: 116, SideMm: 14);
 
     /// <summary>Skip the letterhead artwork — what the render sidecar calls <c>headless</c>.</summary>

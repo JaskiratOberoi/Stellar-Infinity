@@ -171,10 +171,10 @@ async function compositeOntoLetterhead(contentPdf, opts = {}) {
   const headless = opts.headless === true;
   // Baseline for "Page X of Y", in points from the paper bottom. It rides just
   // above the @page foot band so it shares the footer's baseline — and the band
-  // depends on the mode (PrintQuery in the API): 40mm on plain paper, 34mm to
-  // match Noble's pre-printed letterhead clear area. 116pt ≈ 40.9mm for the
-  // former, 99pt ≈ 34.9mm for the latter.
-  const pageNumberY = opts.pageNumberY ?? (headless ? 116 : 99);
+  // depends on the paper (ReportPaper in the API): 40mm on a client's sheet,
+  // 28mm on Noble's, whose footer band starts 25.4mm up. 116pt ≈ 40.9mm for
+  // the former, 82pt ≈ 28.9mm for the latter.
+  const pageNumberY = opts.pageNumberY ?? (headless ? 116 : 82);
   // Inset from the paper's right edge, in points: the @page side margin, which
   // is 10mm on Noble's paper and 14mm on a client's 40mm sheet. The API passes
   // it per paper; the default covers the public route, which is always the
@@ -349,7 +349,7 @@ const server = createServer(async (req, res) => {
       let pdf = Buffer.from(await concat(rendered));
       if (body.numberPages === true) {
         // The batch-level Y tracks the foot band the API laid out for (40mm
-        // plain / 34mm letterhead); default keeps the plain-paper baseline.
+        // plain / 28mm letterhead); default keeps the plain-paper baseline.
         pdf = Buffer.from(await stampPageNumbers(pdf, body.numberPagesY ?? 116, body.numberPagesRight ?? mm(14)));
       }
       console.log(`render ok reports=${reports.length} pages_in=${rendered.length} bytes=${pdf.length} ms=${Date.now() - started}`);

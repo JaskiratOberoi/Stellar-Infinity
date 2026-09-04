@@ -7,13 +7,13 @@ import { useState } from 'react';
  * The LIS asked it as two buttons, "With Header" / "Without Header", and
  * Infinity's first cut kept that shape as a Letterhead toggle. But "without
  * header" hides a second question: WHOSE stationery? Noble's own pre-printed
- * sheets have a 26mm header band; a client's letterhead runs to 40mm. One
+ * sheets have a 23mm header band; a client's letterhead runs to 40mm. One
  * toggle could only say "no artwork, 40mm", so a report printed on Noble
  * paper started a hand's width below the printed header. Three answers:
  *
  *  letterhead  Noble's header and footer IN the PDF, for plain paper and
- *              anything sent digitally. 26/34mm margins.
- *  noble       no artwork, the same 26/34mm — pre-printed Noble stationery.
+ *              anything sent digitally. 23/28mm margins.
+ *  noble       no artwork, the same 23/28mm — pre-printed Noble stationery.
  *  plain       no artwork, 40/40mm — a client's own letterhead.
  *
  * The API and the print route both take the same key (?paper=), so what the

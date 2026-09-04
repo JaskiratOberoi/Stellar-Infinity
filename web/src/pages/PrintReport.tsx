@@ -58,7 +58,7 @@ import '../report.css';
  * `?paper=`     letterhead | noble | plain — see PaperSelect. On screen, the
  *               two headless papers blank the band but keep its space, so the
  *               preview paginates like the PDF. Under ?pdf=1 it picks the
- *               @page margins: 40/40mm for `plain`, 26/34mm otherwise. The
+ *               @page margins: 40/40mm for `plain`, 23/28mm otherwise. The
  *               older `?headless=1` still reads as `plain`.
  * `?split=dept` a DEPARTMENT per page — the complete-report layout, matching
  *               the LIS's PID report where Haematology ends before
@@ -553,7 +553,7 @@ export function PrintReport() {
     <div className={shell} data-print-ready={ready ? 'true' : 'false'}>
       {/* The page box depends on the paper. A client's own stationery gets a
           full 40mm head and foot; Noble's letterhead — composited in, or
-          already printed on the sheet — gets the tighter 26/34mm that matches
+          already printed on the sheet — gets the tighter 23/28mm that matches
           its clear area, so content lands under the printed header rather
           than a hand's-width below it. Emitted only for the PDF route (the
           API passes ?paper=); later in document order than report.css, so it
@@ -563,19 +563,24 @@ export function PrintReport() {
           /* Sides: 10mm on Noble's paper (with or without the artwork), 14mm
              on a client's 40mm sheet. The render sidecar right-aligns the
              page number to the same figure — ReportPaper.SideMm. */
+          /* Noble's letterhead, measured off the file: the header's rule line
+             ends 20.9mm from the top, the footer band starts 25.4mm from the
+             bottom. 23/28mm puts the report 2mm under the rule and 2.6mm
+             above the band; the 26/34 it replaced left a hand's width of
+             white at both ends. ReportPaper.PageNumberY tracks the foot. */
           paper === 'plain'
             ? '@page{size:A4 portrait;margin:40mm 14mm 40mm 14mm}'
-            : '@page{size:A4 portrait;margin:26mm 10mm 34mm 10mm}',
+            : '@page{size:A4 portrait;margin:23mm 10mm 28mm 10mm}',
           /* A client's 40mm stationery leaves 217mm for content where Noble's
-             leaves 237mm, and a full CBC with ESR is built to fill the latter.
+             leaves 246mm, and a full CBC with ESR is built to fill the latter.
              Rather than a second, tighter layout for the smaller box, the SAME
-             layout is drawn at 217/237 = 0.915 — so every report breaks its
+             layout is drawn at 217/246 = 0.882 — so every report breaks its
              pages identically on either paper, and what the operator approved
              in the preview is what comes off the printer whichever tray it
-             goes to. Type lands around 10px on that paper. `zoom`, not
+             goes to. Type lands around 9.7px on that paper. `zoom`, not
              transform: zoom takes part in layout, so the table still spans
              the full page width. */
-          paper === 'plain' ? '.lr{zoom:.915}' : '',
+          paper === 'plain' ? '.lr{zoom:.882}' : '',
         ].join('')}</style>
       )}
       {error ? <p className="lr__error">{error}</p> : !row ? null : !signed ? (
@@ -704,7 +709,7 @@ export function PrintReport() {
 /** Blank stand-in for the letterhead band in letterhead-paper preview mode.
  *  Reserves the space the logo would take and says what the space is for, so
  *  the preview mirrors the headless PDF. On a client's 40mm stationery the
- *  band is the true 14mm taller than Noble's 26mm, so the preview shows the
+ *  band is the true 17mm taller than Noble's 23mm, so the preview shows the
  *  report starting where it really will. */
 function LetterheadZone({ sheet, tall }: { sheet?: boolean; tall?: boolean }) {
   const cls = ['lr__zone', sheet && 'lr__zone--sheet', tall && 'lr__zone--tall'].filter(Boolean).join(' ');
