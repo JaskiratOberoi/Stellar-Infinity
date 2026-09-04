@@ -15,6 +15,7 @@ import {
   type ReportGroup, type ReportItem, type ReportPanel, type ReportRow,
 } from '../lib/reportModel';
 import type { FullRow } from './ReportViewer';
+import { isPaper, type Paper } from '../components/PaperSelect';
 import '../report.css';
 
 /**
@@ -54,10 +55,11 @@ import '../report.css';
  * ── MODES ─────────────────────────────────────────────────────────────────
  * `?pdf=1`      the renderer. No tick boxes, no letterhead placeholder, and
  *               unticked rows are gone rather than dimmed.
- * `?headless=1` preview of what prints onto pre-printed letterhead paper: the
- *               band is blanked but keeps its space, so the preview paginates
- *               exactly like the PDF. Ignored under ?pdf=1, where the render
- *               service drops the background itself.
+ * `?paper=`     letterhead | noble | plain — see PaperSelect. On screen, the
+ *               two headless papers blank the band but keep its space, so the
+ *               preview paginates like the PDF. Under ?pdf=1 it picks the
+ *               @page margins: 40/40mm for `plain`, 26/34mm otherwise. The
+ *               older `?headless=1` still reads as `plain`.
  * `?split=dept` a DEPARTMENT per page — the complete-report layout, matching
  *               the LIS's PID report where Haematology ends before
  *               Biochemistry begins. Sections within a department flow
@@ -102,6 +104,13 @@ function genuineTravelId(v: string | null | undefined): boolean {
   return /[A-Za-z]/.test(t) || /^\d{12}$/.test(t);
 }
 
+/** `?paper=` wins; the older `?headless=1` still means a client's 40mm sheet. */
+function paperFromParams(params: URLSearchParams): Paper {
+  const p = params.get('paper');
+  if (isPaper(p)) return p;
+  return params.get('headless') === '1' ? 'plain' : 'letterhead';
+}
+
 function parseExcluded(raw: string | null): Set<number> {
   if (!raw) return new Set();
   return new Set(
@@ -144,7 +153,10 @@ export function PrintReport() {
    */
   const deptFilter = params.get('dept');
   const showEnd = params.get('end') !== '0';
-  const [headless, setHeadless] = useState(params.get('headless') === '1');
+  const [paper, setPaper] = useState<Paper>(() => paperFromParams(params));
+  // "Headless" to the layout: no artwork band drawn. Two of the three papers
+  // are headless; only the margins tell them apart, and that is @page's job.
+  const headless = paper !== 'letterhead';
   const [excluded, setExcluded] = useState<Set<number>>(() => parseExcluded(params.get('exclude')));
 
   useEffect(() => {
@@ -246,7 +258,8 @@ export function PrintReport() {
       const d = e.data;
       if (!d || d.type !== 'infinity:report-display' || d.sid !== sid) return;
       if (typeof d.split === 'boolean') setSplit(d.split);
-      if (typeof d.headless === 'boolean') setHeadless(d.headless);
+      if (isPaper(d.paper)) setPaper(d.paper);
+      else if (typeof d.headless === 'boolean') setPaper(d.headless ? 'plain' : 'letterhead');
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -502,14 +515,15 @@ export function PrintReport() {
 
   return (
     <div className={shell} data-print-ready={ready ? 'true' : 'false'}>
-      {/* The page box depends on the paper. Plain paper gets a full 40mm head
-          and foot; letterhead gets the tighter 26/34mm that matches Noble's
-          pre-printed clear area, so content lands under the printed header
-          rather than a hand's-width below it. Emitted only for the PDF route
-          (the API passes ?headless=0|1); later in document order than
-          report.css, so it is the winning @page rule. */}
+      {/* The page box depends on the paper. A client's own stationery gets a
+          full 40mm head and foot; Noble's letterhead — composited in, or
+          already printed on the sheet — gets the tighter 26/34mm that matches
+          its clear area, so content lands under the printed header rather
+          than a hand's-width below it. Emitted only for the PDF route (the
+          API passes ?paper=); later in document order than report.css, so it
+          is the winning @page rule. */}
       {pdfMode && (
-        <style>{`@page{size:A4 portrait;margin:${headless ? '40mm' : '26mm'} 14mm ${headless ? '40mm' : '34mm'} 14mm}`}</style>
+        <style>{`@page{size:A4 portrait;margin:${paper === 'plain' ? '40mm' : '26mm'} 14mm ${paper === 'plain' ? '40mm' : '34mm'} 14mm}`}</style>
       )}
       {error ? <p className="lr__error">{error}</p> : !row ? null : !signed ? (
         <p className="lr__error">

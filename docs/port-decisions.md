@@ -266,3 +266,22 @@ queues are `order:view` (which a client legitimately holds) and return an empty
 scoped page; `/api/dashboard/stats` correctly 403s a client for lacking
 `analytics:view`; and two URLs were artefacts of how the route inventory
 tracked `MapGroup` context.
+
+## 2026-09-04 — Report downloads ask "which paper", not "letterhead on/off"
+
+The Letterhead toggle folded two questions into one bit: draw Noble's artwork,
+and use Noble's 26/34mm clear area. Off meant no artwork AND the 40mm bands a
+client's own stationery needs — so a desk printing onto pre-printed Noble
+paper had no mode that fitted, and every such report started 14mm under the
+printed header. Replaced everywhere (Reporting batch bar, the SID viewer, the
+PID Review & edit viewer, the PID menu, Worksheet's PID download) by a
+three-way Paper choice: `letterhead` (artwork in, 26/34), `noble` (no artwork,
+26/34 — the new one), `plain` (no artwork, 40/40). API: `?paper=` on the single
+route and `paper` in the bulk body, resolved by `Reports/ReportPaper.cs`; the
+old `headless` still resolves (true → plain, false → letterhead) so nothing
+already built against it changes shape. The print route reads the same key
+for its @page rule. The paper key rides in the PDF cache key and `PdfCacheV`
+went 1 → 2, because `noble` and `plain` share margins and differ only in
+artwork — a hit across them would be the wrong document. The remembered
+preference keeps its localStorage key; stored `0`/`1` map onto `plain`/
+`letterhead`, the two modes that reproduce exactly what those values printed.

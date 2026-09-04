@@ -12,7 +12,7 @@ import {
   SampleFilters, ActiveFilterChips, useFilterOptions, applyFilterParams,
   initialFilters, SAMPLE_STATUSES, type SampleFilterValues,
 } from '../components/SampleFilters';
-import { LetterheadToggle, useLetterhead } from '../components/LetterheadToggle';
+import { PaperSelect, usePaper, type Paper } from '../components/PaperSelect';
 import { PidReportButton } from '../components/PidReportButton';
 
 export interface WorksheetRow {
@@ -154,7 +154,7 @@ export function Reports() {
   const [total, setTotal] = useState(0);
   const [patients, setPatients] = useState(0);
   const [withGraphs, setWithGraphs] = useState(true);
-  const [letterhead, setLetterhead] = useLetterhead();
+  const [paper, setPaper] = usePaper();
   const [merging, setMerging] = useState(false);
   const [mergeError, setMergeError] = useState<string | null>(null);
 
@@ -244,7 +244,7 @@ export function Reports() {
    * download beyond what the operator can see would hand them a document they
    * did not ask for and cannot check.
    */
-  const downloadPatient = async (pid: number, sids: string[], letterhead: boolean) => {
+  const downloadPatient = async (pid: number, sids: string[], paper: Paper) => {
     setPidBusy(pid);
     setMergeError(null);
     try {
@@ -255,9 +255,9 @@ export function Reports() {
         // the outside, samples within, so a sample whose tests span two
         // departments prints in both places. splitDept rides along because each
         // of those runs is still a department that never shares a page with the
-        // next. The letterhead answer is per download — see PidReportButton.
+        // next. The paper answer is per download — see PidReportButton.
         body: JSON.stringify({
-          sids, withGraph: withGraphs, splitDept: true, deptMajor: true, headless: !letterhead,
+          sids, withGraph: withGraphs, splitDept: true, deptMajor: true, paper,
         }),
         fallbackName: `Reports_PID_${pid}.pdf`,
       });
@@ -275,7 +275,7 @@ export function Reports() {
       await downloadFile('/api/reports/pdf/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...csrfHeader() },
-        body: JSON.stringify({ sids: [...selected], withGraph: withGraphs, headless: !letterhead }),
+        body: JSON.stringify({ sids: [...selected], withGraph: withGraphs, paper }),
         fallbackName: 'Reports.pdf',
       });
     } catch (e) {
@@ -428,7 +428,7 @@ export function Reports() {
               {/* Merged batches keep the remembered preference — a batch is
                   one print run on one kind of paper. PID downloads ask per
                   click instead: see PidReportButton. */}
-              <LetterheadToggle value={letterhead} onChange={setLetterhead} disabled={merging} />
+              <PaperSelect value={paper} onChange={setPaper} disabled={merging} />
 
               <button className="btn btn--ghost btn--sm" disabled={merging}
                       onClick={() => setSelected(new Set())}>
@@ -767,7 +767,7 @@ function PatientReportViewer({ pid, patientName, rows, onClose }: {
 }) {
   const sids = useMemo(() => rows.map((r) => r.sid), [rows]);
   const [activeSid, setActiveSid] = useState(sids[0]);
-  const [headless, setHeadless] = useState(true);
+  const [paper, setPaper] = usePaper();
   const [withGraph, setWithGraph] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -784,7 +784,7 @@ function PatientReportViewer({ pid, patientName, rows, onClose }: {
   // Frozen per activation: the stored cuts ride the URL so a revisited sample
   // reopens exactly as it was left.
   const src = useMemo(() => {
-    const q = new URLSearchParams({ split: '1', headless: '1' });
+    const q = new URLSearchParams({ split: '1', paper });
     const ex = excludesRef.current[activeSid];
     if (ex?.length) q.set('exclude', ex.join(','));
     return `/print/report/${encodeURIComponent(activeSid)}?${q}`;
@@ -820,14 +820,14 @@ function PatientReportViewer({ pid, patientName, rows, onClose }: {
     return () => window.removeEventListener('message', onMessage);
   }, [sids]);
 
-  // Push the letterhead choice into the loaded frame, as the single viewer does.
+  // Push the paper choice into the loaded frame, as the single viewer does.
   useEffect(() => {
     if (frameLoading) return;
     iframeRef.current?.contentWindow?.postMessage(
-      { type: 'infinity:report-display', sid: activeSid, split: true, headless },
+      { type: 'infinity:report-display', sid: activeSid, split: true, paper },
       window.location.origin,
     );
-  }, [frameLoading, headless, activeSid]);
+  }, [frameLoading, paper, activeSid]);
 
   const cutOf = (sid: string) => {
     const c = counts[sid];
@@ -856,7 +856,7 @@ function PatientReportViewer({ pid, patientName, rows, onClose }: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...csrfHeader() },
         body: JSON.stringify({
-          sids, withGraph, splitDept: true, deptMajor: true, headless, excludes,
+          sids, withGraph, splitDept: true, deptMajor: true, paper, excludes,
         }),
         fallbackName: `Reports_PID_${pid}.pdf`,
       });
@@ -887,13 +887,8 @@ function PatientReportViewer({ pid, patientName, rows, onClose }: {
           </div>
 
           <div className="preview__tools">
-            <label className="preview__switch"
-                   title="On: include Noble's header and footer, for plain paper or email. Off (default): the same margins with no header or footer, for printing onto pre-printed letterhead.">
-              <input type="checkbox" checked={!headless}
-                     onChange={(e) => setHeadless(!e.target.checked)} />
-              <span className="preview__track" aria-hidden="true" />
-              Letterhead
-            </label>
+            <PaperSelect className="input input--sm preview__paper" value={paper} onChange={setPaper}
+                         disabled={busy} ariaLabel="Paper to print on" />
 
             {/* Joined to the button as one pill, exactly as the single viewer
                 draws it — .preview__dlopt's colours key off the pill's accent

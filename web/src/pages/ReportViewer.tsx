@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { api } from '../api/client';
 import { downloadFile } from '../lib/format';
 import type { WorksheetRow } from './Reports';
+import { PaperSelect, usePaper } from '../components/PaperSelect';
 
 export interface TestResult {
   resultId: number;
@@ -135,21 +136,19 @@ export function ReportViewer({
   onSmart?: (sid: string) => void;
 }) {
   /*
-   * Headless is the DEFAULT, and the toggle below reads the other way round.
-   *
-   * Noble prints onto pre-printed letterhead paper, so the normal download must
-   * NOT carry a second letterhead of its own — it would print on top of the
-   * one already on the sheet. Turning "Letterhead" on adds Noble's header and
-   * footer, for the times the report is emailed or printed on plain paper.
-   * Telo defaults the same way.
+   * The paper this desk prints on — remembered, not asked each time. Noble's
+   * own desk prints onto pre-printed stationery and must not get a second
+   * letterhead on top of the printed one; a client on its own 40mm paper needs
+   * the taller clear band; an emailed copy needs the artwork in the file. One
+   * answer per desk, kept until it changes — see PaperSelect.
    */
-  const [headless, setHeadless] = useState(true);
+  const [paper, setPaper] = usePaper();
   // One department per sheet. Telo defaults this on: a doctor reading a
   // haematology report should not have to find where biochemistry ended.
   const [split, setSplit] = useState(true);
 
   const [previewSrc] = useState(
-    () => `/print/report/${encodeURIComponent(sid)}?split=1&headless=1`,
+    () => `/print/report/${encodeURIComponent(sid)}?split=1&paper=${paper}`,
   );
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [frameLoading, setFrameLoading] = useState(true);
@@ -192,10 +191,10 @@ export function ReportViewer({
   useEffect(() => {
     if (frameLoading) return;
     iframeRef.current?.contentWindow?.postMessage(
-      { type: 'infinity:report-display', sid, split, headless },
+      { type: 'infinity:report-display', sid, split, paper },
       window.location.origin,
     );
-  }, [frameLoading, split, headless, sid]);
+  }, [frameLoading, split, paper, sid]);
 
   // Take the selection back out. Same-origin only — a report is patient data
   // and this listener must not accept a count, or anything else, from elsewhere.
@@ -242,7 +241,7 @@ export function ReportViewer({
         // withGraph: the LIS staples the graph to the printed report, so
         // Infinity's PDF is the same document unless it is turned off.
         q.set('withGraph', String(hasGraph && includeGraph));
-        q.set('headless', String(headless));
+        q.set('paper', paper);
         q.set('split', String(split));
         if (excluded.length) q.set('exclude', excluded.join(','));
         await downloadFile(`${base}/pdf?${q}`);
@@ -252,7 +251,7 @@ export function ReportViewer({
     } finally {
       setBusy(null);
     }
-  }, [sid, nothingSelected, hasGraph, includeGraph, headless, split, excluded]);
+  }, [sid, nothingSelected, hasGraph, includeGraph, paper, split, excluded]);
 
   return createPortal(
     <div className="modal-backdrop preview-backdrop" onClick={onClose}>
@@ -273,15 +272,11 @@ export function ReportViewer({
           </div>
 
           <div className="preview__tools">
-            {/* Off by default: Noble prints onto pre-printed letterhead, so a
-                second one would land on top of it. */}
-            <label className="preview__switch"
-                   title="On: include Noble's header and footer, for plain paper or email. Off (default): the same margins with no header or footer, for printing onto pre-printed letterhead.">
-              <input type="checkbox" checked={!headless}
-                     onChange={(e) => setHeadless(!e.target.checked)} />
-              <span className="preview__track" aria-hidden="true" />
-              Letterhead
-            </label>
+            {/* Which paper the sheet goes into the printer as. The preview
+                behind blanks or draws the band to match, so what is on screen
+                paginates like the download. */}
+            <PaperSelect className="input input--sm preview__paper" value={paper} onChange={setPaper}
+                         disabled={busy !== null} ariaLabel="Paper to print on" />
 
             <select className="input input--sm preview__layout" value={split ? 'split' : 'continuous'}
                     aria-label="Report layout"

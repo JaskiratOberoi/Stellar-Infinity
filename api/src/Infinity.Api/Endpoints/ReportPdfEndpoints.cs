@@ -117,7 +117,7 @@ public static class ReportPdfEndpoints
     /// it unchecked would be theirs to compose — this keeps the only thing that
     /// can appear there to digits and commas.
     /// </remarks>
-    private static string PrintQuery(bool? split, string? exclude, bool splitDept = false, bool headless = false)
+    private static string PrintQuery(bool? split, string? exclude, ReportPaper paper, bool splitDept = false)
     {
         var ids = (exclude ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -132,12 +132,12 @@ public static class ReportPdfEndpoints
         if (splitDept) q += "&split=dept";
         else if (split == true) q += "&split=1";
         if (ids.Length > 0) q += "&exclude=" + string.Join(",", ids);
-        // The print page needs the mode to choose its @page margins: 40/40mm on
-        // plain paper, but the tighter 26/34mm that matches Noble's pre-printed
-        // letterhead clear area when the letterhead is composited under it. The
-        // render service still decides whether to composite; this only tells the
-        // page which margins to lay out for.
-        if (!headless) q += "&headless=0"; else q += "&headless=1";
+        // The print page needs the paper to choose its @page margins: 40/40mm on
+        // a client's own stationery, but the tighter 26/34mm that matches Noble's
+        // pre-printed clear area whether the letterhead is composited under it
+        // or already on the sheet. The render service still decides whether to
+        // composite; this only tells the page which margins to lay out for.
+        q += paper.Query;
         return q;
     }
 
@@ -230,7 +230,7 @@ public static class ReportPdfEndpoints
      * horizon for the one thing the key cannot see: a redeploy that changes
      * the print layout itself. Bump the version to orphan everything at once.
      * ------------------------------------------------------------------- */
-    private const string PdfCacheV = "1";
+    private const string PdfCacheV = "2";
     private static readonly TimeSpan PdfCacheTtl = TimeSpan.FromMinutes(45);
 
     private static string PdfCacheKey(
@@ -246,7 +246,11 @@ public static class ReportPdfEndpoints
         return meta.Count == 0 ? "0" : $"{meta.Count}.{meta[^1].Id}";
     }
 
-    /// <summary>The report as a PDF on the Noble letterhead.</summary>
+    /// <summary>The report as a PDF, laid out for the paper it will be printed on.</summary>
+    /// <param name="paper">
+    /// <c>letterhead</c>, <c>noble</c> or <c>plain</c> — see <see cref="ReportPaper"/>.
+    /// Absent, the legacy <paramref name="headless"/> flag decides.
+    /// </param>
     /// <param name="split">One department per sheet, as the preview shows it.</param>
     /// <param name="exclude">
     /// Comma-separated result ids the operator unticked in the preview. Filtered
@@ -258,6 +262,7 @@ public static class ReportPdfEndpoints
         string sid,
         bool? withGraph,
         bool? headless,
+        string? paper,
         bool? split,
         string? exclude,
         System.Security.Claims.ClaimsPrincipal principal,
@@ -280,9 +285,11 @@ public static class ReportPdfEndpoints
 
         // Everything that changes the bytes is in the key; the exclude list is
         // already digits-and-commas by the time PrintQuery is done with it.
+        var sheet = ReportPaper.Resolve(paper, headless);
+        var query = PrintQuery(split, exclude, sheet);
         var graphFp = await GraphFingerprintAsync(graphs, sid, withGraph == true, ct).ConfigureAwait(false);
         var key = PdfCacheKey("report", sid, row!.LastModifiedAt,
-            $"s{(split == true ? 1 : 0)}h{(headless == true ? 1 : 0)}g{graphFp}x{PrintQuery(split, exclude, headless: headless == true)}");
+            $"s{(split == true ? 1 : 0)}p{sheet.Key}g{graphFp}x{query}");
 
         if (await cache.GetBytesAsync(key, ct).ConfigureAwait(false) is { } cached)
         {
@@ -296,9 +303,9 @@ public static class ReportPdfEndpoints
         {
             var pdf = await render.RenderAsync(
                 [new RenderClient.ReportRequest(
-                    Url: $"/print/report/{Uri.EscapeDataString(sid)}{PrintQuery(split, exclude, headless: headless == true)}",
+                    Url: $"/print/report/{Uri.EscapeDataString(sid)}{query}",
                     Attachments: attachments,
-                    Headless: headless)],
+                    Headless: sheet.Headless)],
                 http.Request.Headers.Cookie.ToString(),
                 ct).ConfigureAwait(false);
 
@@ -364,6 +371,8 @@ public static class ReportPdfEndpoints
          * branch below.
          */
         var deptMajor = body!.DeptMajor == true;
+        // One paper for the whole bundle: it is one print run into one tray.
+        var sheet = ReportPaper.Resolve(body.Paper, body.Headless);
         if (!deptMajor)
         {
             sids = (await repo.OrderAsLisAsync(sids, ct).ConfigureAwait(false)).ToList();
@@ -416,12 +425,12 @@ public static class ReportPdfEndpoints
             // rendered individually below so ITS bytes land in the cache too —
             // the second pull of the same PID assembles without a browser.
             var graphFp = await GraphFingerprintAsync(graphs, sid, body!.WithGraph, ct).ConfigureAwait(false);
-            var query = PrintQuery(body.Split, null, body.SplitDept == true, body.Headless == true);
+            var query = PrintQuery(body.Split, null, sheet, body.SplitDept == true);
             // n0: rendered WITHOUT per-report page numbers, because the batch
             // is numbered as one document at the staple. Distinct from the
             // single route's cache, whose documents carry their own numbers.
             var key = PdfCacheKey("report", sid, row!.LastModifiedAt,
-                $"n0s{(body.Split == true ? 1 : 0)}d{(body.SplitDept == true ? 1 : 0)}h{(body.Headless == true ? 1 : 0)}g{graphFp}x{query}");
+                $"n0s{(body.Split == true ? 1 : 0)}d{(body.SplitDept == true ? 1 : 0)}p{sheet.Key}g{graphFp}x{query}");
 
             if (await cache.GetBytesAsync(key, ct).ConfigureAwait(false) is { } cachedDoc)
             {
@@ -442,7 +451,7 @@ public static class ReportPdfEndpoints
                 // report goes out whole.
                 Url: $"/print/report/{Uri.EscapeDataString(sid)}{query}",
                 Attachments: await CollectGraphsAsync(graphs, sid, body.WithGraph, ct).ConfigureAwait(false),
-                Headless: body.Headless,
+                Headless: sheet.Headless,
                 PageNumbers: false));
             misses.Add((included.Count - 1, key));
         }
@@ -500,7 +509,7 @@ public static class ReportPdfEndpoints
                 excludesBySid.TryGetValue(u.Sid, out var excl);
                 var query = $"?pdf=1&split=dept&dept={Uri.EscapeDataString(u.Department)}"
                           + (last ? string.Empty : "&end=0")
-                          + (body.Headless == true ? "&headless=1" : "&headless=0")
+                          + sheet.Query
                           + (excl is null ? string.Empty : $"&exclude={Uri.EscapeDataString(excl)}");
 
                 // A sample's graphs ride with the FIRST unit that sample appears
@@ -516,7 +525,7 @@ public static class ReportPdfEndpoints
                     : "0";
                 var key = excl is null
                     ? PdfCacheKey("reportdept", u.Sid, rowStamps.GetValueOrDefault(u.Sid),
-                        $"{u.Department}|e{(last ? 1 : 0)}h{(body.Headless == true ? 1 : 0)}g{graphFp}")
+                        $"{u.Department}|e{(last ? 1 : 0)}p{sheet.Key}g{graphFp}")
                     : null;
 
                 if (key is not null
@@ -535,7 +544,7 @@ public static class ReportPdfEndpoints
                 deptDocs.Add(new RenderClient.ReportRequest(
                     Url: $"/print/report/{Uri.EscapeDataString(u.Sid)}{query}",
                     Attachments: attachments,
-                    Headless: body.Headless,
+                    Headless: sheet.Headless,
                     PageNumbers: false));
                 deptMisses.Add((deptDocs.Count - 1, key));
             }
@@ -568,7 +577,7 @@ public static class ReportPdfEndpoints
 
                 var patientPdf = await render.RenderAsync(
                     deptDocs, cookie, ct, numberPages: true,
-                    numberPagesY: body.Headless == true ? 116 : 99).ConfigureAwait(false);
+                    numberPagesY: sheet.PageNumberY).ConfigureAwait(false);
 
                 if (skipped.Count > 0)
                     http.Response.Headers["X-Reports-Skipped"] = System.Text.Json.JsonSerializer.Serialize(skipped);
@@ -622,7 +631,7 @@ public static class ReportPdfEndpoints
             // The whole bundle numbered once, "Page 1 of 8" meaning the stack
             // in hand — graph sheets counted like any other sheet.
             var pdf = await render.RenderAsync(included, cookieHeader, ct, numberPages: true,
-                numberPagesY: body.Headless == true ? 116 : 99).ConfigureAwait(false);
+                numberPagesY: sheet.PageNumberY).ConfigureAwait(false);
 
             // The skip list rides on a header: the body has to be the PDF, and a
             // silent short delivery ("I asked for 20, I got 19") is exactly the
@@ -703,9 +712,14 @@ public static class ReportPdfEndpoints
     /// always sends it: the LIS's own PID report separates departments, and a
     /// combined document that runs them together reads as one giant sample.
     /// </param>
+    /// <param name="Paper">
+    /// <c>letterhead</c>, <c>noble</c> or <c>plain</c> — the stationery the
+    /// bundle is printed on; see <see cref="ReportPaper"/>.
+    /// </param>
     /// <param name="Headless">
-    /// Skip the letterhead artwork, for pre-printed stationery — the same
-    /// choice the LIS offers as its "Without Header" button.
+    /// The pre-<c>Paper</c> spelling of the same question — skip the artwork,
+    /// as the LIS's "Without Header" button — kept so an older client's
+    /// request still resolves. Ignored when <c>Paper</c> is given.
     /// </param>
     /// <param name="DeptMajor">
     /// Assemble ONE complete report with the departments on the outside and
@@ -723,7 +737,7 @@ public static class ReportPdfEndpoints
     /// full download somebody else's cuts.
     /// </param>
     public sealed record BulkPdfRequest(
-        IReadOnlyList<string>? Sids, bool WithGraph = true, bool? Headless = null, bool? Split = null,
-        bool? SplitDept = null, bool? DeptMajor = null,
+        IReadOnlyList<string>? Sids, bool WithGraph = true, bool? Headless = null, string? Paper = null,
+        bool? Split = null, bool? SplitDept = null, bool? DeptMajor = null,
         IReadOnlyDictionary<string, IReadOnlyList<int>>? Excludes = null);
 }

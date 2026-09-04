@@ -11,6 +11,7 @@ import {
   initialFilters, SAMPLE_STATUSES, type SampleFilterValues,
 } from '../components/SampleFilters';
 import { PidReportButton } from '../components/PidReportButton';
+import type { Paper } from '../components/PaperSelect';
 import { TestList } from '../components/TestList';
 
 /**
@@ -219,16 +220,16 @@ export function Worksheet() {
    * report to give. Those are skipped by the route, so a patient mid-run comes
    * back with the reports that exist and nothing for the ones that do not.
    */
-  const downloadPatient = async (pid: number, sids: string[], letterhead: boolean) => {
+  const downloadPatient = async (pid: number, sids: string[], paper: Paper) => {
     setPidBusy(pid);
     setPidError(null);
     try {
       await downloadFile('/api/reports/pdf/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...csrfHeader() },
-        // Department-per-sheet and the letterhead choice, same as Reporting —
+        // Department-per-sheet and the paper choice, same as Reporting —
         // one PID download, one shape, whichever page it started from.
-        body: JSON.stringify({ sids, splitDept: true, headless: !letterhead }),
+        body: JSON.stringify({ sids, splitDept: true, paper }),
         fallbackName: `Reports_PID_${pid}.pdf`,
       });
     } catch (e) {

@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { PAPER_OPTIONS, type Paper } from './PaperSelect';
 
 /**
  * The PID download control: the number, the download glyph, and — on click —
- * a two-line menu asking the one question the LIS asks with its "With Header"
- * / "Without Header" buttons. The choice is per download, made at the moment
- * it matters, because one patient's report goes to a portal (needs the
- * artwork in the PDF) and the next is printed on pre-printed stationery
- * (must not print it twice). A single page-level switch kept answering
- * yesterday's question.
+ * a menu asking which paper the report is going onto: Noble's letterhead in
+ * the PDF, Noble's pre-printed stationery, or the client's own 40mm sheet
+ * (see PaperSelect). The choice is per download, made at the moment it
+ * matters, because one patient's report goes to a portal (needs the artwork
+ * in the PDF) and the next is printed on pre-printed stationery (must not
+ * print it twice). A single page-level switch kept answering yesterday's
+ * question.
  *
  * The menu is PORTALLED and fixed-positioned: the button lives inside
  * .table-wrap, whose overflow-x:auto makes it a clipping context — an
@@ -26,7 +28,7 @@ export function PidReportButton({ pid, busy, disabled, title, count, onDownload,
   title: string;
   /** Sample count suffix (×N) when the patient has several on this page. */
   count?: number;
-  onDownload: (letterhead: boolean) => void;
+  onDownload: (paper: Paper) => void;
   /** Open the complete report to review and untick tests before downloading. */
   onPreview?: () => void;
 }) {
@@ -39,8 +41,8 @@ export function PidReportButton({ pid, busy, disabled, title, count, onDownload,
   const toggle = () => {
     if (at) { close(); return; }
     const r = btnRef.current!.getBoundingClientRect();
-    // Three rows of menu need ~130px; open upward when the row sits lower.
-    const up = window.innerHeight - r.bottom < 150;
+    // Four rows of menu need ~170px; open upward when the row sits lower.
+    const up = window.innerHeight - r.bottom < 190;
     setAt({ x: r.left, y: up ? r.top : r.bottom, up });
   };
 
@@ -68,7 +70,7 @@ export function PidReportButton({ pid, busy, disabled, title, count, onDownload,
     };
   }, [at]);
 
-  const pick = (letterhead: boolean) => { close(); onDownload(letterhead); };
+  const pick = (paper: Paper) => { close(); onDownload(paper); };
 
   return (
     <>
@@ -120,27 +122,33 @@ export function PidReportButton({ pid, busy, disabled, title, count, onDownload,
               Review &amp; edit…
             </button>
           )}
-          <button type="button" role="menuitem" onClick={() => pick(true)}
-                  title="Download now, with Noble's header and footer in the PDF — for plain paper and digital copies.">
-            <svg viewBox="0 0 16 16" aria-hidden="true">
-              <rect x="3" y="2" width="10" height="12" rx="1.2" fill="none"
-                    stroke="currentColor" strokeWidth="1.3" />
-              <path d="M3.7 4.6h8.6" stroke="currentColor" strokeWidth="2.2" />
-              <path d="M5.5 8h5M5.5 10.5h3.5" stroke="currentColor" strokeWidth="1.1"
-                    strokeLinecap="round" />
-            </svg>
-            Download · letterhead
-          </button>
-          <button type="button" role="menuitem" onClick={() => pick(false)}
-                  title="Download now, with no artwork — for pre-printed stationery that already carries the header.">
-            <svg viewBox="0 0 16 16" aria-hidden="true">
-              <rect x="3" y="2" width="10" height="12" rx="1.2" fill="none"
-                    stroke="currentColor" strokeWidth="1.3" />
-              <path d="M5.5 8h5M5.5 10.5h3.5" stroke="currentColor" strokeWidth="1.1"
-                    strokeLinecap="round" />
-            </svg>
-            Download · plain paper
-          </button>
+          {/* One row per paper, in PaperSelect's order. The glyph says what
+              the sheet looks like: a filled band for artwork in the PDF, a
+              dashed band for Noble's pre-printed header, a taller dashed band
+              for the client's own 40mm stationery. */}
+          {PAPER_OPTIONS.map((o) => (
+            <button key={o.value} type="button" role="menuitem" onClick={() => pick(o.value)}
+                    title={`Download now. ${o.hint}`}>
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <rect x="3" y="2" width="10" height="12" rx="1.2" fill="none"
+                      stroke="currentColor" strokeWidth="1.3" />
+                {o.value === 'letterhead' && (
+                  <path d="M3.7 4.6h8.6" stroke="currentColor" strokeWidth="2.2" />
+                )}
+                {o.value === 'noble' && (
+                  <path d="M3.7 4.6h8.6" stroke="currentColor" strokeWidth="1.1"
+                        strokeDasharray="1.4 1.1" />
+                )}
+                {o.value === 'plain' && (
+                  <path d="M3.7 5.4h8.6" stroke="currentColor" strokeWidth="2.6"
+                        strokeDasharray="1.4 1.1" />
+                )}
+                <path d="M5.5 8.6h5M5.5 11h3.5" stroke="currentColor" strokeWidth="1.1"
+                      strokeLinecap="round" />
+              </svg>
+              {o.label}
+            </button>
+          ))}
         </span>,
         document.body,
       )}
