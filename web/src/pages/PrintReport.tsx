@@ -893,14 +893,20 @@ function PatientMetaBlock({
 
           {cc && !(pdf && ccOff) && (
           <div className={`lr__cc${ccOff ? ' lr__off' : ''}`}>
-            {interactive && (
-              <IncludeToggle
-                label="the collecting centre line"
-                excluded={ccOff}
-                onToggle={() => onToggle(COLLECTED_AT_KEY)}
-              />
-            )}
-            <span className="lr__f-label">Collected at</span>
+            {/* The tick lives INSIDE the label's 112px column, in the space
+                after the words, so the label starts where every label above
+                it starts and the colon stays in its column — a sibling tick
+                shoved the whole line 18px right and out of alignment. */}
+            <span className="lr__f-label lr__cc-label">
+              Collected at
+              {interactive && (
+                <IncludeToggle
+                  label="the collecting centre line"
+                  excluded={ccOff}
+                  onToggle={() => onToggle(COLLECTED_AT_KEY)}
+                />
+              )}
+            </span>
             <span className="lr__f-sep">:</span>
             <span>
               <span className="lr__cc-name">{cc.name ?? cc.code}</span>

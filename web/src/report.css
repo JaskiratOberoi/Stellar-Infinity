@@ -245,6 +245,12 @@
 }
 .lr__metamain { flex: 1 1 auto; min-width: 0; }
 
+/* The "Collected at" tick (preview only) floats in the label column's spare
+   width, after the words and before the colon, so it reads as part of the
+   line rather than a control in front of it. Absolute, so it takes no room. */
+.lr__cc-label { position: relative; }
+.lr__cc-label .lr__tick { position: absolute; right: 6px; top: 0; margin-top: 1px; }
+
 /* Two independent stacks — identity/referral on the left, ids/timeline on the
    right — rather than a row-major grid, so each column reads top to bottom the
    way the bench sheet lays it out. */
