@@ -317,6 +317,12 @@ public static class ReportPdfEndpoints
                     Url: $"/print/report/{Uri.EscapeDataString(sid)}{query}",
                     Attachments: attachments,
                     Headless: sheet.Headless,
+                    // Both stamp coordinates, explicitly. The sidecar's default
+                    // Y keys on headless — right for the client's 40mm sheet,
+                    // WRONG for Without Letterhead, which is headless on
+                    // Noble's 28mm foot: the number landed 41mm up, over the
+                    // signatures. The paper knows its foot; the sidecar does not.
+                    PageNumberY: sheet.PageNumberY,
                     PageNumberRight: sheet.PageNumberRight)],
                 http.Request.Headers.Cookie.ToString(),
                 ct).ConfigureAwait(false);
@@ -464,6 +470,7 @@ public static class ReportPdfEndpoints
                 Url: $"/print/report/{Uri.EscapeDataString(sid)}{query}",
                 Attachments: await CollectGraphsAsync(graphs, sid, body.WithGraph, ct).ConfigureAwait(false),
                 Headless: sheet.Headless,
+                PageNumberY: sheet.PageNumberY,
                 PageNumberRight: sheet.PageNumberRight,
                 PageNumbers: false));
             misses.Add((included.Count - 1, key));

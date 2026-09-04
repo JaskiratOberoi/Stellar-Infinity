@@ -174,6 +174,10 @@ async function compositeOntoLetterhead(contentPdf, opts = {}) {
   // depends on the paper (ReportPaper in the API): 40mm on a client's sheet,
   // 28mm on Noble's, whose footer band starts 25.4mm up. 116pt ≈ 40.9mm for
   // the former, 82pt ≈ 28.9mm for the latter.
+  // A default only for a caller that says nothing — the public route, always
+  // the composited letterhead. The API always passes it: headless alone
+  // cannot tell Noble's pre-printed paper (28mm foot) from a client's 40mm
+  // sheet, and guessing 40mm put the number over the signatures.
   const pageNumberY = opts.pageNumberY ?? (headless ? 116 : 82);
   // Inset from the paper's right edge, in points: the @page side margin, which
   // is 10mm on Noble's paper and 14mm on a client's 40mm sheet. The API passes
