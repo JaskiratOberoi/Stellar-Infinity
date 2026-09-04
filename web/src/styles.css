@@ -2845,9 +2845,9 @@ fieldset.bare {
    stretched to 830px and shoved the rest of the toolbar onto three rows.
    `select.preview__layout` outranks it outright. */
 select.preview__layout { width: 11.25rem; flex: none; }
-/* The paper select beside it: its longest label ("Digital · Noble letterhead")
+/* The paper select beside it: its longest label ("Client Letterhead 40mm")
    needs the extra width, and it must not flex either. */
-select.preview__paper { width: 12.75rem; flex: none; }
+select.preview__paper { width: 11.75rem; flex: none; }
 
 /* The toggles. Written out rather than borrowed from .toggle, which is a
    full-width settings row — these sit in a toolbar and have to stay small. */

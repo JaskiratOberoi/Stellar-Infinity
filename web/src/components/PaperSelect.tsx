@@ -30,17 +30,17 @@ export type Paper = 'letterhead' | 'noble' | 'plain';
 export const PAPER_OPTIONS: ReadonlyArray<{ value: Paper; label: string; hint: string }> = [
   {
     value: 'letterhead',
-    label: 'Digital · Noble letterhead',
+    label: 'With Letterhead',
     hint: "Noble's header and footer are in the PDF. For plain paper, email and WhatsApp.",
   },
   {
     value: 'noble',
-    label: 'Noble pre-printed paper',
-    hint: "No artwork; the report starts just under the printed header. For Noble's own stationery.",
+    label: 'Without Letterhead',
+    hint: "No artwork; the report starts just under the printed header. For Noble's pre-printed stationery.",
   },
   {
     value: 'plain',
-    label: 'Own letterhead · 40 mm',
+    label: 'Client Letterhead 40mm',
     hint: "No artwork; a 40 mm band is left clear at the head and foot. For a client's own stationery.",
   },
 ];
