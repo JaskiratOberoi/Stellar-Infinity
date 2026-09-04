@@ -555,7 +555,19 @@ export function PrintReport() {
           API passes ?paper=); later in document order than report.css, so it
           is the winning @page rule. */}
       {pdfMode && (
-        <style>{`@page{size:A4 portrait;margin:${paper === 'plain' ? '40mm' : '26mm'} 14mm ${paper === 'plain' ? '40mm' : '34mm'} 14mm}`}</style>
+        <style>{[
+          `@page{size:A4 portrait;margin:${paper === 'plain' ? '40mm' : '26mm'} 14mm ${paper === 'plain' ? '40mm' : '34mm'} 14mm}`,
+          /* A client's 40mm stationery leaves 217mm for content where Noble's
+             leaves 237mm, and a full CBC with ESR is built to fill the latter.
+             Rather than a second, tighter layout for the smaller box, the SAME
+             layout is drawn at 217/237 = 0.915 — so every report breaks its
+             pages identically on either paper, and what the operator approved
+             in the preview is what comes off the printer whichever tray it
+             goes to. Type lands around 10px on that paper. `zoom`, not
+             transform: zoom takes part in layout, so the table still spans
+             the full page width. */
+          paper === 'plain' ? '.lr{zoom:.915}' : '',
+        ].join('')}</style>
       )}
       {error ? <p className="lr__error">{error}</p> : !row ? null : !signed ? (
         <p className="lr__error">
