@@ -2576,9 +2576,12 @@ fieldset.bare {
   display: grid; place-items: center; padding: 1.5rem; overflow-y: auto;
 }
 .modal {
+  /* A variable, so a sticky footer can reach out through the padding to the
+     card's own edge and the phone breakpoint below need only change one value. */
+  --modal-pad: 1.6rem;
   width: min(520px, 100%); background: var(--surface);
   border-radius: 18px; border: 1px solid var(--line);
-  padding: 1.6rem; box-shadow: var(--shadow-modal);
+  padding: var(--modal-pad); box-shadow: var(--shadow-modal);
   display: flex; flex-direction: column; gap: 1rem; margin: auto;
 }
 
@@ -2950,7 +2953,9 @@ select.preview__paper { width: 11.75rem; flex: none; }
   .preview__frame { height: 62vh; }
 }
 .modal__title { font-size: 1.1rem; font-weight: 400; letter-spacing: .03em; }
-.modal__actions { display: flex; gap: .6rem; justify-content: flex-end; margin-top: .3rem; }
+/* flex-wrap: three buttons and a status line do not fit a 360px phone on one
+   row, and without wrapping the first item was shoved past the card's edge. */
+.modal__actions { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: flex-end; margin-top: .3rem; }
 
 /* ---------- file drop zone ----------
    One surface, either gesture: click to browse or drop a file on it. The
@@ -3166,7 +3171,22 @@ select.preview__paper { width: 11.75rem; flex: none; }
   max-height: calc(100dvh - 3rem);
   overflow-y: auto;
 }
-.modal--fit > .worksheet-grid { flex: 1 1 auto; min-height: 180px; overflow-y: auto; }
+.modal--fit > .worksheet-grid { flex: 1 1 auto; min-height: 220px; overflow-y: auto; }
+
+/* The action bar is STICKY to the card's bottom edge. On a screen tall enough
+   nothing scrolls and it simply sits last; on one that is not (a 1024x768
+   tablet, a phone) the modal scrolls and Save stays pinned in view — the grid's
+   floor above never has to be traded against the buttons. Negative margins
+   carry it out through the modal's padding so the bar runs edge to edge, and
+   the padding is put back inside it; the modal's own overflow clips it to the
+   rounded corners. */
+.modal--fit > .modal__actions {
+  position: sticky; bottom: 0; z-index: 1;
+  margin: 0 calc(-1 * var(--modal-pad)) calc(-1 * var(--modal-pad));
+  padding: .6rem var(--modal-pad) calc(var(--modal-pad) * .75);
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
 
 /* Compact controls so a twenty-analyte panel fits on one screen without
    scrolling, which is what bench entry actually needs. */
@@ -3273,7 +3293,7 @@ select.preview__paper { width: 11.75rem; flex: none; }
      modals are where the densest lists live. Give the content the width back
      and let the sheet reach closer to the edges. */
   .modal-backdrop { padding: .6rem; }
-  .modal { padding: 1.1rem; border-radius: 14px; }
+  .modal { --modal-pad: 1.1rem; border-radius: 14px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

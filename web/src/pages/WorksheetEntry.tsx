@@ -565,14 +565,17 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
         ) : (
           <>
             {/* ---- header ---- */}
-            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            {/* Both rows wrap: on a phone the badge and three buttons do not fit
+                beside the name, and unwrapped they ran past the card's edge and
+                squeezed the name to one word a line. */}
+            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '.5rem .8rem' }}>
               <div>
                 {/* Salutation joined to the name, as Listec prints it. */}
                 <h2 className="modal__title">
                   {[header.title, header.patientName].filter(Boolean).join(' ') || 'Unnamed patient'}
                 </h2>
               </div>
-              <div className="row" style={{ gap: '.4rem' }}>
+              <div className="row" style={{ gap: '.4rem', flexWrap: 'wrap', justifyContent: 'flex-end', marginLeft: 'auto' }}>
                 <span className={`badge badge--${header.statusCode === 7 ? 'infinity' : 'lis'}`}>
                   {header.status ?? '—'}
                 </span>
