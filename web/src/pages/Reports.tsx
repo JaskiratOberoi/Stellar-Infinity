@@ -93,9 +93,9 @@ export function Reports() {
    * This page is also the client's port of the LIS's Sample Status screen:
    * the Status control reaches every sample — Registered, Tested, Rejected,
    * Pending with its reason — with clinical history attachable along the way.
-   * It OPENS on Reports ready for every account, because most visits are for
-   * finished reports; tracking is one dropdown pick away. View/Smart appear
-   * only once a report exists, whatever the filter shows.
+   * It OPENS on Any status for every account, so a sample still in the lab
+   * is found on the same visit as a finished report; a status pick narrows.
+   * View/Smart appear only once a report exists, whatever the filter shows.
    */
   const [rows, setRows] = useState<WorksheetRow[]>([]);
   const [scope, setScope] = useState<string>('');
@@ -303,14 +303,17 @@ export function Reports() {
       // which reads as "that is all there is" when it is not. The worksheet
       // learned this the same way — see PENDING_STATUSES there.
       //
-      // Three cases, one control, mirroring the worksheet: a chosen status
-      // wins; 'all' asks for everything; '' is the page's default — the
-      // reportable set for EVERYONE. A client tracking a pending sample picks
-      // Any status (or the status itself) from the dropdown; the page opens
-      // on finished reports, which is what most visits are for.
-      if (filters.statusId === 'all') { /* no status filter */ }
-      else if (filters.statusId !== '') p.set('statusIds', String(filters.statusId));
-      else p.set('statusIds', REPORTABLE_STATUSES.join(','));
+      // A chosen status wins; otherwise no status filter — the page opens on
+      // ANY status. It used to open on the reportable set (authorised,
+      // printed) with "Any status" as an explicit extra, and a client tracking
+      // a sample still in the lab had to know to pick it every visit. Unlike
+      // the worksheet, whose default is the pending set because that is the
+      // bench's queue, a reporting page is where every sample is looked for.
+      // 'all' is kept as a synonym for '' so a remembered older value still
+      // reads correctly.
+      if (filters.statusId !== '' && filters.statusId !== 'all') {
+        p.set('statusIds', String(filters.statusId));
+      }
       // No client timeout — a reconciliation over months of reports outlives
       // the 20s default. Stop (or the server's SQL timeout) ends a long one.
       const r = await api.get<{
@@ -382,10 +385,8 @@ export function Reports() {
 
       <SampleFilters value={filters} options={options} onChange={setFilters}
                      statusOptions={SAMPLE_STATUSES}
-                     // '' is this page's default — the reportable set, for
-                     // every account — so the default carries its name and
-                     // 'Any status' is the explicit way to see the rest.
-                     defaultStatusLabel="Reports ready"
+                     // No defaultStatusLabel: '' IS "Any status" on this page,
+                     // so the control needs no separate 'all' entry.
                      lockClientCode={user?.role === 'client'} />
 
       {scope === 'none' && (
