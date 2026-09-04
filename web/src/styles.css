@@ -3152,6 +3152,22 @@ select.preview__paper { width: 11.75rem; flex: none; }
 /* The result grid is dense and horizontal â€” a 520px modal cannot hold it. */
 .modal--wide { width: min(1180px, 100%); }
 
+/* The worksheet entry modal FITS the viewport. Its fixed parts — header, sample
+   card, attachments, comment, the action bar — add up to more than a laptop
+   screen once the grid took a flat 46vh, so Save sat below the fold and the
+   whole backdrop had to be scrolled to reach it. Now the modal is capped a
+   backdrop-padding short of the viewport, the grid is the one flexible child
+   and scrolls inside, and the action bar stays on screen. Below the grid's
+   floor (a very short window) the modal scrolls as a whole rather than
+   clipping. dvh where the browser has it, so a phone's collapsing URL bar
+   does not hide the bar either. */
+.modal--fit {
+  max-height: calc(100vh - 3rem);
+  max-height: calc(100dvh - 3rem);
+  overflow-y: auto;
+}
+.modal--fit > .worksheet-grid { flex: 1 1 auto; min-height: 180px; overflow-y: auto; }
+
 /* Compact controls so a twenty-analyte panel fits on one screen without
    scrolling, which is what bench entry actually needs. */
 .input--sm { padding: .35rem .5rem; border-radius: 8px; font-size: .82rem; width: 100%; }

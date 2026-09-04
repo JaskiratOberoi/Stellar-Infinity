@@ -549,7 +549,7 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
   return (
     <div className="modal-backdrop" onClick={() => !saving && onClose()}>
       <div
-        className="modal modal--wide"
+        className="modal modal--wide modal--fit"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -702,8 +702,11 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                 analyte per card, a full-width value box, the range printed in
                 full underneath — is closer to how the work is actually done
                 away from a bench. */}
-            <div className="table-wrap table-wrap--cards worksheet-grid" ref={gridRef}
-                 style={{ maxHeight: '46vh', overflowY: 'auto' }}>
+            {/* The grid is the modal's flexible child: it takes whatever height
+                the header, card, attachments and action bar leave on THIS
+                screen and scrolls inside — see .modal--fit. A flat 46vh here
+                left Save below the fold on a laptop. */}
+            <div className="table-wrap table-wrap--cards worksheet-grid" ref={gridRef}>
               <table>
                 <thead>
                   <tr>
