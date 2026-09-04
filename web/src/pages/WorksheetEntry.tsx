@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { displayTestName } from '../lib/reportFormat';
 import {
   worksheetApi,
   type ResultEdit,
@@ -151,7 +152,7 @@ function DescReportModal({ sid, rows, valueOf, abnormalOf, readOnly, attachments
         <div style={{ overflowY: 'auto', marginTop: '.6rem', display: 'flex',
                       flexDirection: 'column', gap: '.9rem', paddingRight: '.2rem' }}>
           {editable.map((r) => {
-            const label = plainText(r.testName) || r.testCode || '—';
+            const label = displayTestName(plainText(r.testName)) || r.testCode || '—';
             const value = valueOf(r);
             /* Same rule as the grid: the manual mark exists only where the
                range arithmetic cannot judge — which for prose is always. */
@@ -729,7 +730,7 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                     if (isHeading(r)) {
                       return (
                         <tr key={r.resultId} className="worksheet-grid__heading">
-                          <td colSpan={6}>{plainText(r.testName)}</td>
+                          <td colSpan={6}>{displayTestName(plainText(r.testName))}</td>
                         </tr>
                       );
                     }
@@ -748,7 +749,7 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                     const abManual = pos === 'unknown' && value.trim() !== '';
                     const abOn = drafts[r.resultId]?.abnormal ?? r.abnormal;
                     const willSign = willAutoAuthorize.some((x) => x.resultId === r.resultId);
-                    const label = plainText(r.testName) || r.testCode || '—';
+                    const label = displayTestName(plainText(r.testName)) || r.testCode || '—';
                     const clipped = attachments.countFor(r.resultId);
                     const drawerOpen = openAttach === r.resultId;
 

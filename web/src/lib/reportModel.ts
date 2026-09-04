@@ -25,6 +25,7 @@
  * parent link and is used where present.
  */
 import type { TestResult } from '../pages/ReportViewer';
+import { displayTestName } from './reportFormat';
 
 export interface ReportRow {
   /** Uppercased test code — the key static notes are looked up on. */
@@ -315,7 +316,7 @@ export function methodOf(t: TestResult, headMethod: string | null = null): strin
 export function buildSampleReport(results: readonly TestResult[]): SampleReport {
   const toRow = (t: TestResult, headMethod: string | null = null): ReportRow => ({
     code: t.testCode ? t.testCode.trim().toUpperCase() : null,
-    name: clean(t.testName),
+    name: displayTestName(clean(t.testName)),
     method: methodOf(t, headMethod),
     value: clean(t.value),
     unit: clean(t.unit),
@@ -390,7 +391,7 @@ export function buildSampleReport(results: readonly TestResult[]): SampleReport 
         kind: 'panel',
         panel: {
           profileId: t.profileId ?? null,
-          title: clean(t.testName),
+          title: displayTestName(clean(t.testName)),
           resultId: t.resultId,
           children: [],
         },
@@ -416,7 +417,7 @@ export function buildSampleReport(results: readonly TestResult[]): SampleReport 
         // The row's OWN name. reportTestName is the PARENT test's name, shared
         // by every row under it, and using it here would clobber the
         // sub-group names on a CBC.
-        title: clean(t.testName),
+        title: displayTestName(clean(t.testName)),
         testId: t.testId ?? null,
         resultId: t.resultId,
         method: clean(t.method),

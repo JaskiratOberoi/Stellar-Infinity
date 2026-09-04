@@ -130,3 +130,27 @@ export function formatRange(s: string | null | undefined): string {
     .filter(Boolean);
   return lines.length ? lines.join('\n') : s.trim();
 }
+
+/**
+ * Infinity-only rewording of catalogue names at DISPLAY time.
+ *
+ * Noble is the live LIS shared with Telo and Listec, and the strings below
+ * are master data there — copied onto every result row at registration, and
+ * printed as-is by both older products. When the lab changed instruments the
+ * ask was that Infinity's reports say so WITHOUT touching the database or
+ * anything the LIS prints. So the rename happens here, on the way to the
+ * page, and nowhere else: the row still says what Noble says.
+ *
+ * Add a pair per rename. Matched case-insensitively on the phrase, so the
+ * "& Microscopy" variant and any future re-spelling are covered by one line.
+ */
+const DISPLAY_RENAMES: ReadonlyArray<[RegExp, string]> = [
+  [/\bAutomated\s+5[\s-]*Part\b/gi, 'Automated 7 Part'],
+];
+
+export function displayTestName(name: string | null | undefined): string | null {
+  if (!name) return null;
+  let out = name;
+  for (const [re, to] of DISPLAY_RENAMES) out = out.replace(re, to);
+  return out;
+}
