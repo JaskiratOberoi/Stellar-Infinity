@@ -502,14 +502,14 @@ export function PrintReport() {
 
   return (
     <div className={shell} data-print-ready={ready ? 'true' : 'false'}>
-      {/* The page box depends on the paper. Plain paper gets a 30mm head and a
-          full 40mm foot; letterhead gets the tighter 26/34mm that matches
-          Noble's pre-printed clear area, so content lands under the printed
-          header rather than a hand's-width below it. Emitted only for the PDF
-          route (the API passes ?headless=0|1); later in document order than
+      {/* The page box depends on the paper. Plain paper gets a full 40mm head
+          and foot; letterhead gets the tighter 26/34mm that matches Noble's
+          pre-printed clear area, so content lands under the printed header
+          rather than a hand's-width below it. Emitted only for the PDF route
+          (the API passes ?headless=0|1); later in document order than
           report.css, so it is the winning @page rule. */}
       {pdfMode && (
-        <style>{`@page{size:A4 portrait;margin:${headless ? '30mm' : '26mm'} 14mm ${headless ? '40mm' : '34mm'} 14mm}`}</style>
+        <style>{`@page{size:A4 portrait;margin:${headless ? '40mm' : '26mm'} 14mm ${headless ? '40mm' : '34mm'} 14mm}`}</style>
       )}
       {error ? <p className="lr__error">{error}</p> : !row ? null : !signed ? (
         <p className="lr__error">
