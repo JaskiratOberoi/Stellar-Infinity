@@ -581,7 +581,7 @@ export function PrintReport() {
               each sheet instead, so the once-at-top copy is skipped. */}
           {!pdfMode && !previewSheets && (
             headless
-              ? <LetterheadZone />
+              ? <LetterheadZone tall={paper === 'plain'} />
               : (
                 <div className="lr__brand">
                   <img src={nobleLogo} alt="Noble Diagnostic Centre" />
@@ -613,7 +613,7 @@ export function PrintReport() {
                 <div key={si} className="lr__sheet">
                   <span className="lr__sheet-no">Page {si + 1} of {sections.length}</span>
                   {headless
-                    ? <LetterheadZone sheet />
+                    ? <LetterheadZone sheet tall={paper === 'plain'} />
                     : (
                       <div className="lr__brand lr__brand--sheet">
                         <img src={nobleLogo} alt="Noble Diagnostic Centre" />
@@ -691,11 +691,14 @@ export function PrintReport() {
 
 /** Blank stand-in for the letterhead band in letterhead-paper preview mode.
  *  Reserves the space the logo would take and says what the space is for, so
- *  the preview mirrors the headless PDF. */
-function LetterheadZone({ sheet }: { sheet?: boolean }) {
+ *  the preview mirrors the headless PDF. On a client's 40mm stationery the
+ *  band is the true 14mm taller than Noble's 26mm, so the preview shows the
+ *  report starting where it really will. */
+function LetterheadZone({ sheet, tall }: { sheet?: boolean; tall?: boolean }) {
+  const cls = ['lr__zone', sheet && 'lr__zone--sheet', tall && 'lr__zone--tall'].filter(Boolean).join(' ');
   return (
-    <div className={sheet ? 'lr__zone lr__zone--sheet' : 'lr__zone'} aria-hidden>
-      <span>Pre-printed letterhead area</span>
+    <div className={cls} aria-hidden>
+      <span>{tall ? 'Pre-printed letterhead area · 40 mm' : 'Pre-printed letterhead area'}</span>
     </div>
   );
 }

@@ -152,6 +152,11 @@
   padding-bottom: 12px;
 }
 .lr__zone--sheet { margin-bottom: 12px; height: 40px; padding-bottom: 8px; }
+/* A client's 40mm band: 14mm (53px) taller than Noble's, the real difference
+   between the two page boxes, so the preview starts the report where the
+   printer will. */
+.lr__zone--tall { height: 109px; }
+.lr__zone--sheet.lr__zone--tall { height: 93px; }
 .lr__zone span {
   font-size: 9px;
   text-transform: uppercase;
