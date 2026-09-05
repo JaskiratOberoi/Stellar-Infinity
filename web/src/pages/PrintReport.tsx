@@ -607,12 +607,18 @@ export function PrintReport() {
             <p className="lr__empty">No results available for this sample.</p>
           ) : splitDept ? (
             /* The complete-report layout: each department is its own run of
-               pages, none ever sharing a sheet with the next. */
-            deptGroups.map((g, gi) => (
-              <div key={gi} className="lr__section">
-                {blockTable(g.deptName, g.secs, gi === deptGroups.length - 1)}
-              </div>
-            ))
+               pages, none ever sharing a sheet with the next — and within a
+               department every SECTION (a profile, or a run of bare tests)
+               starts a sheet too, exactly as the split preview draws it. The
+               run used to flow a department's sections into one table, so
+               KFT and Iron Profile shared a sheet in the PID download that
+               the operator had just approved on separate sheets. */
+            deptGroups.flatMap((g, gi) =>
+              g.secs.map((sec, si) => (
+                <div key={`${gi}-${si}`} className="lr__section">
+                  {sectionTable(sec, gi === deptGroups.length - 1 && si === g.secs.length - 1)}
+                </div>
+              )))
           ) : split ? (
             sections.map((sec, si) => {
               const table = sectionTable(sec, si === sections.length - 1);
