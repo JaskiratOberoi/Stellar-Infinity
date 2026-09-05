@@ -398,7 +398,11 @@
    the LIS printed before it, and a report is read against the last one. */
 .lr__abnormal { font-size: 13px; font-weight: 700; color: #b91c1c; }
 
-.lr__note-row td { padding-bottom: 4px; font-size: 10px; color: #1f2937; }
+/* Prose blocks — interpretation, notes, comments, descriptive results — sit a
+   point larger than they did and in near-black ink: at 10–10.5px in grey they
+   were the hardest thing on the sheet to read, and they are what a clinician
+   reads twice. */
+.lr__note-row td { padding-bottom: 4px; font-size: 11px; color: #111827; }
 .lr__note-row b { font-weight: 700; }
 
 /* ---------- interpretation ----------
@@ -406,14 +410,17 @@
    as a different kind of thing. Inside the table, so it travels with the
    numbers it belongs to when the report is split. */
 
-.lr__interp-cell { padding: 4px 0; }
-.lr__interp { border: 1px solid #d1d5db; padding: 8px; break-inside: avoid; }
+.lr__interp-cell { padding: 3px 0; }
+/* padding 6px and leading 1.3, not 8px and 1.375: the text went up a point
+   for legibility, and this is what keeps a notes-heavy test (Western Blot)
+   on the one sheet the LIS prints it on. */
+.lr__interp { border: 1px solid #d1d5db; padding: 6px 8px; break-inside: avoid; }
 .lr__interp h3 { margin-bottom: 2px; font-size: 11px; font-weight: 600; }
 .lr__interp p {
   white-space: pre-line;
-  font-size: 10.5px;
-  line-height: 1.375;
-  color: #374151;
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: #111827;
 }
 
 .lr__interp-img { break-inside: avoid; }
@@ -424,9 +431,9 @@
    column. Sizes sit with the interpretation text — prose, not figures. */
 .lr__rich-row td { padding: 2px 0 6px; }
 .lr__rich {
-  font-size: 10.5px;
+  font-size: 11.5px;
   line-height: 1.4;
-  color: #111827;
+  color: #000;
 }
 .lr__rich p, .lr__rich div { margin: 0 0 4px; }
 .lr__rich ul, .lr__rich ol { margin: 0 0 4px; padding-left: 18px; }
@@ -462,9 +469,9 @@
 .lr__notes ol {
   list-style: decimal;
   padding-left: 20px;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.25;
-  color: #1f2937;
+  color: #111827;
 }
 .lr__notes li + li { margin-top: 2px; }
 
