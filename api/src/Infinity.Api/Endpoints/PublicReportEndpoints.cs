@@ -179,7 +179,7 @@ public static class PublicReportEndpoints
                 ct).ConfigureAwait(false);
 
             log.LogInformation("publicreport.served sid={Sid}", sid);
-            return Results.File(pdf, "application/pdf", $"Report_{Sanitise(sid)}.pdf");
+            return Results.File(pdf, "application/pdf", Reports.ReportFileName.For(row, sid));
         }
         catch (RenderFailedException)
         {
@@ -213,7 +213,4 @@ public static class PublicReportEndpoints
             return null;
         }
     }
-
-    private static string Sanitise(string s) =>
-        new(s.Where(c => char.IsLetterOrDigit(c) || c is '-' or '_').ToArray());
 }

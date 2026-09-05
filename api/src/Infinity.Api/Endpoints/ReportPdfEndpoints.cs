@@ -305,7 +305,7 @@ public static class ReportPdfEndpoints
         if (await cache.GetBytesAsync(key, ct).ConfigureAwait(false) is { } cached)
         {
             http.Response.Headers["X-Report-Cache"] = "hit";
-            return Results.File(cached, "application/pdf", $"Report_{Sanitise(sid)}.pdf");
+            return Results.File(cached, "application/pdf", ReportFileName.For(row!, sid));
         }
 
         var attachments = await CollectGraphsAsync(graphs, sid, withGraph == true, ct).ConfigureAwait(false);
@@ -329,7 +329,7 @@ public static class ReportPdfEndpoints
 
             await cache.SetBytesAsync(key, pdf, PdfCacheTtl, ct).ConfigureAwait(false);
             http.Response.Headers["X-Report-Cache"] = "miss";
-            return Results.File(pdf, "application/pdf", $"Report_{Sanitise(sid)}.pdf");
+            return Results.File(pdf, "application/pdf", ReportFileName.For(row!, sid));
         }
         catch (RenderFailedException)
         {
@@ -389,6 +389,11 @@ public static class ReportPdfEndpoints
          * branch below.
          */
         var deptMajor = body!.DeptMajor == true;
+        // For the file's name: a bundle that is ONE patient's — the PID download,
+        // or a multi-select that happened to pick one person — is named for
+        // them with their PID; a bundle spanning patients keeps the count.
+        Reads.WorksheetRow? firstRow = null;
+        var onePatient = true;
         // One paper for the whole bundle: it is one print run into one tray.
         var sheet = ReportPaper.Resolve(body.Paper, body.Headless);
         if (!deptMajor)
@@ -431,6 +436,8 @@ public static class ReportPdfEndpoints
 
             allowed.Add(sid);
             rowStamps[sid] = row!.LastModifiedAt;
+            firstRow ??= row;
+            if (row.Pid != firstRow.Pid) onePatient = false;
 
             // The complete report is cut into department units below, so there
             // is no whole-sample document to build here. Gating still had to
@@ -603,7 +610,10 @@ public static class ReportPdfEndpoints
                     http.Response.Headers["X-Reports-Skipped"] = System.Text.Json.JsonSerializer.Serialize(skipped);
 
                 var when = NobleTime.NowForNoble().ToString("yyyyMMdd-HHmm");
-                return Results.File(patientPdf, "application/pdf", $"Reports_{allowed.Count}_{when}.pdf");
+                return Results.File(patientPdf, "application/pdf",
+                    firstRow is not null && onePatient
+                        ? ReportFileName.For(firstRow, firstRow.Pid.ToString())
+                        : $"Reports_{allowed.Count}_{when}.pdf");
             }
             catch (RenderFailedException)
             {
@@ -660,7 +670,10 @@ public static class ReportPdfEndpoints
                 http.Response.Headers["X-Reports-Skipped"] = System.Text.Json.JsonSerializer.Serialize(skipped);
 
             var stamp = NobleTime.NowForNoble().ToString("yyyyMMdd-HHmm");
-            return Results.File(pdf, "application/pdf", $"Reports_{included.Count}_{stamp}.pdf");
+            return Results.File(pdf, "application/pdf",
+                firstRow is not null && onePatient
+                    ? ReportFileName.For(firstRow, firstRow.Pid.ToString())
+                    : $"Reports_{included.Count}_{stamp}.pdf");
         }
         catch (RenderFailedException)
         {
