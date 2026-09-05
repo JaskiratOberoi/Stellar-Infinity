@@ -373,19 +373,37 @@ export function PrintReport() {
         .map((item) => ({ item, key: keyOf(item) }));
       if (entries.length === 0) continue;
 
+      /* A TEST is never split across sections. A multi-part test — Western
+         Blot's Envelope / GAG / POL / Inference sub-heads, a CBC's analyzer and
+         differential groups — arrives as several consecutive group items that
+         share a testId, and the LIS prints them as one block: sub-headings in
+         sequence, the clinical notes once at the end. Whether the notes make
+         the block "its own section" is decided for the block, not per
+         sub-group; before this, the notes on each sub-head made each one a
+         section, and a one-page Western Blot became five. */
+      const tidOf = (item: ReportItem): number | null =>
+        item.kind === 'panel' ? null : (item.group?.testId ?? item.testId ?? null);
+
       let firstInDept = true;
-      let run: Section | null = null;
+      let cur: Section | null = null;
+      let curBare = false;
+      let curTid: number | null = null;
       for (const entry of entries) {
-        if (entry.item.kind === 'panel' || hasOwnContent(entry.item)) {
-          out.push({ deptName: dept.name, deptStart: firstInDept, entries: [entry] });
-          run = null;
+        const tid = tidOf(entry.item);
+        if (cur && tid != null && tid === curTid) {
+          cur.entries.push(entry);
+        } else if (entry.item.kind === 'panel' || hasOwnContent(entry.item)) {
+          cur = { deptName: dept.name, deptStart: firstInDept, entries: [entry] };
+          out.push(cur);
+          curBare = false;
+        } else if (cur && curBare) {
+          cur.entries.push(entry);
         } else {
-          if (!run) {
-            run = { deptName: dept.name, deptStart: firstInDept, entries: [] };
-            out.push(run);
-          }
-          run.entries.push(entry);
+          cur = { deptName: dept.name, deptStart: firstInDept, entries: [entry] };
+          out.push(cur);
+          curBare = true;
         }
+        curTid = tid;
         firstInDept = false;
       }
     }

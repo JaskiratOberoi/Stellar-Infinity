@@ -426,6 +426,27 @@ export function buildSampleReport(results: readonly TestResult[]): SampleReport 
         nabl: t.nabl === true,
         rows: [],
       };
+      /*
+       * The interpretation on a Head is the TEST's — m.Interpretation, one
+       * text per test, stamped on every row under it. A multi-part test
+       * (Western Blot: Envelope / GAG / POL antigens / Inference) therefore
+       * arrives with the same clinical notes on each of its sub-heads, and
+       * printing them under each one put the notes on the page four times,
+       * and made every sub-group its own section. The LIS prints them ONCE,
+       * after the last sub-group. So when a Head follows another of the same
+       * test carrying the identical text, the earlier one lets go of it: the
+       * notes end up on the test's last group and nowhere else.
+       */
+      if (
+        head &&
+        t.testId != null &&
+        head.tid === t.testId &&
+        head.group.interpretation != null &&
+        head.group.interpretation === group.interpretation
+      ) {
+        head.group.interpretation = null;
+        if (head.group.interpretationImage === group.interpretationImage) head.group.interpretationImage = null;
+      }
       if (inPanel) {
         panel!.item.panel!.children.push({ kind: 'group', group });
       } else {
