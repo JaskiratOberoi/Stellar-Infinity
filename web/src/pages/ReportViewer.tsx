@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { downloadFile } from '../lib/format';
 import type { WorksheetRow } from './Reports';
 import { PaperSelect, usePaper } from '../components/PaperSelect';
+import { BuTag } from '../components/BuTag';
 
 export interface TestResult {
   resultId: number;
@@ -132,11 +133,15 @@ export type FullRow = WorksheetRow & {
  * move a page break — seconds of blank white for a toggle.
  */
 export function ReportViewer({
-  sid, patientName, onClose, onSmart,
+  sid, patientName, clientCode, businessUnit, onClose, onSmart,
 }: {
   sid: string;
   /** For the window title only; the report draws its own header. */
   patientName?: string | null;
+  /** The centre and its processing lab, for the title bar's tag — the same
+   *  pair the list row shows, from the row the caller already has. */
+  clientCode?: string | null;
+  businessUnit?: string | null;
   onClose: () => void;
   /** Opens the patient-facing Smart Report. Omitted where it is not offered. */
   onSmart?: (sid: string) => void;
@@ -268,6 +273,7 @@ export function ReportViewer({
           <div className="preview__who">
             <p className="preview__name">
               {patientName || 'Report'} <span className="mono muted">· {sid}</span>
+              {clientCode && <span className="muted"> · {clientCode}<BuTag unit={businessUnit} /></span>}
             </p>
             {error && <p className="preview__err">{error}</p>}
             {!error && counts.total > 0 && counts.remaining < counts.total && (

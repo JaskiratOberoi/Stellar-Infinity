@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { BuTag } from './Reports';
+import { BuTag } from '../components/BuTag';
 import { displayTestName } from '../lib/reportFormat';
 import {
   worksheetApi,
@@ -257,9 +257,11 @@ function RangeCell({ text }: { text: string }) {
       <div
         className="range-cell__clamp"
         tabIndex={multiline ? 0 : -1}
-        // Native tooltip as a floor: it survives touch, high-contrast modes and
-        // anything that stops the custom panel rendering.
-        title={multiline ? text : undefined}
+        // No native title: it was meant as a floor under the panel, and the
+        // browser drew it ON TOP of the panel instead — two tooltips, the
+        // ugly one in front. The panel is the tooltip; it opens on hover and
+        // on keyboard focus, which is the floor that matters.
+        aria-label={multiline ? text : undefined}
         onMouseEnter={(e) => multiline && show(e.currentTarget)}
         onMouseLeave={() => setAt(null)}
         onFocus={(e) => multiline && show(e.currentTarget)}

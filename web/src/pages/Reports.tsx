@@ -8,6 +8,7 @@ import { InfinityLoader } from '../components/InfinityLoader';
 import { Pager } from '../components/Pager';
 import { useAuth } from '../auth/AuthContext';
 import { TestList } from '../components/TestList';
+import { BuTag } from '../components/BuTag';
 import {
   SampleFilters, ActiveFilterChips, useFilterOptions, applyFilterParams,
   initialFilters, SAMPLE_STATUSES, type SampleFilterValues,
@@ -83,25 +84,6 @@ export const REPORTABLE_STATUSES = [6, 7, 8, 9];
 
 /** What one balance lock looks like, as /api/reports/locks reports it. */
 interface RowLock { reason: 'patient' | 'client' | null; dueAmount: number }
-
-/**
- * The lab the tube is processed at — the sample's business unit — as the LIS
- * badges it beside the client code: the first three letters, bold, so a
- * bench in Delhi can tell a Haldwani tube (HAL) from a Srinagar one (SRI)
- * without reading the code. The full name is on hover.
- */
-export function BuTag({ unit }: { unit: string | null | undefined }) {
-  const code = (unit ?? '').trim();
-  // Delhi is the default, not a place worth a tag: the LIS leaves a QUGEN
-  // tube — processed at Hari Nagar, including everything inwarded there —
-  // bare, and marks only the tubes that run elsewhere.
-  if (!code || /^qugen$/i.test(code)) return null;
-  return (
-    <span className="badge badge--muted bu-tag" title={`Processed at ${code}`}>
-      {code.slice(0, 3).toUpperCase()}
-    </span>
-  );
-}
 
 /** The same sentence the server's 423 sends, so both paths say one thing. */
 const lockMsg = (l: RowLock) =>
@@ -800,6 +782,8 @@ export function Reports() {
           // name on the modal's own title bar, so the row we already have is
           // the right source and costs nothing.
           patientName={rows.find((r) => r.sid === openSid)?.patientName ?? null}
+          clientCode={rows.find((r) => r.sid === openSid)?.clientCode ?? null}
+          businessUnit={rows.find((r) => r.sid === openSid)?.businessUnit ?? null}
           onClose={() => setOpenSid(null)}
           // Offered ONLY where the patient bought it. Passing undefined is what
           // hides the button — see ReportViewer, which omits the control when
@@ -981,6 +965,14 @@ function PatientReportViewer({ pid, patientName, rows, onClose, overrideLock }: 
           <div className="preview__who">
             <p className="preview__name">
               {patientName || 'Complete report'} <span className="mono muted">· PID {pid}</span>
+              {/* The centre and processing lab of the sample on screen, as
+                  the row shows them — the tabs switch samples, this follows. */}
+              {(() => {
+                const cur = rows.find((r) => r.sid === activeSid);
+                return cur?.clientCode
+                  ? <span className="muted"> · {cur.clientCode}<BuTag unit={cur.businessUnit} /></span>
+                  : null;
+              })()}
             </p>
             {error && <p className="preview__err">{error}</p>}
             {!error && (
