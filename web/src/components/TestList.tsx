@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { plainText } from '../lib/format';
+import { plainText, withoutPackageTag } from '../lib/format';
 
 /**
  * The CSV's separator, once plainText has been through it, is a comma followed
@@ -24,9 +24,18 @@ const countTests = (s: string) => (s ? s.split(/,\s/).length : 0);
  * names are. On a wide screen the cell is one clipped line with the full string
  * on its title attribute, the measurement reports no vertical overflow, and no
  * button is rendered at all.
+ *
+ * `packages` is the package (the LIS's "master profile" — ROHTAK HR203A,
+ * GENOMIC 20) the tube was booked under, named on its own line above the
+ * list. The legacy worklist showed it as a bold "[ROHTAK HR203A]" tacked onto
+ * the CSV, but only on some of a package's tubes; the server now reads it from
+ * the order line instead, and that tag is dropped from the text so the name is
+ * not printed twice. Where the server sends no package the CSV is shown as-is,
+ * tag and all, so nothing that was visible before goes missing.
  */
-export function TestList({ names }: { names: string | null | undefined }) {
-  const text = useMemo(() => plainText(names), [names]);
+export function TestList({ names, packages }: { names: string | null | undefined; packages?: string | null }) {
+  const pkg = packages?.trim() || null;
+  const text = useMemo(() => plainText(pkg ? withoutPackageTag(names) : names), [names, pkg]);
   const count = useMemo(() => countTests(text), [text]);
 
   const ref = useRef<HTMLDivElement | null>(null);
@@ -54,6 +63,12 @@ export function TestList({ names }: { names: string | null | undefined }) {
 
   return (
     <div className="clamp">
+      {pkg && (
+        <div className="testlist__pkg" title={`Package: ${pkg}`}>
+          <span className="testlist__pkg-label">Package</span>
+          <span className="testlist__pkg-name">{pkg}</span>
+        </div>
+      )}
       <div
         ref={ref}
         className={`cell__clip${open ? ' cell__clip--open' : ''}`}

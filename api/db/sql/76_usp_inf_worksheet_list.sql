@@ -168,6 +168,13 @@ BEGIN
             STAT.id                 AS status_code,
             STAT.status             AS status,
             S.testnames             AS test_names_csv,
+            -- The per-code type CSV the LIS writes beside testnames: 't'/'p'
+            -- for a test or profile booked on its own, 'mt'/'mp' for one that
+            -- came out of a package (a "master profile"). Not returned; it is
+            -- what decides whether the package lookup below applies to this
+            -- tube at all.
+            S.testtypes             AS test_types_csv,
+            S.patient_id            AS visit_id,
             P.order_number,
             P.bill_number,
             S.Sample_Comments       AS sample_comments,
@@ -262,41 +269,97 @@ BEGIN
               )
     )
     SELECT
-        H.client_code,
-        H.business_unit,
-        H.pid,
-        H.patient_name,
-        H.sex,
-        H.age,
-        H.age_unit,
-        H.sid,
-        H.sample_drawn,
-        H.regd_at,
-        H.last_modified_at,
-        H.status_code,
-        H.status,
-        H.test_names_csv,
-        H.order_number,
-        H.bill_number,
-        H.sample_comments,
-        H.clinical_history,
-        H.sample_type,
-        H.specimen_rank,
-        -- The count of the FILTERED set, before paging. This is what lets the
-        -- client say "showing 51-100 of 3,412" instead of guessing.
-        COUNT(*) OVER() AS total_count,
-        -- Distinct patients over the same set. COUNT(DISTINCT) has no windowed
-        -- form, so this is the textbook substitute: the highest dense rank
-        -- over pid IS the number of distinct pids, in the same single pass.
-        MAX(H.pid_rank) OVER () AS patient_count,
-        -- Echoed back by the client on every later page so the set stays fixed.
-        @snapshot AS as_of
-    FROM (SELECT H0.*, pid_rank = DENSE_RANK() OVER (ORDER BY H0.pid) FROM H H0) H
-    -- sid is unique per sample, so this ordering is total. Without the
-    -- tiebreak, OFFSET paging over tied regd_at values silently duplicates and
-    -- drops rows between pages.
-    ORDER BY H.regd_at DESC, H.sid DESC
-    OFFSET @offset ROWS FETCH NEXT @size ROWS ONLY
+        page.client_code,
+        page.business_unit,
+        page.pid,
+        page.patient_name,
+        page.sex,
+        page.age,
+        page.age_unit,
+        page.sid,
+        page.sample_drawn,
+        page.regd_at,
+        page.last_modified_at,
+        page.status_code,
+        page.status,
+        page.test_names_csv,
+        page.order_number,
+        page.bill_number,
+        page.sample_comments,
+        page.clinical_history,
+        page.sample_type,
+        page.specimen_rank,
+        page.total_count,
+        page.patient_count,
+        page.as_of,
+        /*
+         * The package this tube was booked under — what the LIS calls a master
+         * profile (ROHTAK HR203A, GENOMIC 20) — so the worklist can name it the
+         * way the legacy grid did.
+         *
+         * NOT read off testnames. The LIS appends "[PACKAGE]" to that CSV on
+         * only some of a package's tubes: a four-tube ROHTAK order tags the
+         * serum and EDTA tubes and leaves the fluoride and urine tubes as bare
+         * "Glucose - Fasting" and "Complete Urine Examination". The order line
+         * (tbl_med_mcc_patient_tests, test_type = 'Master') is the one record
+         * every tube shares, so it is read from there, and only for a tube
+         * whose type CSV says one of its codes came out of a package — a tube
+         * of tests booked on their own beside the package must not inherit it.
+         *
+         * Computed AFTER paging, on the derived table, so it costs one indexed
+         * seek per row shown rather than one per row matched.
+         */
+        CASE WHEN page.test_types_csv LIKE '%m%' THEN
+            (SELECT STRING_AGG(CONVERT(NVARCHAR(MAX), LTRIM(RTRIM(t.test_name))), N', ')
+                        WITHIN GROUP (ORDER BY t.id)
+             FROM dbo.tbl_med_mcc_patient_tests t
+             WHERE t.patient_id = page.visit_id
+               AND t.test_type = 'Master'
+               AND NULLIF(LTRIM(RTRIM(t.test_name)), '') IS NOT NULL)
+        END AS package_names
+    FROM (
+        SELECT
+            H.client_code,
+            H.business_unit,
+            H.pid,
+            H.patient_name,
+            H.sex,
+            H.age,
+            H.age_unit,
+            H.sid,
+            H.sample_drawn,
+            H.regd_at,
+            H.last_modified_at,
+            H.status_code,
+            H.status,
+            H.test_names_csv,
+            H.test_types_csv,
+            H.visit_id,
+            H.order_number,
+            H.bill_number,
+            H.sample_comments,
+            H.clinical_history,
+            H.sample_type,
+            H.specimen_rank,
+            -- The count of the FILTERED set, before paging. This is what lets the
+            -- client say "showing 51-100 of 3,412" instead of guessing.
+            COUNT(*) OVER() AS total_count,
+            -- Distinct patients over the same set. COUNT(DISTINCT) has no windowed
+            -- form, so this is the textbook substitute: the highest dense rank
+            -- over pid IS the number of distinct pids, in the same single pass.
+            MAX(H.pid_rank) OVER () AS patient_count,
+            -- Echoed back by the client on every later page so the set stays fixed.
+            @snapshot AS as_of
+        FROM (SELECT H0.*, pid_rank = DENSE_RANK() OVER (ORDER BY H0.pid) FROM H H0) H
+        -- sid is unique per sample, so this ordering is total. Without the
+        -- tiebreak, OFFSET paging over tied regd_at values silently duplicates and
+        -- drops rows between pages.
+        ORDER BY H.regd_at DESC, H.sid DESC
+        OFFSET @offset ROWS FETCH NEXT @size ROWS ONLY
+    ) AS page
+    -- Restated on the outside: a derived table's ORDER BY only serves its
+    -- OFFSET, and the rows it hands out carry no ordering guarantee.
+    ORDER BY page.regd_at DESC, page.sid DESC
     /* ----------------------------------------------------------------------
      * A plan per call, deliberately.
      *

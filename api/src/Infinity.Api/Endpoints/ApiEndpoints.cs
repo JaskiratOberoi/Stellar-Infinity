@@ -377,6 +377,9 @@ public static class ApiEndpoints
                 // WHY a pending sample is pending — the rejection reason or
                 // hold note the lab wrote in Sample_Comments.
                 r.SampleComments,
+                // The package the tube was booked under, named on the row as
+                // the legacy worklist named it.
+                r.PackageNames,
                 SmartReport = smartPids.Contains(r.Pid),
             }),
             // count is this page; total is the whole filtered set. Both are

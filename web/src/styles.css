@@ -3030,6 +3030,12 @@ select.preview__paper { width: 11.75rem; flex: none; }
 
 .smeta__item { display: flex; flex-direction: column; gap: .15rem; min-width: 0; }
 
+/* A field whose value is a list — the tests on the tube — takes the whole row.
+   In an 11rem column it would clip after two words and say nothing; across the
+   block it holds a package's worth of profiles on the one line the rest of the
+   block keeps to. */
+.smeta__item--wide { grid-column: 1 / -1; }
+
 /*
  * The labels are signposts, not content.
  *
@@ -4116,6 +4122,23 @@ td.cell--value [aria-label] { font-size: .8em; vertical-align: .12em; }
    with .cell--body: the cap above stops the column growing, this stops the row
    growing. Card mode trades the one line for four — see below. */
 .cell__clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The package a tube was booked under, on its own line above the test list.
+   The label is set like the identity block's signposts (.smeta dt) and the
+   name in the teal the entry grid gives a profile heading, so the two screens
+   say "this is a grouping, not an analyte" the same way. One line, clipped,
+   with the full name on the title attribute — the same rule as the list. */
+.testlist__pkg {
+  display: flex; align-items: baseline; gap: .4rem;
+  min-width: 0; margin-bottom: .12rem;
+  font-size: .74rem; font-weight: 600; color: var(--teal);
+}
+.testlist__pkg-label {
+  flex: none;
+  font-size: .6rem; font-weight: 500; letter-spacing: .085em; text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.testlist__pkg-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* The "show all" control that opens a clamped list. Hidden by default: a wide
    screen clips to one line and puts the whole string on the title attribute,

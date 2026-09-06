@@ -6,7 +6,7 @@ import {
   type WorksheetResultRow,
   type WorksheetSampleResponse,
 } from '../api/client';
-import { fmtDateTime, plainText } from '../lib/format';
+import { fmtDateTime, plainText, withoutPackageTag } from '../lib/format';
 import { AttachClip, Attachments, RowAttachments, useAttachments } from '../components/Attachments';
 import { SpellChecked } from '../components/SpellChecked';
 import { RichTextEditor } from '../components/RichTextEditor';
@@ -20,9 +20,9 @@ import { InfinityLoader } from '../components/InfinityLoader';
  * A dt/dd pair rather than two divs: this is a description list in the literal
  * sense, and it gives a screen reader the label-value relationship for free.
  */
-function Meta({ label, value, mono }: { label: string; value?: string | null; mono?: boolean }) {
+function Meta({ label, value, mono, wide }: { label: string; value?: string | null; mono?: boolean; wide?: boolean }) {
   return (
-    <div className="smeta__item">
+    <div className={`smeta__item${wide ? ' smeta__item--wide' : ''}`}>
       <dt>{label}</dt>
       <dd className={mono ? 'mono' : undefined} title={value ?? undefined}>
         {value ? value : <span className="muted">—</span>}
@@ -629,6 +629,19 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
               <Meta label="Sample Drawn" value={fmtOrDash(header.sampleDrawn)} />
               <Meta label="Registered" value={fmtOrDash(header.registeredAt)} />
               <Meta label="Report Date" value={fmtOrDash(header.lastModifiedAt)} />
+              {/* The package the tube was booked under, and what is on it —
+                  the two things the LIS worklist named on the row and this
+                  screen did not. The grid below shows the same profiles as
+                  heading rows, but spread down forty analytes; this is the
+                  one-line answer at the top. The package's legacy "[NAME]"
+                  tag is dropped from the list once the package has its own
+                  field, so it is not read twice. */}
+              <Meta label="Package" value={header.packageNames} />
+              <Meta
+                label="Tests"
+                wide
+                value={plainText(header.packageNames?.trim() ? withoutPackageTag(header.testNames) : header.testNames) || null}
+              />
             </dl>
 
             {/* ---- state banners ---- */}

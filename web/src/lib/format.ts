@@ -152,6 +152,25 @@ const ENTITIES: Record<string, string> = {
 };
 
 /**
+ * The package marker the LIS writes into a sample's test CSV, exactly as it
+ * writes it: "&nbsp;<i><b>[ROHTAK HR203A]</b></i>", glued to the name of one of
+ * the package's tests. Matched on the whole markup rather than on brackets —
+ * eleven catalogue tests carry brackets of their own in their names.
+ */
+const LIS_PACKAGE_TAG = /(?:&nbsp;|\s)*<i>\s*<b>\s*\[[^\]]*\]\s*<\/b>\s*<\/i>/gi;
+
+/**
+ * A test CSV with the LIS's "[PACKAGE]" marker removed, for a screen that
+ * names the package in a field of its own. The marker is only ever on some
+ * of a package's tubes, so the server reads the package from the order line;
+ * once it is shown that way, leaving the marker in the list prints the same
+ * name twice.
+ */
+export function withoutPackageTag(s: string | null | undefined): string | null | undefined {
+  return s ? s.replace(LIS_PACKAGE_TAG, '') : s;
+}
+
+/**
  * LIS free text, made printable.
  *
  * The LIS stores presentation inside its own data. A profile's test list comes

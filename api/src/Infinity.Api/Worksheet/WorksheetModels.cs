@@ -98,7 +98,18 @@ public sealed record WorksheetSampleHeader(
     /// <summary>Master row's name, or the free-text fallback when unmatched.</summary>
     string? ReferringCustomer = null,
     /// <summary>Specimen, e.g. "WB - EDTA".</summary>
-    string? SampleType = null);
+    string? SampleType = null,
+    /// <summary>
+    /// What is on the tube, in the LIS's own CSV (tbl_med_mcc_patient_samples
+    /// .testnames): profile and test names as booked, with the legacy markup
+    /// the LIS worklist rendered inline. The UI cleans it.
+    /// </summary>
+    string? TestNames = null,
+    /// <summary>
+    /// The package(s) — LIS "master profiles" — the tube was booked under, from
+    /// the visit's order lines. Null for a tube of tests booked on their own.
+    /// </summary>
+    string? PackageNames = null);
 
 /// <summary>A rule that will auto-authorize part of this sample, shown up front.</summary>
 public sealed record AutoAuthRuleInForce(

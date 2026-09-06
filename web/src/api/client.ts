@@ -306,6 +306,11 @@ export interface WorksheetSampleHeader {
   referringCustomer: string | null;
   /** Specimen, e.g. "WB - EDTA". */
   sampleType: string | null;
+  /** What is on the tube — the LIS's own profile/test CSV, markup included.
+   *  Optional: arrives with a procedure redeploy. */
+  testNames?: string | null;
+  /** The package (LIS "master profile") the tube was booked under, if any. */
+  packageNames?: string | null;
 }
 
 export interface WorksheetResultRow {

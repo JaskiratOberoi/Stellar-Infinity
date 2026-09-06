@@ -41,6 +41,13 @@ export interface WorksheetRow {
   /** 1 EDTA · 2 fluoride · 3 serum · 4 urine · 5 the rest. */
   specimenRank?: number | null;
   /**
+   * The package — the LIS's "master profile", e.g. ROHTAK HR203A — this tube
+   * was booked under. Null for tests booked on their own. Read from the
+   * visit's order lines, not the test CSV, which the LIS tags on only some of
+   * a package's tubes.
+   */
+  packageNames?: string | null;
+  /**
    * Did this patient's order include the paid Smart Report (SMART-RPT)?
    *
    * The Smart Report is a ₹99 extra, not something every report has. The
@@ -588,7 +595,7 @@ export function Reports() {
                     </td>
                     <td className="muted cell--meta" data-label="Client">{r.clientCode ?? '—'}</td>
                     <td className="cell--body" data-label="Tests">
-                      <TestList names={r.testNames} />
+                      <TestList names={r.testNames} packages={r.packageNames} />
                     </td>
                     <td className="cell--tag">
                       <StatusBadge status={r.status} statusCode={r.statusCode} />

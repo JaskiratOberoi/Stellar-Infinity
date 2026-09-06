@@ -127,7 +127,26 @@ BEGIN
                  NULLIF(LTRIM(RTRIM(p.ref_doctor_other)), ''))   AS ref_doctor,
         COALESCE(NULLIF(LTRIM(RTRIM(cust.customer_name)), ''),
                  NULLIF(LTRIM(RTRIM(p.ref_customer_other)), '')) AS ref_customer,
-        sm.Sampletype                   AS sample_type
+        sm.Sampletype                   AS sample_type,
+
+        -- What is on the tube, as the LIS worklist names it: the profile and
+        -- test names booked onto this sample, in the LIS's own CSV. The grid
+        -- below shows the same profiles as heading rows, but spread down forty
+        -- analytes; this is the one-line answer at the top.
+        s.testnames                     AS test_names,
+        -- The package (LIS "master profile") the tube was booked under, from
+        -- the order line every tube of the visit shares. Only for a tube whose
+        -- type CSV says a code came out of a package ('mt'/'mp'); see the same
+        -- rule, and why testnames cannot be trusted for it, in
+        -- usp_inf_worksheet_list.
+        CASE WHEN s.testtypes LIKE '%m%' THEN
+            (SELECT STRING_AGG(CONVERT(NVARCHAR(MAX), LTRIM(RTRIM(t.test_name))), N', ')
+                        WITHIN GROUP (ORDER BY t.id)
+             FROM dbo.tbl_med_mcc_patient_tests t
+             WHERE t.patient_id = s.patient_id
+               AND t.test_type = 'Master'
+               AND NULLIF(LTRIM(RTRIM(t.test_name)), '') IS NOT NULL)
+        END                             AS package_names
     FROM dbo.tbl_med_mcc_patient_samples s
     JOIN dbo.tbl_med_mcc_patient_master  p ON p.id = s.patient_id
     JOIN dbo.tbl_med_mcc_unit_master     u ON u.id = p.mcc_code

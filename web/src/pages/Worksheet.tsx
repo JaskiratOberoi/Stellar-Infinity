@@ -471,7 +471,7 @@ export function Worksheet() {
 
                       <td className="muted cell--meta" data-label="Client">{r.clientCode ?? '—'}</td>
                       <td className="cell--body" data-label="Tests">
-                        <TestList names={r.testNames} />
+                        <TestList names={r.testNames} packages={r.packageNames} />
                       </td>
                       <td className="cell--tag">
                         <StatusBadge status={r.status} statusCode={r.statusCode} />

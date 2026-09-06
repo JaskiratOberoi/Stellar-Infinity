@@ -112,7 +112,13 @@ public sealed record WorksheetRow(
     /// here, status 3), a QNS/recollect note, a hold. Surfaced so a centre
     /// watching a pending sample sees the reason, not just the status.
     /// </summary>
-    string? SampleComments = null);
+    string? SampleComments = null,
+    /// <summary>
+    /// The package(s) — LIS "master profiles", e.g. ROHTAK HR203A — the tube
+    /// was booked under, read from the visit's order lines by the worklist
+    /// procedure. Null for a tube of tests booked on their own. List rows only.
+    /// </summary>
+    string? PackageNames = null);
 
 public sealed record WorksheetPage(IReadOnlyList<WorksheetRow> Rows, int Count);
 
@@ -450,7 +456,8 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
                         // the old procedure in the window between the two.
                         SampleType: TryStr(reader, "sample_type"),
                         SpecimenRank: TryInt(reader, "specimen_rank"),
-                        SampleComments: TryStr(reader, "sample_comments")));
+                        SampleComments: TryStr(reader, "sample_comments"),
+                        PackageNames: TryStr(reader, "package_names")));
                 }
 
                 return new WorksheetListPage(rows, total, pageNo, size, NobleTime.ToIst(snapshot), patients);
