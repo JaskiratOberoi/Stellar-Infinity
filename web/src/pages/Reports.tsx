@@ -297,7 +297,9 @@ export function Reports() {
     setOverrideBusy(sid);
     try {
       const q = new URLSearchParams({
-        overrideLock: '1', withGraph: String(withGraphs), paper, split: 'true',
+        // 'true', not '1': the route binds this to a bool, and ASP.NET reads
+        // only true/false there — '1' is a 400 before the handler runs.
+        overrideLock: 'true', withGraph: String(withGraphs), paper, split: 'true',
       });
       await downloadFile(`/api/reports/${encodeURIComponent(sid)}/pdf?${q}`);
       showToast(`Downloaded over a hold of ₹${Math.round(l.dueAmount).toLocaleString('en-IN')} — recorded in the audit trail.`);
