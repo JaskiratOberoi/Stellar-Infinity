@@ -256,7 +256,7 @@ export function Reports() {
    * download beyond what the operator can see would hand them a document they
    * did not ask for and cannot check.
    */
-  const downloadPatient = async (pid: number, sids: string[], paper: Paper) => {
+  const downloadPatient = async (pid: number, sids: string[], paper: Paper, includeHeld = false) => {
     setPidBusy(pid);
     setMergeError(null);
     try {
@@ -268,11 +268,16 @@ export function Reports() {
         // departments prints in both places. splitDept rides along because each
         // of those runs is still a department that never shares a page with the
         // next. The paper answer is per download — see PidReportButton.
+        // overrideLock: the Super Admin's choice to include this patient's
+        // held reports; the server honours it for that role alone and writes
+        // each release to the audit trail.
         body: JSON.stringify({
           sids, withGraph: withGraphs, splitDept: true, deptMajor: true, paper,
+          overrideLock: includeHeld || undefined,
         }),
         fallbackName: `Reports_PID_${pid}.pdf`,
       });
+      if (includeHeld) showToast('Downloaded including held reports — recorded in the audit trail.');
     } catch (e) {
       setMergeError(e instanceof Error ? e.message : 'The download failed.');
     } finally {
@@ -562,21 +567,31 @@ export function Reports() {
                               ? `Download all ${groupSize} of this patient's reports on this page as one PDF`
                               : "Download this patient's report"
                           }
-                          onDownload={(lh) => {
+                          /* The Super Admin's override, offered only where
+                             this patient actually has a held report: the
+                             menu then carries a tick to include them. */
+                          override={superAdmin ? (() => {
+                            const held = (grouped.find((g) => g.rows.some((x) => x.sid === r.sid))?.rows ?? [r])
+                              .filter((x) => REPORTABLE_STATUSES.includes(x.statusCode ?? -1) && locks[x.sid]).length;
+                            return held > 0 ? { count: held } : undefined;
+                          })() : undefined}
+                          onDownload={(lh, includeHeld) => {
                             /* Only samples a report EXISTS for. With the
                                status filter on Any, the group can hold
                                pending or tested samples — the server skips
                                those regardless (425), but sending them just
                                produces a document quieter than the list
-                               implied. Same eligibility as Review & edit. */
+                               implied. Same eligibility as Review & edit.
+                               Held samples come in only on the Super Admin's
+                               explicit tick. */
                             const eligible = (grouped.find((g) => g.rows.some((x) => x.sid === r.sid))?.rows ?? [r])
-                              .filter((x) => REPORTABLE_STATUSES.includes(x.statusCode ?? -1) && !locks[x.sid])
+                              .filter((x) => REPORTABLE_STATUSES.includes(x.statusCode ?? -1) && (includeHeld || !locks[x.sid]))
                               .map((x) => x.sid);
                             if (eligible.length === 0) {
                               showToast('None of this patient’s reports are ready to download yet.');
                               return;
                             }
-                            void downloadPatient(r.pid, eligible, lh);
+                            void downloadPatient(r.pid, eligible, lh, includeHeld);
                           }}
                           onPreview={() => {
                             const all = grouped.find((g) => g.rows.some((x) => x.sid === r.sid))?.rows ?? [r];

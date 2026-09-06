@@ -3969,6 +3969,20 @@ select.preview__paper { width: 11.75rem; flex: none; }
 .pidmenu button:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
 .pidmenu button svg { width: 15px; height: 15px; flex: none; opacity: .7; }
 
+/* The Super Admin's tick at the foot of the menu: set apart from the paper
+   rows by a hairline, and in the warn tint the Locked pill wears, so it reads
+   as the exception it is rather than a fourth kind of paper. */
+.pidmenu__override {
+  display: flex; align-items: center; gap: .5rem;
+  margin-top: .15rem; padding: .45rem .7rem;
+  border-top: 1px solid var(--line); border-radius: 0 0 7px 7px;
+  font-size: .8rem; color: var(--ink); cursor: pointer; white-space: nowrap;
+}
+.pidmenu__override:hover { background: var(--warn-soft); }
+.pidmenu__override input { flex: none; margin: 0; }
+.pidmenu__override span { display: flex; flex-direction: column; line-height: 1.2; }
+.pidmenu__override small { font-size: .62rem; letter-spacing: .06em; text-transform: uppercase; color: var(--warn); }
+
 /* ---------- checkboxes ---------- */
 
 /* Styled with appearance:none on the REAL input rather than a hidden input

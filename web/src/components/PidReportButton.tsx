@@ -19,7 +19,7 @@ import { PAPER_OPTIONS, type Paper } from './PaperSelect';
  * of opening, and any scroll closes the menu rather than letting it drift
  * away from its row.
  */
-export function PidReportButton({ pid, busy, disabled, title, count, onDownload, onPreview }: {
+export function PidReportButton({ pid, busy, disabled, title, count, onDownload, onPreview, override }: {
   pid: number;
   /** THIS patient's download is being prepared. */
   busy: boolean;
@@ -28,11 +28,23 @@ export function PidReportButton({ pid, busy, disabled, title, count, onDownload,
   title: string;
   /** Sample count suffix (×N) when the patient has several on this page. */
   count?: number;
-  onDownload: (paper: Paper) => void;
+  /** `includeHeld` is the Super Admin's tick below — true only when the
+   *  override row was offered and ticked. */
+  onDownload: (paper: Paper, includeHeld: boolean) => void;
   /** Open the complete report to review and untick tests before downloading. */
   onPreview?: () => void;
+  /**
+   * The Super Admin's balance-hold override. Given, the menu carries a tick
+   * to include the patient's held reports in the download; the count names
+   * how many, where the page knows. Offered to that role only — the caller
+   * decides — and honoured by the server for that role only.
+   */
+  override?: { count?: number };
 }) {
   const [at, setAt] = useState<{ x: number; y: number; up: boolean } | null>(null);
+  // Off on every opening: releasing a held report is a decision taken each
+  // time, not a setting that lingers from the last patient.
+  const [includeHeld, setIncludeHeld] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLSpanElement>(null);
 
@@ -41,8 +53,10 @@ export function PidReportButton({ pid, busy, disabled, title, count, onDownload,
   const toggle = () => {
     if (at) { close(); return; }
     const r = btnRef.current!.getBoundingClientRect();
-    // Four rows of menu need ~170px; open upward when the row sits lower.
-    const up = window.innerHeight - r.bottom < 190;
+    // Four rows of menu need ~170px (five with the override); open upward
+    // when the row sits lower.
+    const up = window.innerHeight - r.bottom < (override ? 230 : 190);
+    setIncludeHeld(false);
     setAt({ x: r.left, y: up ? r.top : r.bottom, up });
   };
 
@@ -70,7 +84,7 @@ export function PidReportButton({ pid, busy, disabled, title, count, onDownload,
     };
   }, [at]);
 
-  const pick = (paper: Paper) => { close(); onDownload(paper); };
+  const pick = (paper: Paper) => { close(); onDownload(paper, !!override && includeHeld); };
 
   return (
     <>
@@ -149,6 +163,26 @@ export function PidReportButton({ pid, busy, disabled, title, count, onDownload,
               {o.label}
             </button>
           ))}
+          {/* Super Admin only: include the patient's balance-held reports.
+              A tick, not a fourth set of paper rows — the paper is still
+              chosen above; this only widens what goes onto it. The download
+              is written to the audit trail with what was owed. */}
+          {override && (
+            <label className="pidmenu__override"
+                   title="Super Admin: include reports on hold for an outstanding balance. Each one released is recorded in the audit trail.">
+              <input
+                type="checkbox"
+                checked={includeHeld}
+                onChange={(e) => setIncludeHeld(e.target.checked)}
+              />
+              <span>
+                {override.count != null
+                  ? `Include ${override.count} held report${override.count === 1 ? '' : 's'}`
+                  : 'Include held reports'}
+                <small>Super Admin override</small>
+              </span>
+            </label>
+          )}
         </span>,
         document.body,
       )}

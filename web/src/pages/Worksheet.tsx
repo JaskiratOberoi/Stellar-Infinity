@@ -104,7 +104,7 @@ export function Worksheet() {
    * holds it — the worksheet is gated on result:enter. Without report:view the
    * PID stays the plain text it has always been.
    */
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
   const [total, setTotal] = useState(0);
@@ -221,7 +221,7 @@ export function Worksheet() {
    * report to give. Those are skipped by the route, so a patient mid-run comes
    * back with the reports that exist and nothing for the ones that do not.
    */
-  const downloadPatient = async (pid: number, sids: string[], paper: Paper) => {
+  const downloadPatient = async (pid: number, sids: string[], paper: Paper, includeHeld = false) => {
     setPidBusy(pid);
     setPidError(null);
     try {
@@ -230,7 +230,9 @@ export function Worksheet() {
         headers: { 'Content-Type': 'application/json', ...csrfHeader() },
         // Department-per-sheet and the paper choice, same as Reporting —
         // one PID download, one shape, whichever page it started from.
-        body: JSON.stringify({ sids, splitDept: true, paper }),
+        // overrideLock: the Super Admin's tick to include held reports; the
+        // server honours it for that role alone and audits each release.
+        body: JSON.stringify({ sids, splitDept: true, paper, overrideLock: includeHeld || undefined }),
         fallbackName: `Reports_PID_${pid}.pdf`,
       });
     } catch (e) {
@@ -434,11 +436,16 @@ export function Worksheet() {
                             title={groupSize > 1
                               ? `Download this patient's ${groupSize} reports on this page as one PDF`
                               : "Download this patient's report"}
-                            onDownload={(lh) => void downloadPatient(
+                            /* This page does not look balances up, so the
+                               Super Admin's tick is offered without a count;
+                               the server skips nothing held once it is on. */
+                            override={user?.role === 'super_admin' ? {} : undefined}
+                            onDownload={(lh, includeHeld) => void downloadPatient(
                               r.pid,
                               (grouped.find((g) => g.rows.some((x) => x.sid === r.sid))?.rows ?? [r])
                                 .map((x) => x.sid),
                               lh,
+                              includeHeld,
                             )}
                           />
                         ) : (
