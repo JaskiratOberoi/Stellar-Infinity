@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, csrfHeader } from '../api/client';
 import { downloadFile, fmtDateTime } from '../lib/format';
 import { useAuth } from '../auth/AuthContext';
-import { StatusBadge, StatusLegend, statusRowClass, REPORTABLE_STATUSES, type WorksheetRow } from './Reports';
+import { BuTag, StatusBadge, StatusLegend, statusRowClass, REPORTABLE_STATUSES, type WorksheetRow } from './Reports';
 import { WorksheetEntry } from './WorksheetEntry';
 import { Pager } from '../components/Pager';
 import { InfinityLoader } from '../components/InfinityLoader';
@@ -476,7 +476,9 @@ export function Worksheet() {
                         )}
                       </td>
 
-                      <td className="muted cell--meta" data-label="Client">{r.clientCode ?? '—'}</td>
+                      <td className="muted cell--meta" data-label="Client">
+                        {r.clientCode ?? '—'}<BuTag unit={r.businessUnit} />
+                      </td>
                       <td className="cell--body" data-label="Tests">
                         <TestList names={r.testNames} packages={r.packageNames} />
                       </td>

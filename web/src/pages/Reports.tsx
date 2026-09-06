@@ -84,6 +84,22 @@ export const REPORTABLE_STATUSES = [6, 7, 8, 9];
 /** What one balance lock looks like, as /api/reports/locks reports it. */
 interface RowLock { reason: 'patient' | 'client' | null; dueAmount: number }
 
+/**
+ * The lab the tube is processed at — the sample's business unit — as the LIS
+ * badges it beside the client code: the first three letters, bold, so a
+ * bench in Delhi can tell a Haldwani tube (HAL) from a Srinagar one (SRI)
+ * without reading the code. The full name is on hover.
+ */
+export function BuTag({ unit }: { unit: string | null | undefined }) {
+  const code = (unit ?? '').trim();
+  if (!code) return null;
+  return (
+    <span className="badge badge--muted bu-tag" title={`Processed at ${code}`}>
+      {code.slice(0, 3).toUpperCase()}
+    </span>
+  );
+}
+
 /** The same sentence the server's 423 sends, so both paths say one thing. */
 const lockMsg = (l: RowLock) =>
   `This report is on hold: ₹${Math.round(l.dueAmount).toLocaleString('en-IN')} outstanding on the ` +
@@ -641,7 +657,9 @@ export function Reports() {
                         </>
                       )}
                     </td>
-                    <td className="muted cell--meta" data-label="Client">{r.clientCode ?? '—'}</td>
+                    <td className="muted cell--meta" data-label="Client">
+                      {r.clientCode ?? '—'}<BuTag unit={r.businessUnit} />
+                    </td>
                     <td className="cell--body" data-label="Tests">
                       <TestList names={r.testNames} packages={r.packageNames} />
                     </td>

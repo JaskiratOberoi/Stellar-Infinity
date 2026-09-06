@@ -2040,6 +2040,15 @@ tbody tr:hover { background: var(--accent-softer); }
 .badge--bad      { color: var(--danger);  border-color: var(--danger-line); background: var(--danger-soft); }
 .badge--muted    { color: var(--ink-dim); border-color: var(--line);        background: var(--neutral-soft); }
 
+/* The processing-lab tag beside a client code (HAL, SRI, AGR): a badge cut
+   down to sit inside a muted cell without becoming the thing the eye lands
+   on. Bold, as the LIS sets it, so it still reads at a glance. */
+.bu-tag {
+  margin-left: .4rem; padding: .08em .4em;
+  font-size: .56rem; font-weight: 700; letter-spacing: .08em;
+  color: var(--ink); vertical-align: .08em; white-space: nowrap;
+}
+
 /* ---------- toggle ---------- */
 
 .toggle {
