@@ -5116,3 +5116,65 @@ tbody tr.row-status--quiet > td:first-child {
     border-left: 3px solid color-mix(in srgb, var(--status-ink) 45%, transparent);
   }
 }
+
+/* ── THE "?" BESIDE A FIGURE ─────────────────────────────────────────────────
+   Tip (components/Tip.tsx). A small ring after a label; hover or focus shows
+   the bubble. The bubble resets the label's uppercase/tracking because it is
+   a sentence, not a caption. Positioned below by default, above when the
+   label sits at the bottom of its card (tip--above). */
+.tip {
+  position: relative; display: inline-flex; align-items: center;
+  margin-left: .35rem; vertical-align: middle; cursor: help; outline: none;
+}
+.tip__icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 13px; height: 13px; border-radius: 50%;
+  border: 1px solid var(--line); color: var(--ink-dim);
+  font-size: .58rem; font-weight: 700; line-height: 1; letter-spacing: 0;
+  background: var(--neutral-soft); transition: color .12s, border-color .12s;
+}
+.tip:hover .tip__icon, .tip:focus-visible .tip__icon { color: var(--teal); border-color: var(--teal); }
+.tip__bubble {
+  position: absolute; left: 0; top: calc(100% + 6px); z-index: 40;
+  width: max-content; max-width: min(19rem, 78vw);
+  padding: .5rem .65rem; border-radius: 8px;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line);
+  box-shadow: var(--shadow-card);
+  font-size: .74rem; font-weight: 400; line-height: 1.4;
+  letter-spacing: 0; text-transform: none; text-align: left; white-space: normal;
+  opacity: 0; visibility: hidden; transform: translateY(-3px);
+  transition: opacity .12s, transform .12s, visibility 0s .12s;
+  pointer-events: none;
+}
+.tip--above .tip__bubble { top: auto; bottom: calc(100% + 6px); transform: translateY(3px); }
+.tip:hover .tip__bubble, .tip:focus-visible .tip__bubble {
+  opacity: 1; visibility: visible; transform: none; transition-delay: 0s;
+}
+/* A tip near the right edge of a narrow card would push its bubble off-screen;
+   anchor it to the right instead there. */
+.clienthome__split > div:last-child .tip__bubble,
+.revperiod__split .tip__bubble { left: auto; right: 0; }
+.clienthome__title .tip { margin-left: .4rem; }
+
+/* ── REVENUE OVER A PERIOD ───────────────────────────────────────────────────
+   The block under the day tiles: period switch, the total, and the share of
+   it that came through each system. */
+.revperiod {
+  margin-top: .9rem; padding-top: .8rem; border-top: 1px solid var(--line-soft);
+}
+.revperiod__figures {
+  display: flex; flex-wrap: wrap; gap: .5rem 2rem; align-items: flex-end; margin-top: .45rem;
+}
+.revperiod__total { display: flex; flex-direction: column; gap: .1rem; }
+.revperiod__amount { font-size: 1.6rem; font-weight: 600; line-height: 1.1; color: var(--teal); }
+.revperiod__meta { font-size: .74rem; }
+.revperiod__split {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: .35rem 1.4rem;
+}
+.revperiod__split li { display: inline-flex; align-items: center; gap: .45rem; font-size: .84rem; }
+.revperiod__share { font-size: .72rem; min-width: 2.2rem; }
+@media (max-width: 560px) {
+  .revperiod .seg { margin-left: 0 !important; }
+  .revperiod__figures { gap: .5rem 1rem; }
+}

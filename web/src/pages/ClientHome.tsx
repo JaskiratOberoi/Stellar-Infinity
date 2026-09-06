@@ -3,7 +3,52 @@ import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { InfinityLoader } from '../components/InfinityLoader';
+import { Tip } from '../components/Tip';
 import { fmtDateTime } from '../lib/format';
+
+/*
+ * What each figure on this page means, in the centre's words.
+ *
+ * Every number here is computed somewhere else — StatsRepository for the day,
+ * RevenueRepository for the period, usp_inf_client_accounts for the account —
+ * and each has a rule a centre cannot see (bill date versus receipt date, the
+ * sign of a balance, what "revenue" includes). The rule is written once here,
+ * beside the label it explains, rather than left for a phone call.
+ */
+const TIPS = {
+  revenue:
+    'What you were charged for work registered on this day, from every source: orders you placed in Infinity and samples the lab registered directly and debited from your account. Counted on the registration date.',
+  collected:
+    'Money received from you on this day: payments against bills plus deposits to your account. Counted on the day the payment arrived, not the day of the bill it settles.',
+  outstanding:
+    'The unpaid part of bills raised on this day. Samples debited straight from your account are not bills and never appear here; they move the Account balance instead.',
+  patients:
+    'Distinct patients charged to you on this day, across bills and account debits.',
+  registrations:
+    'Patients registered under your centre on this day.',
+  statuses:
+    'Samples added on this day, grouped by where each one stands in the lab.',
+  period:
+    'Everything you were charged in the period, from every source. A week runs Monday to Sunday; a month and a year are the calendar ones. Pick the period with the buttons and move it with the date above.',
+  viaInfinity:
+    'Orders placed by your centre in Infinity.',
+  viaTelo:
+    'Orders placed by your centre in Telo.',
+  viaLis:
+    'Samples the lab registered directly in its LIS and debited from your account, with no bill raised through Infinity or Telo.',
+  trend:
+    'The same revenue, one point per day. For a single day the line shows the six days before it as context; for a year, one point per month.',
+  balance:
+    'Your running account with Noble. Every order or registration debits it and every payment credits it. Red means you owe Noble; green means you hold an advance.',
+  totalPaid:
+    'Everything ever deposited into your account with Noble.',
+  creditLimit:
+    'How far into the negative your account may run before reports are held. "None" means reports hold as soon as anything is owed, unless Noble has granted a release.',
+  override:
+    'A release granted by Noble. Your reports are served regardless of the balance until it expires or is withdrawn.',
+  payments:
+    'Your latest payments, most recent first. Open Full account for every movement, debits included.',
+} as const;
 
 /**
  * The home page a COLLECTION CENTRE sees.
@@ -267,7 +312,7 @@ export function ClientHome() {
               </section>
             ) : (
             <section className={`card clienthome__balance${owes ? ' clienthome__balance--owing' : ''}`}>
-              <p className="clienthome__label">Account balance</p>
+              <p className="clienthome__label">Account balance<Tip text={TIPS.balance} /></p>
               <p className="clienthome__amount">{inr(account.owed || account.balance)}</p>
               <p className="clienthome__note">
                 {owes
@@ -277,11 +322,11 @@ export function ClientHome() {
   
               <div className="clienthome__split">
                 <div>
-                  <p className="clienthome__label">Total paid</p>
+                  <p className="clienthome__label">Total paid<Tip text={TIPS.totalPaid} /></p>
                   <p className="clienthome__sub">{inr(account.totalDeposited)}</p>
                 </div>
                 <div>
-                  <p className="clienthome__label">Credit limit</p>
+                  <p className="clienthome__label">Credit limit<Tip text={TIPS.creditLimit} /></p>
                   <p className="clienthome__sub">{allowance > 0 ? inr(allowance) : 'None'}</p>
                   {/* The lock is what a centre actually cares about here: are
                       their reports about to hold, and how much room is left.
@@ -295,6 +340,7 @@ export function ClientHome() {
                        confusion this branch order used to cause. */
                     <p className="clienthome__hint">
                       Reports released{account.tempUnlocked && !account.unlocked ? ' (temporary)' : ''} — override active
+                      <Tip text={TIPS.override} side="above" />
                     </p>
                   ) : allowance > 0 ? (
                     <p className="clienthome__hint">
@@ -316,7 +362,7 @@ export function ClientHome() {
   
             <section className="card">
               <div className="row" style={{ alignItems: 'baseline', gap: '.6rem' }}>
-                <h2 className="clienthome__title">Recent payments</h2>
+                <h2 className="clienthome__title">Recent payments<Tip text={TIPS.payments} /></h2>
                 <Link to="/accounts" className="muted" style={{ marginLeft: 'auto', fontSize: '.78rem' }}>
                   Full account →
                 </Link>
@@ -495,17 +541,13 @@ function ClientDayStats() {
   if (!busy && !stats) return null;
 
   const t = stats;
-  const chip = (label: string, value: string, accent = false) => (
+  const chip = (label: string, value: string, tip: string, accent = false) => (
     <div className="card" style={{ padding: '.7rem .9rem', minWidth: '9.5rem', flex: '1 1 9.5rem' }}>
-      <p className="clienthome__label" style={{ margin: 0 }}>{label}</p>
+      <p className="clienthome__label" style={{ margin: 0 }}>{label}<Tip text={tip} /></p>
       <p style={{ margin: '.15rem 0 0', fontSize: '1.15rem', fontWeight: 600,
                   color: accent ? 'var(--teal)' : undefined }}>{value}</p>
     </div>
   );
-
-  const max = Math.max(1, ...(t?.trend ?? []).map((p) => p.revenue));
-  const points = (t?.trend ?? []).map((p, i, arr) =>
-    `${(i / Math.max(1, arr.length - 1)) * 100},${34 - (p.revenue / max) * 30}`).join(' ');
 
   return (
     <section className="card" style={{ marginBottom: '.9rem' }}>
@@ -525,27 +567,174 @@ function ClientDayStats() {
       {t && (
         <>
           <div className="row" style={{ flexWrap: 'wrap', gap: '.6rem', marginTop: '.7rem' }}>
-            {chip('Revenue', `${inr(t.revenue)} · ${t.bills} bill${t.bills === 1 ? '' : 's'}`, true)}
-            {chip('Collected', inr(t.collected))}
-            {chip('Outstanding', `${inr(t.outstanding)}${t.discount > 0 ? ` · ${inr(t.discount)} off` : ''}`)}
-            {chip('Patients billed', String(t.patients))}
-            {chip('Registrations', String(t.registrations))}
+            {chip('Revenue', `${inr(t.revenue)} · ${t.bills} bill${t.bills === 1 ? '' : 's'}`, TIPS.revenue, true)}
+            {chip('Collected', inr(t.collected), TIPS.collected)}
+            {chip('Outstanding', `${inr(t.outstanding)}${t.discount > 0 ? ` · ${inr(t.discount)} off` : ''}`, TIPS.outstanding)}
+            {chip('Patients billed', String(t.patients), TIPS.patients)}
+            {chip('Registrations', String(t.registrations), TIPS.registrations)}
           </div>
 
           {t.byStatus.length > 0 && (
-            <div className="row" style={{ flexWrap: 'wrap', gap: '.35rem', marginTop: '.7rem' }}>
+            <div className="row" style={{ flexWrap: 'wrap', gap: '.35rem', marginTop: '.7rem', alignItems: 'center' }}>
               {t.byStatus.map((b) => (
                 <span key={b.status} className="badge badge--lis">
                   {b.status}: <b>{b.count}</b>
                 </span>
               ))}
+              <Tip text={TIPS.statuses} />
             </div>
           )}
+        </>
+      )}
 
-          {t.trend.length > 1 && (
-            <div style={{ marginTop: '.7rem' }}>
+      <ClientRevenue date={date} />
+    </section>
+  );
+}
+
+/* ---- revenue over a period, by source ------------------------------------ */
+
+type Period = 'day' | 'week' | 'month' | 'year';
+
+const PERIODS: { key: Period; label: string }[] = [
+  { key: 'day', label: 'Day' },
+  { key: 'week', label: 'Week' },
+  { key: 'month', label: 'Month' },
+  { key: 'year', label: 'Year' },
+];
+
+interface RevenuePeriod {
+  period: Period;
+  from: string;
+  to: string;
+  total: number;
+  infinity: number;
+  telo: number;
+  lis: number;
+  bills: number;
+  patients: number;
+  trendFrom: string;
+  trendTo: string;
+  trendUnit: 'day' | 'month';
+  trend: { date: string; revenue: number }[];
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "Sun 6 Sep 2026", "Mon 31 Aug – Sun 6 Sep 2026", "September 2026", "2026". */
+function periodLabel(r: RevenuePeriod): string {
+  const [fy, fm, fd] = r.from.split('-').map(Number);
+  const [ty, tm, td] = r.to.split('-').map(Number);
+  const day = (y: number, m: number, d: number) =>
+    new Date(y, m - 1, d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  switch (r.period) {
+    case 'week': return `${day(fy, fm, fd)} – ${day(ty, tm, td)} ${ty}`;
+    case 'month': return `${new Date(fy, fm - 1, 1).toLocaleDateString('en-GB', { month: 'long' })} ${fy}`;
+    case 'year': return String(fy);
+    default: return `${day(fy, fm, fd)} ${fy}`;
+  }
+}
+
+/** The axis caption for one trend point: "31 Aug" for a day, "Jan" for a month. */
+function pointLabel(iso: string, unit: 'day' | 'month'): string {
+  const parts = iso.split('-').map(Number);
+  return unit === 'month' ? MONTHS[(parts[1] ?? 1) - 1] : `${parts[2]} ${MONTHS[(parts[1] ?? 1) - 1]}`;
+}
+
+/**
+ * The centre's revenue for the day, week, month or year containing the date
+ * chosen above, with the share that came through each system.
+ *
+ * The period is the centre's choice and is remembered across visits: a
+ * centre that thinks in months should not have to click Month every morning.
+ */
+function ClientRevenue({ date }: { date: string }) {
+  const [period, setPeriod] = useState<Period>(() => {
+    try {
+      const v = localStorage.getItem('inf.client-revenue-period');
+      return PERIODS.some((p) => p.key === v) ? (v as Period) : 'day';
+    } catch { return 'day'; }
+  });
+  const [rev, setRev] = useState<RevenuePeriod | null>(null);
+  const [busy, setBusy] = useState(true);
+
+  useEffect(() => {
+    try { localStorage.setItem('inf.client-revenue-period', period); } catch { /* per-viewer nicety only */ }
+  }, [period]);
+
+  useEffect(() => {
+    let live = true;
+    setBusy(true);
+    void api.get<{ revenue: RevenuePeriod }>(`/api/dashboard/my-revenue?period=${period}&date=${date}`)
+      .then((r) => { if (live) setRev(r.revenue); })
+      .catch(() => { if (live) setRev(null); })
+      .finally(() => { if (live) setBusy(false); });
+    return () => { live = false; };
+  }, [period, date]);
+
+  if (!busy && !rev) return null;
+
+  const r = rev;
+  const max = Math.max(1, ...(r?.trend ?? []).map((p) => p.revenue));
+  const points = (r?.trend ?? []).map((p, i, arr) =>
+    `${(i / Math.max(1, arr.length - 1)) * 100},${34 - (p.revenue / max) * 30}`).join(' ');
+
+  // The split, only where there is something to split. A wallet-only centre
+  // sees one line; a centre on all three sees three.
+  const sources: { label: string; value: number; tip: string; cls: string }[] = r ? [
+    { label: 'Via Infinity', value: r.infinity, tip: TIPS.viaInfinity, cls: 'badge--infinity' },
+    { label: 'Via Telo', value: r.telo, tip: TIPS.viaTelo, cls: 'badge--telo' },
+    { label: 'Via LIS', value: r.lis, tip: TIPS.viaLis, cls: 'badge--lis' },
+  ].filter((s) => s.value !== 0) : [];
+
+  return (
+    <div className="revperiod">
+      <div className="row" style={{ flexWrap: 'wrap', gap: '.6rem', alignItems: 'center' }}>
+        <p className="clienthome__label" style={{ margin: 0 }}>
+          Revenue{r ? ` · ${periodLabel(r)}` : ''}<Tip text={TIPS.period} />
+        </p>
+        <div className="seg" role="group" aria-label="Revenue period" style={{ marginLeft: 'auto' }}>
+          {PERIODS.map((p) => (
+            <button key={p.key} type="button"
+                    className={`seg__btn${period === p.key ? ' is-on' : ''}`}
+                    aria-pressed={period === p.key}
+                    onClick={() => setPeriod(p.key)}>{p.label}</button>
+          ))}
+        </div>
+      </div>
+
+      {r && (
+        <>
+          <div className="revperiod__figures">
+            <div className="revperiod__total">
+              <span className="revperiod__amount">{inr(r.total)}</span>
+              <span className="muted revperiod__meta">
+                {r.patients} patient{r.patients === 1 ? '' : 's'}
+                {r.bills > 0 ? ` · ${r.bills} bill${r.bills === 1 ? '' : 's'}` : ''}
+              </span>
+            </div>
+            {sources.length > 0 && (
+              <ul className="revperiod__split">
+                {sources.map((s) => (
+                  <li key={s.label}>
+                    <span className={`badge ${s.cls}`}>{s.label}</span>
+                    <b>{inr(s.value)}</b>
+                    <span className="muted revperiod__share">
+                      {r.total > 0 ? `${Math.round((s.value / r.total) * 100)}%` : ''}
+                    </span>
+                    <Tip text={s.tip} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {r.trend.length > 1 && (
+            <div style={{ marginTop: '.6rem' }}>
               <p className="clienthome__label" style={{ marginBottom: '.25rem' }}>
-                Revenue · 7 days
+                {r.period === 'day' ? 'Revenue · 7 days'
+                  : r.period === 'year' ? 'Revenue · by month' : 'Revenue · by day'}
+                <Tip text={TIPS.trend} />
               </p>
               <svg viewBox="0 0 100 36" preserveAspectRatio="none"
                    style={{ width: '100%', height: 54, display: 'block' }} aria-hidden="true">
@@ -554,13 +743,13 @@ function ClientDayStats() {
                           strokeLinejoin="round" strokeLinecap="round" />
               </svg>
               <div className="row" style={{ justifyContent: 'space-between', fontSize: '.62rem' }}>
-                <span className="muted">{t.trend[0]?.date?.slice(5)}</span>
-                <span className="muted">{t.trend[t.trend.length - 1]?.date?.slice(5)}</span>
+                <span className="muted">{pointLabel(r.trend[0].date, r.trendUnit)}</span>
+                <span className="muted">{pointLabel(r.trend[r.trend.length - 1].date, r.trendUnit)}</span>
               </div>
             </div>
           )}
         </>
       )}
-    </section>
+    </div>
   );
 }

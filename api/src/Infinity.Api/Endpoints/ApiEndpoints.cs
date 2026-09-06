@@ -28,6 +28,14 @@ public static class ApiEndpoints
            .RequireAuthorization()
            .RequireCapability(Capabilities.BillingView);
 
+        // The centre's own revenue over a longer window than a day, split by
+        // the system the order came through. Same gate as my-day: every
+        // figure is resolved inside the caller's scope.
+        app.MapGet("/api/dashboard/my-revenue", GetRevenue)
+           .RequireAuthorization()
+           .RequireCapability(Capabilities.BillingView)
+           .WithName("GetMyRevenue");
+
         app.MapGet("/api/dashboard/stats", GetStats)
            .RequireAuthorization()
            .RequireCapability(Capabilities.AnalyticsView)
@@ -139,6 +147,26 @@ public static class ApiEndpoints
         var result = await stats.GetAsync(scope, date, ct).ConfigureAwait(false);
 
         return Results.Ok(new { stats = result, centres = scope.Count });
+    }
+
+    /// <summary>
+    /// Revenue over the day / week / month / year containing <paramref name="date"/>,
+    /// in the caller's scope, attributed to Infinity, Telo or the LIS.
+    /// </summary>
+    private static async Task<IResult> GetRevenue(
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
+        RevenueRepository revenue,
+        CancellationToken ct,
+        string? period = null,
+        string? date = null)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+
+        var scope = await scopes.GetScopeAsync(userId, ct).ConfigureAwait(false);
+        var result = await revenue.GetAsync(scope, period, date, ct).ConfigureAwait(false);
+
+        return Results.Ok(new { revenue = result });
     }
 
     /// <summary>
