@@ -20,16 +20,27 @@ import { TestList } from '../components/TestList';
  * tbl_med_mcc_patient_samples_status_master. Status 1 (Sample Sent) never
  * reaches the worksheet — the procedure excludes it.
  */
-const STATUSES = SAMPLE_STATUSES;
 
 /**
- * The statuses "Outstanding only" means: registered, partially tested, tested,
+ * The statuses "Outstanding" means: registered, partially tested, tested,
  * partially authorised. Sent to the SERVER as a filter — filtering these out in
  * the browser after a page had already been fetched meant a page of 50 could
  * display as 6 rows with a dead Next button, which read as "that is all there
  * is" when it was not.
+ *
+ * A choice in the Status control, not the page's default: the worksheet opens
+ * on Any status, as Reporting does, so the two lists agree on what a fresh
+ * page shows. OUTSTANDING is the pseudo-status the control offers for it —
+ * negative so it can never collide with an LIS status id.
  */
 const PENDING_STATUSES = [2, 4, 5, 6];
+const OUTSTANDING = -1;
+
+/** The Status control's rows: the Outstanding shorthand first, then the LIS
+ *  statuses, verified against tbl_med_mcc_patient_samples_status_master.
+ *  Status 1 (Sample Sent) never reaches the worksheet — the procedure
+ *  excludes it. */
+const STATUSES = [{ id: OUTSTANDING, label: 'Outstanding' }, ...SAMPLE_STATUSES];
 
 /** Every row is reachable at any of these; the choice only trades requests
  *  against response size. */
@@ -89,8 +100,10 @@ function ActionButton({ statusCode, onOpen }: { statusCode: number | null | unde
 /**
  * The bench worklist: samples waiting for results, and the way into entry.
  *
- * Defaults to today and to the statuses that actually need work (registered,
- * partially tested, tested), because the question a technologist opens this
+ * Defaults to today and to Any status, as Reporting does, so the two lists
+ * agree on what a fresh page shows; "Outstanding" — the statuses that actually
+ * need work (registered, partially tested, tested, partially authorised) — is
+ * the first row of the Status control, because the question a technologist opens this
  * screen with is "what is outstanding", not "show me everything".
  */
 export function Worksheet() {
@@ -148,11 +161,11 @@ export function Worksheet() {
       // Every filter goes to the server so that paging and the total count
       // describe the same set the operator is looking at.
       //
-      // Three cases, one control: 'all' asks for no status filter, a number
-      // asks for that status, and '' is this page's default — outstanding.
-      if (adv.statusId === 'all') { /* no status filter */ }
-      else if (adv.statusId !== '') p.set('statusIds', String(adv.statusId));
-      else p.set('statusIds', PENDING_STATUSES.join(','));
+      // Any status by default, as Reporting opens: '' and 'all' send no
+      // status filter, the Outstanding shorthand sends its four, and a real
+      // status sends itself.
+      if (adv.statusId === OUTSTANDING) p.set('statusIds', PENDING_STATUSES.join(','));
+      else if (adv.statusId !== '' && adv.statusId !== 'all') p.set('statusIds', String(adv.statusId));
 
       // Only while paging within one result set. Page 1 always takes a fresh
       // snapshot, so the list is never stale without the operator asking for it.
@@ -347,10 +360,9 @@ export function Worksheet() {
 
       <SampleFilters
         value={adv} options={options} onChange={setAdv} statusOptions={STATUSES}
-        // "Outstanding" is this page's default status set, so it is named and
-        // selectable inside the Status control rather than being a second
-        // checkbox that the status has to disable.
-        defaultStatusLabel="Outstanding"
+        // No defaultStatusLabel: '' IS "Any status" here now, as on Reporting.
+        // "Outstanding" stays a choice in the same control — the first row of
+        // it — rather than the page's silent default.
       >
         {/* Group by patient is NOT a filter — it changes how the same rows are
             drawn, not which rows they are. It sits in the footer alone now that
@@ -519,7 +531,7 @@ export function Worksheet() {
                     <td colSpan={8} className="muted" style={{ textAlign: 'center', padding: '2rem' }}>
                       {/* Names the control that is hiding them, by the label it
                           now carries in the panel. */}
-                      {adv.statusId === ''
+                      {adv.statusId === OUTSTANDING
                         ? 'Nothing outstanding in this window — set Status to “Any status” to see completed samples.'
                         : 'No samples in this window.'}
                     </td>
