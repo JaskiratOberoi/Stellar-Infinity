@@ -161,23 +161,29 @@ BEGIN
     -- the old value is read is what makes "was this an entry or an amendment"
     -- a decidable question.
     ------------------------------------------------------------------
+    -- COLLATE DATABASE_DEFAULT on every text column: a #temp table takes
+    -- tempdb's collation, and on Noble's server that is Latin1_General_CI_AI
+    -- while the database is SQL_Latin1_General_CP1_CI_AS. Without it the
+    -- auto-authorisation join (cfg.scope_key = w.testcode) fails with a
+    -- collation conflict on EVERY save — see 102_usp_inf_report_extras.sql,
+    -- which already does this for the same reason.
     CREATE TABLE #work (
         result_id     INT PRIMARY KEY,
-        testtype      VARCHAR(10),
-        testcode      VARCHAR(50),
+        testtype      VARCHAR(10)   COLLATE DATABASE_DEFAULT,
+        testcode      VARCHAR(50)   COLLATE DATABASE_DEFAULT,
         testid        INT,
         paramid       INT,
         profile_id    INT,
         master_profile_id INT,
         department_id INT,
 
-        old_value     NVARCHAR(MAX),
-        new_value     NVARCHAR(MAX),
+        old_value     NVARCHAR(MAX) COLLATE DATABASE_DEFAULT,
+        new_value     NVARCHAR(MAX) COLLATE DATABASE_DEFAULT,
         value_changed BIT,
         is_amend      BIT,
 
-        old_comments  NVARCHAR(MAX),
-        new_comments  NVARCHAR(MAX),
+        old_comments  NVARCHAR(MAX) COLLATE DATABASE_DEFAULT,
+        new_comments  NVARCHAR(MAX) COLLATE DATABASE_DEFAULT,
         comments_changed BIT,
 
         old_auth      BIT,
@@ -194,7 +200,7 @@ BEGIN
         numeric_value DECIMAL(18,6),
 
         auto_auth     BIT,
-        reason        NVARCHAR(500)
+        reason        NVARCHAR(500) COLLATE DATABASE_DEFAULT
     );
 
     BEGIN TRY
