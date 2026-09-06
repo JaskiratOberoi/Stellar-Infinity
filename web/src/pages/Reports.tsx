@@ -761,24 +761,31 @@ export function Reports() {
                           <button className="btn btn--ghost btn--sm" onClick={(e) => { e.stopPropagation(); setOpenSid(r.sid); }}>
                             View
                           </button>
-                          {/* Only where the patient BOUGHT it. The Smart Report is
-                              a paid extra and the API refuses a SID without the
-                              purchase — a button that always renders is a button
-                              that sometimes answers 404, which is exactly what an
-                              operator reported. The modal's own Smart control is
-                              gated the same way below; the server check remains the
-                              enforcement either way. */}
-                          {r.smartReport && (
-                            <button className="btn btn--primary btn--sm"
-                                    title={groupSize > 1
-                                      ? `This patient's Smart Report — all ${groupSize} samples in one booklet`
-                                      : "This patient's Smart Report"}
-                                    onClick={(e) => { e.stopPropagation(); openSmart(r); }}>
-                              Smart
-                            </button>
-                          )}
                         </>
                       )}
+                      {/* ONE Smart button per patient, on the lead row of the
+                          group beside the PID — the booklet is the patient's,
+                          not the tube's, and four buttons opening one document
+                          read as four documents. Drawn from the group, not
+                          from this row's own state, so a lead row that is
+                          pending or held does not hide the patient's booklet
+                          while another tube is ready. Only where the patient
+                          BOUGHT it: the Smart Report is a paid extra and the
+                          API refuses a set without the purchase. */}
+                      {i === 0 && r.smartReport && (() => {
+                        const group = grouped.find((g) => g.rows.some((x) => x.sid === r.sid))?.rows ?? [r];
+                        const ready = group.filter((x) =>
+                          REPORTABLE_STATUSES.includes(x.statusCode ?? -1) && !locks[x.sid]).length;
+                        return ready > 0 ? (
+                          <button className="btn btn--primary btn--sm"
+                                  title={groupSize > 1
+                                    ? `This patient's Smart Report — ${ready} of ${groupSize} samples ready, in one booklet`
+                                    : "This patient's Smart Report"}
+                                  onClick={(e) => { e.stopPropagation(); openSmart(r); }}>
+                            Smart
+                          </button>
+                        ) : null;
+                      })()}
                     </td>
                   </tr>
                 ))}
