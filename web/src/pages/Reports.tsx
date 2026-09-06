@@ -92,7 +92,10 @@ interface RowLock { reason: 'patient' | 'client' | null; dueAmount: number }
  */
 export function BuTag({ unit }: { unit: string | null | undefined }) {
   const code = (unit ?? '').trim();
-  if (!code) return null;
+  // Delhi is the default, not a place worth a tag: the LIS leaves a QUGEN
+  // tube — processed at Hari Nagar, including everything inwarded there —
+  // bare, and marks only the tubes that run elsewhere.
+  if (!code || /^qugen$/i.test(code)) return null;
   return (
     <span className="badge badge--muted bu-tag" title={`Processed at ${code}`}>
       {code.slice(0, 3).toUpperCase()}

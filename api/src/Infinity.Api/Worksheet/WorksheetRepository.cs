@@ -72,7 +72,8 @@ public sealed class WorksheetRepository(NobleConnectionFactory db, SqlRetry retr
                     SampleType: reader.StrOpt("sample_type"),
                     // Same reasoning: both arrive with a procedure redeploy.
                     TestNames: reader.StrOpt("test_names"),
-                    PackageNames: reader.StrOpt("package_names"));
+                    PackageNames: reader.StrOpt("package_names"),
+                    BusinessUnit: reader.StrOpt("business_unit"));
 
                 // ---- 2. analyte rows ----
                 var rows = new List<WorksheetResultRow>();

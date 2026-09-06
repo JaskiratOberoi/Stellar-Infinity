@@ -311,6 +311,8 @@ export interface WorksheetSampleHeader {
   testNames?: string | null;
   /** The package (LIS "master profile") the tube was booked under, if any. */
   packageNames?: string | null;
+  /** The processing lab (business unit code), for the tag beside the centre. */
+  businessUnit?: string | null;
 }
 
 export interface WorksheetResultRow {

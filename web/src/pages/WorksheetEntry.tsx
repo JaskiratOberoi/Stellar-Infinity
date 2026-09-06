@@ -1,4 +1,5 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { BuTag } from './Reports';
 import { displayTestName } from '../lib/reportFormat';
 import {
   worksheetApi,
@@ -20,12 +21,17 @@ import { InfinityLoader } from '../components/InfinityLoader';
  * A dt/dd pair rather than two divs: this is a description list in the literal
  * sense, and it gives a screen reader the label-value relationship for free.
  */
-function Meta({ label, value, mono, wide }: { label: string; value?: string | null; mono?: boolean; wide?: boolean }) {
+function Meta({ label, value, mono, wide, tag }: {
+  label: string; value?: string | null; mono?: boolean; wide?: boolean;
+  /** Drawn after the value — the processing-lab tag beside the centre. */
+  tag?: ReactNode;
+}) {
   return (
     <div className={`smeta__item${wide ? ' smeta__item--wide' : ''}`}>
       <dt>{label}</dt>
       <dd className={mono ? 'mono' : undefined} title={value ?? undefined}>
         {value ? value : <span className="muted">—</span>}
+        {value ? tag : null}
       </dd>
     </div>
   );
@@ -622,7 +628,7 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                   header.sex,
                 ].filter(Boolean).join('  ') || null}
               />
-              <Meta label="Collection Centre" value={header.clientCode} />
+              <Meta label="Collection Centre" value={header.clientCode} tag={<BuTag unit={header.businessUnit} />} />
               <Meta label="Referring Doctor" value={header.referringDoctor} />
               <Meta label="Referring Customer" value={header.referringCustomer} />
               <Meta label="Sample type" value={header.sampleType} />

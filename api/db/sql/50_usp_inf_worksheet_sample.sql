@@ -146,7 +146,10 @@ BEGIN
              WHERE t.patient_id = s.patient_id
                AND t.test_type = 'Master'
                AND NULLIF(LTRIM(RTRIM(t.test_name)), '') IS NOT NULL)
-        END                             AS package_names
+        END                             AS package_names,
+        -- The lab the tube is processed at, for the tag the worklists draw
+        -- beside the client code (HALDWANI -> HAL).
+        bu.BusinessUnitCode             AS business_unit
     FROM dbo.tbl_med_mcc_patient_samples s
     JOIN dbo.tbl_med_mcc_patient_master  p ON p.id = s.patient_id
     JOIN dbo.tbl_med_mcc_unit_master     u ON u.id = p.mcc_code
@@ -156,6 +159,7 @@ BEGIN
     LEFT JOIN dbo.tbl_med_mcc_doctors    doc  ON doc.id  = p.ref_doctor
     LEFT JOIN dbo.tbl_med_mcc_customer   cust ON cust.id = p.ref_customer
     LEFT JOIN dbo.tbl_med_sample_master  sm   ON sm.id   = s.sampleid
+    LEFT JOIN dbo.tbl_med_business_unit_master bu ON bu.id = s.business_unit_id
     WHERE s.id = @sample_id;
 
     -- ---- 2. analyte rows ------------------------------------------------

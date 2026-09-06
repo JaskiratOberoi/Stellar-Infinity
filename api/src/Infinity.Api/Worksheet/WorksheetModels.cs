@@ -109,7 +109,9 @@ public sealed record WorksheetSampleHeader(
     /// The package(s) — LIS "master profiles" — the tube was booked under, from
     /// the visit's order lines. Null for a tube of tests booked on their own.
     /// </summary>
-    string? PackageNames = null);
+    string? PackageNames = null,
+    /// <summary>The processing lab — tbl_med_business_unit_master.BusinessUnitCode.</summary>
+    string? BusinessUnit = null);
 
 /// <summary>A rule that will auto-authorize part of this sample, shown up front.</summary>
 public sealed record AutoAuthRuleInForce(
