@@ -2,7 +2,10 @@ import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } f
 import { useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import nobleLogo from '../assets/noble-logo.png';
-import nablLogo from '../assets/nabl.png';
+// The medallion WITH the accreditation number beneath it — Infinity's own
+// composite. nabl.png beside it is the LIS's artwork as received, kept
+// untouched; this file is generated from it, not edited into it.
+import nablLogo from '../assets/nabl-mc2547.png';
 import { isRichValue, sanitizeRich } from '../lib/richText';
 import { code128 } from '../lib/code128';
 import { notesForCodes } from '../lib/reportNotes';

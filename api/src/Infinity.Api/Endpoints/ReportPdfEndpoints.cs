@@ -291,7 +291,8 @@ public static class ReportPdfEndpoints
     // 10: the method column two points larger again, italic, black.
     // 11: the descriptive method line back to 10px, upright.
     // 12: reference interval and method column at 10px.
-    private const string PdfCacheV = "12";
+    // 13: the NABL medallion carries MC-2547 beneath it, every instance.
+    private const string PdfCacheV = "13";
     private static readonly TimeSpan PdfCacheTtl = TimeSpan.FromMinutes(45);
 
     private static string PdfCacheKey(
