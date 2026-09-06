@@ -287,7 +287,10 @@ public static class ReportPdfEndpoints
     //    and darker.
     // 8: the descriptive shape - signpost labels, quiet blanks, a heavier
     //    impression, and a two-column band over an all-descriptive sheet.
-    private const string PdfCacheV = "8";
+    // 9: a vitamin prints on a sheet of its own, its interpretation with it.
+    // 10: the method column two points larger again, italic, black.
+    // 11: the descriptive method line back to 10px, upright.
+    private const string PdfCacheV = "11";
     private static readonly TimeSpan PdfCacheTtl = TimeSpan.FromMinutes(45);
 
     private static string PdfCacheKey(

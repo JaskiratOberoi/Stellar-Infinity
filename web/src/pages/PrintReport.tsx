@@ -317,7 +317,11 @@ export function PrintReport() {
      next sheet, which is where the blank-page artefact came from. */
 
   type Entry = { item: ReportItem; key: number };
-  type Section = { deptName: string; deptStart: boolean; entries: Entry[] };
+  type Section = {
+    deptName: string; deptStart: boolean; entries: Entry[];
+    /** Prints on a sheet of its own wherever sections flow — the vitamins. */
+    ownSheet?: boolean;
+  };
 
   const sections = useMemo<Section[]>(() => {
     const keyOf = (item: ReportItem): number =>
@@ -412,12 +416,17 @@ export function PrintReport() {
     }
     /*
      * The vitamin pair. B12 and D are the two commonly co-ordered standalones
-     * that both carry long clinical notes, which is exactly what makes each
-     * its own section — and two one-test sheets out of one blood draw reads
-     * as padding to the clinician holding it. When both are present in a
-     * department, the later folds into the earlier: one section, one sheet in
-     * split mode, adjacent in the continuous flow. Content taller than a page
-     * still paginates normally — "together" is the promise, not "cramped".
+     * that both carry a page of clinical notes. An earlier version folded the
+     * two into ONE section so a single blood draw did not make two sheets —
+     * and that is what broke: Vitamin D's notes and comments run most of a
+     * page, so B12's value landed under them and its interpretation went to
+     * the next sheet on its own (PID 3646376, 06/09/2026). A value parted
+     * from its interpretation is the one thing a section exists to prevent.
+     *
+     * So each vitamin is its own section, and its own SHEET: a page break
+     * before and after it wherever sections flow (the department-per-sheet
+     * bundle, the continuous report). A page of notes is a page; two sheets
+     * out of one draw is the honest cost.
      */
     const isVitamin = (sec: Section) =>
       sec.entries.length === 1
@@ -425,18 +434,19 @@ export function PrintReport() {
       && /vit(?:amin)?\s*\.?-?\s*(d3?\b|b\s*-?\s*12\b)/i.test(
         sec.entries[0].item.row?.name ?? '');
 
-    const merged: Section[] = [];
-    const vitaminHome = new Map<string, Section>();
-    for (const sec of out) {
-      if (isVitamin(sec)) {
-        const home = vitaminHome.get(sec.deptName);
-        if (home) { home.entries.push(...sec.entries); continue; }
-        vitaminHome.set(sec.deptName, sec);
-      }
-      merged.push(sec);
-    }
-    return merged;
+    for (const sec of out) if (isVitamin(sec)) sec.ownSheet = true;
+    return out;
   }, [report, interactive, excluded, deptFilter]);
+
+  /*
+   * A section that takes a whole sheet gets the break classes — but not a
+   * break BEFORE the first section of a table (its thead would print alone
+   * on a blank page) nor AFTER the last (the sheet ends anyway).
+   */
+  const keepClass = (sec: Section, i: number, n: number) =>
+    'lr__keep'
+    + (sec.ownSheet && i > 0 ? ' lr__sheet-start' : '')
+    + (sec.ownSheet && i < n - 1 ? ' lr__sheet-end' : '');
 
   /* Sections re-joined into whole departments, for ?split=dept. Built from
      sections rather than from report.departments directly so the exclusion
@@ -552,7 +562,7 @@ export function PrintReport() {
       </thead>
       {tfoot}
       {secs.map((sec, i) => (
-        <tbody className="lr__keep" key={i}>
+        <tbody className={keepClass(sec, i, secs.length)} key={i}>
           {i === 0 && (
             <tr>
               <td colSpan={5} className="lr__dept">{deptName}</td>
@@ -695,7 +705,7 @@ export function PrintReport() {
                   modes use, so a test and its interpretation never straddle a
                   page break while the space for them exists below. */}
               {sections.map((sec, si) => (
-                <tbody className="lr__keep" key={si}>
+                <tbody className={keepClass(sec, si, sections.length)} key={si}>
                   {sec.deptStart && (
                     <tr>
                       <td colSpan={5} className="lr__dept">{sec.deptName}</td>
