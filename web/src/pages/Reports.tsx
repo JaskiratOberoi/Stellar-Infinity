@@ -805,6 +805,14 @@ export function Reports() {
           rows={pidView.rows}
           overrideLock={pidView.overrideLock}
           onClose={() => setPidView(null)}
+          // The purchase is per order, so any sample of the patient carrying
+          // the flag means the booklet was bought. Swap modals rather than
+          // stack them, as the single viewer does.
+          onSmart={
+            pidView.rows.some((r) => r.smartReport)
+              ? (s) => { setPidView(null); setSmartSid(s); }
+              : undefined
+          }
         />
       )}
       {cliSid && (
@@ -842,7 +850,7 @@ export function Reports() {
  * unit minus its cuts. Switching back to an edited sample reopens it with its
  * ticks as they were left (the excludes ride the frame URL).
  */
-function PatientReportViewer({ pid, patientName, rows, onClose, overrideLock }: {
+function PatientReportViewer({ pid, patientName, rows, onClose, overrideLock, onSmart }: {
   pid: number;
   patientName: string | null;
   rows: WorksheetRow[];
@@ -851,6 +859,9 @@ function PatientReportViewer({ pid, patientName, rows, onClose, overrideLock }: 
    *  and the download both carry it, and the server honours it for that
    *  role alone. */
   overrideLock?: boolean;
+  /** Opens the patient-facing Smart Report for the sample on screen. Omitted
+   *  where the order did not buy it, exactly as the single viewer does. */
+  onSmart?: (sid: string) => void;
 }) {
   const sids = useMemo(() => rows.map((r) => r.sid), [rows]);
   const [activeSid, setActiveSid] = useState(sids[0]);
@@ -986,6 +997,17 @@ function PatientReportViewer({ pid, patientName, rows, onClose, overrideLock }: 
           <div className="preview__tools">
             <PaperSelect className="input input--sm preview__paper" value={paper} onChange={setPaper}
                          disabled={busy} ariaLabel="Paper to print on" />
+
+            {/* The Smart Report is per SAMPLE — its route takes a SID — so
+                this opens it for the tab on screen. Gated on the purchase
+                the same way as the row's button: no handler, no control. */}
+            {onSmart && (
+              <button className="btn btn--ghost btn--sm" disabled={busy}
+                      onClick={() => onSmart(activeSid)}
+                      title={`The patient-facing Smart Report for sample ${activeSid}`}>
+                Smart Report
+              </button>
+            )}
 
             {/* Joined to the button as one pill, exactly as the single viewer
                 draws it — .preview__dlopt's colours key off the pill's accent
