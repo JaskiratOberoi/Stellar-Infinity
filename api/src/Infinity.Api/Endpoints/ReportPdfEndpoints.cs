@@ -128,7 +128,15 @@ public static class ReportPdfEndpoints
     /// it unchecked would be theirs to compose — this keeps the only thing that
     /// can appear there to digits and commas.
     /// </remarks>
-    private static string PrintQuery(bool? split, string? exclude, ReportPaper paper, bool splitDept = false)
+    /// <param name="overrideLock">
+    /// The report was released over a balance hold. The print page fetches
+    /// its data through the view route with the same session, and that route
+    /// would answer 423 — so the page never signals ready and the renderer
+    /// waits out its 45 seconds. The flag rides the URL so the page forwards
+    /// it; the view route re-checks the role, so it grants nothing by itself.
+    /// </param>
+    private static string PrintQuery(bool? split, string? exclude, ReportPaper paper, bool splitDept = false,
+                                     bool overrideLock = false)
     {
         var ids = (exclude ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -149,6 +157,7 @@ public static class ReportPdfEndpoints
         // or already on the sheet. The render service still decides whether to
         // composite; this only tells the page which margins to lay out for.
         q += paper.Query;
+        if (overrideLock) q += "&overrideLock=true";
         return q;
     }
 
@@ -372,7 +381,7 @@ public static class ReportPdfEndpoints
         // Everything that changes the bytes is in the key; the exclude list is
         // already digits-and-commas by the time PrintQuery is done with it.
         var sheet = ReportPaper.Resolve(paper, headless);
-        var query = PrintQuery(split, exclude, sheet);
+        var query = PrintQuery(split, exclude, sheet, overrideLock: overrode is not null);
         var graphFp = await GraphFingerprintAsync(graphs, sid, withGraph == true, ct).ConfigureAwait(false);
         var key = PdfCacheKey("report", sid, RowStamp(row!),
             $"s{(split == true ? 1 : 0)}p{sheet.Key}g{graphFp}x{query}");
@@ -485,12 +494,16 @@ public static class ReportPdfEndpoints
 
         var hits = 0;
         var overrideLock = body.OverrideLock == true;
+        // The SIDs released over a hold, so the department units below can
+        // carry the flag to the print page for exactly those samples.
+        var overrodeSids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var sid in sids)
         {
             var (ok, fail, row, overrode) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct,
                                                             overrideLock: overrideLock).ConfigureAwait(false);
             if (overrode is not null)
             {
+                overrodeSids.Add(sid);
                 audit.Log("report.lock_override", actor: principal.UserId(), sid: sid, ip: Audit.AuditIp.From(http),
                     details: new { reason = overrode.Reason, dueAmount = overrode.DueAmount });
             }
@@ -532,7 +545,7 @@ public static class ReportPdfEndpoints
             // rendered individually below so ITS bytes land in the cache too —
             // the second pull of the same PID assembles without a browser.
             var graphFp = await GraphFingerprintAsync(graphs, sid, body!.WithGraph, ct).ConfigureAwait(false);
-            var query = PrintQuery(body.Split, null, sheet, body.SplitDept == true);
+            var query = PrintQuery(body.Split, null, sheet, body.SplitDept == true, overrideLock: overrode is not null);
             // n0: rendered WITHOUT per-report page numbers, because the batch
             // is numbered as one document at the staple. Distinct from the
             // single route's cache, whose documents carry their own numbers.
@@ -619,7 +632,10 @@ public static class ReportPdfEndpoints
                 var query = $"?pdf=1&split=dept&dept={Uri.EscapeDataString(u.Department)}"
                           + (last ? string.Empty : "&end=0")
                           + sheet.Query
-                          + (excl is null ? string.Empty : $"&exclude={Uri.EscapeDataString(excl)}");
+                          + (excl is null ? string.Empty : $"&exclude={Uri.EscapeDataString(excl)}")
+                          // Same reason as PrintQuery: the page's own fetch
+                          // would answer 423 without it and the render times out.
+                          + (overrodeSids.Contains(u.Sid) ? "&overrideLock=true" : string.Empty);
 
                 // A sample's graphs ride with the FIRST unit that sample appears
                 // in, so a tube whose tests span two departments does not carry

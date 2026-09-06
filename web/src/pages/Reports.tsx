@@ -129,7 +129,11 @@ export function Reports() {
   /** The row whose clinical-history dialog is open. */
   const [cliSid, setCliSid] = useState<WorksheetRow | null>(null);
   /** The patient whose complete report is open for review & edit. */
-  const [pidView, setPidView] = useState<{ pid: number; name: string | null; rows: WorksheetRow[] } | null>(null);
+  const [pidView, setPidView] = useState<{
+    pid: number; name: string | null; rows: WorksheetRow[];
+    /** Set when a Super Admin opened it with the patient's held reports in. */
+    overrideLock?: boolean;
+  } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<number | undefined>(undefined);
   const showToast = (msg: string) => {
@@ -599,14 +603,18 @@ export function Reports() {
                             const all = grouped.find((g) => g.rows.some((x) => x.sid === r.sid))?.rows ?? [r];
                             // Only samples a report exists for and that are not
                             // balance-held — the same ones the download would
-                            // actually include rather than skip.
-                            const eligible = all.filter((x) =>
-                              REPORTABLE_STATUSES.includes(x.statusCode ?? -1) && !locks[x.sid]);
+                            // actually include rather than skip. A Super Admin
+                            // opens the held ones too, under the same override
+                            // the download carries; each is audited on open.
+                            const ready = all.filter((x) => REPORTABLE_STATUSES.includes(x.statusCode ?? -1));
+                            const held = ready.some((x) => locks[x.sid]);
+                            const eligible = superAdmin ? ready : ready.filter((x) => !locks[x.sid]);
                             if (eligible.length === 0) {
                               showToast('None of this patient’s reports can be opened yet.');
                               return;
                             }
-                            setPidView({ pid: r.pid, name: r.patientName, rows: eligible });
+                            if (superAdmin && held) showToast('Opened including held reports — recorded in the audit trail.');
+                            setPidView({ pid: r.pid, name: r.patientName, rows: eligible, overrideLock: superAdmin && held });
                           }}
                         />
                       ) : (
@@ -790,6 +798,7 @@ export function Reports() {
           pid={pidView.pid}
           patientName={pidView.name}
           rows={pidView.rows}
+          overrideLock={pidView.overrideLock}
           onClose={() => setPidView(null)}
         />
       )}
@@ -828,11 +837,15 @@ export function Reports() {
  * unit minus its cuts. Switching back to an edited sample reopens it with its
  * ticks as they were left (the excludes ride the frame URL).
  */
-function PatientReportViewer({ pid, patientName, rows, onClose }: {
+function PatientReportViewer({ pid, patientName, rows, onClose, overrideLock }: {
   pid: number;
   patientName: string | null;
   rows: WorksheetRow[];
   onClose: () => void;
+  /** The Super Admin's release of this patient's held reports: the frame
+   *  and the download both carry it, and the server honours it for that
+   *  role alone. */
+  overrideLock?: boolean;
 }) {
   const sids = useMemo(() => rows.map((r) => r.sid), [rows]);
   const [activeSid, setActiveSid] = useState(sids[0]);
@@ -854,6 +867,7 @@ function PatientReportViewer({ pid, patientName, rows, onClose }: {
   // reopens exactly as it was left.
   const src = useMemo(() => {
     const q = new URLSearchParams({ split: '1', paper });
+    if (overrideLock) q.set('overrideLock', 'true');
     const ex = excludesRef.current[activeSid];
     if (ex?.length) q.set('exclude', ex.join(','));
     return `/print/report/${encodeURIComponent(activeSid)}?${q}`;
@@ -926,6 +940,7 @@ function PatientReportViewer({ pid, patientName, rows, onClose }: {
         headers: { 'Content-Type': 'application/json', ...csrfHeader() },
         body: JSON.stringify({
           sids, withGraph, splitDept: true, deptMajor: true, paper, excludes,
+          overrideLock: overrideLock || undefined,
         }),
         fallbackName: `Reports_PID_${pid}.pdf`,
       });

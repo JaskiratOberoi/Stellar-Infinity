@@ -192,9 +192,12 @@ export function PrintReport() {
     // With a token there is no session to authenticate with, so the request
     // goes to the route the token opens. The token is the whole credential —
     // see PublicReportEndpoints for what it does and does not permit.
+    // overrideLock: the Super Admin's release of a held report, forwarded to
+    // the view route, which re-checks the role. Without it the route answers
+    // 423, this page never signals ready, and the PDF renderer times out.
     const url = token
       ? `/api/public/reports/${encodeURIComponent(sid)}?t=${encodeURIComponent(token)}`
-      : `/api/reports/${encodeURIComponent(sid)}`;
+      : `/api/reports/${encodeURIComponent(sid)}${params.get('overrideLock') === 'true' ? '?overrideLock=true' : ''}`;
     api.get<FullRow>(url)
       .then((r) => { if (live) setRow(r); })
       .catch((e) => { if (live) setError(e instanceof Error ? e.message : 'Could not load this report.'); });
