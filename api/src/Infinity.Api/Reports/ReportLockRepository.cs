@@ -114,12 +114,27 @@ public sealed class ReportLockRepository(
                     // report open; both the LIS and Telo write medid as a plain
                     // int-as-string, so string equality selects the same rows and
                     // an index on medid can seek.
+                    //
+                    // Bills tagged b2b are NOT the patient's own bill. The
+                    // remarks above say a B2B patient has no bill, and that was
+                    // true of LIS-registered work; an order booked in Telo or
+                    // Infinity for a centre DOES raise one (usp_telo_create_order
+                    // with @billAtMrp = 1), and nothing ever pays it — the centre
+                    // is charged from its wallet at accessioning, and the bill's
+                    // Balance stays at the full amount for ever. Counting it
+                    // locked every portal-booked B2B report as "patient due":
+                    // 64 of 64 such bills since the portal went live were
+                    // unpaid, with their reports at status 7–9. Excluding them
+                    // lets the wallet rule below decide, which is the rule the
+                    // remarks describe.
                     await using var bill = NobleConnectionFactory.CreateCommand(conn,
                         """
-                        SELECT SUM(CASE WHEN ISNULL(Balance, 0) > 0 THEN Balance ELSE 0 END) AS due,
+                        SELECT SUM(CASE WHEN ISNULL(b.Balance, 0) > 0 THEN b.Balance ELSE 0 END) AS due,
                                COUNT(*) AS bills
-                        FROM dbo.tbl_billing_patient_detail
-                        WHERE medid = @pid;
+                        FROM dbo.tbl_billing_patient_detail b
+                        WHERE b.medid = @pid
+                          AND NOT EXISTS (SELECT 1 FROM dbo.telo_order_kind k
+                                          WHERE k.bill_id = b.id AND k.kind = N'b2b');
                         """);
                     // VarChar, not NVarChar: a varchar column promoted to nvarchar
                     // for the comparison is the same index-defeating mistake by
