@@ -665,6 +665,7 @@ public static class ApiEndpoints
     /// </remarks>
     private static async Task<IResult> GetReport(
         string sid,
+        bool? overrideLock,
         System.Security.Claims.ClaimsPrincipal principal,
         ScopeRepository scopes,
         ReportsRepository repo,
@@ -714,15 +715,25 @@ public static class ApiEndpoints
         var lockState = await locks.GetAsync(sid, ct).ConfigureAwait(false);
         if (lockState.Locked)
         {
-            return Results.Json(new
+            // A Super Admin may open it over the hold, and only a Super Admin
+            // — the same rule, and the same audit event, as the PDF routes.
+            if (overrideLock == true && ReportPdfEndpoints.CanOverrideLock(principal))
             {
-                error = "BALANCE_LOCKED",
-                message = $"This report is on hold: ₹{Math.Round(lockState.DueAmount):N0} outstanding on the "
-                        + (lockState.Reason == "client" ? "client account" : "patient's bill")
-                        + ". Clear the balance to release it.",
-                reason = lockState.Reason,
-                dueAmount = lockState.DueAmount,
-            }, statusCode: StatusCodes.Status423Locked);
+                audit.Log("report.lock_override", actor: userId, sid: sid, ip: Audit.AuditIp.From(http),
+                    details: new { reason = lockState.Reason, dueAmount = lockState.DueAmount });
+            }
+            else
+            {
+                return Results.Json(new
+                {
+                    error = "BALANCE_LOCKED",
+                    message = $"This report is on hold: ₹{Math.Round(lockState.DueAmount):N0} outstanding on the "
+                            + (lockState.Reason == "client" ? "client account" : "patient's bill")
+                            + ". Clear the balance to release it.",
+                    reason = lockState.Reason,
+                    dueAmount = lockState.DueAmount,
+                }, statusCode: StatusCodes.Status423Locked);
+            }
         }
 
         // Who opened which patient's report — the same event Telo logs, and

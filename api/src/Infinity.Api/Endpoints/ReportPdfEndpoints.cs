@@ -76,7 +76,7 @@ public static class ReportPdfEndpoints
         Audit.AuditLog audit,
         CancellationToken ct)
     {
-        var (ok, fail, row) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct).ConfigureAwait(false);
+        var (ok, fail, row, _) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct).ConfigureAwait(false);
         if (!ok) return fail!;
 
         // Sold, not given. Same 404 as the data route behind it — see
@@ -163,7 +163,14 @@ public static class ReportPdfEndpoints
     /// issued would withhold a file the lab already owns for a reason that has
     /// nothing to do with it. Every route that renders a report leaves this on.
     /// </param>
-    private static async Task<(bool Ok, IResult? Fail, Reads.WorksheetRow? Row)> GateAsync(
+    /// <param name="overrideLock">
+    /// Issue the report over an outstanding balance. Honoured for a Super
+    /// Admin only — any other caller passing it gets the same 423 as before,
+    /// so the flag is not a way for a centre to lift its own hold. The lock
+    /// it stepped over comes back in <c>Overrode</c> so the route can record
+    /// who released what, and how much was owed at the time.
+    /// </param>
+    private static async Task<(bool Ok, IResult? Fail, Reads.WorksheetRow? Row, ReportLockRepository.ReportLock? Overrode)> GateAsync(
         string sid,
         System.Security.Claims.ClaimsPrincipal principal,
         ScopeRepository scopes,
@@ -172,18 +179,19 @@ public static class ReportPdfEndpoints
         ReportExtrasRepository extras,
         ILoggerFactory loggers,
         CancellationToken ct,
-        bool requireSignatory = true)
+        bool requireSignatory = true,
+        bool overrideLock = false)
     {
         if (principal.UserId() is not int userId)
-            return (false, Results.Unauthorized(), null);
+            return (false, Results.Unauthorized(), null, null);
         if (string.IsNullOrWhiteSpace(sid) || sid.Length > 50)
-            return (false, Results.BadRequest(new { error = "A SID is required." }), null);
+            return (false, Results.BadRequest(new { error = "A SID is required." }), null, null);
 
         var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
-        if (scope.IsDenied) return (false, Results.NotFound(), null);
+        if (scope.IsDenied) return (false, Results.NotFound(), null, null);
 
         var row = await repo.GetBySidAsync(scope.ClientCodes, sid, ct).ConfigureAwait(false);
-        if (row is null) return (false, Results.NotFound(), null);
+        if (row is null) return (false, Results.NotFound(), null, null);
 
         /*
          * A report EXISTS only from authorisation onward. A registered,
@@ -204,21 +212,29 @@ public static class ReportPdfEndpoints
             {
                 error = "REPORT_NOT_READY",
                 message = "This sample’s report is not ready yet — nothing on it has been authorised.",
-            }, statusCode: 425), null);
+            }, statusCode: 425), null, null);
         }
 
+        ReportLockRepository.ReportLock? overrode = null;
         var lockState = await locks.GetAsync(sid, ct).ConfigureAwait(false);
         if (lockState.Locked)
         {
-            // 423 Locked, matching Telo. A distinct status rather than 403 so the
-            // SPA can say WHY — "clear the balance" is an action the operator can
-            // take, where "forbidden" is a dead end.
-            return (false, Results.Json(new
+            if (overrideLock && CanOverrideLock(principal))
             {
-                error = "BALANCE_LOCKED",
-                reason = lockState.Reason,
-                dueAmount = lockState.DueAmount,
-            }, statusCode: StatusCodes.Status423Locked), null);
+                overrode = lockState;
+            }
+            else
+            {
+                // 423 Locked, matching Telo. A distinct status rather than 403 so the
+                // SPA can say WHY — "clear the balance" is an action the operator can
+                // take, where "forbidden" is a dead end.
+                return (false, Results.Json(new
+                {
+                    error = "BALANCE_LOCKED",
+                    reason = lockState.Reason,
+                    dueAmount = lockState.DueAmount,
+                }, statusCode: StatusCodes.Status423Locked), null, null);
+            }
         }
 
         // Last, and deliberately after the lock: a report with nobody to sign it
@@ -228,11 +244,21 @@ public static class ReportPdfEndpoints
         if (requireSignatory)
         {
             var signoff = await ReportSignoff.RequireAsync(extras, sid, loggers, ct).ConfigureAwait(false);
-            if (signoff.Refusal is not null) return (false, signoff.Refusal, null);
+            if (signoff.Refusal is not null) return (false, signoff.Refusal, null, null);
         }
 
-        return (true, null, row);
+        return (true, null, row, overrode);
     }
+
+    /// <summary>
+    /// Who may issue a report over an outstanding balance: the Super Admin
+    /// role, and nobody else. Decided on the ROLE claim, not on a capability
+    /// an admin could grant to a centre — the hold is Noble's money, and the
+    /// decision to release a report in spite of it belongs to the top of the
+    /// lab, not to whoever holds report:view.
+    /// </summary>
+    internal static bool CanOverrideLock(System.Security.Claims.ClaimsPrincipal principal) =>
+        string.Equals(principal.Role(), InfinityRoles.SuperAdmin, StringComparison.Ordinal);
 
     /* ---------------------------------------------------------------------
      * The finished-PDF cache.
@@ -306,6 +332,9 @@ public static class ReportPdfEndpoints
     /// the URL the renderer loads, and anything else in it would be injected
     /// into that query.
     /// </param>
+    /// <param name="overrideLock">
+    /// Issue over an outstanding balance. Super Admin only; see GateAsync.
+    /// </param>
     private static async Task<IResult> GetReportPdf(
         string sid,
         bool? withGraph,
@@ -313,6 +342,7 @@ public static class ReportPdfEndpoints
         string? paper,
         bool? split,
         string? exclude,
+        bool? overrideLock,
         System.Security.Claims.ClaimsPrincipal principal,
         HttpContext http,
         ScopeRepository scopes,
@@ -326,9 +356,17 @@ public static class ReportPdfEndpoints
         Audit.AuditLog audit,
         CancellationToken ct)
     {
-        var (ok, fail, row) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct).ConfigureAwait(false);
+        var (ok, fail, row, overrode) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct,
+                                                        overrideLock: overrideLock == true).ConfigureAwait(false);
         if (!ok) return fail!;
 
+        // A release over a hold is its own event, with what was owed: the
+        // audit feed has to answer "who let this report out, and for how much".
+        if (overrode is not null)
+        {
+            audit.Log("report.lock_override", actor: principal.UserId(), sid: sid, ip: Audit.AuditIp.From(http),
+                details: new { reason = overrode.Reason, dueAmount = overrode.DueAmount });
+        }
         audit.Log("report.pdf", actor: principal.UserId(), sid: sid, ip: Audit.AuditIp.From(http));
 
         // Everything that changes the bytes is in the key; the exclude list is
@@ -446,9 +484,16 @@ public static class ReportPdfEndpoints
         var rowStamps = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         var hits = 0;
+        var overrideLock = body.OverrideLock == true;
         foreach (var sid in sids)
         {
-            var (ok, fail, row) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct).ConfigureAwait(false);
+            var (ok, fail, row, overrode) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct,
+                                                            overrideLock: overrideLock).ConfigureAwait(false);
+            if (overrode is not null)
+            {
+                audit.Log("report.lock_override", actor: principal.UserId(), sid: sid, ip: Audit.AuditIp.From(http),
+                    details: new { reason = overrode.Reason, dueAmount = overrode.DueAmount });
+            }
             if (!ok)
             {
                 // Named separately from "unavailable": an operator can act on
@@ -735,8 +780,8 @@ public static class ReportPdfEndpoints
         GraphRepository graphs,
         CancellationToken ct)
     {
-        var (ok, fail, _) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct,
-                                            requireSignatory: false).ConfigureAwait(false);
+        var (ok, fail, _, _) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct,
+                                               requireSignatory: false).ConfigureAwait(false);
         if (!ok) return fail!;
 
         if (meta == true)
@@ -809,5 +854,7 @@ public static class ReportPdfEndpoints
     public sealed record BulkPdfRequest(
         IReadOnlyList<string>? Sids, bool WithGraph = true, bool? Headless = null, string? Paper = null,
         bool? Split = null, bool? SplitDept = null, bool? DeptMajor = null,
-        IReadOnlyDictionary<string, IReadOnlyList<int>>? Excludes = null);
+        IReadOnlyDictionary<string, IReadOnlyList<int>>? Excludes = null,
+        /// <summary>Issue held reports over their balance. Super Admin only; see GateAsync.</summary>
+        bool? OverrideLock = null);
 }

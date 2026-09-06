@@ -280,6 +280,29 @@ export function Reports() {
     }
   };
 
+  /*
+   * A Super Admin may take a held report anyway. The button is drawn for
+   * that role only, and the server honours the flag for that role only —
+   * the button is a courtesy, the role check on the PDF route is the rule.
+   * Every such download is written to the audit trail with what was owed.
+   */
+  const superAdmin = user?.role === 'super_admin';
+  const [overrideBusy, setOverrideBusy] = useState<string | null>(null);
+  const downloadOverride = async (sid: string, l: RowLock) => {
+    setOverrideBusy(sid);
+    try {
+      const q = new URLSearchParams({
+        overrideLock: '1', withGraph: String(withGraphs), paper, split: 'true',
+      });
+      await downloadFile(`/api/reports/${encodeURIComponent(sid)}/pdf?${q}`);
+      showToast(`Downloaded over a hold of ₹${Math.round(l.dueAmount).toLocaleString('en-IN')} — recorded in the audit trail.`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'The download failed.');
+    } finally {
+      setOverrideBusy(null);
+    }
+  };
+
   const downloadMerged = async () => {
     setMerging(true);
     setMergeError(null);
@@ -659,13 +682,28 @@ export function Reports() {
                            both View and Smart (they answer the same 423), and
                            clicking it says what is owed instead of doing
                            nothing, because a dead control reads as a bug. */
-                        <button
-                          className="btn btn--ghost btn--sm btn--locked"
-                          title={lockMsg(locks[r.sid])}
-                          onClick={(e) => { e.stopPropagation(); showToast(lockMsg(locks[r.sid])); }}
-                        >
-                          <LockGlyph /> Locked
-                        </button>
+                        <>
+                          <button
+                            className="btn btn--ghost btn--sm btn--locked"
+                            title={lockMsg(locks[r.sid])}
+                            onClick={(e) => { e.stopPropagation(); showToast(lockMsg(locks[r.sid])); }}
+                          >
+                            <LockGlyph /> Locked
+                          </button>
+                          {/* Super Admin only: the report in spite of the hold.
+                              Plain, not primary — releasing a held report is
+                              an exception, not the next thing to click. */}
+                          {superAdmin && (
+                            <button
+                              className="btn btn--ghost btn--sm"
+                              disabled={overrideBusy === r.sid}
+                              title={`Super Admin: download this report despite the balance on hold. ${lockMsg(locks[r.sid])} The download is recorded in the audit trail.`}
+                              onClick={(e) => { e.stopPropagation(); void downloadOverride(r.sid, locks[r.sid]); }}
+                            >
+                              {overrideBusy === r.sid ? 'Preparing…' : 'Download anyway'}
+                            </button>
+                          )}
+                        </>
                       ) : (
                         <>
                           <button className="btn btn--ghost btn--sm" onClick={(e) => { e.stopPropagation(); setOpenSid(r.sid); }}>
