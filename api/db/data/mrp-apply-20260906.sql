@@ -1,4 +1,4 @@
--- MRP corrections from E:DownloadsInfinity_Tests_MRP.xlsx (the B2B source of truth as of 2026-09-06).
+-- MRP corrections from E:\Downloads\Infinity_Tests_MRP.xlsx (the B2B source of truth as of 2026-09-06).
 -- 73 rows: 46 tests, 18 profiles, 9 packages. Touches ONLY the MRP column of the three
 -- catalogue masters; client special rates (incl. MDCARE) are not read or written.
 -- Every row is updated only if it still holds the MRP it was diffed against; otherwise the
