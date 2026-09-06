@@ -425,14 +425,14 @@
 .lr__c-name-text--abnormal { font-weight: 700; color: #b91c1c; }
 .lr__c-value { padding: 2px 12px 2px 0; }
 .lr__c-unit { padding: 2px 6px; text-align: center; }
-.lr__c-range { padding: 2px 6px; font-size: 12px; line-height: 1.25; color: #111827; text-align: center; }
+.lr__c-range { padding: 2px 6px; font-size: 10px; line-height: 1.25; color: #111827; text-align: center; }
 /* padding 1px, not the 2px of its neighbours: a two-line method ("Automated 5
    Part Analyzer, DLC Flowcytometry") is what sets a result row's height, so
    the method column keeps the tightest padding and leading on the sheet.
-   12px, italic, black (from 8px/#4b5563, then 10px): the method, range, notes and
+   10px, italic, black (from 8px/#4b5563): the method, range, notes and
    interpretation all went up two points and darker together, for legibility
    on the printed page. A CBC row is a little taller for it. */
-.lr__c-method { padding: 1px 0; font-size: 12px; line-height: 1.2; font-style: italic; color: #000; }
+.lr__c-method { padding: 1px 0; font-size: 10px; line-height: 1.2; font-style: italic; color: #000; }
 
 /* Red and bold, not a letter flag: this is the mark Telo prints and the one
    the LIS printed before it, and a report is read against the last one. */
