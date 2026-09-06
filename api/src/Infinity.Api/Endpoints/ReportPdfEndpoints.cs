@@ -248,7 +248,9 @@ public static class ReportPdfEndpoints
      * ------------------------------------------------------------------- */
     // 6: descriptive tests (cytology, histopathology, smears) print label and
     //    full-width text with the method once under the name.
-    private const string PdfCacheV = "6";
+    // 7: method, range, notes, comments and interpretation two points larger
+    //    and darker.
+    private const string PdfCacheV = "7";
     private static readonly TimeSpan PdfCacheTtl = TimeSpan.FromMinutes(45);
 
     private static string PdfCacheKey(
