@@ -393,10 +393,13 @@ export function Worksheet() {
             <table>
               <thead>
                 <tr>
-                  <th>SID</th>
+                  {/* Client Code · PID · Patient · SID · Tests — the LIS's own
+                      worksheet order, so a bench moving between the two reads
+                      the same columns in the same places. */}
+                  <th>Client</th>
                   <th>PID</th>
                   <th>Patient</th>
-                  <th>Client</th>
+                  <th>SID</th>
                   <th>Tests</th>
                   <th>Status</th>
                   <th>Registered</th>
@@ -421,11 +424,19 @@ export function Worksheet() {
                           badge sits beside it, and the button becomes the
                           card's foot. data-label carries the column heading
                           down, because the <thead> is off-screen there. */}
-                      <td className="mono cell--lead"><b>{r.sid}</b></td>
+                      <td className="muted cell--meta" data-label="Client">
+                        {r.clientCode ?? '—'}<BuTag unit={r.businessUnit} />
+                      </td>
 
+                      {/* The PID once per patient, on the first row, with the
+                          sample count as its suffix — as Reporting draws it.
+                          Repeating it down a bracketed block read as duplicate
+                          rows; the bracket already says whose samples these
+                          are. Left truly empty on the later rows so the card
+                          layout can collapse the cell. */}
                       <td className="mono muted cell--meta" data-label="PID" style={{ fontSize: '.78rem' }}
-                          onClick={(e) => { if (can('report:view')) e.stopPropagation(); }}>
-                        {r.pid && can('report:view') ? (
+                          onClick={(e) => { if (i === 0 && can('report:view')) e.stopPropagation(); }}>
+                        {i > 0 && groupByPid ? null : r.pid && can('report:view') ? (
                           /* The same pidlink the reporting list uses — the
                              ghost-button pill it replaces wrapped onto two
                              lines and swallowed the column there, and did the
@@ -434,6 +445,7 @@ export function Worksheet() {
                             pid={r.pid}
                             busy={pidBusy === r.pid}
                             disabled={pidBusy !== null}
+                            count={groupByPid ? groupSize : undefined}
                             title={groupSize > 1
                               ? `Download this patient's ${groupSize} reports on this page as one PDF`
                               : "Download this patient's report"}
@@ -452,14 +464,6 @@ export function Worksheet() {
                         ) : (
                           r.pid || '—'
                         )}
-                        {/* Only the first row of a multi-sample patient carries
-                            the count, so the repetition reads as one patient
-                            rather than as duplicate rows. */}
-                        {groupByPid && groupSize > 1 && isGroupStart && (
-                          <span className="badge badge--role" style={{ marginLeft: '.4rem' }}>
-                            {groupSize} samples
-                          </span>
-                        )}
                       </td>
 
                       <td className="cell--head">
@@ -477,9 +481,7 @@ export function Worksheet() {
                         )}
                       </td>
 
-                      <td className="muted cell--meta" data-label="Client">
-                        {r.clientCode ?? '—'}<BuTag unit={r.businessUnit} />
-                      </td>
+                      <td className="mono cell--lead"><b>{r.sid}</b></td>
                       <td className="cell--body" data-label="Tests">
                         <TestList names={r.testNames} packages={r.packageNames} />
                       </td>
