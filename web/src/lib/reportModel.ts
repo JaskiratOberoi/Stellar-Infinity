@@ -283,6 +283,37 @@ export function isTitleHead(group: ReportGroup): boolean {
 }
 
 /**
+ * A descriptive test: a multi-parameter test none of whose parameters carries
+ * a unit or a reference range. Cytology, histopathology, a peripheral smear,
+ * a rapid card, a blood group — labels with text under them, not figures
+ * against intervals. The LIS prints these as the label and its text running
+ * the width of the page, with the method once under the test name, and the
+ * report does the same.
+ *
+ * Decided on the row STRUCTURE, not on how long the text happens to be: an
+ * FNAC whose impression is a paragraph and one whose every field is "-" are
+ * the same kind of report and must print in the same shape. Nor on the
+ * catalogue's ReportTypeId: this very FNAC is filed there as "Value".
+ *
+ * A Culture & Sensitivity group has its own structure and is not this.
+ */
+export function isDescriptive(group: ReportGroup): boolean {
+  return group.culture == null
+    && group.rows.length > 0
+    && group.rows.every((r) => !r.unit && !r.range);
+}
+
+/**
+ * The method a descriptive test prints once under its name: the test's own,
+ * as the LIS prints it; failing that, whatever its parameters agree on.
+ */
+export function descriptiveMethod(group: ReportGroup): string | null {
+  if (group.method) return group.method;
+  const seen = [...new Set(group.rows.map((r) => r.method).filter((m): m is string => !!m))];
+  return seen.length > 0 ? seen.join('; ') : null;
+}
+
+/**
  * A method string from the parameter master, as it should print. The master
  * was typed by hand over years: "RBC : Electrical Impedance Method.", "TLC :
  * Electrical Impedance Method.", "Calculated.", and a bare "." where somebody

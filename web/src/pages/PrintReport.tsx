@@ -10,7 +10,7 @@ import {
   ageLabel, fmtDob, fmtStamp, formatRange, genderLabel, splitInterp,
 } from '../lib/reportFormat';
 import {
-  buildSampleReport, isTitleHead, COLLECTED_AT_KEY,
+  buildSampleReport, isTitleHead, isDescriptive, descriptiveMethod, COLLECTED_AT_KEY,
   type CultureReport, type ReportBlock,
   type ReportGroup, type ReportItem, type ReportPanel, type ReportRow,
 } from '../lib/reportModel';
@@ -1186,6 +1186,18 @@ function GroupBlock({
   indent?: boolean;
   hideInterpretation?: boolean;
 }) {
+  /*
+   * A descriptive test — cytology, histopathology, a smear, a rapid card —
+   * is prose under labels, not figures against ranges, and the LIS prints it
+   * that way: the method once under the test name, then each label with its
+   * text running the width of the page. The five-column grid gave the same
+   * rows a 12% value column (an FNAC impression wrapped to twenty-five lines
+   * of two words), a dash in Unit and Range on every line, and the method
+   * repeated beside each label. See isDescriptive for the rule.
+   */
+  const descriptive = isDescriptive(group);
+  const methodLine = descriptive ? descriptiveMethod(group) : null;
+
   const heading = (
     <tr className={`lr__group-row${groupOff ? ' lr__off' : ''}`}>
       <td colSpan={5} className={`lr__group-cell${indent ? ' lr__indent' : ''}`}>
@@ -1201,6 +1213,7 @@ function GroupBlock({
           {group.nabl && <img className="lr__nabl" src={nablLogo} alt="NABL accredited" />}
           <span className="lr__title-text">{group.title ?? ''}</span>
         </span>
+        {methodLine && <div className="lr__method-line">(Method: {methodLine})</div>}
       </td>
     </tr>
   );
@@ -1234,6 +1247,7 @@ function GroupBlock({
           row={r}
           dim={rowOff(r)}
           indent={indent}
+          wide={descriptive}
           lead={interactive ? (
             <IncludeToggle
               label={r.name ?? 'parameter'}
@@ -1297,8 +1311,8 @@ function SingleBlock({
 }
 
 function ResultRow({
-  row, dim, lead, indent,
-}: { row: ReportRow; dim?: boolean; lead?: ReactNode; indent?: boolean }) {
+  row, dim, lead, indent, wide,
+}: { row: ReportRow; dim?: boolean; lead?: ReactNode; indent?: boolean; wide?: boolean }) {
   const off = dim ? ' lr__off' : '';
   /*
    * A descriptive result — the Desc Report editor writes real HTML, and here
@@ -1325,6 +1339,14 @@ function ResultRow({
         </td>
         {rich ? (
           <td className="lr__c-value" colSpan={4} />
+        ) : wide ? (
+          /* A descriptive row: the text takes the four remaining columns.
+             Unit, range and method are not blank here, they do not apply —
+             the method is on the heading, once. Line breaks in the text are
+             the pathologist's paragraphs and are kept. */
+          <td className="lr__c-value lr__c-value--wide" colSpan={4}>
+            <span className={row.abnormal ? 'lr__abnormal' : undefined}>{row.value ?? '—'}</span>
+          </td>
         ) : (
           <>
             <td className="lr__c-value">

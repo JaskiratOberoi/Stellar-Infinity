@@ -360,6 +360,17 @@
 .lr__title-text { font-weight: 700; text-transform: uppercase; letter-spacing: 0.025em; }
 .lr__title-text--panel { color: #2b2b6b; }
 
+/* "(Method: H&E and Geimsa stain)" under a descriptive test's name — the one
+   place its method prints. Set like the method column it replaces, in the
+   name's own case. */
+.lr__method-line { margin-top: 1px; font-size: 9px; line-height: 1.25; color: #4b5563; }
+
+/* A descriptive row's text, across the four columns to the right of the
+   label. pre-line: a microscopic description's paragraphs are the
+   pathologist's own breaks and print as written. The right padding matches
+   the name column's left, so the text stops where the range column would. */
+.lr__c-value--wide { padding-right: 5px; white-space: pre-line; }
+
 /* ---------- result rows ---------- */
 
 /* A tall row — a multi-line value like "LOW RISK FOR TRISOMIES 13, 18 AND 21",

@@ -246,7 +246,9 @@ public static class ReportPdfEndpoints
      * horizon for the one thing the key cannot see: a redeploy that changes
      * the print layout itself. Bump the version to orphan everything at once.
      * ------------------------------------------------------------------- */
-    private const string PdfCacheV = "5";
+    // 6: descriptive tests (cytology, histopathology, smears) print label and
+    //    full-width text with the method once under the name.
+    private const string PdfCacheV = "6";
     private static readonly TimeSpan PdfCacheTtl = TimeSpan.FromMinutes(45);
 
     private static string PdfCacheKey(
