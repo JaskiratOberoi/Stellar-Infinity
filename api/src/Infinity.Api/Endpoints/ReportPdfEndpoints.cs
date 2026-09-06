@@ -250,7 +250,9 @@ public static class ReportPdfEndpoints
     //    full-width text with the method once under the name.
     // 7: method, range, notes, comments and interpretation two points larger
     //    and darker.
-    private const string PdfCacheV = "7";
+    // 8: the descriptive shape - signpost labels, quiet blanks, a heavier
+    //    impression, and a two-column band over an all-descriptive sheet.
+    private const string PdfCacheV = "8";
     private static readonly TimeSpan PdfCacheTtl = TimeSpan.FromMinutes(45);
 
     private static string PdfCacheKey(

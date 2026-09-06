@@ -545,7 +545,7 @@ export function PrintReport() {
             />
           </td>
         </tr>
-        <ColumnHeaderRow />
+        <ColumnHeaderRow descriptive={secs.every((s) => s.entries.every((e) => itemDescriptive(e.item)))} />
       </thead>
       {tfoot}
       {secs.map((sec, i) => (
@@ -685,7 +685,7 @@ export function PrintReport() {
                     />
                   </td>
                 </tr>
-                <ColumnHeaderRow />
+                <ColumnHeaderRow descriptive={sections.every((s) => s.entries.every((e) => itemDescriptive(e.item)))} />
               </thead>
               {tfoot}
               {/* A tbody per section — the same keep-together unit the split
@@ -755,11 +755,27 @@ function ReportColgroup() {
 
 /** Repeats at the top of every page: a continuation sheet whose columns are
  *  unlabelled is a table you have to page back to read. */
-function ColumnHeaderRow() {
+function ColumnHeaderRow({ descriptive }: { descriptive?: boolean }) {
   // One full-width cell with an inner grid, not five <th>: the results table
   // collapses its borders, which defeats cell border-radius, so a rounded band
   // has to be a single element. The grid columns mirror the colgroup widths
   // (33/12/11/24/20) so each label still sits over its column's data.
+  //
+  // A sheet of nothing but descriptive tests (an FNAC, a biopsy) has no
+  // units, intervals or method column to head, so its band names the two
+  // things it does have: the label and the text.
+  if (descriptive) {
+    return (
+      <tr className="lr__cols">
+        <td colSpan={5} className="lr__cols-cell">
+          <div className="lr__cols-band lr__cols-band--desc">
+            <span>Test Name</span>
+            <span>Result</span>
+          </div>
+        </td>
+      </tr>
+    );
+  }
   return (
     <tr className="lr__cols">
       <td colSpan={5} className="lr__cols-cell">
@@ -774,6 +790,29 @@ function ColumnHeaderRow() {
     </tr>
   );
 }
+
+/**
+ * Whether an item prints in the descriptive shape: a descriptive group, or a
+ * profile made only of them. A standalone test always has the five columns.
+ */
+function itemDescriptive(item: ReportItem): boolean {
+  if (item.kind === 'group' && item.group) return isDescriptive(item.group);
+  if (item.kind === 'panel' && item.panel) {
+    return item.panel.children.length > 0
+      && item.panel.children.every((c) => c.kind === 'group' && !!c.group && isDescriptive(c.group));
+  }
+  return false;
+}
+
+/** A label as stored ("IMPRESSION:"), without the colon the two-column
+ *  layout already says. */
+function labelText(name: string | null): string {
+  return (name ?? '—').replace(/\s*:\s*$/, '');
+}
+
+/** The label under which a descriptive test states its finding — the line a
+ *  clinician reads first, so its text is set a weight heavier. */
+const KEY_LABEL = /impression|diagnosis|conclusion|opinion|interpretation|final report|result/i;
 
 function EndOfReport() {
   return (
@@ -1322,9 +1361,15 @@ function ResultRow({
    * markup to dangerouslySetInnerHTML.
    */
   const rich = isRichValue(row.valueRaw);
+  /* A descriptive row: label and text. The label loses its stored colon and
+     is set as a signpost; a field the pathologist left as "-" prints as a
+     quiet dash rather than a finding; the impression or diagnosis is set a
+     weight heavier, because it is the line the report exists to carry. */
+  const blank = wide && (!row.value || /^[-–—.]+$/.test(row.value));
+  const key = wide && KEY_LABEL.test(row.name ?? '');
   return (
     <>
-      <tr className={`lr__row${off}`}>
+      <tr className={`lr__row${wide ? ' lr__row--desc' : ''}${off}`}>
         <td className={`lr__c-name${indent ? ' lr__indent' : ''}`}>
           <div className="lr__c-name-inner">
             {lead}
@@ -1332,20 +1377,22 @@ function ResultRow({
             {/* Out of range: the NAME goes bold red with the value, so the eye
                 running down the left column catches the flagged analytes
                 without having to cross to the figure. */}
-            <div className={`lr__c-name-text${row.abnormal ? ' lr__c-name-text--abnormal' : ''}`}>
-              {row.name ?? '—'}
+            <div className={`lr__c-name-text${wide ? ' lr__c-name-text--label' : ''}${row.abnormal ? ' lr__c-name-text--abnormal' : ''}`}>
+              {wide ? labelText(row.name) : (row.name ?? '—')}
             </div>
           </div>
         </td>
         {rich ? (
           <td className="lr__c-value" colSpan={4} />
         ) : wide ? (
-          /* A descriptive row: the text takes the four remaining columns.
-             Unit, range and method are not blank here, they do not apply —
-             the method is on the heading, once. Line breaks in the text are
-             the pathologist's paragraphs and are kept. */
-          <td className="lr__c-value lr__c-value--wide" colSpan={4}>
-            <span className={row.abnormal ? 'lr__abnormal' : undefined}>{row.value ?? '—'}</span>
+          /* The text takes the four remaining columns. Unit, range and
+             method are not blank here, they do not apply — the method is on
+             the heading, once. Line breaks in the text are the pathologist's
+             paragraphs and are kept. */
+          <td className={`lr__c-value lr__c-value--wide${key ? ' lr__c-value--key' : ''}`} colSpan={4}>
+            {blank
+              ? <span className="lr__c-value--blank">—</span>
+              : <span className={row.abnormal ? 'lr__abnormal' : undefined}>{row.value}</span>}
           </td>
         ) : (
           <>

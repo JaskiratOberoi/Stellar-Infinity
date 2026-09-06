@@ -363,13 +363,34 @@
 /* "(Method: H&E and Geimsa stain)" under a descriptive test's name — the one
    place its method prints. Set like the method column it replaces, in the
    name's own case. */
-.lr__method-line { margin-top: 1px; font-size: 11px; line-height: 1.25; color: #1f2937; }
+.lr__method-line { margin-top: 1px; margin-bottom: 3px; font-size: 11px; line-height: 1.25; color: #1f2937; }
 
 /* A descriptive row's text, across the four columns to the right of the
    label. pre-line: a microscopic description's paragraphs are the
    pathologist's own breaks and print as written. The right padding matches
    the name column's left, so the text stops where the range column would. */
-.lr__c-value--wide { padding-right: 5px; white-space: pre-line; }
+.lr__c-value--wide { padding-right: 5px; white-space: pre-line; font-size: 11.5px; line-height: 1.4; }
+
+/* ---------- the descriptive shape ----------
+   A cytology or histopathology report is read as a form: a column of labels
+   and the text beside each. The rows get more air than a run of figures
+   needs, the labels are set as signposts rather than as analyte names, a
+   field left as "-" prints as a quiet dash, and the impression — the line
+   the report exists to carry — sits a weight heavier than the fields that
+   lead up to it. */
+.lr__row--desc > td { padding-top: 4px; padding-bottom: 4px; }
+.lr__row--desc + .lr__row--desc > td { border-top: 0.5px solid #eceff3; }
+.lr__c-name-text--label {
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase;
+  color: #374151; padding-top: 1px;
+}
+.lr__c-value--key { font-weight: 600; color: #111827; }
+.lr__c-value--blank { color: #9ca3af; }
+
+/* The band over a sheet of nothing but descriptive tests: label and text, the
+   two columns it has, at the same 33% split as the rows beneath. */
+.lr__cols-band--desc { grid-template-columns: 33% 67%; }
+.lr__cols-band--desc > span:nth-child(2) { text-align: left; padding-right: 0; }
 
 /* ---------- result rows ---------- */
 
