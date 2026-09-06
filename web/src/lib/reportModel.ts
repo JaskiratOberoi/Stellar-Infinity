@@ -140,6 +140,10 @@ const clean = (s: string | null | undefined): string | null => {
   return t || null;
 };
 
+/** A field the LIS filled with only dots or dashes is an empty field. */
+const placeholderToNull = (s: string | null): string | null =>
+  s !== null && /^[-–—.\s]+$/.test(s) ? null : s;
+
 /**
  * Like clean(), but KEEPS line breaks.
  *
@@ -350,9 +354,14 @@ export function buildSampleReport(results: readonly TestResult[]): SampleReport 
     name: displayTestName(clean(t.testName)),
     method: methodOf(t, headMethod),
     value: clean(t.value),
-    unit: clean(t.unit),
+    // "." and "-" are the LIS's way of leaving a unit or range EMPTY — a
+    // qualitative test (rapid HCV, VDRL) carries unit "." — and printing the
+    // dot in the Unit column reads as a typo. The value is NOT filtered: a
+    // "-" result on a descriptive row is the pathologist's own entry and the
+    // row's own rules decide how it prints.
+    unit: placeholderToNull(clean(t.unit)),
     // Bands keep their own lines; formatRange finishes the job at render time.
-    range: cleanMultiline(t.normalRange),
+    range: placeholderToNull(cleanMultiline(t.normalRange)),
     abnormal: t.abnormal === true,
     comments: clean(t.comments),
     resultId: t.resultId,

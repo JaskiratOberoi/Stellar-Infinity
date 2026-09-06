@@ -360,7 +360,8 @@ public static class ReportPdfEndpoints
     // 11: the descriptive method line back to 10px, upright.
     // 12: reference interval and method column at 10px.
     // 13: the NABL medallion carries MC-2547 beneath it, every instance.
-    private const string PdfCacheV = "13";
+    // 14: a "." or "-" unit / range from the LIS prints as an empty cell.
+    private const string PdfCacheV = "14";
     private static readonly TimeSpan PdfCacheTtl = TimeSpan.FromMinutes(45);
 
     private static string PdfCacheKey(
