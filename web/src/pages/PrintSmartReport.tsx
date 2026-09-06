@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { SmartBooklet, type SmartBookletData } from './SmartBooklet';
 
@@ -40,6 +40,14 @@ export const PAGE_RULE = `
 
 export function PrintSmartReport() {
   const { sid = '' } = useParams();
+  const [search] = useSearchParams();
+  /*
+   * Two ways in, one booklet. /print/smart?sids=a,b,c is what the PDF route
+   * renders — the patient's visit as one document. /print/report/:sid/smart
+   * is the older per-sample address, kept so nothing holding it breaks; it
+   * simply becomes a one-sample list. Both read the same patient route.
+   */
+  const query = search.get('sids') || sid;
   const [data, setData] = useState<SmartBookletData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,7 +64,7 @@ export function PrintSmartReport() {
      * 404 that reads like a broken report; if the booklet ever needs a public
      * copy, the route comes first.
      */
-    api.get<SmartBookletData>(`/api/reports/${encodeURIComponent(sid)}/smart`)
+    api.get<SmartBookletData>(`/api/reports/smart?sids=${encodeURIComponent(query)}`)
       .then((d) => { if (live) setData(d); })
       .catch((e) => {
         if (live) {
@@ -64,7 +72,7 @@ export function PrintSmartReport() {
         }
       });
     return () => { live = false; };
-  }, [sid]);
+  }, [query]);
 
   /*
    * Ready ONLY with data in hand.

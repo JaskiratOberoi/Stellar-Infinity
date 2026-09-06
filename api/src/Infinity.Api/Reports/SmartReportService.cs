@@ -57,7 +57,13 @@ public sealed record SmartReport(
     /// <summary>QR to the patient's verifiable copy, as the clinical report carries.</summary>
     string? Qr = null,
     /// <summary>When this booklet was produced, as distinct from when reported.</summary>
-    DateTimeOffset? PrintedAt = null);
+    DateTimeOffset? PrintedAt = null,
+    /// <summary>
+    /// Every sample the booklet was built from, in the order given. <see cref="Sid"/>
+    /// is the same list joined for printing, kept for the booklet's "Sample" line.
+    /// </summary>
+    IReadOnlyList<string>? Sids = null,
+    int? Pid = null);
 
 /// <summary>
 /// Builds the patient-facing Smart Report: results grouped into body-system
@@ -94,10 +100,34 @@ public sealed class SmartReportService(SmartMeta meta)
         WorksheetRow row,
         ReportExtras extras,
         string? qr = null,
+        DateTimeOffset? printedAt = null) =>
+        Build([row], extras.Signers, extras.ProcessedAt, qr, printedAt);
+
+    /// <summary>
+    /// Assemble ONE booklet from every sample of a visit.
+    /// </summary>
+    /// <remarks>
+    /// The sections group by body system, not by tube, so results from four
+    /// samples fall into the same handful of sections a single sample's
+    /// would — the lipids from the serum tube and the HbA1c from the EDTA
+    /// tube sit together under the heart and the sugar. Patient fields come
+    /// from the first sample (they are the patient's, not the tube's);
+    /// "collected" is the earliest draw and "reported" the latest sign-off,
+    /// which is what those words mean for a visit. The caller has already
+    /// established that the rows are one patient's — see SmartReportGate.
+    /// </remarks>
+    public SmartReport Build(
+        IReadOnlyList<WorksheetRow> rows,
+        IReadOnlyList<ReportSigner> signers,
+        ProcessingUnit? processedAt,
+        string? qr = null,
         DateTimeOffset? printedAt = null)
     {
-        var authorised = row.Results.Where(r => r.Authorized).ToList();
-        var withheld = row.Results.Count - authorised.Count;
+        if (rows.Count == 0) throw new ArgumentException("A Smart Report needs at least one sample.", nameof(rows));
+        var first = rows[0];
+
+        var authorised = rows.SelectMany(row => row.Results.Where(r => r.Authorized)).ToList();
+        var withheld = rows.Sum(row => row.Results.Count) - authorised.Count;
 
         var sections = new List<SmartSection>();
         var grouped = new Dictionary<string, List<SmartAnalyte>>(StringComparer.Ordinal);
@@ -109,7 +139,7 @@ public sealed class SmartReportService(SmartMeta meta)
             if (string.IsNullOrWhiteSpace(r.Value) && string.IsNullOrWhiteSpace(r.Unit)) continue;
 
             var resolved = meta.Resolve(r.TestCode, r.TestName, r.DepartmentName);
-            var gauge = SmartRange.Build(r.Value, r.NormalRange, row.Sex);
+            var gauge = SmartRange.Build(r.Value, r.NormalRange, first.Sex);
 
             // Trust the LIS's abnormal flag first — it is the lab's own
             // determination and may account for rules our text parsing cannot
@@ -167,24 +197,30 @@ public sealed class SmartReportService(SmartMeta meta)
 
         var total = sections.Sum(s => s.Analytes.Count);
 
+        var sids = rows.Select(r => r.Sid).ToList();
+        var drawn = rows.Select(r => r.SampleDrawn).Where(d => d is not null).OrderBy(d => d).FirstOrDefault();
+        var reported = rows.Select(r => r.LastModifiedAt).Where(d => d is not null).OrderByDescending(d => d).FirstOrDefault();
+
         return new SmartReport(
-            Sid: row.Sid,
-            PatientName: row.PatientName,
-            Sex: row.Sex,
-            Age: row.Age,
-            AgeUnit: row.AgeUnit,
-            ClientCode: row.ClientCode,
-            RefDoctor: row.RefDoctor,
-            SampleDrawn: row.SampleDrawn,
-            ReportedAt: row.LastModifiedAt,
+            Sid: string.Join(", ", sids),
+            PatientName: first.PatientName,
+            Sex: first.Sex,
+            Age: first.Age,
+            AgeUnit: first.AgeUnit,
+            ClientCode: first.ClientCode,
+            RefDoctor: first.RefDoctor,
+            SampleDrawn: drawn,
+            ReportedAt: reported,
             TotalAnalytes: total,
             AbnormalCount: sections.Sum(s => s.AbnormalCount),
             WithheldCount: withheld,
             FullyAuthorised: withheld == 0,
             Sections: sections,
-            Signers: extras.Signers,
-            ProcessedAt: extras.ProcessedAt,
+            Signers: signers,
+            ProcessedAt: processedAt,
             Qr: qr,
-            PrintedAt: printedAt);
+            PrintedAt: printedAt,
+            Sids: sids,
+            Pid: first.Pid);
     }
 }

@@ -44,6 +44,9 @@ public static class ReportPdfEndpoints
 
         reports.MapGet("/{sid}/pdf", GetReportPdf).WithName("GetReportPdf");
         reports.MapGet("/{sid}/smart/pdf", GetSmartPdf).WithName("GetSmartReportPdf");
+        // The patient's booklet as one PDF; literal segment, so it wins over
+        // /{sid}/smart/pdf in routing.
+        reports.MapGet("/smart/pdf", GetPatientSmartPdf).WithName("GetPatientSmartReportPdf");
         reports.MapGet("/{sid}/graph", GetReportGraph).WithName("GetReportGraph");
         reports.MapPost("/pdf/bulk", PostBulkPdf).WithName("GetBulkReportPdf");
     }
@@ -107,6 +110,71 @@ public static class ReportPdfEndpoints
             await cache.SetBytesAsync(key, pdf, PdfCacheTtl, ct).ConfigureAwait(false);
             http.Response.Headers["X-Report-Cache"] = "miss";
             return Results.File(pdf, "application/pdf", $"HealthSummary_{Sanitise(sid)}.pdf");
+        }
+        catch (RenderFailedException)
+        {
+            return Results.Problem("The summary could not be rendered.", statusCode: StatusCodes.Status502BadGateway);
+        }
+    }
+
+    /// <summary>
+    /// The patient's Smart Report as one PDF, built from every sample named.
+    /// Same headless, unnumbered render as the per-sample booklet; the gate
+    /// is SmartReportGate, shared with the JSON route the print page reads.
+    /// </summary>
+    private static async Task<IResult> GetPatientSmartPdf(
+        string? sids,
+        System.Security.Claims.ClaimsPrincipal principal,
+        HttpContext http,
+        ScopeRepository scopes,
+        ReportsRepository repo,
+        ReportLockRepository locks,
+        ReportExtrasRepository extras,
+        ILoggerFactory loggers,
+        SmartReportAccessRepository smartAccess,
+        RenderClient render,
+        Caching.InfinityCache cache,
+        Audit.AuditLog audit,
+        CancellationToken ct)
+    {
+        var list = SmartReportGate.ParseSids(sids);
+        var (fail, ok) = await SmartReportGate
+            .PassAsync(list, principal, scopes, repo, locks, extras, smartAccess, loggers, ct)
+            .ConfigureAwait(false);
+        if (fail is not null) return fail;
+        var rows = ok!.Rows;
+
+        // One audit line per sample: the trail is read per SID.
+        foreach (var r in rows)
+            audit.Log("report.smart_pdf", actor: principal.UserId(), sid: r.Sid, ip: Audit.AuditIp.From(http));
+
+        var ordered = rows.Select(r => r.Sid).ToList();
+        var joined = string.Join(",", ordered);
+        // Keyed on every sample's stamp: a correction on any tube re-renders
+        // the whole booklet, as the merged clinical PDF is keyed.
+        var key = PdfCacheKey("smart", string.Join("+", ordered), string.Join("|", rows.Select(RowStamp)), "-");
+        var name = "Smart_" + ReportFileName.For(rows[0], rows[0].Pid.ToString());
+
+        if (await cache.GetBytesAsync(key, ct).ConfigureAwait(false) is { } cached)
+        {
+            http.Response.Headers["X-Report-Cache"] = "hit";
+            return Results.File(cached, "application/pdf", name);
+        }
+
+        try
+        {
+            var pdf = await render.RenderAsync(
+                [new RenderClient.ReportRequest(
+                    Url: $"/print/smart?sids={Uri.EscapeDataString(joined)}",
+                    Attachments: null,
+                    Headless: true,
+                    PageNumbers: false)],
+                http.Request.Headers.Cookie.ToString(),
+                ct).ConfigureAwait(false);
+
+            await cache.SetBytesAsync(key, pdf, PdfCacheTtl, ct).ConfigureAwait(false);
+            http.Response.Headers["X-Report-Cache"] = "miss";
+            return Results.File(pdf, "application/pdf", name);
         }
         catch (RenderFailedException)
         {

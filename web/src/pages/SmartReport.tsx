@@ -38,7 +38,10 @@ export interface SmartSection {
 }
 
 export interface SmartReportData {
+  /** The samples the booklet covers, joined for display. */
   sid: string;
+  sids?: string[];
+  pid?: number | null;
   patientName: string | null;
   sex: string | null;
   age: number | null;
@@ -53,15 +56,21 @@ export interface SmartReportData {
   sections: SmartSection[];
 }
 
-export function SmartReportModal({ sid, onClose }: { sid: string; onClose: () => void }) {
+/**
+ * The patient's Smart Report: ONE booklet for the visit, built from every
+ * sample passed in. The routes take the SID list because the booklet is per
+ * patient, not per tube — a four-tube profile is one summary, not four.
+ */
+export function SmartReportModal({ sids, onClose }: { sids: string[]; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const query = `sids=${encodeURIComponent(sids.join(','))}`;
 
   const download = async () => {
     setBusy(true);
     setDownloadError(null);
     try {
-      await downloadFile(`/api/reports/${encodeURIComponent(sid)}/smart/pdf`);
+      await downloadFile(`/api/reports/smart/pdf?${query}`);
     } catch (e) {
       setDownloadError(e instanceof Error ? e.message : 'The download failed.');
     } finally {
@@ -76,7 +85,7 @@ export function SmartReportModal({ sid, onClose }: { sid: string; onClose: () =>
   useEffect(() => {
     let live = true;
     api
-      .get<SmartReportData>(`/api/reports/${encodeURIComponent(sid)}/smart`)
+      .get<SmartReportData>(`/api/reports/smart?${query}`)
       .then((r) => { if (live) setData(r); })
       .catch((e) => {
         if (!live) return;
@@ -91,7 +100,7 @@ export function SmartReportModal({ sid, onClose }: { sid: string; onClose: () =>
       })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, [sid]);
+  }, [query]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -102,7 +111,7 @@ export function SmartReportModal({ sid, onClose }: { sid: string; onClose: () =>
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" style={{ width: 'min(820px, 100%)' }} onClick={(e) => e.stopPropagation()}
-           role="dialog" aria-modal="true" aria-label={`Smart report ${sid}`}>
+           role="dialog" aria-modal="true" aria-label={`Smart report for samples ${sids.join(', ')}`}>
         {loading ? (
           <div className="center" style={{ minHeight: 160 }}><InfinityLoader /></div>
         ) : error ? (
@@ -118,7 +127,8 @@ export function SmartReportModal({ sid, onClose }: { sid: string; onClose: () =>
                 {data.patientName ?? 'Patient'}
                 {data.sex && ` · ${data.sex}`}
                 {data.age != null && ` · ${data.age}${data.ageUnit ?? ''}`}
-                {' · '}SID <span className="mono">{data.sid}</span>
+                {' · '}{(data.sids?.length ?? 1) === 1 ? 'SID' : 'Samples'}{' '}
+                <span className="mono">{data.sid}</span>
               </p>
             </div>
 
@@ -143,7 +153,7 @@ export function SmartReportModal({ sid, onClose }: { sid: string; onClose: () =>
 
             {data.totalAnalytes === 0 && (
               <p className="muted" style={{ fontSize: '.85rem' }}>
-                No authorised results are available for this sample yet.
+                No authorised results are available for this patient yet.
               </p>
             )}
 

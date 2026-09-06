@@ -114,7 +114,13 @@ export function Reports() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openSid, setOpenSid] = useState<string | null>(null);
-  const [smartSid, setSmartSid] = useState<string | null>(null);
+  /*
+   * The Smart Report is the PATIENT'S: one booklet for the visit, however
+   * many tubes it took. So the state is the list of samples it is built
+   * from, and every way in — the row, either viewer — resolves the same set:
+   * the patient's samples on this page that have a report and are not held.
+   */
+  const [smartSids, setSmartSids] = useState<string[] | null>(null);
 
   /*
    * Balance locks for the page, keyed by SID — the advisory mirror of the
@@ -261,6 +267,24 @@ export function Reports() {
    * download beyond what the operator can see would hand them a document they
    * did not ask for and cannot check.
    */
+  /**
+   * Open the Smart Report for the patient a row belongs to: every sample of
+   * theirs on this page that has a report and is not held, in bench order.
+   * The same eligibility as the PID download, because it is the same
+   * document's worth of results. The server re-checks every one.
+   */
+  const openSmart = (row: WorksheetRow) => {
+    const group = grouped.find((g) => g.rows.some((x) => x.sid === row.sid))?.rows ?? [row];
+    const eligible = group
+      .filter((x) => REPORTABLE_STATUSES.includes(x.statusCode ?? -1) && !locks[x.sid])
+      .map((x) => x.sid);
+    if (eligible.length === 0) {
+      showToast('None of this patient’s reports are ready for a Smart Report yet.');
+      return;
+    }
+    setSmartSids(eligible);
+  };
+
   const downloadPatient = async (pid: number, sids: string[], paper: Paper, includeHeld = false) => {
     setPidBusy(pid);
     setMergeError(null);
@@ -746,7 +770,10 @@ export function Reports() {
                               enforcement either way. */}
                           {r.smartReport && (
                             <button className="btn btn--primary btn--sm"
-                                    onClick={(e) => { e.stopPropagation(); setSmartSid(r.sid); }}>
+                                    title={groupSize > 1
+                                      ? `This patient's Smart Report — all ${groupSize} samples in one booklet`
+                                      : "This patient's Smart Report"}
+                                    onClick={(e) => { e.stopPropagation(); openSmart(r); }}>
                               Smart
                             </button>
                           )}
@@ -792,12 +819,16 @@ export function Reports() {
             rows.find((r) => r.sid === openSid)?.smartReport
               // Swap one modal for the other rather than stacking them — two
               // dialogs deep, Escape closes the wrong one.
-              ? (s) => { setOpenSid(null); setSmartSid(s); }
+              ? (s) => {
+                  const row = rows.find((r) => r.sid === s);
+                  setOpenSid(null);
+                  if (row) openSmart(row);
+                }
               : undefined
           }
         />
       )}
-      {smartSid && <SmartReportModal sid={smartSid} onClose={() => setSmartSid(null)} />}
+      {smartSids && <SmartReportModal sids={smartSids} onClose={() => setSmartSids(null)} />}
       {pidView && (
         <PatientReportViewer
           pid={pidView.pid}
@@ -810,7 +841,7 @@ export function Reports() {
           // stack them, as the single viewer does.
           onSmart={
             pidView.rows.some((r) => r.smartReport)
-              ? (s) => { setPidView(null); setSmartSid(s); }
+              ? () => { const first = pidView.rows[0]; setPidView(null); if (first) openSmart(first); }
               : undefined
           }
         />
@@ -859,9 +890,9 @@ function PatientReportViewer({ pid, patientName, rows, onClose, overrideLock, on
    *  and the download both carry it, and the server honours it for that
    *  role alone. */
   overrideLock?: boolean;
-  /** Opens the patient-facing Smart Report for the sample on screen. Omitted
-   *  where the order did not buy it, exactly as the single viewer does. */
-  onSmart?: (sid: string) => void;
+  /** Opens the patient's Smart Report — the whole visit in one booklet.
+   *  Omitted where the order did not buy it, exactly as the single viewer does. */
+  onSmart?: () => void;
 }) {
   const sids = useMemo(() => rows.map((r) => r.sid), [rows]);
   const [activeSid, setActiveSid] = useState(sids[0]);
@@ -1003,8 +1034,8 @@ function PatientReportViewer({ pid, patientName, rows, onClose, overrideLock, on
                 the same way as the row's button: no handler, no control. */}
             {onSmart && (
               <button className="btn btn--ghost btn--sm" disabled={busy}
-                      onClick={() => onSmart(activeSid)}
-                      title={`The patient-facing Smart Report for sample ${activeSid}`}>
+                      onClick={() => onSmart()}
+                      title="This patient's Smart Report — every sample of the visit in one booklet">
                 Smart Report
               </button>
             )}

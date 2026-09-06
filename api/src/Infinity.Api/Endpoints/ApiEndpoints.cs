@@ -77,6 +77,10 @@ public static class ApiEndpoints
         reports.MapGet("/tests/search", SearchFilterTests).WithName("SearchFilterTests");
         reports.MapGet("/{sid}", GetReport).WithName("GetReport");
         reports.MapGet("/{sid}/smart", GetSmartReport).WithName("GetSmartReport");
+        // The patient's booklet: every sample of the visit in one document.
+        // A literal segment, so it wins over /{sid}/... in routing. The
+        // per-SID route above stays for anything still holding its URL.
+        reports.MapGet("/smart", GetPatientSmartReport).WithName("GetPatientSmartReport");
         // POST because a page of fifty SIDs does not fit a query string.
         reports.MapPost("/locks", GetReportLocks).WithName("GetReportLocks");
         // The per-sample clinical-history PDF — the LIS's Sample Status upload,
@@ -991,6 +995,37 @@ public static class ApiEndpoints
     /// The patient-facing Smart Report for one SID: results grouped by body
     /// system with plain-English explanations and gauges.
     /// </summary>
+    /// <summary>
+    /// One Smart Report for a patient, built from the samples named in
+    /// <paramref name="sids"/>. The gate is shared with the PDF route — see
+    /// <see cref="Reports.SmartReportGate"/>.
+    /// </summary>
+    private static async Task<IResult> GetPatientSmartReport(
+        string? sids,
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
+        ReportsRepository repo,
+        Reports.SmartReportService smart,
+        Reports.SmartReportAccessRepository smartAccess,
+        Reports.ReportExtrasRepository extras,
+        Reports.ReportLink links,
+        ILoggerFactory loggers,
+        Reports.ReportLockRepository locks,
+        CancellationToken ct)
+    {
+        var list = Reports.SmartReportGate.ParseSids(sids);
+        var (fail, ok) = await Reports.SmartReportGate
+            .PassAsync(list, principal, scopes, repo, locks, extras, smartAccess, loggers, ct)
+            .ConfigureAwait(false);
+        if (fail is not null) return fail;
+
+        // The QR points at the clinical softcopy, which is per sample; the
+        // first sample's is the one printed, as the first tube's report is
+        // the first page of the merged clinical document.
+        return Results.Ok(smart.Build(
+            ok!.Rows, ok.Signers, ok.ProcessedAt, links.QrDataUrl(ok.Rows[0].Sid), DateTimeOffset.UtcNow));
+    }
+
     private static async Task<IResult> GetSmartReport(
         string sid,
         System.Security.Claims.ClaimsPrincipal principal,

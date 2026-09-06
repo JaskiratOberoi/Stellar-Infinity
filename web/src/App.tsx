@@ -298,6 +298,8 @@ export function App() {
       <Routes>
         <Route path="/print/report/:sid" element={<PrintReport />} />
         <Route path="/print/report/:sid/smart" element={<PrintSmartReport />} />
+        {/* The patient's booklet — every sample of the visit, ?sids=a,b,c. */}
+        <Route path="/print/smart" element={<PrintSmartReport />} />
         {/* The invoice is printed by the operator rather than photographed by
             the render service, but it belongs here for the same reason: no
             application chrome around a document someone hands to a client. */}
