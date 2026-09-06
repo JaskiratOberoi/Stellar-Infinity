@@ -445,7 +445,6 @@ export function Worksheet() {
                             pid={r.pid}
                             busy={pidBusy === r.pid}
                             disabled={pidBusy !== null}
-                            count={groupByPid ? groupSize : undefined}
                             title={groupSize > 1
                               ? `Download this patient's ${groupSize} reports on this page as one PDF`
                               : "Download this patient's report"}
@@ -463,6 +462,13 @@ export function Worksheet() {
                           />
                         ) : (
                           r.pid || '—'
+                        )}
+                        {/* The count as a pill beside the PID, on the first
+                            row only — the bench's own wording, kept. */}
+                        {groupByPid && groupSize > 1 && isGroupStart && (
+                          <span className="badge badge--role" style={{ marginLeft: '.4rem' }}>
+                            {groupSize} samples
+                          </span>
                         )}
                       </td>
 
