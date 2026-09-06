@@ -78,7 +78,7 @@ public static class PublicReportEndpoints
 
         // No report exists before authorisation, and the public route reveals
         // nothing about why — the same 404 as an unknown SID.
-        if (row.StatusCode is not (7 or 8 or 9)) return Results.NotFound();
+        if (row.StatusCode is not (6 or 7 or 8 or 9)) return Results.NotFound();
 
         var lockState = await locks.GetAsync(sid, ct).ConfigureAwait(false);
         if (lockState.Locked) return Results.NotFound();
@@ -89,7 +89,10 @@ public static class PublicReportEndpoints
         if (signoff.Refusal is not null) return signoff.Refusal;
         var more = signoff.Extras!;
 
-        var results = await ReportEnrichment.ApplyAsync(catalogue, row, ct).ConfigureAwait(false);
+        // Authorised rows only, as on the signed-in route: the patient's copy
+        // must never show a value nobody has released. See ReportRelease.
+        var results = ReportRelease.Releasable(
+            await ReportEnrichment.ApplyAsync(catalogue, row, ct).ConfigureAwait(false));
 
         return Results.Ok(new
         {
@@ -150,7 +153,7 @@ public static class PublicReportEndpoints
         if (row is null) return Results.NotFound();
 
         // Same rule as the JSON route above: nothing issued, nothing served.
-        if (row.StatusCode is not (7 or 8 or 9)) return Results.NotFound();
+        if (row.StatusCode is not (6 or 7 or 8 or 9)) return Results.NotFound();
 
         var lockState = await locks.GetAsync(sid, ct).ConfigureAwait(false);
         // 404, not 423. The signed-in route says "clear the balance" because a

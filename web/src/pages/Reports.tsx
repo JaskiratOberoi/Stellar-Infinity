@@ -69,7 +69,10 @@ export interface WorksheetRow {
  * still unsigned, so there is no finished report to look at yet; it belongs on
  * the worksheet, where it is already listed as outstanding work.
  */
-export const REPORTABLE_STATUSES = [7, 8, 9];
+/** Statuses a report can be viewed and downloaded at. 6 (Partially
+ *  authorised) is in, as the LIS has it: the report carries the results
+ *  that ARE authorised and the API drops the rest (ReportRelease). */
+export const REPORTABLE_STATUSES = [6, 7, 8, 9];
 
 /** What one balance lock looks like, as /api/reports/locks reports it. */
 interface RowLock { reason: 'patient' | 'client' | null; dueAmount: number }

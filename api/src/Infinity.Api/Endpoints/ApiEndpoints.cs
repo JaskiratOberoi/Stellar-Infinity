@@ -660,7 +660,7 @@ public static class ApiEndpoints
         // A report exists only from authorisation onward — the list hides the
         // View button on earlier statuses, and this is what makes that true
         // for a typed URL as well. In-progress data belongs to the worksheet.
-        if (row.StatusCode is not (7 or 8 or 9))
+        if (row.StatusCode is not (6 or 7 or 8 or 9))
         {
             return Results.Json(new
             {
@@ -710,8 +710,12 @@ public static class ApiEndpoints
 
         // The age-narrowed range and the interpretation graphs. Best-effort, in
         // the same spirit as the extras above.
-        var results = await Infinity.Api.Reports.ReportEnrichment
-            .ApplyAsync(catalogue, row, ct).ConfigureAwait(false);
+        // Only what has been authorised leaves here — a partially authorised
+        // sample (6) is released like the LIS releases it, minus the rows
+        // still unsigned. See ReportRelease.
+        var results = Infinity.Api.Reports.ReportRelease.Releasable(
+            await Infinity.Api.Reports.ReportEnrichment
+                .ApplyAsync(catalogue, row, ct).ConfigureAwait(false));
 
         return Results.Ok(new
         {
@@ -970,7 +974,7 @@ public static class ApiEndpoints
         // A report exists only from authorisation onward — the list hides the
         // View button on earlier statuses, and this is what makes that true
         // for a typed URL as well. In-progress data belongs to the worksheet.
-        if (row.StatusCode is not (7 or 8 or 9))
+        if (row.StatusCode is not (6 or 7 or 8 or 9))
         {
             return Results.Json(new
             {

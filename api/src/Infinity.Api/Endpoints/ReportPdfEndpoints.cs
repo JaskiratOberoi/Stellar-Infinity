@@ -86,7 +86,7 @@ public static class ReportPdfEndpoints
 
         audit.Log("report.smart_pdf", actor: principal.UserId(), sid: sid, ip: Audit.AuditIp.From(http));
 
-        var key = PdfCacheKey("smart", sid, row!.LastModifiedAt, "-");
+        var key = PdfCacheKey("smart", sid, RowStamp(row!), "-");
         if (await cache.GetBytesAsync(key, ct).ConfigureAwait(false) is { } cached)
         {
             http.Response.Headers["X-Report-Cache"] = "hit";
@@ -193,12 +193,17 @@ public static class ReportPdfEndpoints
          * otherwise finished report. 425 Too Early, so the bulk route can
          * name the skip for what it is.
          */
-        if (row.StatusCode is not (7 or 8 or 9))
+        // 6 (Partially Authorised) is released too, as the LIS releases it:
+        // GET_PATIENT_REPORT_VAIL_ID takes sample_status IN (6,7,8,9) and
+        // prints the authorised rows. The report routes drop the rows that
+        // are not yet signed (ReportRelease), so a partial report carries
+        // only what has been released.
+        if (row.StatusCode is not (6 or 7 or 8 or 9))
         {
             return (false, Results.Json(new
             {
                 error = "REPORT_NOT_READY",
-                message = "This sample’s report is not ready yet — it has not been authorised.",
+                message = "This sample’s report is not ready yet — nothing on it has been authorised.",
             }, statusCode: 425), null);
         }
 
@@ -241,12 +246,38 @@ public static class ReportPdfEndpoints
      * horizon for the one thing the key cannot see: a redeploy that changes
      * the print layout itself. Bump the version to orphan everything at once.
      * ------------------------------------------------------------------- */
-    private const string PdfCacheV = "4";
+    private const string PdfCacheV = "5";
     private static readonly TimeSpan PdfCacheTtl = TimeSpan.FromMinutes(45);
 
     private static string PdfCacheKey(
-        string kind, string sid, DateTimeOffset? lastModified, string options) =>
-        $"rptpdf:{PdfCacheV}:{kind}:{sid.ToUpperInvariant()}:{lastModified?.UtcTicks ?? 0}:{options}";
+        string kind, string sid, string? stamp, string options) =>
+        $"rptpdf:{PdfCacheV}:{kind}:{sid.ToUpperInvariant()}:{stamp ?? "0"}:{options}";
+
+    /// <summary>
+    /// What makes a cached PDF current: the sample's last-modified stamp, its
+    /// status, and a fingerprint of the header the sheet prints.
+    /// </summary>
+    /// <remarks>
+    /// lastmodified_date alone was the key, and it moves only when the SAMPLE
+    /// is re-saved. A patient's name, age, doctor or centre corrected in the
+    /// legacy LIS moves the patient row, not the sample — so the PDF kept the
+    /// old name for the cache's 45 minutes, and because each paper is its own
+    /// entry, "With Letterhead" could show the fix while "Without" still did
+    /// not. Hashing the header fields the sheet prints closes that: any edit
+    /// that would change the page changes the key. Status rides along so a
+    /// partially-authorised sample re-renders the moment it is fully signed.
+    /// </remarks>
+    private static string RowStamp(Reads.WorksheetRow row)
+    {
+        var header = string.Join("|",
+            row.PatientName, row.Sex, row.Age?.ToString(), row.AgeUnit, row.Dob?.ToString("O"),
+            row.ClientCode, row.BusinessUnit, row.RefDoctor, row.RefCustomer, row.PassportNo,
+            row.BillNumber, row.OrderNumber, row.ClinicalHistory, row.TestNames,
+            row.SampleDrawn?.ToString("O"), row.RegisteredAt?.ToString("O"));
+        var fp = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(header)))[..12];
+        return $"{row.LastModifiedAt?.UtcTicks ?? 0}.{row.StatusCode ?? 0}.{fp}";
+    }
 
     /// <summary>count.maxid of the SID's graph attachments, without the bytes.</summary>
     private static async Task<string> GraphFingerprintAsync(
@@ -299,7 +330,7 @@ public static class ReportPdfEndpoints
         var sheet = ReportPaper.Resolve(paper, headless);
         var query = PrintQuery(split, exclude, sheet);
         var graphFp = await GraphFingerprintAsync(graphs, sid, withGraph == true, ct).ConfigureAwait(false);
-        var key = PdfCacheKey("report", sid, row!.LastModifiedAt,
+        var key = PdfCacheKey("report", sid, RowStamp(row!),
             $"s{(split == true ? 1 : 0)}p{sheet.Key}g{graphFp}x{query}");
 
         if (await cache.GetBytesAsync(key, ct).ConfigureAwait(false) is { } cached)
@@ -406,7 +437,7 @@ public static class ReportPdfEndpoints
         // above. The stamps ride along so a unit's cache entry expires when its
         // sample is re-authorised, exactly as a whole report's does.
         var allowed = new List<string>();
-        var rowStamps = new Dictionary<string, DateTimeOffset?>(StringComparer.OrdinalIgnoreCase);
+        var rowStamps = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         var hits = 0;
         foreach (var sid in sids)
@@ -435,7 +466,7 @@ public static class ReportPdfEndpoints
             }
 
             allowed.Add(sid);
-            rowStamps[sid] = row!.LastModifiedAt;
+            rowStamps[sid] = RowStamp(row!);
             firstRow ??= row;
             if (row.Pid != firstRow.Pid) onePatient = false;
 
@@ -454,7 +485,7 @@ public static class ReportPdfEndpoints
             // n0: rendered WITHOUT per-report page numbers, because the batch
             // is numbered as one document at the staple. Distinct from the
             // single route's cache, whose documents carry their own numbers.
-            var key = PdfCacheKey("report", sid, row!.LastModifiedAt,
+            var key = PdfCacheKey("report", sid, RowStamp(row!),
                 $"n0s{(body.Split == true ? 1 : 0)}d{(body.SplitDept == true ? 1 : 0)}p{sheet.Key}g{graphFp}x{query}");
 
             if (await cache.GetBytesAsync(key, ct).ConfigureAwait(false) is { } cachedDoc)
