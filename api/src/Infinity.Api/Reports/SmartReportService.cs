@@ -127,7 +127,13 @@ public sealed class SmartReportService(SmartMeta meta)
         var first = rows[0];
 
         var authorised = rows.SelectMany(row => row.Results.Where(r => r.Authorized)).ToList();
-        var withheld = rows.Sum(row => row.Results.Count) - authorised.Count;
+        // Withheld = VALUE rows not yet signed. Head and Profile rows are
+        // structure, not results, and carry no authorised bit on a real
+        // sample (see ReportRelease) — counting them said "6 results not
+        // authorised" on a fully signed four-tube visit, which is the
+        // clinical panel headings, not results.
+        var withheld = rows.SelectMany(row => row.Results)
+            .Count(r => !r.Authorized && !IsHeading(r));
 
         var sections = new List<SmartSection>();
         var grouped = new Dictionary<string, List<SmartAnalyte>>(StringComparer.Ordinal);
@@ -222,5 +228,13 @@ public sealed class SmartReportService(SmartMeta meta)
             PrintedAt: printedAt,
             Sids: sids,
             Pid: first.Pid);
+    }
+
+    /// <summary>A Head or Profile row: a heading over results, never a result.</summary>
+    private static bool IsHeading(TestResult r)
+    {
+        var t = (r.TestType ?? string.Empty).Trim();
+        return t.Equals("Head", StringComparison.OrdinalIgnoreCase)
+            || t.Equals("Profile", StringComparison.OrdinalIgnoreCase);
     }
 }

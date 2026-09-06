@@ -32,6 +32,11 @@ createRoot(document.getElementById('root')!).render(
       <Routes>
         <Route path="/print/report/:sid" element={<PrintReport />} />
         <Route path="/print/report/:sid/smart" element={<PrintSmartReport />} />
+        {/* The patient's booklet — every sample of the visit, ?sids=a,b,c.
+            This is the page the render service photographs for the Smart
+            Report PDF; missing here, the renderer waits out its 45 seconds
+            on a blank page and the download fails at the gateway. */}
+        <Route path="/print/smart" element={<PrintSmartReport />} />
         <Route path="/print/invoice/:billId" element={<PrintInvoice />} />
         <Route path="/print/payment-receipt/:orderRef" element={<PrintPaymentReceipt />} />
         <Route path="/print/statement/:mcc" element={<PrintStatement />} />
