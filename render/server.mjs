@@ -97,6 +97,24 @@ async function renderContent(url, cookieHeader) {
   const page = await b.newPage();
   try {
     /*
+     * Print media and the printed content width from the first paint. The
+     * print page paginates ITSELF before it declares ready — to catch an
+     * "End of Report" stranded on a sheet of its own and tighten spacing
+     * until it is not (PrintReport's fit) — and that measurement is only
+     * honest if the layout it measures is the layout page.pdf prints: the
+     * same @media print rules, the same line wraps. page.pdf uses print
+     * media regardless; this makes the page see it earlier. The width is
+     * A4 less the side margins the page's own @page sets per paper
+     * (ReportPaper.SideMm: 14mm on a client's plain sheet, 10mm otherwise).
+     */
+    await page.emulateMediaType('print');
+    const sideMm = target.searchParams.get('paper') === 'plain' ? 14 : 10;
+    await page.setViewport({
+      width: Math.round((210 - 2 * sideMm) * 96 / 25.4),
+      height: Math.round(297 * 96 / 25.4),
+      deviceScaleFactor: 1,
+    });
+    /*
      * The browser is long-lived (see above), so its HTTP cache outlives
      * deploys — and it bit: the HTML shell had no Cache-Control, entries are
      * per-URL, and a print URL first visited under an older deploy kept

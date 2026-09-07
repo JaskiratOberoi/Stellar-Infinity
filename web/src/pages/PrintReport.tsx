@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import nobleLogo from '../assets/noble-logo.png';
@@ -279,7 +279,41 @@ export function PrintReport() {
    * rather than the only one.
    */
   const signed = (row?.signers ?? []).some((sg) => !!sg.signatureDataUrl);
-  const ready = row !== null && signed;
+
+  /* ---- the end-of-report fit ------------------------------------------------
+     A report whose results fill the last page to within a line pushes
+     "*** End of Report ***" onto a sheet of its own — a page carrying the
+     header, the footer and one centred line (PID 3201546). Chromium will not
+     tell a page where it broke, so before this page declares itself ready
+     for the renderer it paginates itself the way Chromium will — the patient
+     block and footer spacer repeat on every page, a keep-together body moves
+     whole unless it is taller than a page, a row never splits — and if the
+     marker is alone on the last page, tightens the spacing a step and looks
+     again: interpretation padding, then leading, then a few percent of zoom.
+     The first step that lands the marker with the results is the one printed.
+     Measured under print media at the printed width — the renderer emulates
+     both from the start (render/server.mjs) — so the wraps it measures are
+     the wraps it prints. Off-screen previews are never touched. */
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState<number | null>(pdfMode ? null : 0);
+  useEffect(() => {
+    if (!pdfMode || row === null || !signed) return;
+    let cancelled = false;
+    void document.fonts.ready.then(() => {
+      if (cancelled || !rootRef.current) return;
+      const root = rootRef.current;
+      const pageH = (paper === 'plain' ? 297 - 40 - 40 : 297 - 23 - 28) * 96 / 25.4;
+      let level = 0;
+      for (; level <= FIT_MAX; level++) {
+        root.className = fitClass('lr', level);
+        if (!endOfReportOrphaned(root, pageH)) break;
+      }
+      setFit(Math.min(level, FIT_MAX));
+    });
+    return () => { cancelled = true; };
+  }, [pdfMode, row, signed, paper]);
+
+  const ready = row !== null && signed && fit !== null;
 
   /* ---- the preview conversation ------------------------------------------
      Same-origin only, both ways. A report is patient data and the frame must
@@ -581,10 +615,12 @@ export function PrintReport() {
   const sectionTable = (sec: Section, last: boolean) =>
     blockTable(sec.deptName, [sec], last);
 
-  const shell = pdfMode ? 'lr' : previewSheets ? 'lr lr--sheets' : 'lr lr--screen';
+  const shell = pdfMode
+    ? fitClass('lr', fit ?? 0)
+    : previewSheets ? 'lr lr--sheets' : 'lr lr--screen';
 
   return (
-    <div className={shell} data-print-ready={ready ? 'true' : 'false'}>
+    <div ref={rootRef} className={shell} data-print-ready={ready ? 'true' : 'false'} data-print-fit={fit ?? undefined}>
       {/* The page box depends on the paper. A client's own stationery gets a
           full 40mm head and foot; Noble's letterhead — composited in, or
           already printed on the sheet — gets the tighter 23/28mm that matches
@@ -836,6 +872,64 @@ function EndOfReport() {
       <td colSpan={5} className="lr__end">*** End of Report ***</td>
     </tr>
   );
+}
+
+/** How many tightening steps the fit may take; see report.css .lr--fit*. */
+const FIT_MAX = 4;
+
+/** The shell class with the fit steps up to `level` applied, cumulatively. */
+function fitClass(base: string, level: number): string {
+  let c = base;
+  for (let i = 1; i <= level; i++) c += ` lr--fit${i}`;
+  return c;
+}
+
+/**
+ * Paginate the rendered report the way Chromium's print engine will, and say
+ * whether the last page holds nothing but the end-of-report marker.
+ *
+ * The rules mirrored, in order of what decides a break:
+ *   • every table starts a page (sections are their own tables in split
+ *     mode; the continuous report is one table);
+ *   • a table's thead and tfoot repeat on each page it spans, so each page
+ *     offers the page height less both;
+ *   • a `lr__keep` body moves whole to the next page when it does not fit
+ *     the space left, unless it is taller than a page, in which case it
+ *     fragments row by row; any other body fragments row by row;
+ *   • a row never splits; `lr__sheet-start` opens a page, `lr__sheet-end`
+ *     closes one.
+ * Heading rows' break-after:avoid is not modelled — a pixel of slack there
+ * costs nothing, since the answer is only used to tighten.
+ */
+function endOfReportOrphaned(root: HTMLElement, pageH: number): boolean {
+  const h = (el: Element) => el.getBoundingClientRect().height;
+  let lastPage: Element[] = [];
+  for (const table of Array.from(root.querySelectorAll<HTMLTableElement>('table.lr__table'))) {
+    const avail = pageH - (table.tHead ? h(table.tHead) : 0) - (table.tFoot ? h(table.tFoot) : 0);
+    let remaining = avail;
+    let page: Element[] = [];
+    const newPage = () => { remaining = avail; page = []; };
+    for (const body of Array.from(table.tBodies)) {
+      const rows = Array.from(body.rows);
+      if (rows.length === 0) continue;
+      if (body.classList.contains('lr__sheet-start') && page.length > 0) newPage();
+      const bh = h(body);
+      if (bh <= remaining) {
+        remaining -= bh; page.push(...rows);
+      } else if (bh <= avail && body.classList.contains('lr__keep')) {
+        newPage(); remaining -= bh; page.push(...rows);
+      } else {
+        for (const r of rows) {
+          const rh = h(r);
+          if (rh > remaining && page.length > 0) newPage();
+          remaining -= rh; page.push(r);
+        }
+      }
+      if (body.classList.contains('lr__sheet-end')) newPage();
+    }
+    if (page.length > 0) lastPage = page;
+  }
+  return lastPage.length > 0 && lastPage.every((r) => r.querySelector('td.lr__end') !== null);
 }
 
 function Meta({

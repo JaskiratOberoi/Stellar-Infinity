@@ -363,7 +363,8 @@ public static class ReportPdfEndpoints
     // 14: a "." or "-" unit / range from the LIS prints as an empty cell.
     // 15: abnormal values boxed, so they survive a black-and-white print.
     // 16: the box is the legacy grey block, with a high/low chevron.
-    private const string PdfCacheV = "16";
+    // 17: the end-of-report fit - a report paginates itself and tightens.
+    private const string PdfCacheV = "17";
     private static readonly TimeSpan PdfCacheTtl = TimeSpan.FromMinutes(45);
 
     private static string PdfCacheKey(
