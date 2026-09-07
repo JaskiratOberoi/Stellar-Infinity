@@ -370,7 +370,8 @@ public static class ReportPdfEndpoints
     // 21: bundle units cached content-only; the letterhead goes on once per
     //     document, with its 1.4MB colour profile dropped.
     // 22: flagged values lose the grey block - heavy bold, red, a larger chevron.
-    private const string PdfCacheV = "22";
+    // 23: the patient box unwashed with a Noble-purple rule; flagged names heavier.
+    private const string PdfCacheV = "23";
     private static readonly TimeSpan PdfCacheTtl = TimeSpan.FromMinutes(45);
 
     private static string PdfCacheKey(

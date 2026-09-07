@@ -240,9 +240,11 @@
    panel on both plain paper and letterhead. It lives in the repeating
    <thead>, so the frame reprints at the top of every page the report spans. */
 .lr__meta {
-  border: 1.25px solid #2b2b6b;
+  /* Noble's own purple — the letterhead artwork's fill, CMYK 100/100/0/0,
+     which the file itself carries as RGB 57/49/133 — and no wash behind
+     the text: the box is a rule, not a panel. */
+  border: 1.25px solid #393185;
   border-radius: 3px;
-  background: #f8fafc;
   padding: 4px 12px 5px;
   margin-bottom: 5px;
   /* Text on the left, the vertical SID barcode pinned to the right edge. */
@@ -422,7 +424,11 @@
 .lr__c-name-text { font-size: 12px; font-weight: 500; }
 /* The flagged analyte's name, in the value's ink and weight but at the
    name's own size, so the row reads as one flagged line end to end. */
-.lr__c-name-text--abnormal { font-weight: 900; color: #b91c1c; }
+/* Heavier than the face can go: the renderer's Liberation Sans stops at
+   bold, so 900 alone draws 700. A hairline stroke in the same red thickens
+   every glyph a third of a pixel each side — a true black weight on paper,
+   without a second font. */
+.lr__c-name-text--abnormal { font-weight: 900; color: #b91c1c; -webkit-text-stroke: 0.35px #b91c1c; }
 .lr__c-value { padding: 2px 12px 2px 0; }
 .lr__c-unit { padding: 2px 6px; text-align: center; }
 .lr__c-range { padding: 2px 6px; font-size: 10px; line-height: 1.25; color: #111827; text-align: center; }
