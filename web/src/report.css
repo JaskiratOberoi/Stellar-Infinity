@@ -436,20 +436,21 @@
 
 /* Red and bold, not a letter flag: this is the mark Telo prints and the one
    the LIS printed before it, and a report is read against the last one. */
-/* An out-of-range value sits in a tinted, hairline-bordered box as well as
-   going bold red. Red alone vanishes on the black-and-white printers most
-   centres use: the box survives greyscale as a grey pill with a dark edge,
-   so the flagged figure is found on the printed sheet as fast as on screen.
-   The tint is warm and light enough to leave the digits fully legible on a
-   photocopy; print-color-adjust keeps Chromium from dropping it in the PDF. */
+/* An out-of-range value sits on a solid light-grey block that fills the
+   Result column — the mark the legacy LIS report has always used, and the
+   one every centre's staff and doctors read by. Square, borderless, the
+   width of the column: a shaded cell, not a badge. It survives the
+   black-and-white printers most centres use exactly as it always has, and
+   the bold red the value already carries reads as near-black on the grey.
+   The block runs the cell's full height through the negative margins, so
+   the shading meets the row edges as the LIS's does. print-color-adjust
+   keeps Chromium from dropping the fill in the PDF. */
 .lr__abnormal {
-  display: inline-block;
+  display: block;
   font-size: 13px; font-weight: 700; color: #b91c1c;
-  background: #f8d7d7;
-  border: 0.75px solid #7f1d1d;
-  border-radius: 3px;
-  padding: 0 5px;
-  margin: -1px 0;
+  background: #d9d9d9;
+  padding: 2px 6px;
+  margin: -2px 0;
   line-height: 1.3;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
