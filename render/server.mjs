@@ -26,7 +26,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import puppeteer from 'puppeteer';
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { PDFArray, PDFBool, PDFDocument, PDFName, StandardFonts, rgb } from 'pdf-lib';
 
 const PORT = Number(process.env.PORT ?? 8090);
 /** Where the SPA is reachable from inside the compose network. */
@@ -37,9 +37,50 @@ const CONCURRENCY = Number(process.env.RENDER_CONCURRENCY ?? 4);
 
 const LETTERHEAD_PATH = path.join(process.cwd(), 'report-assets', 'letterhead.pdf');
 let letterheadBytes = null;
+/**
+ * The letterhead, with its embedded CMYK ICC profile replaced by the device
+ * space it names as its own alternate.
+ *
+ * The profile is 1.37MB of the file's 1.49MB — the artwork is 120KB of
+ * vector — and it rode into every document, and once per stapled unit into
+ * a bundle: a five-sheet PID report weighed 7.8MB, of which 6.8MB was five
+ * copies of the same colour table. Chromium's viewer draws the stripped
+ * page identically (compared side by side, header and watermark alike),
+ * because /DeviceCMYK is what the profile itself declares as its fallback.
+ * The 2.6KB sRGB profile beside it is left alone. The file on disk is not
+ * touched; this is done in memory, once.
+ */
 async function letterhead() {
-  if (!letterheadBytes) letterheadBytes = await readFile(LETTERHEAD_PATH);
+  if (letterheadBytes) return letterheadBytes;
+  const doc = await PDFDocument.load(await readFile(LETTERHEAD_PATH), { ignoreEncryption: true });
+  const ctx = doc.context;
+  for (const [ref, obj] of ctx.enumerateIndirectObjects()) {
+    if (!(obj instanceof PDFArray) || obj.size() < 2 || obj.get(0) !== PDFName.of('ICCBased')) continue;
+    const profile = ctx.lookup(obj.get(1));
+    if (!profile || !profile.contents || profile.contents.length < 100_000) continue;
+    const n = profile.dict.get(PDFName.of('N'));
+    const alternate = profile.dict.get(PDFName.of('Alternate'))
+      ?? PDFName.of(String(n) === '4' ? 'DeviceCMYK' : String(n) === '1' ? 'DeviceGray' : 'DeviceRGB');
+    ctx.assign(ref, alternate);
+    ctx.delete(obj.get(1));
+  }
+  letterheadBytes = await doc.save({ useObjectStreams: true });
   return letterheadBytes;
+}
+
+/* Page tags that survive stapling, so the one compositing pass at the end
+   knows what each sheet is: the first sheet of a report (primary letterhead,
+   patient block under it), a continuation sheet, or an attachment (a graph
+   the instrument produced — no letterhead at all). Private keys on the page
+   dictionary; every viewer ignores them. */
+const TAG_FIRST = PDFName.of('InfinityFirstSheet');
+const TAG_BARE = PDFName.of('InfinityNoLetterhead');
+
+/** Mark the first page of a freshly rendered report. */
+async function tagFirstPage(bytes) {
+  const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
+  if (doc.getPageCount() > 0) doc.getPage(0).node.set(TAG_FIRST, PDFBool.True);
+  return doc.save();
 }
 
 /* ---------------------------------------------------------------- browser -- */
@@ -212,6 +253,11 @@ async function compositeOntoLetterhead(contentPdf, opts = {}) {
   const out = await PDFDocument.create();
   const content = await PDFDocument.load(contentPdf, { ignoreEncryption: true });
 
+  // Embedded ONCE per document and drawn on every sheet that wants it. This
+  // is the whole of the size fix: the pass runs on the finished, stapled
+  // document, so a bundle carries one letterhead where it carried one per
+  // unit — the XObject is shared, and a five-sheet PID report is the size of
+  // its own content plus 120KB.
   let embeddedLetterhead = [];
   if (!headless) {
     const lh = await PDFDocument.load(await letterhead(), { ignoreEncryption: true });
@@ -226,8 +272,14 @@ async function compositeOntoLetterhead(contentPdf, opts = {}) {
     const { width, height } = src.getSize();
     const page = out.addPage([width, height]);
 
-    if (embeddedLetterhead.length) {
-      const bg = embeddedLetterhead[i === 0 ? 0 : Math.min(1, embeddedLetterhead.length - 1)];
+    // Which sheet this is, from the tags the render pass left: a report's
+    // first sheet takes the primary letterhead, any other its continuation,
+    // and an attachment none. A page with no tag at all (a document from
+    // before the tags) falls back to position.
+    const bare = src.node.get(TAG_BARE) === PDFBool.True;
+    const first = src.node.has(TAG_FIRST) ? src.node.get(TAG_FIRST) === PDFBool.True : i === 0;
+    if (embeddedLetterhead.length && !bare) {
+      const bg = embeddedLetterhead[first ? 0 : Math.min(1, embeddedLetterhead.length - 1)];
       page.drawPage(bg, { x: 0, y: 0, width, height });
     }
 
@@ -261,7 +313,12 @@ async function appendAttachment(reportBytes, { b64, mime }) {
 
   if (mime === 'application/pdf') {
     const doc = await PDFDocument.load(extra, { ignoreEncryption: true });
-    for (const p of await out.copyPages(doc, doc.getPageIndices())) out.addPage(p);
+    for (const p of await out.copyPages(doc, doc.getPageIndices())) {
+      // Stapled BEFORE the letterhead pass now, so the sheet says for itself
+      // that it must stay bare.
+      p.node.set(TAG_BARE, PDFBool.True);
+      out.addPage(p);
+    }
   } else {
     const img = mime === 'image/png' ? await out.embedPng(extra) : await out.embedJpg(extra);
     const page = out.addPage([595.28, 841.89]); // A4, points
@@ -273,6 +330,7 @@ async function appendAttachment(reportBytes, { b64, mime }) {
     );
     const w = img.width * scale, h = img.height * scale;
     page.drawImage(img, { x: (page.getWidth() - w) / 2, y: (page.getHeight() - h) / 2, width: w, height: h });
+    page.node.set(TAG_BARE, PDFBool.True);
   }
   return out.save();
 }
@@ -360,24 +418,44 @@ const server = createServer(async (req, res) => {
         return res.end(JSON.stringify({ error: 'no reports requested' }));
       }
 
+      /*
+       * Content first, letterhead last. Each report is rendered and its
+       * attachments stapled as a CONTENT-ONLY document, tagged sheet by
+       * sheet; the batch is concatenated; and then the letterhead and the
+       * page numbers go on in ONE pass over the finished document. The
+       * previous order — composite each unit, then staple — put a full copy
+       * of the letterhead into every unit, and a bundle carried as many
+       * copies as it had units.
+       *
+       * contentOnly: the API's per-unit render for its cache. What comes
+       * back is the tagged content document, which a later batch call hands
+       * in as pdfB64 for stapling under one letterhead. A cache hit from
+       * before this change never reaches here: the API's cache version moved
+       * with it.
+       */
       const rendered = await mapLimit(reports, CONCURRENCY, async (r) => {
-        // A finished document — the API's cache hit — skips the browser, the
-        // letterhead and the stapling: all of that is already baked into it.
         if (r.pdfB64) return Buffer.from(r.pdfB64, 'base64');
-
-        let doc = await compositeOntoLetterhead(
-          await renderContent(r.url, body.cookie ?? null),
-          { headless: r.headless, pageNumbers: r.pageNumbers, pageNumberY: r.pageNumberY, pageNumberRight: r.pageNumberRight },
-        );
+        let doc = await tagFirstPage(await renderContent(r.url, body.cookie ?? null));
         for (const a of r.attachments ?? []) doc = await appendAttachment(doc, a);
         return doc;
       });
 
       let pdf = Buffer.from(await concat(rendered));
-      if (body.numberPages === true) {
-        // The batch-level Y tracks the foot band the API laid out for (40mm
-        // plain / 28mm letterhead); default keeps the plain-paper baseline.
-        pdf = Buffer.from(await stampPageNumbers(pdf, body.numberPagesY ?? 116, body.numberPagesRight ?? mm(14)));
+      if (body.contentOnly !== true) {
+        // One paper per document: the batch says so at the top, a single
+        // render on its own item.
+        const lead = reports[0];
+        const headless = body.headless ?? lead.headless === true;
+        const numbered = body.numberPages === true
+          || (reports.length === 1 && !lead.pdfB64 && lead.pageNumbers !== false);
+        pdf = Buffer.from(await compositeOntoLetterhead(pdf, {
+          headless,
+          pageNumbers: numbered,
+          // The batch-level Y tracks the foot band the API laid out for (40mm
+          // plain / 28mm letterhead); a single render carries its own.
+          pageNumberY: body.numberPagesY ?? lead.pageNumberY,
+          pageNumberRight: body.numberPagesRight ?? lead.pageNumberRight,
+        }));
       }
       console.log(`render ok reports=${reports.length} pages_in=${rendered.length} bytes=${pdf.length} ms=${Date.now() - started}`);
       res.writeHead(200, { 'content-type': 'application/pdf', 'content-length': pdf.length });

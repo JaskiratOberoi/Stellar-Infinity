@@ -367,7 +367,9 @@ public static class ReportPdfEndpoints
     // 18: the grey block a fixed 60px, not the column.
     // 19: the grey block 50px.
     // 20: the grey block 2px inside the row edges, so two flagged rows part.
-    private const string PdfCacheV = "20";
+    // 21: bundle units cached content-only; the letterhead goes on once per
+    //     document, with its 1.4MB colour profile dropped.
+    private const string PdfCacheV = "21";
     private static readonly TimeSpan PdfCacheTtl = TimeSpan.FromMinutes(45);
 
     private static string PdfCacheKey(
@@ -765,7 +767,9 @@ public static class ReportPdfEndpoints
                         await gate.WaitAsync(ct).ConfigureAwait(false);
                         try
                         {
-                            var one = await render.RenderAsync([deptDocs[m.Index]], cookie, ct).ConfigureAwait(false);
+                            // Content only: the letterhead goes on once, over
+                            // the whole bundle, in the call below.
+                            var one = await render.RenderAsync([deptDocs[m.Index]], cookie, ct, contentOnly: true).ConfigureAwait(false);
                             if (m.Key is not null)
                                 await cache.SetBytesAsync(m.Key, one, PdfCacheTtl, ct).ConfigureAwait(false);
                             deptDocs[m.Index] = new RenderClient.ReportRequest(
@@ -782,7 +786,8 @@ public static class ReportPdfEndpoints
 
                 var patientPdf = await render.RenderAsync(
                     deptDocs, cookie, ct, numberPages: true,
-                    numberPagesY: sheet.PageNumberY, numberPagesRight: sheet.PageNumberRight).ConfigureAwait(false);
+                    numberPagesY: sheet.PageNumberY, numberPagesRight: sheet.PageNumberRight,
+                    headless: sheet.Headless).ConfigureAwait(false);
 
                 if (skipped.Count > 0)
                     http.Response.Headers["X-Reports-Skipped"] = System.Text.Json.JsonSerializer.Serialize(skipped);
@@ -822,7 +827,9 @@ public static class ReportPdfEndpoints
                     await gate.WaitAsync(ct).ConfigureAwait(false);
                     try
                     {
-                        var one = await render.RenderAsync([included[m.Index]], cookieHeader, ct).ConfigureAwait(false);
+                        // Content only: the letterhead goes on once, over the
+                        // whole bundle, in the call below.
+                        var one = await render.RenderAsync([included[m.Index]], cookieHeader, ct, contentOnly: true).ConfigureAwait(false);
                         await cache.SetBytesAsync(m.Key, one, PdfCacheTtl, ct).ConfigureAwait(false);
                         included[m.Index] = new RenderClient.ReportRequest(
                             Url: null, PdfB64: Convert.ToBase64String(one));
@@ -839,7 +846,8 @@ public static class ReportPdfEndpoints
             // The whole bundle numbered once, "Page 1 of 8" meaning the stack
             // in hand — graph sheets counted like any other sheet.
             var pdf = await render.RenderAsync(included, cookieHeader, ct, numberPages: true,
-                numberPagesY: sheet.PageNumberY, numberPagesRight: sheet.PageNumberRight).ConfigureAwait(false);
+                numberPagesY: sheet.PageNumberY, numberPagesRight: sheet.PageNumberRight,
+                headless: sheet.Headless).ConfigureAwait(false);
 
             // The skip list rides on a header: the body has to be the PDF, and a
             // silent short delivery ("I asked for 20, I got 19") is exactly the

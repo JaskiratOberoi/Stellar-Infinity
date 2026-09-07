@@ -31,8 +31,10 @@ public sealed class RenderClient(HttpClient http, ILogger<RenderClient> log)
 
     /// <summary>One report in a render request: a print URL plus anything stapled after it.</summary>
     /// <param name="PdfB64">
-    /// A FINISHED report — letterhead, numbers, attachments already in — that
-    /// only needs concatenating into the batch. The cache's currency: a batch
+    /// A rendered report from the cache — its CONTENT, tagged sheet by sheet,
+    /// attachments stapled, but no letterhead and no numbers: those go on
+    /// once, over the whole batch, in the sidecar's final pass (see
+    /// <c>contentOnly</c> on RenderAsync). The cache's currency: a batch
     /// re-downloaded minutes later renders nothing and merely re-staples.
     /// When set, Url is ignored.
     /// </param>
@@ -61,7 +63,15 @@ public sealed class RenderClient(HttpClient http, ILogger<RenderClient> log)
         // the caller passes it rather than the sidecar guessing from a batch
         // whose entries may be cache hits carrying no mode.
         [property: JsonPropertyName("numberPagesY")] double? NumberPagesY = null,
-        [property: JsonPropertyName("numberPagesRight")] double? NumberPagesRight = null);
+        [property: JsonPropertyName("numberPagesRight")] double? NumberPagesRight = null,
+        // Return the rendered content without the letterhead pass — the
+        // per-unit render a batch caches. The letterhead is 120KB of vector
+        // that used to ride into every unit and so into a bundle once per
+        // unit; now it goes on once, over the stapled whole.
+        [property: JsonPropertyName("contentOnly")] bool ContentOnly = false,
+        // The paper for the final pass over a batch, whose items are cache
+        // hits carrying no mode of their own.
+        [property: JsonPropertyName("headless")] bool? Headless = null);
 
     /// <summary>
     /// Render one or more reports into a single PDF. A batch goes in one call
@@ -76,12 +86,15 @@ public sealed class RenderClient(HttpClient http, ILogger<RenderClient> log)
         // positionally keep meaning what they said. Named at the one caller.
         bool numberPages = false,
         double? numberPagesY = null,
-        double? numberPagesRight = null)
+        double? numberPagesRight = null,
+        bool contentOnly = false,
+        bool? headless = null)
     {
         if (reports.Count == 0) throw new ArgumentException("No reports to render.", nameof(reports));
 
         using var content = new StringContent(
-            JsonSerializer.Serialize(new Envelope(cookieHeader, reports, numberPages, numberPagesY, numberPagesRight), Json),
+            JsonSerializer.Serialize(
+                new Envelope(cookieHeader, reports, numberPages, numberPagesY, numberPagesRight, contentOnly, headless), Json),
             System.Text.Encoding.UTF8,
             "application/json");
 
