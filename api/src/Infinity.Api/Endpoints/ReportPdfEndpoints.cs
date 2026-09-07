@@ -365,7 +365,8 @@ public static class ReportPdfEndpoints
     // 16: the box is the legacy grey block, with a high/low chevron.
     // 17: the end-of-report fit - a report paginates itself and tightens.
     // 18: the grey block a fixed 60px, not the column.
-    private const string PdfCacheV = "18";
+    // 19: the grey block 50px.
+    private const string PdfCacheV = "19";
     private static readonly TimeSpan PdfCacheTtl = TimeSpan.FromMinutes(45);
 
     private static string PdfCacheKey(
