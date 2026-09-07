@@ -152,6 +152,11 @@ async function renderContent(url, cookieHeader) {
     const tNav = Date.now();
     await page.waitForSelector('[data-print-ready="true"]', { timeout: NAV_TIMEOUT });
     const tReady = Date.now();
+    // Which end-of-report fit step the page settled on (0 = untouched), for
+    // the log line below — the one place a stranded marker can be diagnosed
+    // after the fact without opening the PDF.
+    const fit = await page.$eval('[data-print-ready="true"]', (el) => el.getAttribute('data-print-fit') ?? '-')
+      .catch(() => '-');
     await page.evaluate(() => document.fonts.ready.then(() => undefined));
     await page.waitForNetworkIdle({ idleTime: 200, timeout: 8_000 }).catch(() => {});
     const tSettle = Date.now();
@@ -162,7 +167,7 @@ async function renderContent(url, cookieHeader) {
       preferCSSPageSize: true,
       margin: { top: '0', right: '0', bottom: '0', left: '0' },
     });
-    console.log(`page ${target.pathname} nav=${tNav - t0} ready=${tReady - tNav} settle=${tSettle - tReady} pdf=${Date.now() - tSettle}`);
+    console.log(`page ${target.pathname} fit=${fit} nav=${tNav - t0} ready=${tReady - tNav} settle=${tSettle - tReady} pdf=${Date.now() - tSettle}`);
     return pdf;
   } finally {
     await page.close().catch(() => {});
