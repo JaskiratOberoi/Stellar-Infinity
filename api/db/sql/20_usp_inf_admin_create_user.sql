@@ -50,7 +50,7 @@ BEGIN
        Telo shipped a version of this guard that omitted roles its own admin
        panel offered, making those users unsavable with "Unknown role" — if you
        add a role in code, deploy this procedure too. */
-    IF @infinityRole NOT IN (N'super_admin', N'admin', N'lab_manager',
+    IF @infinityRole NOT IN (N'super_admin', N'admin', N'sales', N'lab_manager',
                              N'technician', N'reporting', N'client',
                      N'client_b2c', N'client_reporting', N'sub_client', N'viewer')
     BEGIN

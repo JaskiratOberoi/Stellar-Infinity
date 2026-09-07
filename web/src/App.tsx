@@ -210,10 +210,11 @@ const NAV: NavEntry[] = [
       { to: '/worksheet', label: 'Worksheet', icon: 'worksheet', cap: 'result:enter' },
       { to: '/reports', label: 'Reporting', icon: 'reporting', cap: 'report:view' },
       { to: '/instruments', label: 'Instruments', icon: 'instruments', cap: 'result:enter' },
-      // The remote-lab middleware fleet. analytics:view rather than
-      // result:enter — this is monitoring, not bench work, and the numbers it
-      // shows (throughput, entry sources) are the dashboard's kind of numbers.
-      { to: '/interfacing', label: 'Interfacing', icon: 'instruments', cap: 'analytics:view' },
+      // The remote-lab middleware fleet. Its own capability: it was gated on
+      // analytics:view, which every dashboard reader holds — including the
+      // Sales Admin login, which has no business on the lab's instrument
+      // fleet. interfacing:view goes to the lab's managers and above only.
+      { to: '/interfacing', label: 'Interfacing', icon: 'instruments', cap: 'interfacing:view' },
       // "Jarvis" alone: the page's own heading already reads
       // "Jarvis · auto-authorisation". With the bench rather than with Admin
       // because what it governs is result sign-off.
@@ -444,7 +445,7 @@ export function App() {
         <Route path="/worksheet" element={can('result:enter') ? <Worksheet /> : <Navigate to="/" replace />} />
         <Route path="/reports" element={can('report:view') ? <Reports /> : <Navigate to="/" replace />} />
         <Route path="/instruments" element={can('result:enter') ? <Instruments /> : <Navigate to="/" replace />} />
-        <Route path="/interfacing" element={can('analytics:view') ? <Interfacing /> : <Navigate to="/" replace />} />
+        <Route path="/interfacing" element={can('interfacing:view') ? <Interfacing /> : <Navigate to="/" replace />} />
         <Route
           path="/settings/auto-auth"
           element={can('autoauth:manage') ? <AutoAuthSettings /> : <Navigate to="/" replace />}

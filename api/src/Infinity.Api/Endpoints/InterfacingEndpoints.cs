@@ -32,15 +32,15 @@ public static class InterfacingEndpoints
                        .RequireAuthorization();
 
         admin.MapGet("/overview", Overview)
-             .RequireCapability(Capabilities.AnalyticsView)
+             .RequireCapability(Capabilities.InterfacingView)
              .WithName("InterfacingOverview");
 
         admin.MapGet("/daily", Daily)
-             .RequireCapability(Capabilities.AnalyticsView)
+             .RequireCapability(Capabilities.InterfacingView)
              .WithName("InterfacingDaily");
 
         admin.MapGet("/result-sources", ResultSources)
-             .RequireCapability(Capabilities.AnalyticsView)
+             .RequireCapability(Capabilities.InterfacingView)
              .WithName("InterfacingResultSources");
 
         // Registering a site mints a credential that can post reports, so the

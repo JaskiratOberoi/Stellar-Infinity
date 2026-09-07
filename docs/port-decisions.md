@@ -285,3 +285,17 @@ went 1 → 2, because `noble` and `plain` share margins and differ only in
 artwork — a hit across them would be the wrong document. The remembered
 preference keeps its localStorage key; stored `0`/`1` map onto `plain`/
 `letterhead`, the two modes that reproduce exactly what those values printed.
+
+## Interfacing is its own capability; Sales Admin is its own role (2026-09-08)
+
+The Interfacing tab (the Synapse fleet, throughput, entry sources) was gated on
+`analytics:view` — "may read the dashboards" — which every commercial reader
+holds. The LIS's SALES ADMIN usertype (32) mapped to `admin`, so the sales
+login had the lab's instrument fleet on its menu. Now `interfacing:view` gates
+the tab, its route and the three monitoring API routes (site set-up stays
+behind `user:manage`), held by super_admin, admin and lab_manager. Usertype 32
+maps to a new `sales` role: the admin capability set minus `interfacing:view`,
+still an unrestricted reporter. A role rather than a per-user revocation
+because the grant table only grants, and because the next Sales Admin the LIS
+creates must land in the same place. SPs 20 and 23 carry `sales` in their
+role IN-lists and must be redeployed with this.

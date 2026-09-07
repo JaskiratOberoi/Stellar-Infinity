@@ -15,6 +15,8 @@ public static class InfinityRoles
 {
     public const string SuperAdmin = "super_admin";
     public const string Admin = "admin";
+    /// <summary>The LIS's SALES ADMIN: Admin without the instrument fleet. See RoleCapabilities.</summary>
+    public const string Sales = "sales";
     public const string LabManager = "lab_manager";
     public const string Technician = "technician";
     public const string Reporting = "reporting";
@@ -47,7 +49,7 @@ public static class InfinityRoles
     /// </summary>
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
-        SuperAdmin, Admin, LabManager, Technician, Reporting, Client, ClientB2c, ClientReporting,
+        SuperAdmin, Admin, Sales, LabManager, Technician, Reporting, Client, ClientB2c, ClientReporting,
         SubClient, Viewer,
     };
 
@@ -75,11 +77,29 @@ public static class InfinityRoles
                 Capabilities.AutoAuthManage,
                 Capabilities.ReportView, Capabilities.ReportRelease,
                 Capabilities.BillingView, Capabilities.PaymentCapture, Capabilities.RateManage,
-                Capabilities.AnalyticsView),
+                Capabilities.AnalyticsView, Capabilities.InterfacingView),
 
             // Everything Super Admin has except user management — the one
             // capability that can escalate privilege.
             [Admin] = Caps(
+                Capabilities.OrderCreate, Capabilities.OrderView, Capabilities.OrderAccession,
+                Capabilities.OrderB2c, Capabilities.OrderB2b,
+                Capabilities.PatientCreate, Capabilities.PatientView, Capabilities.PatientEdit,
+                Capabilities.ResultEnter, Capabilities.ResultAuthorize,
+                Capabilities.ResultAmend, Capabilities.ResultReopen, Capabilities.SampleReject,
+                Capabilities.AutoAuthManage,
+                Capabilities.ReportView, Capabilities.ReportRelease,
+                Capabilities.BillingView, Capabilities.PaymentCapture, Capabilities.RateManage,
+                Capabilities.AnalyticsView, Capabilities.InterfacingView),
+
+            // The LIS's SALES ADMIN login. It used to land on Admin outright,
+            // which put the lab's instrument fleet on a commercial account's
+            // menu. This is the Admin shape with that one thing withheld:
+            // everything it had — orders, billing, rates, reports, the
+            // dashboards — except interfacing:view. Its own role rather than
+            // a per-user revocation, which the grant table cannot express, so
+            // the next Sales Admin the LIS creates lands here too.
+            [Sales] = Caps(
                 Capabilities.OrderCreate, Capabilities.OrderView, Capabilities.OrderAccession,
                 Capabilities.OrderB2c, Capabilities.OrderB2b,
                 Capabilities.PatientCreate, Capabilities.PatientView, Capabilities.PatientEdit,
@@ -99,7 +119,7 @@ public static class InfinityRoles
                 Capabilities.ResultEnter, Capabilities.ResultAuthorize,
                 Capabilities.ResultAmend, Capabilities.SampleReject,
                 Capabilities.ReportView, Capabilities.ReportRelease,
-                Capabilities.AnalyticsView),
+                Capabilities.AnalyticsView, Capabilities.InterfacingView),
 
             // Bench work: accession samples and enter results, but never
             // authorize their own results or release a report.
@@ -188,7 +208,7 @@ public static class InfinityRoles
         [5] = Admin,        // Admin
         [26] = Admin,       // Director
         [28] = Admin,       // BAS ADMIN
-        [32] = Admin,       // SALES ADMIN
+        [32] = Sales,       // SALES ADMIN — Admin minus the instrument fleet
 
         [2] = Client,       // Client
         [7] = SubClient,    // Sub Client — a child code under a parent client
@@ -237,7 +257,7 @@ public static class InfinityRoles
     /// client's patients to every client.
     /// </summary>
     public static readonly IReadOnlySet<string> UnrestrictedReporters =
-        new HashSet<string>(StringComparer.Ordinal) { SuperAdmin, Admin, LabManager, Reporting };
+        new HashSet<string>(StringComparer.Ordinal) { SuperAdmin, Admin, Sales, LabManager, Reporting };
 
     public static bool IsUnrestrictedReporter(string? role) =>
         role is not null && UnrestrictedReporters.Contains(role);
@@ -342,6 +362,16 @@ public static class Capabilities
     /// </summary>
     public const string RateManage = "rate:manage";
     public const string AnalyticsView = "analytics:view";
+    /// <summary>
+    /// The Interfacing tab: the remote-lab middleware fleet, its throughput
+    /// and where results are entered from. Split out of analytics:view, which
+    /// it used to ride on, because that capability is "may read the
+    /// dashboards" and is held by every commercial reader — the Sales Admin
+    /// login among them — while this is a view of the lab's instruments and
+    /// belongs to the people who run the lab. Site set-up stays behind
+    /// user:manage as before.
+    /// </summary>
+    public const string InterfacingView = "interfacing:view";
 
     /// <summary>
     /// Hide every test price from this account — the order form, the preview
