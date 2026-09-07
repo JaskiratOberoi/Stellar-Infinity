@@ -1413,7 +1413,17 @@ function ResultRow({
         ) : (
           <>
             <td className="lr__c-value">
-              <span className={row.abnormal ? 'lr__abnormal' : undefined}>{row.value ?? '—'}</span>
+              <span className={row.abnormal ? 'lr__abnormal' : undefined}>
+                {row.value ?? '—'}
+                {/* Which way it went, when the interval says. Text, not an
+                    image, so it prints wherever the digits print. */}
+                {row.abnormal && row.direction && (
+                  <span className={`lr__dir lr__dir--${row.direction}`}
+                        aria-label={row.direction === 'high' ? 'above range' : 'below range'}>
+                    {row.direction === 'high' ? '▲' : '▼'}
+                  </span>
+                )}
+              </span>
             </td>
             <td className="lr__c-unit">{row.unit ?? '—'}</td>
             <td className="lr__c-range"><RangeCell range={row.range} /></td>

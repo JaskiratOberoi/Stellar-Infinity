@@ -455,6 +455,13 @@
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
+/* The chevron after a flagged figure: up for above the interval, down for
+   below. Small and set off the baseline so it reads as a mark on the number
+   rather than another digit. */
+.lr__dir { font-size: 8px; margin-left: 5px; vertical-align: 1px; letter-spacing: 0; }
+.lr__dir--high { color: #b91c1c; }
+.lr__dir--low { color: #1d4ed8; }
+
 /* Inside the descriptive shape the value is a run of prose, not a figure;
    the box would wrap a paragraph. There the red weight alone carries it. */
 .lr__c-value--wide .lr__abnormal {

@@ -362,7 +362,8 @@ public static class ReportPdfEndpoints
     // 13: the NABL medallion carries MC-2547 beneath it, every instance.
     // 14: a "." or "-" unit / range from the LIS prints as an empty cell.
     // 15: abnormal values boxed, so they survive a black-and-white print.
-    private const string PdfCacheV = "15";
+    // 16: the box is the legacy grey block, with a high/low chevron.
+    private const string PdfCacheV = "16";
     private static readonly TimeSpan PdfCacheTtl = TimeSpan.FromMinutes(45);
 
     private static string PdfCacheKey(

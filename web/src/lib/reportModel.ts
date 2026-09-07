@@ -36,6 +36,8 @@ export interface ReportRow {
   unit: string | null;
   range: string | null;
   abnormal: boolean;
+  /** High or low, when the interval says which; null where it cannot. */
+  direction?: Direction | null;
   comments: string | null;
   /** The result row's own id — the unit the tick boxes and ?exclude= use. */
   resultId: number;
@@ -143,6 +145,52 @@ const clean = (s: string | null | undefined): string | null => {
 /** A field the LIS filled with only dots or dashes is an empty field. */
 const placeholderToNull = (s: string | null): string | null =>
   s !== null && /^[-–—.\s]+$/.test(s) ? null : s;
+
+export type Direction = 'high' | 'low';
+
+const firstNumber = (s: string): number | null => {
+  const m = s.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
+  return m ? Number(m[0]) : null;
+};
+
+/**
+ * Which way an out-of-range value went, for the chevron beside it.
+ *
+ * Decided from the printed reference interval, not from the LIS's abnormal
+ * bit, which only says THAT a value is off. The interval is the text the
+ * reader sees, so the arrow agrees with it: "74 - 110" against 126 is high,
+ * "Sufficiency 30 - 100" against 22 is low. On a banded interval the band
+ * that names the healthy state is the yardstick — Sufficiency, Desirable,
+ * Optimal, Normal, Adult — else the first line. A one-sided interval gives
+ * one direction only. Where none of this can be read (a qualitative value,
+ * an interval in prose, a value inside the band the LIS still flagged) there
+ * is no chevron: an arrow pointing the wrong way is worse than none.
+ */
+export function directionOf(value: string | null, range: string | null): Direction | null {
+  if (!value || !range) return null;
+  if (!/^\s*[<>≤≥]?\s*-?\d/.test(value)) return null;
+  const v = firstNumber(value);
+  if (v === null) return null;
+
+  const lines = range.split('\n').map((l) => l.trim()).filter(Boolean);
+  const exclude = /near|border|high|low|deficien|insufficien|toxic|undesirable|very|pregnan|newborn|p(a)?ediatric|child|infant|trimester/i;
+  const band = lines.find((l) => /adult|normal|desirable|optimal|sufficien/i.test(l) && !exclude.test(l))
+    ?? lines[0];
+  if (!band) return null;
+
+  const pair = band.match(/(-?\d+(?:\.\d+)?)\s*(?:-|–|to)\s*(-?\d+(?:\.\d+)?)/);
+  if (pair) {
+    const lo = Number(pair[1]), hi = Number(pair[2]);
+    if (v > hi) return 'high';
+    if (v < lo) return 'low';
+    return null;
+  }
+  const lt = band.match(/[<≤]\s*=?\s*(-?\d+(?:\.\d+)?)/);
+  if (lt) return v > Number(lt[1]) ? 'high' : null;
+  const gt = band.match(/[>≥]\s*=?\s*(-?\d+(?:\.\d+)?)/);
+  if (gt) return v < Number(gt[1]) ? 'low' : null;
+  return null;
+}
 
 /**
  * Like clean(), but KEEPS line breaks.
@@ -363,6 +411,9 @@ export function buildSampleReport(results: readonly TestResult[]): SampleReport 
     // Bands keep their own lines; formatRange finishes the job at render time.
     range: placeholderToNull(cleanMultiline(t.normalRange)),
     abnormal: t.abnormal === true,
+    direction: t.abnormal === true
+      ? directionOf(clean(t.value), placeholderToNull(cleanMultiline(t.normalRange)))
+      : null,
     comments: clean(t.comments),
     resultId: t.resultId,
     nabl: t.nabl === true,
