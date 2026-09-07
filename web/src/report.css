@@ -457,7 +457,10 @@
   font-size: 13px; font-weight: 700; color: #b91c1c;
   background: #d9d9d9;
   padding: 2px 6px;
-  margin: -2px 0;
+  /* Inside the row's 2px cell padding rather than through it: two flagged
+     rows in a row keep a sliver of white between their blocks instead of
+     fusing into one tall slab. */
+  margin: 0;
   line-height: 1.3;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;

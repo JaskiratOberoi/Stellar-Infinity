@@ -366,7 +366,8 @@ public static class ReportPdfEndpoints
     // 17: the end-of-report fit - a report paginates itself and tightens.
     // 18: the grey block a fixed 60px, not the column.
     // 19: the grey block 50px.
-    private const string PdfCacheV = "19";
+    // 20: the grey block 2px inside the row edges, so two flagged rows part.
+    private const string PdfCacheV = "20";
     private static readonly TimeSpan PdfCacheTtl = TimeSpan.FromMinutes(45);
 
     private static string PdfCacheKey(
