@@ -303,12 +303,34 @@ export function PrintReport() {
       if (cancelled || !rootRef.current) return;
       const root = rootRef.current;
       const pageH = (paper === 'plain' ? 297 - 40 - 40 : 297 - 23 - 28) * 96 / 25.4;
-      let level = 0;
-      for (; level <= FIT_MAX; level++) {
-        root.className = fitClass('lr', level);
-        if (!endOfReportOrphaned(root, pageH)) break;
+      /*
+       * Two things are worth tightening for, and only these two:
+       *   • the marker alone on the last page (the original case);
+       *   • a LIGHT last page — a few rows that overran by a line or two,
+       *     the way a Double or Quadruple Marker's last risk row and its
+       *     interpretation landed on a sheet of their own. A page that is
+       *     mostly blank under a header and footer reads as a mistake, and
+       *     a two-page report that could have been one costs the centre a
+       *     sheet per patient.
+       * The steps are tried in order and the first that drops a page is
+       * printed. If none does, the report goes out untouched: tightening
+       * that saves nothing is only a smaller document. The orphaned marker
+       * keeps its old fallback — the last step — since even a partial gain
+       * moves the marker closer to its results.
+       */
+      root.className = fitClass('lr', 0);
+      const base = paginate(root, pageH);
+      const wants = base.pages > 1 && (base.orphaned || base.lastFill <= LIGHT_PAGE);
+      let chosen = 0;
+      if (wants) {
+        chosen = base.orphaned ? FIT_MAX : 0;
+        for (let level = 1; level <= FIT_MAX; level++) {
+          root.className = fitClass('lr', level);
+          if (paginate(root, pageH).pages < base.pages) { chosen = level; break; }
+        }
       }
-      setFit(Math.min(level, FIT_MAX));
+      root.className = fitClass('lr', chosen);
+      setFit(chosen);
     });
     return () => { cancelled = true; };
   }, [pdfMode, row, signed, paper]);
@@ -875,7 +897,15 @@ function EndOfReport() {
 }
 
 /** How many tightening steps the fit may take; see report.css .lr--fit*. */
-const FIT_MAX = 4;
+const FIT_MAX = 6;
+
+/**
+ * A last page filled to this fraction or less is "light": what is on it
+ * would have fitted the page before with a little tightening, so it is
+ * worth trying. Above it the overrun is real content and a second page is
+ * the honest answer.
+ */
+const LIGHT_PAGE = 0.4;
 
 /** The shell class with the fit steps up to `level` applied, cumulatively. */
 function fitClass(base: string, level: number): string {
@@ -901,14 +931,19 @@ function fitClass(base: string, level: number): string {
  * Heading rows' break-after:avoid is not modelled — a pixel of slack there
  * costs nothing, since the answer is only used to tighten.
  */
-function endOfReportOrphaned(root: HTMLElement, pageH: number): boolean {
+function paginate(root: HTMLElement, pageH: number): { pages: number; orphaned: boolean; lastFill: number } {
   const h = (el: Element) => el.getBoundingClientRect().height;
+  let pages = 0;
   let lastPage: Element[] = [];
+  let lastFill = 0;
   for (const table of Array.from(root.querySelectorAll<HTMLTableElement>('table.lr__table'))) {
     const avail = pageH - (table.tHead ? h(table.tHead) : 0) - (table.tFoot ? h(table.tFoot) : 0);
     let remaining = avail;
     let page: Element[] = [];
-    const newPage = () => { remaining = avail; page = []; };
+    const close = () => {
+      if (page.length > 0) { pages++; lastPage = page; lastFill = (avail - remaining) / avail; }
+    };
+    const newPage = () => { close(); remaining = avail; page = []; };
     for (const body of Array.from(table.tBodies)) {
       const rows = Array.from(body.rows);
       if (rows.length === 0) continue;
@@ -927,9 +962,10 @@ function endOfReportOrphaned(root: HTMLElement, pageH: number): boolean {
       }
       if (body.classList.contains('lr__sheet-end')) newPage();
     }
-    if (page.length > 0) lastPage = page;
+    close();
   }
-  return lastPage.length > 0 && lastPage.every((r) => r.querySelector('td.lr__end') !== null);
+  const orphaned = lastPage.length > 0 && lastPage.every((r) => r.querySelector('td.lr__end') !== null);
+  return { pages, orphaned, lastFill };
 }
 
 function Meta({

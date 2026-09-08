@@ -580,6 +580,12 @@
 .lr--fit2 .lr__c-name, .lr--fit2 .lr__c-value, .lr--fit2 .lr__c-unit, .lr--fit2 .lr__c-range { padding-top: 1px; padding-bottom: 1px; }
 .lr--fit3 .lr__table { zoom: .97; }
 .lr--fit4 .lr__table { zoom: .94; }
+/* Two further steps, reached only when a light last page can be pulled back
+   onto the sheet — a prenatal screen whose last risk row and interpretation
+   overran by a few lines. .86 keeps 11px type at 9.5px, the floor for a
+   document read by hand. */
+.lr--fit5 .lr__table { zoom: .90; }
+.lr--fit6 .lr__table { zoom: .86; }
 
 /* ---------- end of report ---------- */
 
