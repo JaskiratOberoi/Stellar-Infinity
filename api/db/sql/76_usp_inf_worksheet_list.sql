@@ -147,6 +147,21 @@ BEGIN
     END
     DECLARE @statusCount INT = (SELECT COUNT(*) FROM @statuses);
 
+    /*
+     * Sample Sent (1): a tube the centre has barcoded and dispatched but the
+     * lab has not received. Excluded from every list by default — it is not
+     * on any bench and has no report — exactly as the legacy portal's
+     * usp_pcc_samplestatus leaves it out of "--All--". But that portal DOES
+     * show it when the centre picks the status: it is how a centre sees
+     * what is in transit, and Infinity gave it no way at all (the worksheet
+     * procedure dropped status 1 unconditionally, 24,000 rows a month with
+     * nowhere to be seen). So status 1 rows are listed ONLY when asked for
+     * by id. The date window uses the row's added date where the LIS left
+     * modifieddate NULL, which it does for most of them — the sample has
+     * not been modified; it has only been sent.
+     */
+    DECLARE @wantsSent BIT = CASE WHEN EXISTS (SELECT 1 FROM @statuses WHERE status_id = 1) THEN 1 ELSE 0 END;
+
     ;WITH H AS (
         SELECT
             P.id                    AS pid,
@@ -200,8 +215,11 @@ BEGIN
         LEFT JOIN dbo.tbl_med_business_unit_master BU ON BU.id = S.business_unit_id
         LEFT JOIN dbo.tbl_med_mcc_patient_samples_status_master STAT ON STAT.id = S.sample_status
         LEFT JOIN dbo.tbl_med_sample_master SM ON SM.id = S.sampleid
-        WHERE S.modifieddate BETWEEN @from AND @to
-          AND S.sample_status > 1
+        WHERE (
+                (S.sample_status > 1 AND S.modifieddate BETWEEN @from AND @to)
+             OR (S.sample_status = 1 AND @wantsSent = 1
+                 AND COALESCE(S.modifieddate, S.addeddate) BETWEEN @from AND @to)
+              )
           AND (@statusCount = 0 OR EXISTS (SELECT 1 FROM @statuses st WHERE st.status_id = S.sample_status))
           AND (
                 @sid IS NULL

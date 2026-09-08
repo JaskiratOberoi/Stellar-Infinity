@@ -40,7 +40,10 @@ const OUTSTANDING = -1;
  *  statuses, verified against tbl_med_mcc_patient_samples_status_master.
  *  Status 1 (Sample Sent) never reaches the worksheet — the procedure
  *  excludes it. */
-const STATUSES = [{ id: OUTSTANDING, label: 'Outstanding' }, ...SAMPLE_STATUSES];
+// No Sample Sent here: a tube in transit is not bench work, and the entry
+// screen would refuse it. Reporting offers it, for the centre tracking a
+// dispatch.
+const STATUSES = [{ id: OUTSTANDING, label: 'Outstanding' }, ...SAMPLE_STATUSES.filter((s) => s.id !== 1)];
 
 /** Every row is reachable at any of these; the choice only trades requests
  *  against response size. */
@@ -400,7 +403,7 @@ export function Worksheet() {
               one stylesheet block — see "Rows as cards" in styles.css. Half the
               people opening this screen are on a phone at a collection centre,
               and an eight-column table is a sideways drag on one. */}
-          <StatusLegend />
+          <StatusLegend statuses={SAMPLE_STATUSES.filter((s) => s.id !== 1)} />
           <div className="table-wrap table-wrap--cards">
             <table>
               <thead>

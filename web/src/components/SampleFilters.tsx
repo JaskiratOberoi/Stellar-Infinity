@@ -102,6 +102,11 @@ export function initialFilters(fromDaysAgo: number): SampleFilterValues {
  * draw from, labelled the way the pills already spell them.
  */
 export const SAMPLE_STATUSES: { id: number; label: string }[] = [
+  // Sent but not received: barcoded by the centre, still in transit. Listed
+  // only when picked, never under "Any status" — the legacy portal's rule,
+  // and the list procedure enforces it. The worksheet leaves it out
+  // altogether; nothing at this status is on a bench.
+  { id: 1, label: 'Sample sent' },
   { id: 2, label: 'Registered' },
   { id: 4, label: 'Partially tested' },
   { id: 5, label: 'Tested' },

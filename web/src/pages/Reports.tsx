@@ -1360,10 +1360,10 @@ export function statusRowClass(statusCode?: number | null, status?: string | nul
 }
 
 /** The colour key, so the tints teach themselves — one swatch per status, in bench order. */
-export function StatusLegend() {
+export function StatusLegend({ statuses = SAMPLE_STATUSES }: { statuses?: { id: number; label: string }[] }) {
   return (
     <div className="slegend" role="list" aria-label="Status colours">
-      {SAMPLE_STATUSES.map((s) => (
+      {statuses.map((s) => (
         <span key={s.id} role="listitem" className={`slegend__item status--${STATUS_HUE[s.id] ?? 'neutral'}`}>
           <i className="slegend__swatch" aria-hidden="true" />
           {s.label}
