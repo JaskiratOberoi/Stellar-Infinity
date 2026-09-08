@@ -430,6 +430,13 @@
    without a second font. */
 .lr__c-name-text--abnormal { font-weight: 900; color: #b91c1c; -webkit-text-stroke: 0.35px #b91c1c; }
 .lr__c-value { padding: 2px 12px 2px 0; }
+/* A long text value, spanning into the Unit (and empty Reference) column —
+   see ResultRow. Half a point smaller with the tracking pulled in, so a
+   forty-character finding sits on one line beside its unit, or two where a
+   reference interval keeps its column. The unit follows the text in the
+   unit column's own size, dimmed, so it still reads as a unit. */
+.lr__c-value--text { padding-right: 10px; font-size: 10.5px; line-height: 1.25; letter-spacing: -0.01em; }
+.lr__c-value-unit { margin-left: 6px; font-size: 10px; color: #374151; white-space: nowrap; }
 .lr__c-unit { padding: 2px 6px; text-align: center; }
 .lr__c-range { padding: 2px 6px; font-size: 10px; line-height: 1.25; color: #111827; text-align: center; }
 /* padding 1px, not the 2px of its neighbours: a two-line method ("Automated 5

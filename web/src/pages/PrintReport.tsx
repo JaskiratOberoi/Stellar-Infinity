@@ -1477,6 +1477,20 @@ function ResultRow({
      weight heavier, because it is the line the report exists to carry. */
   const blank = wide && (!row.value || /^[-–—.]+$/.test(row.value));
   const key = wide && KEY_LABEL.test(row.name ?? '');
+  /*
+   * A SENTENCE for a value — "LOWER THAN THE LINEAR RANGE OF THE ASSAY",
+   * "NO MICROORGANISM ISOLATED" — in the 12% figure column is four ragged
+   * lines beside an empty page. No spacing rescues that: the column is
+   * 86px of text. So a long text value borrows the Unit column, and the
+   * Reference column too when there is no interval, with the unit set
+   * inline after it in the unit's own small type. One line where the
+   * reference is empty, two at most where it is not. A figure, however
+   * long its decimals, and anything with a comparator stays in its column.
+   */
+  const longText = !wide && !rich && !!row.value
+    && row.value.length > 14
+    && !/^\s*[<>≤≥]?\s*-?\d/.test(row.value);
+  const textSpan = longText ? (row.range ? 2 : 3) : 1;
   return (
     <>
       <tr className={`lr__row${wide ? ' lr__row--desc' : ''}${off}`}>
@@ -1506,7 +1520,7 @@ function ResultRow({
           </td>
         ) : (
           <>
-            <td className="lr__c-value">
+            <td className={`lr__c-value${longText ? ' lr__c-value--text' : ''}`} colSpan={textSpan}>
               <span className={row.abnormal ? 'lr__abnormal' : undefined}>
                 {row.value ?? '—'}
                 {/* Which way it went, when the interval says. Text, not an
@@ -1518,9 +1532,10 @@ function ResultRow({
                   </span>
                 )}
               </span>
+              {longText && row.unit && <span className="lr__c-value-unit">{row.unit}</span>}
             </td>
-            <td className="lr__c-unit">{row.unit ?? '—'}</td>
-            <td className="lr__c-range"><RangeCell range={row.range} /></td>
+            {!longText && <td className="lr__c-unit">{row.unit ?? '—'}</td>}
+            {(!longText || row.range) && <td className="lr__c-range"><RangeCell range={row.range} /></td>}
             <td className="lr__c-method">{row.method ?? '—'}</td>
           </>
         )}

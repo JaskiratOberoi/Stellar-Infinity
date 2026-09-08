@@ -371,7 +371,8 @@ public static class ReportPdfEndpoints
     //     document, with its 1.4MB colour profile dropped.
     // 22: flagged values lose the grey block - heavy bold, red, a larger chevron.
     // 23: the patient box unwashed with a Noble-purple rule; flagged names heavier.
-    private const string PdfCacheV = "23";
+    // 24: a long text value spans into the Unit / empty Reference column, unit inline.
+    private const string PdfCacheV = "24";
     private static readonly TimeSpan PdfCacheTtl = TimeSpan.FromMinutes(45);
 
     private static string PdfCacheKey(
