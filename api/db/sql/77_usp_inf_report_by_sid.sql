@@ -237,10 +237,17 @@ BEGIN
                  * unit, not the collection centre's home unit — a BU-17 centre's
                  * sample processed in Delhi (SID 9293660) prints the medallions.
                  * Accreditation belongs to the lab that ran the test.
+                 *
+                 * Or the report is listed in inf_report_nabl_override (script
+                 * 142): a per-SID, one-time decision to print the mark on a
+                 * report whose test the catalogue does not accredit. Same
+                 * rows as the rule above — Test and Head, never Param — so
+                 * the print is indistinguishable from an accredited one.
                  */
-                CONVERT(bit, CASE WHEN H.bu_id = 1
-                                   AND m.Nabl_Logo = 1
-                                   AND r.testtype IN (N'Test', N'Head')
+                CONVERT(bit, CASE WHEN r.testtype IN (N'Test', N'Head')
+                                   AND ((H.bu_id = 1 AND m.Nabl_Logo = 1)
+                                        OR EXISTS (SELECT 1 FROM dbo.inf_report_nabl_override o
+                                                   WHERE o.sid = H.sid))
                                   THEN 1 ELSE 0 END) AS nabl
             FROM dbo.tbl_med_mcc_patient_test_result r
             LEFT JOIN dbo.tbl_med_test_master m ON r.testid = m.id
