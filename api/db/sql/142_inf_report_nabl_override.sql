@@ -13,8 +13,12 @@
  *
  * Read by usp_inf_report_by_sid (script 77), so every route that draws a
  * report — the download, the patient bundle, the on-screen viewer and the
- * QR copy — agrees. Idempotent: the table is created once, the seed rows
- * are inserted only while absent. To withdraw an override, delete its row.
+ * QR copy — agrees. Idempotent: the table is created once. Rows are added
+ * by hand for the case in question and deleted to withdraw it; this script
+ * seeds none, so a redeploy can never re-mark a report whose override was
+ * withdrawn (the two SIDs above were marked once, on 2026-09-08, for PDFs
+ * handed over that day, and then withdrawn the same day at the user's ask —
+ * Infinity itself prints them unmarked).
  */
 SET NOCOUNT ON;
 
@@ -30,11 +34,4 @@ BEGIN
 END
 ELSE
     PRINT 'dbo.inf_report_nabl_override already present.';
-GO
-
-INSERT INTO dbo.inf_report_nabl_override (sid, reason, created_by)
-SELECT v.sid, N'One-time NABL mark on HCV Quantitative PCR, requested 2026-09-08', N'inf:6593'
-FROM (VALUES (N'9692094'), (N'9692060')) v(sid)
-WHERE NOT EXISTS (SELECT 1 FROM dbo.inf_report_nabl_override o WHERE o.sid = v.sid);
-PRINT CONCAT('Override rows inserted: ', @@ROWCOUNT);
 GO
