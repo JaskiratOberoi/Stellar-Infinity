@@ -175,6 +175,14 @@ button, input, select { font: inherit; color: inherit; }
 .login__brand { display: flex; align-items: center; gap: .7rem; user-select: none; }
 .login__brand svg { height: 30px; width: auto; flex: none; }
 
+/* The Noble mark on the card: pushed to the far edge rather than butted
+   against the last letter, so the two identities stand apart with the card's
+   own width between them — the top bar has room to spare; the card does not.
+   A shade smaller than in the bar, so it accompanies the wordmark instead of
+   competing with it on a line this short. */
+.login__brand .noble-mark { margin-left: auto; padding-left: 1.25rem; }
+.login__brand .noble-mark img { height: 26px; }
+
 .login__letters { display: inline-flex; }
 
 .login__letter {
