@@ -59,7 +59,7 @@ public sealed class AuditTrailRepository(NobleConnectionFactory db, SqlRetry ret
     private static readonly Dictionary<string, string[]> Categories = new(StringComparer.OrdinalIgnoreCase)
     {
         ["reports"] = ["report."],
-        ["users"] = ["admin."],
+        ["users"] = ["admin.", "centre."],
         ["auth"] = ["login.", "session."],
         ["orders"] = ["order.", "bill.", "patient."],
         ["payments"] = ["payment.", "receipt.", "mcc."],
@@ -178,6 +178,13 @@ public sealed class AuditTrailRepository(NobleConnectionFactory db, SqlRetry ret
                         bill_id = CONVERT(INT, NULL), sid = r.vailid, ip = r.actor_ip,
                         details = CONCAT('{"test":"', STRING_ESCAPE(ISNULL(r.test_code, ''), 'json'),
                             '","field":"', STRING_ESCAPE(r.field, 'json'), '"',
+                            -- A status transition is the one field whose values
+                            -- are safe and short enough to carry: "7 → 9" is
+                            -- the whole story of a download marking Printed.
+                            CASE WHEN r.field = 'status'
+                                 THEN CONCAT(',"from":"', STRING_ESCAPE(ISNULL(r.old_value, ''), 'json'),
+                                             '","to":"', STRING_ESCAPE(ISNULL(r.new_value, ''), 'json'), '"')
+                                 ELSE '' END,
                             CASE WHEN r.reason IS NOT NULL
                                  THEN CONCAT(',"reason":"', STRING_ESCAPE(r.reason, 'json'), '"') ELSE '' END,
                             CASE WHEN r.source <> 'ui'

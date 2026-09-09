@@ -62,12 +62,15 @@ public static class PublicReportEndpoints
     private static async Task<IResult> GetPublicReport(
         string sid,
         string? t,
+        bool? render,
         ReportLink links,
         ReportsRepository repo,
         ReportExtrasRepository extras,
         CatalogueDetailRepository catalogue,
         ReportLockRepository locks,
         ILoggerFactory loggers,
+        Audit.AuditLog audit,
+        HttpContext http,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(sid) || sid.Length > 50) return Results.NotFound();
@@ -95,6 +98,16 @@ public static class PublicReportEndpoints
         // must never show a value nobody has released. See ReportRelease.
         var results = ReportRelease.Releasable(
             await ReportEnrichment.ApplyAsync(catalogue, row, ct).ConfigureAwait(false));
+
+        // The patient's copy opened from the QR: no actor, so the username
+        // says what it was. The IP is the one fact there is about who. It
+        // does not mark Printed — the legacy's QR copy (g.aspx) never did,
+        // and "Printed" is the lab's word for the client having the report.
+        // render=true is the PDF route's own renderer fetching this data for
+        // the copy it is about to serve; that copy is recorded as
+        // report.public_pdf, so the fetch behind it is not a second open.
+        if (render != true)
+            audit.Log("report.public_viewed", username: "qr", sid: row.Sid, ip: Audit.AuditIp.From(http));
 
         return Results.Ok(new
         {
@@ -133,6 +146,7 @@ public static class PublicReportEndpoints
         GraphRepository graphs,
         RenderClient render,
         ILoggerFactory logs,
+        Audit.AuditLog audit,
         CancellationToken ct)
     {
         var log = logs.CreateLogger("Infinity.Api.PublicReport");
@@ -184,6 +198,9 @@ public static class PublicReportEndpoints
                 ct).ConfigureAwait(false);
 
             log.LogInformation("publicreport.served sid={Sid}", sid);
+            // On the audit trail as well as the log stream: the report left,
+            // and the feed is where "who has this report" gets answered.
+            audit.Log("report.public_pdf", username: "qr", sid: row.Sid, ip: Audit.AuditIp.From(http));
             return Results.File(pdf, "application/pdf", Reports.ReportFileName.For(row, sid));
         }
         catch (RenderFailedException)

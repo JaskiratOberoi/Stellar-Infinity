@@ -252,6 +252,16 @@ export function Worksheet() {
         body: JSON.stringify({ sids, splitDept: true, paper, overrideLock: includeHeld || undefined }),
         fallbackName: `Reports_PID_${pid}.pdf`,
       });
+      // The server marked each delivered sample Printed (6→8, 7→9, the
+      // legacy rule — usp_inf_report_mark_printed); show it now, not after
+      // the next search.
+      const taken = new Set(sids.map((s) => s.toUpperCase()));
+      setRows((prev) => prev.map((r) => {
+        if (!taken.has(r.sid.toUpperCase())) return r;
+        if (r.statusCode === 7) return { ...r, statusCode: 9, status: 'Printed' };
+        if (r.statusCode === 6) return { ...r, statusCode: 8, status: 'Partially Printed' };
+        return r;
+      }));
     } catch (e) {
       setPidError(e instanceof Error ? e.message : 'The download failed.');
     } finally {

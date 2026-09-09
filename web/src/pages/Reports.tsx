@@ -285,6 +285,25 @@ export function Reports() {
     setSmartSids(eligible);
   };
 
+  /*
+   * A download marks the sample Printed on the server (6→8, 7→9 — the
+   * legacy LIS's rule, see usp_inf_report_mark_printed). The list shows it
+   * at once rather than after the next search: the same transition, applied
+   * to the rows in hand, so the tech who pulled the report sees the status
+   * they will find on the next load. Nothing is marked that the server would
+   * not mark — a held or not-ready report was skipped there, and here it
+   * cannot be at 6 or 7 with a download that came back.
+   */
+  const markPrinted = (sids: string[]) => {
+    const taken = new Set(sids.map((s) => s.toUpperCase()));
+    setRows((prev) => prev.map((r) => {
+      if (!taken.has(r.sid.toUpperCase())) return r;
+      if (r.statusCode === 7) return { ...r, statusCode: 9, status: 'Printed' };
+      if (r.statusCode === 6) return { ...r, statusCode: 8, status: 'Partially Printed' };
+      return r;
+    }));
+  };
+
   const downloadPatient = async (pid: number, sids: string[], paper: Paper, includeHeld = false) => {
     setPidBusy(pid);
     setMergeError(null);
@@ -306,6 +325,7 @@ export function Reports() {
         }),
         fallbackName: `Reports_PID_${pid}.pdf`,
       });
+      markPrinted(sids);
       if (includeHeld) showToast('Downloaded including held reports — recorded in the audit trail.');
     } catch (e) {
       setMergeError(e instanceof Error ? e.message : 'The download failed.');
@@ -331,6 +351,7 @@ export function Reports() {
         overrideLock: 'true', withGraph: String(withGraphs), paper, split: 'true',
       });
       await downloadFile(`/api/reports/${encodeURIComponent(sid)}/pdf?${q}`);
+      markPrinted([sid]);
       showToast(`Downloaded over a hold of ₹${Math.round(l.dueAmount).toLocaleString('en-IN')} — recorded in the audit trail.`);
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'The download failed.');
@@ -349,6 +370,7 @@ export function Reports() {
         body: JSON.stringify({ sids: [...selected], withGraph: withGraphs, paper }),
         fallbackName: 'Reports.pdf',
       });
+      markPrinted([...selected]);
     } catch (e) {
       setMergeError(e instanceof Error ? e.message : 'The merged download failed.');
     } finally {

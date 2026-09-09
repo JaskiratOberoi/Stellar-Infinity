@@ -198,9 +198,14 @@ export function PrintReport() {
     // overrideLock: the Super Admin's release of a held report, forwarded to
     // the view route, which re-checks the role. Without it the route answers
     // 423, this page never signals ready, and the PDF renderer times out.
+    // render=1 under ?pdf=1: this fetch is the PDF renderer's, not a person's,
+    // and the audit trail files it as such (report.rendered, not viewed).
+    const own = new URLSearchParams();
+    if (params.get('overrideLock') === 'true') own.set('overrideLock', 'true');
+    if (params.get('pdf') === '1') own.set('render', 'true');
     const url = token
-      ? `/api/public/reports/${encodeURIComponent(sid)}?t=${encodeURIComponent(token)}`
-      : `/api/reports/${encodeURIComponent(sid)}${params.get('overrideLock') === 'true' ? '?overrideLock=true' : ''}`;
+      ? `/api/public/reports/${encodeURIComponent(sid)}?t=${encodeURIComponent(token)}${params.get('pdf') === '1' ? '&render=true' : ''}`
+      : `/api/reports/${encodeURIComponent(sid)}${own.toString() ? `?${own.toString()}` : ''}`;
     api.get<FullRow>(url)
       .then((r) => { if (live) setRow(r); })
       .catch((e) => { if (live) setError(e instanceof Error ? e.message : 'Could not load this report.'); });

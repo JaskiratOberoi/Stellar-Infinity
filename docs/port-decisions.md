@@ -299,3 +299,39 @@ still an unrestricted reporter. A role rather than a per-user revocation
 because the grant table only grants, and because the next Sales Admin the LIS
 creates must land in the same place. SPs 20 and 23 carry `sales` in their
 role IN-lists and must be redeployed with this.
+
+## A report download marks the sample Printed, as an audited transition (2026-09-09)
+
+The legacy LIS's "With Header" / "Without Header" click on `Pcc/WebForm2.aspx`
+— which IS the PDF download, for lab and client alike — runs
+`WorksheetClass.ChangeSampleStatus`: 6 → 8, 7 → 9, 8 stays, nothing else
+moves. It touches no other column, marks BEFORE the Crystal export (so a failed
+export still marks), logs one free-text "Printed <from>-<to>" row with no IP,
+and is not triggered by viewing, by the QR copy (`g.aspx`) or by the e-mail
+button. Telo never ported it. Infinity read 8/9 everywhere and never wrote
+them, so a lab tech could not tell from the list that a client had taken a
+report.
+
+Infinity now does the same, differently in three places on purpose.
+`usp_inf_report_mark_printed` (143) makes the transition under UPDLOCK and
+writes an `inf_result_audit` row (action `status`, old → new, actor, IP,
+agent, `reason` naming the channel) — the sample's history tab and the audit
+feed both show it. The API calls it only once the PDF bytes exist, rendered or
+from cache, on the single route and per report inside a bundle; a failed render
+is on the trail as `report.pdf_failed` and marks nothing. `modifieddate` is not
+touched, so a download never moves a sample between the lists' date windows.
+Every signed-in role marks, as in the legacy — the audit row carries the role
+and username, which is how "was it the client" is answered. The QR copy and the
+on-screen viewer do not mark. A printed sample leaves 8/9 only through the
+reopen (52) — `usp_inf_result_save` refuses a 7/8/9 sample outright — so an
+amendment after printing is itself an audited step, and the next download
+marks the sample Printed again; the legacy froze 9 for ever, which hid
+amendments.
+
+The trail was also completed while here: `report.pdf` now carries role, paper,
+cache hit and the status flip, and is written per report inside a bundle (a
+fifty-report PID pull was one row naming no patient); `report.pdf_bulk` names
+the SIDs; the graph download, the Smart Report view and the two QR routes are
+recorded; the renderer's own data fetch is filed as `report.rendered` instead
+of a phantom `report.viewed` beside every download. The Reporting list updates
+the row's status locally the moment a download completes.

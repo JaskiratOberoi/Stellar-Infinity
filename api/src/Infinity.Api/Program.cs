@@ -72,6 +72,7 @@ builder.Services.AddSingleton<Infinity.Api.Reports.SmartReportService>();
 builder.Services.AddSingleton<Infinity.Api.Orders.ReferrerRepository>();
 builder.Services.AddSingleton<Infinity.Api.Reports.GraphRepository>();
 builder.Services.AddSingleton<Infinity.Api.Reports.ReportLockRepository>();
+builder.Services.AddSingleton<Infinity.Api.Reports.ReportPrintRepository>();
 
 // The render sidecar. A typed client rather than a bare HttpClient so the base
 // address and the generous timeout live in one place: a merged batch of fifty

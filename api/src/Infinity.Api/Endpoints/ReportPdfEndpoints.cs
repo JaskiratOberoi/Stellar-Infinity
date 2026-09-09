@@ -449,6 +449,7 @@ public static class ReportPdfEndpoints
         RenderClient render,
         Caching.InfinityCache cache,
         Audit.AuditLog audit,
+        ReportPrintRepository prints,
         CancellationToken ct)
     {
         var (ok, fail, row, overrode) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct,
@@ -462,7 +463,9 @@ public static class ReportPdfEndpoints
             audit.Log("report.lock_override", actor: principal.UserId(), sid: sid, ip: Audit.AuditIp.From(http),
                 details: new { reason = overrode.Reason, dueAmount = overrode.DueAmount });
         }
-        audit.Log("report.pdf", actor: principal.UserId(), sid: sid, ip: Audit.AuditIp.From(http));
+        // The download itself is recorded when the bytes are in hand — see
+        // IssuedAsync — not here, so a render that fails is not on the trail
+        // as a report that left.
 
         // Everything that changes the bytes is in the key; the exclude list is
         // already digits-and-commas by the time PrintQuery is done with it.
@@ -475,6 +478,7 @@ public static class ReportPdfEndpoints
         if (await cache.GetBytesAsync(key, ct).ConfigureAwait(false) is { } cached)
         {
             http.Response.Headers["X-Report-Cache"] = "hit";
+            await IssuedAsync(prints, audit, http, sid, sheet.Key, cache: "hit", ct).ConfigureAwait(false);
             return Results.File(cached, "application/pdf", ReportFileName.For(row!, sid));
         }
 
@@ -499,12 +503,90 @@ public static class ReportPdfEndpoints
 
             await cache.SetBytesAsync(key, pdf, PdfCacheTtl, ct).ConfigureAwait(false);
             http.Response.Headers["X-Report-Cache"] = "miss";
+            await IssuedAsync(prints, audit, http, sid, sheet.Key, cache: "miss", ct).ConfigureAwait(false);
             return Results.File(pdf, "application/pdf", ReportFileName.For(row!, sid));
         }
         catch (RenderFailedException)
         {
+            // On the trail as what it was: an attempt that produced nothing.
+            // Not report.pdf, and no status change — the legacy marks Printed
+            // before it exports, which is how a sample reaches Printed with no
+            // report ever leaving.
+            audit.Log("report.pdf_failed", actor: principal.UserId(), sid: sid, ip: Audit.AuditIp.From(http),
+                details: new { paper = sheet.Key });
             return Results.Problem("The report could not be rendered.", statusCode: StatusCodes.Status502BadGateway);
         }
+    }
+
+    /// <summary>
+    /// The report has left: the bytes are in hand. Two records, in this order —
+    /// the legacy status flip (6→8, 7→9) through procedure 143, which writes
+    /// its own inf_result_audit row when it moves; then the download on
+    /// inf_audit_log, every time, with who, from where, which paper, whether
+    /// the cache served it and whether the status moved. Never called on a
+    /// failed render — see <see cref="ReportPrintRepository"/>.
+    /// </summary>
+    private static async Task IssuedAsync(
+        ReportPrintRepository prints, Audit.AuditLog audit, HttpContext http,
+        string sid, string paper, string cache, CancellationToken ct)
+    {
+        var actor = Audit.AuditActorAccessor.For(http);
+        var mark = await prints.MarkPrintedAsync(sid, actor, "pdf", ct).ConfigureAwait(false);
+        var details = new Dictionary<string, object?>
+        {
+            ["role"] = http.User.Role(),
+            ["paper"] = paper,
+            ["cache"] = cache,
+        };
+        if (mark is { Changed: true }) details["printed"] = $"{mark.Before}->{mark.After}";
+        audit.Log("report.pdf", actor: actor.UserId, username: actor.Username, sid: sid,
+            ip: Audit.AuditIp.From(http), details: details);
+    }
+
+    /// <summary>
+    /// The bundle's counterpart: one report.pdf per report delivered, each
+    /// marking its sample the same way, then one report.pdf_bulk naming the
+    /// batch — so a fifty-report PID pull is fifty rows naming fifty
+    /// patients, not one row naming none.
+    /// </summary>
+    private static async Task IssuedBulkAsync(
+        ReportPrintRepository prints, Audit.AuditLog audit, HttpContext http,
+        IReadOnlyList<string> sids, string paper, bool patientReport, int requested, int skipped,
+        CancellationToken ct)
+    {
+        var actor = Audit.AuditActorAccessor.For(http);
+        var ip = Audit.AuditIp.From(http);
+        var role = http.User.Role();
+        var via = patientReport ? "patient" : "bulk";
+        var moved = 0;
+        foreach (var sid in sids)
+        {
+            var mark = await prints.MarkPrintedAsync(sid, actor, "bulk", ct).ConfigureAwait(false);
+            var details = new Dictionary<string, object?>
+            {
+                ["role"] = role,
+                ["paper"] = paper,
+                ["via"] = via,
+            };
+            if (mark is { Changed: true })
+            {
+                moved++;
+                details["printed"] = $"{mark.Before}->{mark.After}";
+            }
+            audit.Log("report.pdf", actor: actor.UserId, username: actor.Username, sid: sid, ip: ip, details: details);
+        }
+
+        var joined = string.Join(",", sids);
+        audit.Log("report.pdf_bulk", actor: actor.UserId, username: actor.Username, ip: ip,
+            details: new
+            {
+                requested,
+                delivered = sids.Count,
+                skipped,
+                printed = moved,
+                via,
+                sids = joined.Length > 400 ? joined[..400] : joined,
+            });
     }
 
     /// <summary>
@@ -524,6 +606,7 @@ public static class ReportPdfEndpoints
         RenderClient render,
         Caching.InfinityCache cache,
         Audit.AuditLog audit,
+        ReportPrintRepository prints,
         CancellationToken ct)
     {
         var sids = (body?.Sids ?? [])
@@ -544,8 +627,9 @@ public static class ReportPdfEndpoints
         var skipped = new List<object>();
         var misses = new List<(int Index, string Key)>();
 
-        audit.Log("report.pdf_bulk", actor: principal.UserId(), ip: Audit.AuditIp.From(http),
-            details: new { requested = sids.Count });
+        // Recorded when the bundle is in hand — IssuedBulkAsync — one row per
+        // report delivered plus the batch row, not a count of what was asked.
+        var requested = sids.Count;
 
         /*
          * The stapled merge comes out in a chronological order, not the order
@@ -796,6 +880,9 @@ public static class ReportPdfEndpoints
                 if (skipped.Count > 0)
                     http.Response.Headers["X-Reports-Skipped"] = System.Text.Json.JsonSerializer.Serialize(skipped);
 
+                await IssuedBulkAsync(prints, audit, http, allowed, sheet.Key, patientReport: true,
+                    requested, skipped.Count, ct).ConfigureAwait(false);
+
                 var when = NobleTime.NowForNoble().ToString("yyyyMMdd-HHmm");
                 return Results.File(patientPdf, "application/pdf",
                     firstRow is not null && onePatient
@@ -804,6 +891,8 @@ public static class ReportPdfEndpoints
             }
             catch (RenderFailedException)
             {
+                audit.Log("report.pdf_failed", actor: principal.UserId(), ip: Audit.AuditIp.From(http),
+                    details: new { via = "patient", requested, paper = sheet.Key });
                 return Results.Problem("The report could not be rendered.", statusCode: StatusCodes.Status502BadGateway);
             }
         }
@@ -859,6 +948,9 @@ public static class ReportPdfEndpoints
             if (skipped.Count > 0)
                 http.Response.Headers["X-Reports-Skipped"] = System.Text.Json.JsonSerializer.Serialize(skipped);
 
+            await IssuedBulkAsync(prints, audit, http, allowed, sheet.Key, patientReport: false,
+                requested, skipped.Count, ct).ConfigureAwait(false);
+
             var stamp = NobleTime.NowForNoble().ToString("yyyyMMdd-HHmm");
             return Results.File(pdf, "application/pdf",
                 firstRow is not null && onePatient
@@ -867,6 +959,8 @@ public static class ReportPdfEndpoints
         }
         catch (RenderFailedException)
         {
+            audit.Log("report.pdf_failed", actor: principal.UserId(), ip: Audit.AuditIp.From(http),
+                details: new { via = "bulk", requested, paper = sheet.Key });
             return Results.Problem("The reports could not be rendered.", statusCode: StatusCodes.Status502BadGateway);
         }
     }
@@ -886,6 +980,8 @@ public static class ReportPdfEndpoints
         ReportExtrasRepository extras,
         ILoggerFactory loggers,
         GraphRepository graphs,
+        HttpContext http,
+        Audit.AuditLog audit,
         CancellationToken ct)
     {
         var (ok, fail, _, _) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct,
@@ -900,6 +996,12 @@ public static class ReportPdfEndpoints
 
         var files = await graphs.GetFilesAsync(sid, ct).ConfigureAwait(false);
         if (files.Count == 0) return Results.NotFound();
+
+        // Patient data leaving on its own — the graph names the patient — so
+        // it is on the trail like the report is. It does not mark Printed:
+        // the graph is an attachment, not the report.
+        audit.Log("report.graph", actor: principal.UserId(), sid: sid, ip: Audit.AuditIp.From(http),
+            details: new { role = principal.Role(), files = files.Count });
 
         // One file goes out as-is. Several are left to the caller to merge —
         // only the PDF path needs them stapled, and that is the renderer's job.

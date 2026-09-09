@@ -541,6 +541,12 @@ BEGIN
         IF LTRIM(RTRIM(ISNULL(@held, ''))) <> ''
             SET @status_after = 10;    -- Pending
 
+        -- Printed (8/9) is set by a report download (procedure 143) and is
+        -- never recomputed here: this procedure refuses a 7/8/9 sample above
+        -- ("Reopen it before editing"), and the reopen (52) is what takes a
+        -- printed sample back to 6/5 — an audited step of its own. The next
+        -- download marks it Printed again. The legacy froze a 9 for ever.
+
         IF @status_after <> @status_before
         BEGIN
             UPDATE dbo.tbl_med_mcc_patient_samples

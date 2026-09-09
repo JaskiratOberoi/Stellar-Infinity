@@ -670,6 +670,7 @@ public static class ApiEndpoints
     private static async Task<IResult> GetReport(
         string sid,
         bool? overrideLock,
+        bool? render,
         System.Security.Claims.ClaimsPrincipal principal,
         ScopeRepository scopes,
         ReportsRepository repo,
@@ -742,7 +743,15 @@ public static class ApiEndpoints
 
         // Who opened which patient's report — the same event Telo logs, and
         // the reason the audit feed can answer "who has seen this result".
-        audit.Log("report.viewed", actor: userId, sid: sid, ip: Audit.AuditIp.From(http));
+        //
+        // render=1 is the PDF renderer fetching the page's data on the user's
+        // behalf (PrintReport adds it under ?pdf=1). That is not a person
+        // looking at a screen, and filing it as one put a phantom "viewed"
+        // beside every download; it is kept on the trail under its own kind
+        // so the download's provenance is still traceable.
+        audit.Log(render == true ? "report.rendered" : "report.viewed",
+            actor: userId, sid: sid, ip: Audit.AuditIp.From(http),
+            details: new { role = principal.Role() });
 
         // No signatory, no report. This used to fall back to printing the sheet
         // bare on the reasoning that a document someone is waiting on beats a
@@ -1011,6 +1020,8 @@ public static class ApiEndpoints
         Reports.ReportLink links,
         ILoggerFactory loggers,
         Reports.ReportLockRepository locks,
+        Audit.AuditLog audit,
+        HttpContext http,
         CancellationToken ct)
     {
         var list = Reports.SmartReportGate.ParseSids(sids);
@@ -1018,6 +1029,14 @@ public static class ApiEndpoints
             .PassAsync(list, principal, scopes, repo, locks, extras, smartAccess, loggers, ct)
             .ConfigureAwait(false);
         if (fail is not null) return fail;
+
+        // The booklet carries the patient's results too; on the trail like the
+        // report view, one row per sample it covers.
+        foreach (var r in ok!.Rows)
+        {
+            audit.Log("report.smart_viewed", actor: principal.UserId(), sid: r.Sid, ip: Audit.AuditIp.From(http),
+                details: new { role = principal.Role() });
+        }
 
         // The QR points at the clinical softcopy, which is per sample; the
         // first sample's is the one printed, as the first tube's report is
@@ -1037,6 +1056,8 @@ public static class ApiEndpoints
         Reports.ReportLink links,
         ILoggerFactory loggers,
         Reports.ReportLockRepository locks,
+        Audit.AuditLog audit,
+        HttpContext http,
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
@@ -1099,6 +1120,9 @@ public static class ApiEndpoints
         var signoff = await Reports.ReportSignoff
             .RequireAsync(extras, row.Sid, loggers, ct).ConfigureAwait(false);
         if (signoff.Refusal is not null) return signoff.Refusal;
+
+        audit.Log("report.smart_viewed", actor: userId, sid: row.Sid, ip: Audit.AuditIp.From(http),
+            details: new { role = principal.Role() });
 
         return Results.Ok(smart.Build(
             row, signoff.Extras!, links.QrDataUrl(row.Sid), DateTimeOffset.UtcNow));

@@ -56,7 +56,7 @@ function categoryOf(kind: string): string {
   if (kind.startsWith('lis.')) return 'lis';
   if (kind.startsWith('report.')) return 'reports';
   if (kind.startsWith('result.')) return 'results';
-  if (kind.startsWith('admin.')) return 'users';
+  if (kind.startsWith('admin.') || kind.startsWith('centre.')) return 'users';
   if (kind.startsWith('login.') || kind.startsWith('session.')) return 'auth';
   if (kind.startsWith('order.') || kind.startsWith('bill.') || kind.startsWith('patient.')) return 'orders';
   if (kind.startsWith('payment.') || kind.startsWith('receipt.') || kind.startsWith('mcc.')) return 'payments';
@@ -100,9 +100,27 @@ const KIND_LABEL: Record<string, string> = {
   'sample.accessioned': 'Samples registered to worksheet',
   'sample.sids_attached': 'Barcodes attached',
   'report.viewed': 'Report viewed',
+  'report.rendered': 'Report rendered for a PDF',
   'report.pdf': 'Report PDF downloaded',
   'report.pdf_bulk': 'Bulk report PDFs downloaded',
+  'report.pdf_failed': 'Report PDF failed to render',
+  'report.graph': 'Report graph downloaded',
+  'report.smart_viewed': 'Smart Report viewed',
   'report.smart_pdf': 'Smart Report downloaded',
+  'report.public_viewed': 'Patient copy opened from QR',
+  'report.public_pdf': 'Patient copy downloaded from QR',
+  'report.lock_override': 'Report released over a balance hold',
+  'report.clinical_history.set': 'Clinical history set',
+  'report.clinical_history.delete': 'Clinical history removed',
+  'centre.unlock.permanent': 'Centre permanently unlocked',
+  'centre.unlock.temp': 'Centre temporarily unlocked',
+  'admin.password.viewed': 'Password viewed',
+  'mrf.created': 'Material request raised',
+  'mrf.cancelled': 'Material request cancelled',
+  'help.created': 'Help request raised',
+  'help.responded': 'Help request answered',
+  'help.closed': 'Help request closed',
+  'result.status': 'Sample status changed',
   'result.enter': 'Result entered',
   'result.amend': 'Result amended',
   'result.authorize': 'Result authorised',
@@ -122,6 +140,8 @@ const DETAIL_LABEL: Record<string, string> = {
   orderId: 'order', instrument: 'via', reference: 'ref', detail: '',
   test: 'test', field: 'field', source: 'source', patientId: 'PID',
   pid: 'PID', info: 'info',
+  from: 'from', to: 'to', printed: 'status', paper: 'paper', cache: 'cache',
+  via: 'via', delivered: 'delivered', files: 'files', dueAmount: 'due',
 };
 const MONEY_KEYS = new Set(['total', 'amount', 'discount', 'paid', 'refunded', 'newAmount', 'oldAmount']);
 
