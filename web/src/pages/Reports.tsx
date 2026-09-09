@@ -841,6 +841,7 @@ export function Reports() {
           clientCode={rows.find((r) => r.sid === openSid)?.clientCode ?? null}
           businessUnit={rows.find((r) => r.sid === openSid)?.businessUnit ?? null}
           onClose={() => setOpenSid(null)}
+          onDownloaded={(s) => markPrinted([s])}
           // Offered ONLY where the patient bought it. Passing undefined is what
           // hides the button — see ReportViewer, which omits the control when
           // it has no handler.
@@ -865,6 +866,7 @@ export function Reports() {
           rows={pidView.rows}
           overrideLock={pidView.overrideLock}
           onClose={() => setPidView(null)}
+          onDownloaded={markPrinted}
           // The purchase is per order, so any sample of the patient carrying
           // the flag means the booklet was bought. Swap modals rather than
           // stack them, as the single viewer does.
@@ -910,11 +912,14 @@ export function Reports() {
  * unit minus its cuts. Switching back to an edited sample reopens it with its
  * ticks as they were left (the excludes ride the frame URL).
  */
-function PatientReportViewer({ pid, patientName, rows, onClose, overrideLock, onSmart }: {
+function PatientReportViewer({ pid, patientName, rows, onClose, overrideLock, onSmart, onDownloaded }: {
   pid: number;
   patientName: string | null;
   rows: WorksheetRow[];
   onClose: () => void;
+  /** The bundle left: every sample in it is now Printed on the server, and
+   *  the list behind this preview shows it at once. */
+  onDownloaded?: (sids: string[]) => void;
   /** The Super Admin's release of this patient's held reports: the frame
    *  and the download both carry it, and the server honours it for that
    *  role alone. */
@@ -1020,6 +1025,7 @@ function PatientReportViewer({ pid, patientName, rows, onClose, overrideLock, on
         }),
         fallbackName: `Reports_PID_${pid}.pdf`,
       });
+      onDownloaded?.(sids);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'The download failed.');
     } finally {

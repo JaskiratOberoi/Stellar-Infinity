@@ -133,7 +133,7 @@ export type FullRow = WorksheetRow & {
  * move a page break — seconds of blank white for a toggle.
  */
 export function ReportViewer({
-  sid, patientName, clientCode, businessUnit, onClose, onSmart,
+  sid, patientName, clientCode, businessUnit, onClose, onSmart, onDownloaded,
 }: {
   sid: string;
   /** For the window title only; the report draws its own header. */
@@ -145,6 +145,9 @@ export function ReportViewer({
   onClose: () => void;
   /** Opens the patient-facing Smart Report. Omitted where it is not offered. */
   onSmart?: (sid: string) => void;
+  /** The report PDF left: the server has marked the sample Printed, and the
+   *  list behind this preview can show it without another search. */
+  onDownloaded?: (sid: string) => void;
 }) {
   /*
    * The paper this desk prints on — remembered, not asked each time. Noble's
@@ -256,13 +259,14 @@ export function ReportViewer({
         q.set('split', String(split));
         if (excluded.length) q.set('exclude', excluded.join(','));
         await downloadFile(`${base}/pdf?${q}`);
+        onDownloaded?.(sid);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'The download failed.');
     } finally {
       setBusy(null);
     }
-  }, [sid, nothingSelected, hasGraph, includeGraph, paper, split, excluded]);
+  }, [sid, nothingSelected, hasGraph, includeGraph, paper, split, excluded, onDownloaded]);
 
   return createPortal(
     <div className="modal-backdrop preview-backdrop" onClick={onClose}>

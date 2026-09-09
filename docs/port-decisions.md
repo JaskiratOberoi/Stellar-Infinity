@@ -335,3 +335,16 @@ the SIDs; the graph download, the Smart Report view and the two QR routes are
 recorded; the renderer's own data fetch is filed as `report.rendered` instead
 of a phantom `report.viewed` beside every download. The Reporting list updates
 the row's status locally the moment a download completes.
+
+## A client ROLE locks the account to its centre, not only a client usertype (2026-09-09)
+
+Both scope resolvers keyed the centre lock on the LIS usertype (2, 7, 8, 10,
+12). The admin's New User form takes any LIS usertype id, so an account created
+as `client_reporting` over usertype 33 with no centre attached carried no
+restriction the LIS would honour and fell into the parity branch — every
+centre, on the dashboard and the reporting list. Found the moment such an
+account was made for the printed-status test. Now an explicit Infinity role of
+`client`, `client_b2c`, `client_reporting` or `sub_client` (inf_user_role) is
+treated as a client usertype in both resolvers: own centre plus admin-granted
+codes, and NOTHING until one is granted. A centre is attached to such an
+account through Admin → Users → client codes, which is the audited path.

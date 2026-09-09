@@ -83,6 +83,18 @@ public sealed class ScopeRepository(
         Cached($"scope:{userId}", Query(userId, """
             DECLARE @ut INT = (SELECT usertypeid FROM dbo.tbl_med_user_master WHERE id = @uid);
 
+            -- An Infinity-assigned CLIENT role locks the account to its centre
+            -- exactly as a client usertype does. The admin form takes any LIS
+            -- usertype id, and one created as "client_reporting" over a staff
+            -- usertype with no centre attached fell through to the parity
+            -- branch below — every centre. The role is the lab's statement of
+            -- what the account is; it fails closed until a centre is granted.
+            DECLARE @clientRole BIT =
+                CASE WHEN EXISTS (SELECT 1 FROM dbo.inf_user_role r
+                                  WHERE r.user_id = @uid
+                                    AND r.role IN (N'client', N'client_b2c', N'client_reporting', N'sub_client'))
+                     THEN 1 ELSE 0 END;
+
             -- Does the user carry ANY restriction the LIS would honour?
             DECLARE @restricted BIT =
                 CASE WHEN EXISTS (SELECT 1 FROM dbo.tbl_med_user_sales_mcc_mapping m
@@ -92,9 +104,9 @@ public sealed class ScopeRepository(
                                     AND (ISNULL(u.PCC_Id, 0) > 0 OR ISNULL(u.sub_pcc_id, 0) > 0))
                      THEN 1 ELSE 0 END;
 
-            IF @ut IN (1, 5)
+            IF @ut IN (1, 5) AND @clientRole = 0
                 SELECT id AS mcc_code FROM dbo.tbl_med_mcc_unit_master;
-            ELSE IF @ut IN (2, 7, 8, 10, 12)
+            ELSE IF @ut IN (2, 7, 8, 10, 12) OR @clientRole = 1
             BEGIN
                 WITH own AS (
                     /*
@@ -194,6 +206,14 @@ public sealed class ScopeRepository(
         Cached($"reportscope:{userId}", Query(userId, """
             DECLARE @ut INT = (SELECT usertypeid FROM dbo.tbl_med_user_master WHERE id = @uid);
 
+            -- Same rule as the operational scope: an Infinity CLIENT role is a
+            -- client, whatever LIS usertype the admin form was given.
+            DECLARE @clientRole BIT =
+                CASE WHEN EXISTS (SELECT 1 FROM dbo.inf_user_role r
+                                  WHERE r.user_id = @uid
+                                    AND r.role IN (N'client', N'client_b2c', N'client_reporting', N'sub_client'))
+                     THEN 1 ELSE 0 END;
+
             -- Same restriction test as the operational scope: the LIS parity
             -- rule is that a staff account restricted NOWHERE reports on
             -- everything. Client usertypes are excluded from that rule — a
@@ -207,7 +227,7 @@ public sealed class ScopeRepository(
                                     AND (ISNULL(u.PCC_Id, 0) > 0 OR ISNULL(u.sub_pcc_id, 0) > 0))
                      THEN 1 ELSE 0 END;
 
-            IF @restricted = 1 OR @ut IN (2, 7, 8, 10, 12)
+            IF @restricted = 1 OR @ut IN (2, 7, 8, 10, 12) OR @clientRole = 1
             BEGIN
                 WITH own AS (
                     /*
