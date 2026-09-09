@@ -563,8 +563,15 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
     /// equality predicate on a unique key, no date window, same projection.
     /// </para>
     /// </remarks>
+    /// <param name="publicCopy">
+    /// True only from the token-opened route behind the printed QR. The data is
+    /// the same; the procedure uses it to honour a NABL override scoped to the
+    /// patient's copy alone (inf_report_nabl_override.qr_only). Every signed-in
+    /// caller leaves it false.
+    /// </param>
     public async Task<WorksheetRow?> GetBySidAsync(
-        IReadOnlyList<string> clientCodes, string sid, CancellationToken ct = default)
+        IReadOnlyList<string> clientCodes, string sid, CancellationToken ct = default,
+        bool publicCopy = false)
     {
         var target = (sid ?? string.Empty).Trim();
         if (target.Length == 0) return null;
@@ -589,6 +596,7 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
 
                 cmd.Parameters.Add("@sid", SqlDbType.NVarChar, 100).Value = target;
                 cmd.Parameters.Add("@include_unauthorized", SqlDbType.Bit).Value = true;
+                cmd.Parameters.Add("@public", SqlDbType.Bit).Value = publicCopy;
 
                 await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SingleResult, inner)
                     .ConfigureAwait(false);

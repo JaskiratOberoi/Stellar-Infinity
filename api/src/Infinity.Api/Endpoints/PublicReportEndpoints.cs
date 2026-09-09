@@ -73,7 +73,9 @@ public static class PublicReportEndpoints
         if (string.IsNullOrWhiteSpace(sid) || sid.Length > 50) return Results.NotFound();
         if (!links.Verify(sid, t)) return Results.NotFound();
 
-        var row = await repo.GetBySidAsync([], sid, ct).ConfigureAwait(false);
+        // publicCopy: this is the patient's copy, and the one route on which a
+        // QR-only NABL override applies. See inf_report_nabl_override.qr_only.
+        var row = await repo.GetBySidAsync([], sid, ct, publicCopy: true).ConfigureAwait(false);
         if (row is null) return Results.NotFound();
 
         // No report exists before authorisation, and the public route reveals
@@ -149,7 +151,7 @@ public static class PublicReportEndpoints
         // Empty client-code list = unrestricted, which is what "no session"
         // means here. The token has already established WHICH report may be
         // read, so the scope check has nothing left to narrow.
-        var row = await repo.GetBySidAsync([], sid, ct).ConfigureAwait(false);
+        var row = await repo.GetBySidAsync([], sid, ct, publicCopy: true).ConfigureAwait(false);
         if (row is null) return Results.NotFound();
 
         // Same rule as the JSON route above: nothing issued, nothing served.

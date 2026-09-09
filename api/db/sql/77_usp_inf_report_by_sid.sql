@@ -46,11 +46,17 @@ GO
  * Scope is enforced by the caller passing its client codes as a TVP. An empty
  * TVP means unrestricted; the endpoint short-circuits "may see nothing" before
  * calling. Read-only.
+ *
+ * @public: 1 only from the token-opened route behind the printed QR — the
+ * patient's own copy. Nothing about the data changes with it; it exists so a
+ * NABL override can be scoped to that copy alone (inf_report_nabl_override
+ * .qr_only, script 142). Every signed-in caller leaves it at 0.
  */
 CREATE OR ALTER PROCEDURE dbo.usp_inf_report_by_sid
     @sid                    NVARCHAR(100),
     @client_codes           dbo.ClientCodeList READONLY,
-    @include_unauthorized   BIT = 1
+    @include_unauthorized   BIT = 1,
+    @public                 BIT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -243,11 +249,15 @@ BEGIN
                  * report whose test the catalogue does not accredit. Same
                  * rows as the rule above — Test and Head, never Param — so
                  * the print is indistinguishable from an accredited one.
+                 * An override flagged qr_only applies to the patient's copy
+                 * behind the QR alone (@public = 1); the lab's own downloads
+                 * and viewer print the report as the catalogue has it.
                  */
                 CONVERT(bit, CASE WHEN r.testtype IN (N'Test', N'Head')
                                    AND ((H.bu_id = 1 AND m.Nabl_Logo = 1)
                                         OR EXISTS (SELECT 1 FROM dbo.inf_report_nabl_override o
-                                                   WHERE o.sid = H.sid))
+                                                   WHERE o.sid = H.sid
+                                                     AND (o.qr_only = 0 OR @public = 1)))
                                   THEN 1 ELSE 0 END) AS nabl
             FROM dbo.tbl_med_mcc_patient_test_result r
             LEFT JOIN dbo.tbl_med_test_master m ON r.testid = m.id
