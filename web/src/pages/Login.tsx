@@ -167,6 +167,13 @@ export function Login() {
           shell's veil can open on an identical dot at the identical point. */}
       {leaving && <span className="login__spark" aria-hidden="true" />}
 
+      {/* The lab's own mark, above the card and outside it: the first screen
+          says whose system this is before it says anything else. Infinity's
+          mark stays inside the card as the product's own signature. */}
+      <div className="login__noble">
+        <NobleMark />
+      </div>
+
       <form className="login__card" onSubmit={onSubmit}>
         {/* The wordmark, letter by letter, wearing its own expansion. The
             symbol keeps drawing itself from Mark; the letters become the
@@ -189,10 +196,6 @@ export function Login() {
               </button>
             ))}
           </span>
-          {/* The lab's own mark beside Infinity's, before anyone signs in:
-              the same pairing the top bar shows once they are in, so the
-              first screen already says whose system this is. */}
-          <NobleMark />
         </div>
         {/* Fixed height, so the word changing never nudges the form fields. */}
         <p className="login__unfold" aria-hidden="true">

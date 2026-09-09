@@ -175,13 +175,13 @@ button, input, select { font: inherit; color: inherit; }
 .login__brand { display: flex; align-items: center; gap: .7rem; user-select: none; }
 .login__brand svg { height: 30px; width: auto; flex: none; }
 
-/* The Noble mark on the card: pushed to the far edge rather than butted
-   against the last letter, so the two identities stand apart with the card's
-   own width between them — the top bar has room to spare; the card does not.
-   A shade smaller than in the bar, so it accompanies the wordmark instead of
-   competing with it on a line this short. */
-.login__brand .noble-mark { margin-left: auto; padding-left: 1.25rem; }
-.login__brand .noble-mark img { height: 26px; }
+/* The Noble mark above the card, dead centre, at a size that carries from
+   across a room: the lab's name comes first on the screen everyone starts
+   at. No divider — it is not sharing a line with anything. */
+.login__noble { display: flex; justify-content: center; }
+.login__noble .noble-mark { border-left: 0; padding-left: 0; }
+.login__noble .noble-mark img { height: 64px; opacity: 1; }
+.dark .login__noble .noble-mark img { opacity: .92; }
 
 .login__letters { display: inline-flex; }
 
@@ -229,6 +229,9 @@ button, input, select { font: inherit; color: inherit; }
 
 .login {
   min-height: 100dvh; display: grid; place-items: center;
+  /* Two rows — the Noble mark, then the card — packed at the centre of the
+     viewport as one group rather than spread over it. */
+  align-content: center; row-gap: 1.75rem;
   padding: 1.5rem; position: relative;
   /* The orbs are huge and blurred; anything escaping the viewport must clip,
      not scroll. */
@@ -421,7 +424,8 @@ button, input, select { font: inherit; color: inherit; }
 
 /* Contents and the corner toggle breathe out together. */
 .login--leaving .login__card > *,
-.login--leaving .login__corner {
+.login--leaving .login__corner,
+.login--leaving .login__noble {
   animation: si-hide .2s ease-in both;
 }
 @keyframes si-hide { to { opacity: 0; transform: translateY(-4px); } }
