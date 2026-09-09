@@ -140,7 +140,7 @@ const DETAIL_LABEL: Record<string, string> = {
   orderId: 'order', instrument: 'via', reference: 'ref', detail: '',
   test: 'test', field: 'field', source: 'source', patientId: 'PID',
   pid: 'PID', info: 'info',
-  from: 'from', to: 'to', printed: 'status', paper: 'paper', cache: 'cache',
+  from: 'from', to: 'to', printed: 'printed', paper: 'paper', cache: 'cache',
   via: 'via', delivered: 'delivered', files: 'files', dueAmount: 'due',
 };
 const MONEY_KEYS = new Set(['total', 'amount', 'discount', 'paid', 'refunded', 'newAmount', 'oldAmount']);
@@ -219,9 +219,11 @@ export function AuditTrail() {
     if (origin) p.set('origin', origin);
     const trimmed = q.trim();
     if (trimmed) {
-      // A number is far more often a bill than a word in a payload — send it
-      // as both, and the bill filter wins where it matches.
-      if (/^\d{3,}$/.test(trimmed)) p.set('bill', trimmed);
+      // Free text only. A number used to be sent as a bill filter as well,
+      // and that filter is an AND — so a SID, which is also a number, found
+      // nothing, because report events carry no bill. The server's text
+      // match already equals a bill number exactly and LIKEs the SID column,
+      // so one parameter covers both without excluding either.
       p.set('q', trimmed);
     }
     void api.get<AuditResponse>(`/api/audit?${p}`)
