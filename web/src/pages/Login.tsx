@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent, type PointerEvent } from 
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { Mark } from '../components/Mark';
+import { NobleMark } from '../components/NobleMark';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { InfinityLoader } from '../components/InfinityLoader';
 import { ReliefField } from '../components/ReliefField';
@@ -188,6 +189,10 @@ export function Login() {
               </button>
             ))}
           </span>
+          {/* The lab's own mark beside Infinity's, before anyone signs in:
+              the same pairing the top bar shows once they are in, so the
+              first screen already says whose system this is. */}
+          <NobleMark />
         </div>
         {/* Fixed height, so the word changing never nudges the form fields. */}
         <p className="login__unfold" aria-hidden="true">
