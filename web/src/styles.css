@@ -234,8 +234,11 @@ button, input, select { font: inherit; color: inherit; }
   align-content: center; row-gap: 1.75rem;
   padding: 1.5rem; position: relative;
   /* The orbs are huge and blurred; anything escaping the viewport must clip,
-     not scroll. */
+     not scroll. `hidden` still lets a focus() or a script scroll the box —
+     which is how the whole screen was found sitting 72px left of centre —
+     `clip` cannot be scrolled at all. hidden stays as the fallback. */
   overflow: hidden;
+  overflow: clip;
 }
 
 .login__corner { position: absolute; top: 1.1rem; right: 1.1rem; z-index: 2; }
