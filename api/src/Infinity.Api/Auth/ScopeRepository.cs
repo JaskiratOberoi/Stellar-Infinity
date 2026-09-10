@@ -124,6 +124,19 @@ public sealed class ScopeRepository(
                     UNION
                     SELECT u.sub_pcc_id FROM dbo.tbl_med_user_master u
                     WHERE u.id = @uid AND u.sub_pcc_id IS NOT NULL AND u.sub_pcc_id > 0
+                    UNION
+                    -- An Infinity-created client account has no PCC of its
+                    -- own: the centre an admin granted it (Admin → Users →
+                    -- client codes) is the only centre it has, and without
+                    -- this arm it could report on that centre but not see its
+                    -- ledger or book under it. Taken ONLY when both own
+                    -- columns are unset — a LIS client login keeps ignoring
+                    -- its mappings, so it can never act on another centre.
+                    SELECT DISTINCT m.mcc_code FROM dbo.tbl_med_user_sales_mcc_mapping m
+                    WHERE m.user_id = @uid AND m.mcc_code IS NOT NULL
+                      AND NOT EXISTS (SELECT 1 FROM dbo.tbl_med_user_master u2
+                                      WHERE u2.id = @uid
+                                        AND (ISNULL(u2.PCC_Id, 0) > 0 OR ISNULL(u2.sub_pcc_id, 0) > 0))
                 )
                 SELECT id AS mcc_code FROM own
                 UNION
