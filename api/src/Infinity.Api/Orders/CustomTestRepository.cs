@@ -6,8 +6,22 @@ namespace Infinity.Api.Orders;
 
 /// <summary>One thing the lab bills for but never performs on the LIS.</summary>
 /// <param name="Mrp">Rupees per unit. The AUTHORITATIVE price — see the remarks.</param>
+/// <param name="OnlyWithPackages">
+/// The master profiles this extra is sold with, when it is sold with some
+/// and not others — the Smart Report and the HR health packages
+/// (inf_smart_report_package, script 144). Null or empty: offered on any
+/// order. The form offers it only when the cart carries one; placement
+/// refuses it otherwise.
+/// </param>
 public sealed record CustomTest(
-    int Id, string Code, string Name, int Mrp, bool RequiresMrd, bool AllowQty);
+    int Id, string Code, string Name, int Mrp, bool RequiresMrd, bool AllowQty,
+    IReadOnlyList<int>? OnlyWithPackages = null)
+{
+    /// <summary>True when the extra may be sold with these cart items.</summary>
+    public bool OfferedWith(IEnumerable<CartItem> items) =>
+        OnlyWithPackages is not { Count: > 0 } need
+        || items.Any(i => string.Equals(i.Kind, "master", StringComparison.OrdinalIgnoreCase) && need.Contains(i.Id));
+}
 
 /// <summary>
 /// "Custom" tests — charged by the lab, not carried out by it.
@@ -48,6 +62,10 @@ public sealed class CustomTestRepository(NobleConnectionFactory db, SqlRetry ret
         FROM dbo.telo_custom_test
         WHERE is_active = 1 AND client_code IN (@code, N'*')
         ORDER BY name;
+
+        -- The packages the Smart Report is sold with (144). Second result
+        -- set, so the offer and its condition arrive together.
+        SELECT master_profile_id FROM dbo.inf_smart_report_package;
         """;
 
     /// <summary>Active custom tests offered to one client.</summary>
@@ -73,6 +91,23 @@ public sealed class CustomTestRepository(NobleConnectionFactory db, SqlRetry ret
                         Mrp: r.NullableInt("mrp") ?? 0,
                         RequiresMrd: r.Bool("requires_mrd"),
                         AllowQty: r.Bool("allow_qty")));
+                }
+
+                var packages = new List<int>();
+                if (await r.NextResultAsync(inner).ConfigureAwait(false))
+                {
+                    while (await r.ReadAsync(inner).ConfigureAwait(false)) packages.Add(r.GetInt32(0));
+                }
+                // The Smart Report is the one extra with a condition. An empty
+                // list would mean "with nothing", so it is left unconditioned
+                // only when the table is empty — which it is not seeded to be.
+                if (packages.Count > 0)
+                {
+                    for (var i = 0; i < rows.Count; i++)
+                    {
+                        if (string.Equals(rows[i].Code, Reports.SmartReportAccessRepository.SmartReportCode, StringComparison.OrdinalIgnoreCase))
+                            rows[i] = rows[i] with { OnlyWithPackages = packages };
+                    }
                 }
                 return (IReadOnlyList<CustomTest>)rows;
             }, token), ct).ConfigureAwait(false);

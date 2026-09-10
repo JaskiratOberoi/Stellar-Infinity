@@ -762,6 +762,9 @@ export interface CustomTest {
   mrp: number;
   requiresMrd: boolean;
   allowQty: boolean;
+  /** Master profile ids this extra is sold with — the Smart Report and the
+   *  HR health packages. Null or empty: offered on any order. */
+  onlyWithPackages?: number[] | null;
 }
 
 /** A queued order as the run list draws it — everything but the payload. */

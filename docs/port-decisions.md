@@ -348,3 +348,18 @@ account was made for the printed-status test. Now an explicit Infinity role of
 treated as a client usertype in both resolvers: own centre plus admin-granted
 codes, and NOTHING until one is granted. A centre is attached to such an
 account through Admin → Users → client codes, which is the audited path.
+
+## The Smart Report is sold only with the HR health packages (2026-09-10)
+
+The booklet (SMART-RPT, ₹99, a custom line) was offered on every order from
+every centre. Its sections, scores and advice are written around the HR health
+packages' analytes, and the lab's decision is that it is sold with those alone
+for now. `inf_smart_report_package` (144) lists the eligible master profiles —
+seeded with the eleven verified on ZZTEST01: HR201A, HR203A, HR202A, HR202A EX,
+HR0201EX, HR0203 EXTENDED, HR204A, HR204AEX, UP101, UP0102, UP103. The order
+form offers the extra only while the cart carries one of them and untucks it if
+the package is removed; placement refuses the line otherwise, rather than
+dropping it, so a draft that lost its package is not booked without the extra
+the operator thought was there. Offering it with another package is one INSERT.
+Reports already bought are untouched: the booklet's visibility stays keyed on
+the purchase.

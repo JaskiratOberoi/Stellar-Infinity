@@ -303,6 +303,24 @@ export function NewOrder() {
     setCustomPicked({});
     return () => { live = false; };
   }, [cart.mcc]);
+  /*
+   * An extra sold only with certain packages — the Smart Report with the HR
+   * health packages — is offered only while the cart carries one. The server
+   * refuses the line otherwise, so this is the courtesy; and a tick that
+   * loses its package is untucked with it rather than left to be refused.
+   */
+  const offeredCustomTests = customTests.filter((t) =>
+    !t.onlyWithPackages?.length
+    || cart.items.some((i) => i.kind === 'master' && t.onlyWithPackages!.includes(i.id)));
+  const offeredKey = offeredCustomTests.map((t) => t.id).join(',');
+  useEffect(() => {
+    const keep = new Set(offeredKey.split(',').filter(Boolean).map(Number));
+    setCustomPicked((prev) => {
+      const next: Record<number, number> = {};
+      for (const [id, qty] of Object.entries(prev)) if (keep.has(Number(id))) next[Number(id)] = qty;
+      return Object.keys(next).length === Object.keys(prev).length ? prev : next;
+    });
+  }, [offeredKey]);
   const [refCustomer, setRefCustomer] = useState<RefPick>(null);
   useEffect(() => {
     // Rosters are PER CENTRE — the pcc_code on the doctor/customer masters is
@@ -563,7 +581,7 @@ export function NewOrder() {
   const goldDetailsOk = isValidGoldCardNumber(goldNumber) && isValidGoldCardHolder(goldHolder);
   const goldTotal = (preview?.lines ?? []).reduce(
     (sum, l) => sum + Math.round((l.rate ?? 0) / 2), 0);
-  const customTotal = customTests.reduce(
+  const customTotal = offeredCustomTests.reduce(
     (sum, t) => sum + t.mrp * (customPicked[t.id] ?? 0), 0);
   const hasBillable = cart.items.length > 0 || customTotal > 0;
   const effectiveTotal = (goldApplied ? goldTotal : (preview?.total ?? 0)) + customTotal;
@@ -1751,13 +1769,13 @@ export function NewOrder() {
             </div>
 
           {/* ---- extras: billed by the lab, not performed by it ---- */}
-          {customTests.length > 0 && (
+          {offeredCustomTests.length > 0 && (
             <div style={{ marginTop: '.9rem' }}>
               <div className="muted" style={{ fontSize: '.76rem', marginBottom: '.35rem' }}>
                 Extras
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.5rem' }}>
-                {customTests.map((t) => {
+                {offeredCustomTests.map((t) => {
                   const on = (customPicked[t.id] ?? 0) > 0;
                   return (
                     <label

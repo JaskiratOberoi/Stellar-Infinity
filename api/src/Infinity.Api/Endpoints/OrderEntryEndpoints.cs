@@ -639,6 +639,22 @@ public static class OrderEntryEndpoints
                 .ConfigureAwait(false);
             if (test is not null) resolved.Add((test, line.Qty));
         }
+        // The Smart Report is sold only on an order that carries one of the
+        // packages it is built for (inf_smart_report_package — the HR health
+        // packages). The form offers it only then; this is the rule, and it
+        // refuses rather than drops so a draft that lost its package is not
+        // booked without the extra the operator thought they had added.
+        foreach (var (test, _) in resolved)
+        {
+            if (!test.OfferedWith(placed.Items))
+            {
+                return Results.BadRequest(new
+                {
+                    error = $"{test.Name} is offered only with an HR health package. Add the package, or remove the extra.",
+                    code = "SMART_REPORT_NEEDS_PACKAGE",
+                });
+            }
+        }
         var result = await orders.CreateAsync(userId, placed, resolved, ct).ConfigureAwait(false);
         if (!result.Ok)
         {
