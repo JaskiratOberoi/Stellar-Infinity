@@ -1245,8 +1245,16 @@ function IncludeToggle({
 }
 
 /** A profile panel (LIVER FUNCTION TEST): a parent tick box that cascades to
- *  every child block, and the profile's own clinical text printed once beneath
- *  the whole thing rather than under each constituent. */
+ *  every child block, and the profile's clinical text.
+ *
+ *  Whose text, depends on the profile. Where the lab has written a text for
+ *  the profile itself (Telo's sidecar — LFT, KFT, Lipid, Thyroid, Iron and
+ *  their variants), that prints once beneath the whole thing and the
+ *  constituents stay quiet, as Telo prints it. Where it has not — Typhidot,
+ *  every Fertility profile — each constituent prints its OWN catalogue text
+ *  in place, as the legacy LIS prints every report: FSH's "Clinical Use"
+ *  under FSH, LH's under LH. Hiding those too printed such profiles with no
+ *  interpretation at all, which is a report the lab has never issued. */
 function PanelBlock({
   panel, interactive, excluded, onToggle, pdf, interpretation,
 }: {
@@ -1278,6 +1286,28 @@ function PanelBlock({
 
   if (pdf && visible.length === 0) return null;
 
+  /*
+   * Which constituents speak. None, when the profile has its own text. All,
+   * otherwise — except that identical text prints once, on its LAST carrier,
+   * the same rule the Head groups of a multi-part test follow: a profile
+   * whose members share one catalogue text is one note, not one per member.
+   */
+  const childText = (c: ReportBlock): string | null =>
+    c.kind === 'group' ? (c.group?.interpretation ?? null) : (c.interpretation ?? null);
+  const lastCarrier = new Map<string, number>();
+  if (!interpretation) {
+    visible.forEach((c, i) => {
+      const t = childText(c);
+      if (t) lastCarrier.set(t, i);
+    });
+  }
+  const speaks = (c: ReportBlock, i: number): boolean => {
+    if (interpretation) return false;
+    const t = childText(c);
+    if (!t) return c.kind === 'group' ? !!c.group?.interpretationImage : !!c.interpretationImage;
+    return lastCarrier.get(t) === i;
+  };
+
   // Static notes still attach to the profile, from the codes actually printed.
   const codes: (string | null)[] = [];
   for (const child of panel.children) {
@@ -1306,7 +1336,7 @@ function PanelBlock({
           </span>
         </td>
       </tr>
-      {visible.map((child) => renderChild(child, { interactive, excluded, panelOff, pdf, onToggle }))}
+      {visible.map((child, i) => renderChild(child, { interactive, excluded, panelOff, pdf, onToggle, showInterpretation: speaks(child, i) }))}
       {interpretation && <InterpretationRow text={interpretation} dim={panelOff} />}
       <NoteRow notes={notesForCodes(codes)} dim={panelOff} />
     </>
@@ -1321,6 +1351,9 @@ function renderChild(
     panelOff: boolean;
     pdf: boolean;
     onToggle: (id: number) => void;
+    /** PanelBlock's decision — see its comment. Notes are never the
+     *  child's to print inside a profile: they attach to the profile. */
+    showInterpretation: boolean;
   },
 ): ReactNode {
   if (child.kind === 'group' && child.group) {
@@ -1335,8 +1368,8 @@ function renderChild(
         onToggle={ctl.onToggle}
         pdf={ctl.pdf}
         indent
-        // Printed once below the whole profile by PanelBlock.
-        hideInterpretation
+        hideInterpretation={!ctl.showInterpretation}
+        hideNotes
       />
     );
   }
@@ -1352,7 +1385,8 @@ function renderChild(
         disabled={ctl.panelOff}
         onToggle={() => ctl.onToggle(child.row!.resultId)}
         indent
-        hideInterpretation
+        hideInterpretation={!ctl.showInterpretation}
+        hideNotes
       />
     );
   }
@@ -1364,7 +1398,7 @@ function renderChild(
  *  to — and disables — its parameters; under the renderer unticked parameters
  *  are dropped and the group vanishes when none survive. */
 function GroupBlock({
-  group, interactive, excluded, groupOff, onToggle, disabled, pdf, indent, hideInterpretation,
+  group, interactive, excluded, groupOff, onToggle, disabled, pdf, indent, hideInterpretation, hideNotes,
 }: {
   group: ReportGroup;
   interactive: boolean;
@@ -1375,6 +1409,8 @@ function GroupBlock({
   pdf?: boolean;
   indent?: boolean;
   hideInterpretation?: boolean;
+  /** Inside a profile the static notes print once, at the panel's foot. */
+  hideNotes?: boolean;
 }) {
   /*
    * A descriptive test — cytology, histopathology, a smear, a rapid card —
@@ -1454,7 +1490,7 @@ function GroupBlock({
       {!hideInterpretation && group.interpretationImage && (
         <InterpretationImageRow src={group.interpretationImage} dim={groupOff} />
       )}
-      {!hideInterpretation && <NoteRow notes={notesForCodes(includedCodes)} dim={groupOff} />}
+      {!hideNotes && <NoteRow notes={notesForCodes(includedCodes)} dim={groupOff} />}
     </>
   );
 }
@@ -1462,7 +1498,7 @@ function GroupBlock({
 /** A standalone test row and its own interpretation. */
 function SingleBlock({
   row, interpretation, interpretationImage, interactive, excluded, onToggle,
-  disabled, indent, hideInterpretation,
+  disabled, indent, hideInterpretation, hideNotes,
 }: {
   row: ReportRow;
   interpretation: string | null;
@@ -1473,6 +1509,8 @@ function SingleBlock({
   disabled?: boolean;
   indent?: boolean;
   hideInterpretation?: boolean;
+  /** Inside a profile the static notes print once, at the panel's foot. */
+  hideNotes?: boolean;
 }) {
   return (
     <>
@@ -1495,7 +1533,7 @@ function SingleBlock({
       {!hideInterpretation && interpretationImage && (
         <InterpretationImageRow src={interpretationImage} dim={excluded} />
       )}
-      {!hideInterpretation && <NoteRow notes={notesForCodes([row.code])} dim={excluded} />}
+      {!hideNotes && <NoteRow notes={notesForCodes([row.code])} dim={excluded} />}
     </>
   );
 }
