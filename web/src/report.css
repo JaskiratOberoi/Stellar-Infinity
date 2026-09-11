@@ -428,7 +428,7 @@
    bold, so 900 alone draws 700. A hairline stroke in the same red thickens
    every glyph a third of a pixel each side — a true black weight on paper,
    without a second font. */
-.lr__c-name-text--abnormal { font-weight: 900; color: #b91c1c; -webkit-text-stroke: 0.35px #b91c1c; }
+.lr__c-name-text--abnormal { font-weight: 900; color: #000; -webkit-text-stroke: 0.35px #000; }
 .lr__c-value { padding: 2px 12px 2px 0; }
 /* A long text value, spanning into the Unit (and empty Reference) column —
    see ResultRow. Half a point smaller with the tracking pulled in, so a
@@ -459,13 +459,16 @@
    the shading meets the row edges as the LIS's does. print-color-adjust
    keeps Chromium from dropping the fill in the PDF. */
 .lr__abnormal {
-  /* No block behind it any more: the flag is the weight and the red, with
-     the chevron doing the pointing. Heavy bold — 900 where the face has
-     it, the boldest it has otherwise — so a flagged figure stands out of
-     a column of regular ones on a black-and-white print as well. */
+  /* No block behind it any more: the flag is the weight, with the chevron
+     doing the pointing. Heavy bold — 900 where the face has it, the boldest
+     it has otherwise — so a flagged figure stands out of a column of
+     regular ones. BLACK, not red: on the low-end black-and-white printers
+     many centres use, a red figure came out faint or dropped altogether and
+     a client raised it. Colour carried nothing the weight and the chevron
+     do not, so it is gone and the mark survives any printer. */
   display: inline;
   white-space: nowrap;
-  font-size: 13px; font-weight: 900; color: #b91c1c;
+  font-size: 13px; font-weight: 900; color: #000;
   line-height: 1.3;
 }
 /* The chevron after a flagged figure: up for above the interval, down for
@@ -473,9 +476,11 @@
    rather than another digit. */
 /* 12px, up from 8: with the grey block gone the chevron carries the "which
    way" on its own, so it is set to read at arm's length. */
-.lr__dir { font-size: 12px; margin-left: 4px; vertical-align: 0; letter-spacing: 0; }
-.lr__dir--high { color: #b91c1c; }
-.lr__dir--low { color: #1d4ed8; }
+.lr__dir { font-size: 12px; margin-left: 4px; vertical-align: 0; letter-spacing: 0; color: #000; }
+/* Both directions black for the same reason as the figure: the shape says
+   which way, and a red or blue mark is the first thing a cheap mono printer
+   loses. */
+.lr__dir--high, .lr__dir--low { color: #000; }
 
 /* Inside the descriptive shape the value is a run of prose, not a figure;
    the box would wrap a paragraph. There the red weight alone carries it. */
