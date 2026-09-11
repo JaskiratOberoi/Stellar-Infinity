@@ -577,12 +577,22 @@ public static class ApiEndpoints
         if (o is null) return Results.Unauthorized();
 
         var needle = (q ?? string.Empty).Trim();
-        var rows = o.ClientCodes
-            .Where(c => needle.Length == 0
-                     || c.Code.Contains(needle, StringComparison.OrdinalIgnoreCase)
-                     || (c.Name ?? string.Empty).Contains(needle, StringComparison.OrdinalIgnoreCase))
-            .Take(SearchLimit)
-            .ToList();
+        /*
+         * Two kinds of caller. The typeahead filters (SampleFilters) send a
+         * fragment and want a short list — capped. The pickers that filter
+         * LOCALLY (ClientPicker on the order form, the Requests page) load the
+         * route once with no fragment and expect the whole scope, and were
+         * getting the first 25 of 3,764 centres in code order: every centre
+         * past "AG0075" was unfindable on the order form, silently, since the
+         * cap arrived with the typeahead. No fragment means the whole list.
+         */
+        var rows = needle.Length == 0
+            ? o.ClientCodes.ToList()
+            : o.ClientCodes
+                .Where(c => c.Code.Contains(needle, StringComparison.OrdinalIgnoreCase)
+                         || (c.Name ?? string.Empty).Contains(needle, StringComparison.OrdinalIgnoreCase))
+                .Take(SearchLimit)
+                .ToList();
 
         /* The currently-selected code, even when it does not match the query.
            Without this the control blanks its own value the moment someone
