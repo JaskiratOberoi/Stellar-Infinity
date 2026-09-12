@@ -363,3 +363,17 @@ dropping it, so a draft that lost its package is not booked without the extra
 the operator thought was there. Offering it with another package is one INSERT.
 Reports already bought are untouched: the booklet's visibility stays keyed on
 the purchase.
+
+## Report format v2 — serif and capitals, selectable, under test (2026-09-12)
+
+A second FORMAT for the standard report, asked for as "keep everything the
+same, change the font to serif and capitalise the text so it reads bigger".
+Not a global switch: `?format=v2` on the print route, `format` on the PDF
+routes, a Format select beside the Paper select in both viewers, remembered
+per desk (`inf.report-format`) and carried on every download. Anything
+unrecognised is v1, so prod and every existing caller print exactly as before
+until the lab chooses. v2 is one root class, `.lr--v2`: Georgia/Times, the
+tabular text (patient block, table, signatures, footer) in capitals; units,
+e-mail addresses, the QR caption and the prose blocks (interpretations, notes,
+descriptive results, culture free text) keep their case. Pagination, paper
+and content are untouched. The format is in the PDF cache key.

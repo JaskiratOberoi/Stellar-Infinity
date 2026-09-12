@@ -14,6 +14,7 @@ import {
   initialFilters, SAMPLE_STATUSES, type SampleFilterValues,
 } from '../components/SampleFilters';
 import { PaperSelect, usePaper, type Paper } from '../components/PaperSelect';
+import { readStoredFormat } from '../components/ReportFormat';
 import { PidReportButton } from '../components/PidReportButton';
 
 export interface WorksheetRow {
@@ -321,6 +322,7 @@ export function Reports() {
         // each release to the audit trail.
         body: JSON.stringify({
           sids, withGraph: withGraphs, splitDept: true, deptMajor: true, paper,
+          format: readStoredFormat(),
           overrideLock: includeHeld || undefined,
         }),
         fallbackName: `Reports_PID_${pid}.pdf`,
@@ -349,6 +351,7 @@ export function Reports() {
         // 'true', not '1': the route binds this to a bool, and ASP.NET reads
         // only true/false there — '1' is a 400 before the handler runs.
         overrideLock: 'true', withGraph: String(withGraphs), paper, split: 'true',
+        format: readStoredFormat(),
       });
       await downloadFile(`/api/reports/${encodeURIComponent(sid)}/pdf?${q}`);
       markPrinted([sid]);
@@ -367,7 +370,7 @@ export function Reports() {
       await downloadFile('/api/reports/pdf/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...csrfHeader() },
-        body: JSON.stringify({ sids: [...selected], withGraph: withGraphs, paper }),
+        body: JSON.stringify({ sids: [...selected], withGraph: withGraphs, paper, format: readStoredFormat() }),
         fallbackName: 'Reports.pdf',
       });
       markPrinted([...selected]);
@@ -947,7 +950,7 @@ function PatientReportViewer({ pid, patientName, rows, onClose, overrideLock, on
   // Frozen per activation: the stored cuts ride the URL so a revisited sample
   // reopens exactly as it was left.
   const src = useMemo(() => {
-    const q = new URLSearchParams({ split: '1', paper });
+    const q = new URLSearchParams({ split: '1', paper, format: readStoredFormat() });
     if (overrideLock) q.set('overrideLock', 'true');
     const ex = excludesRef.current[activeSid];
     if (ex?.length) q.set('exclude', ex.join(','));
@@ -988,7 +991,7 @@ function PatientReportViewer({ pid, patientName, rows, onClose, overrideLock, on
   useEffect(() => {
     if (frameLoading) return;
     iframeRef.current?.contentWindow?.postMessage(
-      { type: 'infinity:report-display', sid: activeSid, split: true, paper },
+      { type: 'infinity:report-display', sid: activeSid, split: true, paper, format: readStoredFormat() },
       window.location.origin,
     );
   }, [frameLoading, paper, activeSid]);
@@ -1021,6 +1024,7 @@ function PatientReportViewer({ pid, patientName, rows, onClose, overrideLock, on
         headers: { 'Content-Type': 'application/json', ...csrfHeader() },
         body: JSON.stringify({
           sids, withGraph, splitDept: true, deptMajor: true, paper, excludes,
+          format: readStoredFormat(),
           overrideLock: overrideLock || undefined,
         }),
         fallbackName: `Reports_PID_${pid}.pdf`,

@@ -781,3 +781,29 @@
 .lr__weeks-hi { text-align: left; color: #1f2937; }
 
 .lr__pre { white-space: pre-line; }
+
+/* ── Format v2 (under test since 2026-09-12) ──────────────────────────────
+   The same layout, set in a serif face with the tabular text in capitals so
+   the sheet reads larger at the same size. Selected per desk (FormatSelect)
+   and carried as ?format=v2; nothing else about the report changes. Units
+   keep their case (mg/dL, µIU/mL are not the same words in capitals), as do
+   e-mail addresses and the QR caption; the prose blocks — interpretations,
+   notes, descriptive results, culture free text — stay in sentence case,
+   because a paragraph in capitals is slower to read, not bigger. */
+.lr--v2 { font-family: Georgia, "Times New Roman", Times, serif; }
+/* On the CELLS, not the table: the reset above sets text-transform: none on
+   every th and td directly, and a property set on the element beats one
+   inherited from its table. */
+.lr--v2 .lr__table td,
+.lr--v2 .lr__meta th, .lr--v2 .lr__meta td, .lr--v2 .lr__metamain, .lr--v2 .lr__cc,
+.lr--v2 .lr__signs, .lr--v2 .lr__foot-cell, .lr--v2 .lr__foot-fixed, .lr--v2 .lr__end, .lr--v2 .lr__legal {
+  text-transform: uppercase;
+}
+/* The column headers keep their case: "BIOLOGICAL REF INTERVAL" in serif
+   capitals runs into "METHOD" at the column widths the layout has. */
+.lr--v2 .lr__table th { text-transform: none; }
+.lr--v2 .lr__table td.lr__c-unit, .lr--v2 .lr__c-value-unit, .lr--v2 .lr__cc-contact, .lr--v2 .lr__qr,
+.lr--v2 .lr__table td .lr__interp, .lr--v2 .lr__interp, .lr--v2 .lr__rich, .lr--v2 .lr__notes,
+.lr--v2 .lr__culture-pre, .lr--v2 .lr__culture-remarks {
+  text-transform: none;
+}

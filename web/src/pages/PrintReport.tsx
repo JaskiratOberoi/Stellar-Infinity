@@ -19,6 +19,7 @@ import {
 } from '../lib/reportModel';
 import type { FullRow } from './ReportViewer';
 import { isPaper, type Paper } from '../components/PaperSelect';
+import { isReportFormat, type ReportFormat } from '../components/ReportFormat';
 import '../report.css';
 
 /**
@@ -188,6 +189,12 @@ export function PrintReport() {
   // "Headless" to the layout: no artwork band drawn. Two of the three papers
   // are headless; only the margins tell them apart, and that is @page's job.
   const headless = paper !== 'letterhead';
+  // The format — typography only. v2 is a class on the root; see ReportFormat.
+  const [format, setFormat] = useState<ReportFormat>(() => (params.get('format') === 'v2' ? 'v2' : 'v1'));
+  // The root's base class. The fit pass below rewrites the root's className
+  // outright while it measures, so the format has to be IN the base or the
+  // first measurement strips it — which is exactly what happened.
+  const rootBase = format === 'v2' ? 'lr lr--v2' : 'lr';
   const [excluded, setExcluded] = useState<Set<number>>(() => parseExcluded(params.get('exclude')));
 
   useEffect(() => {
@@ -323,22 +330,22 @@ export function PrintReport() {
        * keeps its old fallback — the last step — since even a partial gain
        * moves the marker closer to its results.
        */
-      root.className = fitClass('lr', 0);
+      root.className = fitClass(rootBase, 0);
       const base = paginate(root, pageH);
       const wants = base.pages > 1 && (base.orphaned || base.lastFill <= LIGHT_PAGE);
       let chosen = 0;
       if (wants) {
         chosen = base.orphaned ? FIT_MAX : 0;
         for (let level = 1; level <= FIT_MAX; level++) {
-          root.className = fitClass('lr', level);
+          root.className = fitClass(rootBase, level);
           if (paginate(root, pageH).pages < base.pages) { chosen = level; break; }
         }
       }
-      root.className = fitClass('lr', chosen);
+      root.className = fitClass(rootBase, chosen);
       setFit(chosen);
     });
     return () => { cancelled = true; };
-  }, [pdfMode, row, signed, paper]);
+  }, [pdfMode, row, signed, paper, rootBase]);
 
   const ready = row !== null && signed && fit !== null;
 
@@ -355,6 +362,7 @@ export function PrintReport() {
       if (typeof d.split === 'boolean') setSplit(d.split);
       if (isPaper(d.paper)) setPaper(d.paper);
       else if (typeof d.headless === 'boolean') setPaper(d.headless ? 'plain' : 'letterhead');
+      if (isReportFormat(d.format)) setFormat(d.format);
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -643,8 +651,8 @@ export function PrintReport() {
     blockTable(sec.deptName, [sec], last);
 
   const shell = pdfMode
-    ? fitClass('lr', fit ?? 0)
-    : previewSheets ? 'lr lr--sheets' : 'lr lr--screen';
+    ? fitClass(rootBase, fit ?? 0)
+    : previewSheets ? `${rootBase} lr--sheets` : `${rootBase} lr--screen`;
 
   return (
     <div ref={rootRef} className={shell} data-print-ready={ready ? 'true' : 'false'} data-print-fit={fit ?? undefined}>

@@ -13,6 +13,7 @@ import {
 } from '../components/SampleFilters';
 import { PidReportButton } from '../components/PidReportButton';
 import type { Paper } from '../components/PaperSelect';
+import { readStoredFormat } from '../components/ReportFormat';
 import { TestList } from '../components/TestList';
 
 /**
@@ -249,7 +250,7 @@ export function Worksheet() {
         // one PID download, one shape, whichever page it started from.
         // overrideLock: the Super Admin's tick to include held reports; the
         // server honours it for that role alone and audits each release.
-        body: JSON.stringify({ sids, splitDept: true, paper, overrideLock: includeHeld || undefined }),
+        body: JSON.stringify({ sids, splitDept: true, paper, format: readStoredFormat(), overrideLock: includeHeld || undefined }),
         fallbackName: `Reports_PID_${pid}.pdf`,
       });
       // The server marked each delivered sample Printed (6→8, 7→9, the

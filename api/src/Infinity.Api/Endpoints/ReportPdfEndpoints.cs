@@ -204,7 +204,7 @@ public static class ReportPdfEndpoints
     /// it; the view route re-checks the role, so it grants nothing by itself.
     /// </param>
     private static string PrintQuery(bool? split, string? exclude, ReportPaper paper, bool splitDept = false,
-                                     bool overrideLock = false)
+                                     bool overrideLock = false, string format = ReportFormat.V1)
     {
         var ids = (exclude ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -225,6 +225,9 @@ public static class ReportPdfEndpoints
         // or already on the sheet. The render service still decides whether to
         // composite; this only tells the page which margins to lay out for.
         q += paper.Query;
+        // The format rides the same way, and so lands in every cache key that
+        // folds the query in: v1 and v2 are different documents.
+        q += ReportFormat.Query(format);
         if (overrideLock) q += "&overrideLock=true";
         return q;
     }
@@ -438,6 +441,7 @@ public static class ReportPdfEndpoints
         bool? split,
         string? exclude,
         bool? overrideLock,
+        string? format,
         System.Security.Claims.ClaimsPrincipal principal,
         HttpContext http,
         ScopeRepository scopes,
@@ -470,7 +474,8 @@ public static class ReportPdfEndpoints
         // Everything that changes the bytes is in the key; the exclude list is
         // already digits-and-commas by the time PrintQuery is done with it.
         var sheet = ReportPaper.Resolve(paper, headless);
-        var query = PrintQuery(split, exclude, sheet, overrideLock: overrode is not null);
+        var query = PrintQuery(split, exclude, sheet, overrideLock: overrode is not null,
+                               format: ReportFormat.Normalise(format));
         var graphFp = await GraphFingerprintAsync(graphs, sid, withGraph == true, ct).ConfigureAwait(false);
         var key = PdfCacheKey("report", sid, RowStamp(row!),
             $"s{(split == true ? 1 : 0)}p{sheet.Key}g{graphFp}x{query}");
@@ -715,7 +720,8 @@ public static class ReportPdfEndpoints
             // rendered individually below so ITS bytes land in the cache too —
             // the second pull of the same PID assembles without a browser.
             var graphFp = await GraphFingerprintAsync(graphs, sid, body!.WithGraph, ct).ConfigureAwait(false);
-            var query = PrintQuery(body.Split, null, sheet, body.SplitDept == true, overrideLock: overrode is not null);
+            var query = PrintQuery(body.Split, null, sheet, body.SplitDept == true, overrideLock: overrode is not null,
+                                   format: ReportFormat.Normalise(body.Format));
             // n0: rendered WITHOUT per-report page numbers, because the batch
             // is numbered as one document at the staple. Distinct from the
             // single route's cache, whose documents carry their own numbers.
@@ -802,6 +808,7 @@ public static class ReportPdfEndpoints
                 var query = $"?pdf=1&split=dept&dept={Uri.EscapeDataString(u.Department)}"
                           + (last ? string.Empty : "&end=0")
                           + sheet.Query
+                          + ReportFormat.Query(ReportFormat.Normalise(body.Format))
                           + (excl is null ? string.Empty : $"&exclude={Uri.EscapeDataString(excl)}")
                           // Same reason as PrintQuery: the page's own fetch
                           // would answer 423 without it and the render times out.
@@ -820,7 +827,7 @@ public static class ReportPdfEndpoints
                     : "0";
                 var key = excl is null
                     ? PdfCacheKey("reportdept", u.Sid, rowStamps.GetValueOrDefault(u.Sid),
-                        $"{u.Department}|e{(last ? 1 : 0)}p{sheet.Key}g{graphFp}")
+                        $"{u.Department}|e{(last ? 1 : 0)}p{sheet.Key}g{graphFp}f{ReportFormat.Normalise(body.Format)}")
                     : null;
 
                 if (key is not null
@@ -1063,6 +1070,7 @@ public static class ReportPdfEndpoints
     /// </param>
     public sealed record BulkPdfRequest(
         IReadOnlyList<string>? Sids, bool WithGraph = true, bool? Headless = null, string? Paper = null,
+        string? Format = null,
         bool? Split = null, bool? SplitDept = null, bool? DeptMajor = null,
         IReadOnlyDictionary<string, IReadOnlyList<int>>? Excludes = null,
         /// <summary>Issue held reports over their balance. Super Admin only; see GateAsync.</summary>

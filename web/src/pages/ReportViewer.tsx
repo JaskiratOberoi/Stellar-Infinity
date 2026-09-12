@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { downloadFile } from '../lib/format';
 import type { WorksheetRow } from './Reports';
 import { PaperSelect, usePaper } from '../components/PaperSelect';
+import { FormatSelect, useReportFormat } from '../components/ReportFormat';
 import { BuTag } from '../components/BuTag';
 
 export interface TestResult {
@@ -157,12 +158,16 @@ export function ReportViewer({
    * answer per desk, kept until it changes — see PaperSelect.
    */
   const [paper, setPaper] = usePaper();
+  // The format — v1 or the serif-and-capitals v2 under test. Remembered per
+  // desk like the paper, pushed into the frame the same way, and carried on
+  // the download so the PDF is the sheet on screen.
+  const [format, setFormat] = useReportFormat();
   // One department per sheet. Telo defaults this on: a doctor reading a
   // haematology report should not have to find where biochemistry ended.
   const [split, setSplit] = useState(true);
 
   const [previewSrc] = useState(
-    () => `/print/report/${encodeURIComponent(sid)}?split=1&paper=${paper}`,
+    () => `/print/report/${encodeURIComponent(sid)}?split=1&paper=${paper}&format=${format}`,
   );
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [frameLoading, setFrameLoading] = useState(true);
@@ -205,10 +210,10 @@ export function ReportViewer({
   useEffect(() => {
     if (frameLoading) return;
     iframeRef.current?.contentWindow?.postMessage(
-      { type: 'infinity:report-display', sid, split, paper },
+      { type: 'infinity:report-display', sid, split, paper, format },
       window.location.origin,
     );
-  }, [frameLoading, split, paper, sid]);
+  }, [frameLoading, split, paper, format, sid]);
 
   // Take the selection back out. Same-origin only — a report is patient data
   // and this listener must not accept a count, or anything else, from elsewhere.
@@ -256,6 +261,7 @@ export function ReportViewer({
         // Infinity's PDF is the same document unless it is turned off.
         q.set('withGraph', String(hasGraph && includeGraph));
         q.set('paper', paper);
+        q.set('format', format);
         q.set('split', String(split));
         if (excluded.length) q.set('exclude', excluded.join(','));
         await downloadFile(`${base}/pdf?${q}`);
@@ -266,7 +272,7 @@ export function ReportViewer({
     } finally {
       setBusy(null);
     }
-  }, [sid, nothingSelected, hasGraph, includeGraph, paper, split, excluded, onDownloaded]);
+  }, [sid, nothingSelected, hasGraph, includeGraph, paper, format, split, excluded, onDownloaded]);
 
   return createPortal(
     <div className="modal-backdrop preview-backdrop" onClick={onClose}>
@@ -293,6 +299,10 @@ export function ReportViewer({
                 paginates like the download. */}
             <PaperSelect className="input input--sm preview__paper" value={paper} onChange={setPaper}
                          disabled={busy !== null} ariaLabel="Paper to print on" />
+            {/* The format under test, beside the paper: same preview, same
+                download, one more remembered answer. */}
+            <FormatSelect className="input input--sm preview__paper" value={format} onChange={setFormat}
+                          disabled={busy !== null} ariaLabel="Report format" />
 
             <select className="input input--sm preview__layout" value={split ? 'split' : 'continuous'}
                     aria-label="Report layout"
