@@ -800,8 +800,14 @@
   text-transform: uppercase;
 }
 /* The column headers keep their case: "BIOLOGICAL REF INTERVAL" in serif
-   capitals runs into "METHOD" at the column widths the layout has. */
-.lr--v2 .lr__table th { text-transform: none; }
+   capitals runs into "METHOD" at the column widths the layout has. The
+   header row is a td holding the patient block too; that block keeps its
+   capitals through the direct .lr__meta rule above. */
+.lr--v2 td.lr__head-cell, .lr--v2 td.lr__cols-cell { text-transform: none; }
+/* The signatures and the footer lines are <p>s, which the reset styles
+   directly; name them so the doctors' names and the footer read in the
+   same capitals as the sheet. */
+.lr--v2 .lr__signs p, .lr--v2 .lr__foot-fixed p, .lr--v2 .lr__foot-cell p { text-transform: uppercase; }
 .lr--v2 .lr__table td.lr__c-unit, .lr--v2 .lr__c-value-unit, .lr--v2 .lr__cc-contact, .lr--v2 .lr__qr,
 .lr--v2 .lr__table td .lr__interp, .lr--v2 .lr__interp, .lr--v2 .lr__rich, .lr--v2 .lr__notes,
 .lr--v2 .lr__culture-pre, .lr--v2 .lr__culture-remarks {
