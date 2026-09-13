@@ -161,6 +161,9 @@ export function Worksheet() {
     try {
       const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
       applyFilterParams(p, adv);
+      // The server orders a grouped list by patient so a patient's tubes page
+      // together; ungrouped is pure registration order, as the bench works it.
+      p.set('group', groupByPid ? 'true' : 'false');
 
       // Every filter goes to the server so that paging and the total count
       // describe the same set the operator is looking at.
@@ -198,7 +201,7 @@ export function Worksheet() {
     } finally {
       if (searchRef.current === ctrl) setLoading(false);
     }
-  }, [adv, page, pageSize]);
+  }, [adv, page, pageSize, groupByPid]);
 
   useEffect(() => {
     const id = setTimeout(() => void load(), 300);

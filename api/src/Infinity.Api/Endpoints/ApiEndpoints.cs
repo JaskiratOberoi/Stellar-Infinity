@@ -306,7 +306,11 @@ public static class ApiEndpoints
         int pageSize = 100,
         // Echoed from a previous response to keep paging on one fixed set while
         // the LIS keeps registering samples underneath it.
-        string? asOf = null)
+        string? asOf = null,
+        // A patient's tubes listed together, placed by their latest
+        // registration. On unless a caller says otherwise — the worksheet's
+        // Group-by-patient toggle is the one that does.
+        bool? group = null)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
 
@@ -349,7 +353,7 @@ public static class ApiEndpoints
 
         var result = await repo.ListPageAsync(
             scope.ClientCodes, fromDate, toDate, patient, sid, statuses, filters,
-            page, pageSize, snapshot, ct).ConfigureAwait(false);
+            page, pageSize, snapshot, ct, groupByPatient: group != false).ConfigureAwait(false);
 
         // Which of these patients actually bought the Smart Report. One indexed
         // query for the whole page, so the list can draw that button only where

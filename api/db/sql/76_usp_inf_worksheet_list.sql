@@ -97,7 +97,13 @@ CREATE OR ALTER PROCEDURE dbo.usp_inf_worksheet_list
     -- Upper bound on modifieddate, pinned by the caller so that paging walks a
     -- fixed set. NULL means "now", which the procedure returns for the caller
     -- to send back on subsequent pages.
-    @as_of           DATETIME      = NULL
+    @as_of           DATETIME      = NULL,
+    -- 1 (the default): a patient's samples are listed TOGETHER, the group
+    -- placed by its latest registration, so two tubes of one visit registered
+    -- an hour apart on a busy day no longer land fifty rows — and a page —
+    -- apart. Reporting always asks for this; the worksheet passes its own
+    -- toggle, since a bench sometimes works in pure registration order (0).
+    @group_by_patient BIT          = 1
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -359,6 +365,7 @@ BEGIN
             H.clinical_history,
             H.sample_type,
             H.specimen_rank,
+            H.pid_last,
             -- The count of the FILTERED set, before paging. This is what lets the
             -- client say "showing 51-100 of 3,412" instead of guessing.
             COUNT(*) OVER() AS total_count,
@@ -368,16 +375,30 @@ BEGIN
             MAX(H.pid_rank) OVER () AS patient_count,
             -- Echoed back by the client on every later page so the set stays fixed.
             @snapshot AS as_of
-        FROM (SELECT H0.*, pid_rank = DENSE_RANK() OVER (ORDER BY H0.pid) FROM H H0) H
+        FROM (SELECT H0.*,
+                     pid_rank = DENSE_RANK() OVER (ORDER BY H0.pid),
+                     -- The patient's latest registration in this set: the key a
+                     -- grouped list sorts the GROUP by, so a patient sits where
+                     -- their newest tube would have, with the older tubes
+                     -- beside it rather than pages below.
+                     pid_last = MAX(H0.regd_at) OVER (PARTITION BY H0.pid)
+              FROM H H0) H
         -- sid is unique per sample, so this ordering is total. Without the
         -- tiebreak, OFFSET paging over tied regd_at values silently duplicates and
-        -- drops rows between pages.
-        ORDER BY H.regd_at DESC, H.sid DESC
+        -- drops rows between pages. Grouped: latest-visit patients first, one
+        -- patient's tubes contiguous (pid), newest tube first within them.
+        ORDER BY
+            CASE WHEN @group_by_patient = 1 THEN H.pid_last END DESC,
+            CASE WHEN @group_by_patient = 1 THEN H.pid END DESC,
+            H.regd_at DESC, H.sid DESC
         OFFSET @offset ROWS FETCH NEXT @size ROWS ONLY
     ) AS page
     -- Restated on the outside: a derived table's ORDER BY only serves its
     -- OFFSET, and the rows it hands out carry no ordering guarantee.
-    ORDER BY page.regd_at DESC, page.sid DESC
+    ORDER BY
+        CASE WHEN @group_by_patient = 1 THEN page.pid_last END DESC,
+        CASE WHEN @group_by_patient = 1 THEN page.pid END DESC,
+        page.regd_at DESC, page.sid DESC
     /* ----------------------------------------------------------------------
      * A plan per call, deliberately.
      *

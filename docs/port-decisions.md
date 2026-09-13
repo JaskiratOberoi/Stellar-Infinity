@@ -377,3 +377,18 @@ tabular text (patient block, table, signatures, footer) in capitals; units,
 e-mail addresses, the QR caption and the prose blocks (interpretations, notes,
 descriptive results, culture free text) keep their case. Pagination, paper
 and content are untouched. The format is in the PDF cache key.
+
+## Reporting groups by patient across pages, not only within one (2026-09-13)
+
+The list procedure ordered by registration time alone, and the pages grouped a
+patient's tubes only when they happened to land on the same page. Two tubes of
+PID 3675368 registered an hour apart on a busy morning sat a page apart and
+read as two patients. The lab's rule is that a patient's samples belong
+together, whenever they were registered. `usp_inf_worksheet_list` now takes
+`@group_by_patient` (default 1): the sort key becomes the patient's LATEST
+registration in the filtered set, then the patient, then the tube — so a
+patient sits where their newest tube would have, with the older tubes beside
+it, and the page grouping needs no luck. Reporting always asks for it; the
+worksheet passes its own Group-by-patient toggle, since a bench sometimes
+works in pure registration order. Two limits stay: grouping applies within
+the date window asked for, and a group can still straddle a page cut.

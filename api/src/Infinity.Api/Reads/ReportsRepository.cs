@@ -332,7 +332,10 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
         int page,
         int pageSize,
         DateTime? asOf,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        // A patient's tubes listed together, the group placed by its latest
+        // registration. Reporting always; the worksheet by its own toggle.
+        bool groupByPatient = true)
     {
         var size = Math.Clamp(pageSize, 1, 1000);
         var pageNo = Math.Max(page, 1);
@@ -410,6 +413,7 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
                 cmd.Parameters.Add("@page", SqlDbType.Int).Value = pageNo;
                 cmd.Parameters.Add("@page_size", SqlDbType.Int).Value = size;
                 cmd.Parameters.Add("@as_of", SqlDbType.DateTime).Value = snapshot;
+                cmd.Parameters.Add("@group_by_patient", SqlDbType.Bit).Value = groupByPatient;
 
                 await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SingleResult, inner)
                     .ConfigureAwait(false);
