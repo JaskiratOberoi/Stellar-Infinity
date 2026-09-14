@@ -250,7 +250,11 @@ async function finishSeal(req, res, { original, originalName, rawOptions, rows, 
   const t = token(secret, id);
   const link = publicUrl(resolveBase(req), id, secret);
   const started = Date.now();
-  const result = await seal(original, rawOptions, { qrUrl: link, rows });
+  // Where the report's own QR sits on each page, for the seal to take its
+  // place. Read again here rather than carried from the upload step: the
+  // one-shot API has no upload step, and a scanned PDF simply has none.
+  const qrBoxes = await analyze(original).then((a) => a.qrs).catch(() => []);
+  const result = await seal(original, rawOptions, { qrUrl: link, rows, qrBoxes });
 
   const meta = {
     id,
