@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Report Seal</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap top__in">
+    <a class="brand" href="/"><span class="brand__mark" aria-hidden="true"></span>Report Seal</a>
+    <p class="top__tag">Accreditation mark · page numbers · QR download link</p>
+  </div>
+</header>
+
+<main class="wrap grid">
+  <form id="form" class="col" novalidate>
+    <section class="card">
+      <h2 class="card__h"><span class="step">1</span>Report PDF</h2>
+      <div id="drop" class="drop" tabindex="0" role="button" aria-label="Choose a PDF to seal">
+        <input id="file" type="file" accept="application/pdf,.pdf" hidden>
+        <svg class="drop__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0l-4 4m4-4l4 4M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <p class="drop__lead">Drop the report here, or <span class="link">browse</span></p>
+        <p class="drop__hint">One PDF, up to <span id="maxMb">25</span> MB. It is stamped as-is; nothing inside it is re-typeset.</p>
+      </div>
+      <div id="fileCard" class="filecard" hidden>
+        <div class="filecard__icon" aria-hidden="true">PDF</div>
+        <div class="filecard__meta">
+          <p id="fileName" class="filecard__name"></p>
+          <p id="fileInfo" class="muted small"></p>
+        </div>
+        <button id="clear" type="button" class="btn btn--ghost btn--sm">Change</button>
+      </div>
+    </section>
+
+    <section id="rowsCard" class="card" hidden>
+      <h2 class="card__h"><span class="step">2</span>Accredited parameters</h2>
+      <p class="muted small">Each ticked line gets the small mark to the left of its name, the way the results table usually carries it. Lines that look like results are ticked already; untick anything that is not accredited.</p>
+      <div class="rows__bar">
+        <span id="rowsCount" class="small"></span>
+        <span class="rows__actions">
+          <button id="rowsAll" type="button" class="btn btn--ghost btn--sm">Tick all</button>
+          <button id="rowsNone" type="button" class="btn btn--ghost btn--sm">Untick all</button>
+          <label class="toggle small"><input id="rowsShowAll" type="checkbox"> Show every line</label>
+        </span>
+      </div>
+      <div id="rowsNote" class="note" hidden></div>
+      <div id="rows" class="rows"></div>
+    </section>
+
+    <section class="card">
+      <h2 class="card__h"><span class="step">3</span>Accreditation mark</h2>
+      <div class="fields">
+        <label class="field field--wide">
+          <span>Certificate number</span>
+          <input name="cert" type="text" maxlength="40" value="MC-2547" placeholder="e.g. MC-0000" autocomplete="off" spellcheck="false">
+          <small>Printed beneath every copy of the symbol. Leave empty to print the symbol on its own.</small>
+        </label>
+        <label class="field">
+          <span>Foot mark</span>
+          <select name="mark">
+            <option value="footer-center" selected>Bottom centre, beside the QR</option>
+            <option value="footer-right">Bottom right</option>
+            <option value="footer-left">Bottom left</option>
+            <option value="header-right">Top right</option>
+            <option value="header-left">Top left</option>
+            <option value="header-center">Top centre</option>
+            <option value="off">No foot mark</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Foot mark on</span>
+          <select name="markPages">
+            <option value="all" selected>Every page</option>
+            <option value="first">First page only</option>
+            <option value="last">Last page only</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Foot mark height</span>
+          <span class="range"><input name="markSize" type="range" min="8" max="30" step="1" value="14"><output data-for="markSize">14 mm</output></span>
+        </label>
+        <label class="field">
+          <span>Row mark height</span>
+          <span class="range"><input name="rowSize" type="range" min="3" max="8" step="0.5" value="4"><output data-for="rowSize">4 mm</output></span>
+        </label>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 class="card__h"><span class="step">4</span>QR download link</h2>
+      <div class="fields">
+        <label class="field">
+          <span>Position</span>
+          <select name="qr">
+            <option value="footer-center" selected>Bottom centre</option>
+            <option value="footer-right">Bottom right</option>
+            <option value="footer-left">Bottom left</option>
+            <option value="header-right">Top right</option>
+            <option value="header-left">Top left</option>
+            <option value="header-center">Top centre</option>
+            <option value="off">Do not add a QR</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Pages</span>
+          <select name="qrPages">
+            <option value="all" selected>Every page</option>
+            <option value="first">First page only</option>
+            <option value="last">Last page only</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Size</span>
+          <span class="range"><input name="qrSize" type="range" min="10" max="40" step="1" value="13"><output data-for="qrSize">13 mm</output></span>
+        </label>
+        <label class="field field--wide">
+          <span>Caption</span>
+          <input name="caption" type="text" maxlength="60" value="Scan to download this report" autocomplete="off">
+          <small>Shown under the code. Clear it for the code alone.</small>
+        </label>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 class="card__h"><span class="step">5</span>Page numbers and margin</h2>
+      <div class="fields">
+        <label class="field">
+          <span>"Page X of Y"</span>
+          <select name="numbers">
+            <option value="right" selected>Bottom right</option>
+            <option value="center">Bottom centre</option>
+            <option value="left">Bottom left</option>
+            <option value="off">Off</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Margin from edge</span>
+          <span class="range"><input name="margin" type="range" min="5" max="25" step="1" value="10"><output data-for="margin">10 mm</output></span>
+        </label>
+      </div>
+    </section>
+
+    <div class="actions">
+      <button id="go" class="btn btn--primary btn--lg" type="submit" disabled>Seal report</button>
+      <span id="status" class="status" role="status" aria-live="polite"></span>
+    </div>
+    <div id="error" class="alert" role="alert" hidden></div>
+  </form>
+
+  <aside class="col">
+    <section id="empty" class="card card--empty">
+      <h2 class="card__h">What comes back</h2>
+      <ul class="checks">
+        <li><b>The accreditation symbol</b> with your certificate number beneath it: a small copy to the left of each accredited parameter's name, and a full-size one at the foot beside the QR.</li>
+        <li><b>A QR code</b> that opens a download of this exact sealed file. The link is signed, so it cannot be guessed from another report's.</li>
+        <li><b>"Page X of Y"</b> on every sheet.</li>
+        <li><b>The original untouched.</b> Your upload is kept beside the sealed copy; the text, fonts and layout inside are never re-flowed.</li>
+      </ul>
+      <p class="muted small">The file is read as soon as you drop it, so the parameter names can be found. It stays on this server only.</p>
+    </section>
+
+    <section id="result" class="card" hidden>
+      <div class="result__head">
+        <h2 class="card__h">Sealed</h2>
+        <span id="rid" class="mono pill"></span>
+      </div>
+      <p id="summary" class="muted small"></p>
+      <iframe id="preview" class="preview" title="Sealed report preview"></iframe>
+      <div class="result__row">
+        <img id="qr" class="qrimg" alt="QR code linking to this report" width="120" height="120">
+        <div class="result__link">
+          <p class="label">The QR opens</p>
+          <a id="plink" class="mono link wrapany" target="_blank" rel="noopener"></a>
+          <div class="btns">
+            <a id="dl" class="btn btn--primary" download>Download sealed PDF</a>
+            <button id="copy" type="button" class="btn">Copy link</button>
+          </div>
+          <p class="muted small">Anyone holding this link can download the report, and it does not expire. Treat it like the paper itself.</p>
+        </div>
+      </div>
+      <button id="again" type="button" class="btn btn--ghost">Seal another report</button>
+    </section>
+  </aside>
+</main>
+
+<footer class="wrap foot">
+  <p>The accreditation symbol may only be used as the accreditation body's rules allow, on reports within the laboratory's accredited scope. This tool places it where you ask; it does not check that you are entitled to.</p>
+</footer>
+<script src="/app.js"></script>
+</body>
+</html>

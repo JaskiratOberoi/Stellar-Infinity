@@ -1,0 +1,21 @@
+{
+  "name": "report-seal",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Upload a laboratory report PDF; get it back with the NABL accreditation mark, page numbers and a scannable QR that downloads the same report.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs",
+    "sample": "node scripts/make-sample.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^6.3.289",
+    "qrcode": "^1.5.4"
+  }
+}
