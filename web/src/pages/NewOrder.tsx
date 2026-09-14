@@ -1400,9 +1400,14 @@ export function NewOrder() {
         </div>
 
         <div className="field" style={{ marginBottom: 0 }}>
+          {/* Every centre in scope, not only the LIS's "active" ones: that
+              flag is not a liveness flag in this deployment — half the
+              network trades daily with it off, PB0007 booked sixty
+              patients in a fortnight without it — and the create procedure
+              stopped checking it long ago. Hiding on it made real centres
+              unfindable on this form. */}
           <ClientPicker
             value={cart.mcc}
-            activeOnly
             allowNone={false}
             onChange={(mcc) => { if (mcc != null) void act(() => cartApi.setClient(mcc)); }}
             onClient={(c) => setClientCode(c?.code ?? null)}

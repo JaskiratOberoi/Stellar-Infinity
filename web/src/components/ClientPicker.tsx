@@ -63,11 +63,13 @@ const MAX_VISIBLE = 50;
  * typing more of it. The count is shown because a silently truncated list is
  * indistinguishable from "that is all there is".
  *
- * `activeOnly` is for order entry. A deactivated centre still has history worth
- * filtering a worklist by, but it cannot take a new order — the create
- * procedure refuses it with "Unknown or inactive collection centre". Offering
- * one on a booking form only produces that error after the operator has typed
- * out a whole patient.
+ * `activeOnly` hides centres the LIS flags inactive. Nothing uses it any more:
+ * IsActive is not a liveness flag in this deployment — 1,879 of 3,779 codes
+ * carry it off, 949 of those placed orders in the last ninety days, MDCARE
+ * and the busiest Delhi centres among them — and the create procedure
+ * checks existence only (108_alter_telo_create_order_client_rate.sql). The
+ * order form used to pass it, and lost PB0007 among hundreds of trading
+ * centres. Kept as an option for a future flag that means what it says.
  */
 export function ClientPicker({
   value,
