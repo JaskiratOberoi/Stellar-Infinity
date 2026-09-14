@@ -1,0 +1,43 @@
+# Report Seal — as its own stack beside Infinity's live and staging ones.
+#
+#   docker compose -p report-seal up -d --build      (from this worktree)
+#
+# Reached at http://localhost:3123 — bound to 127.0.0.1 like every other port
+# in this deployment, so the only way in from outside is a tunnel, if one is
+# ever pointed at it. Its own project name and image, so `up`/`down` here can
+# never touch the Infinity containers; the branch is checked out in its own
+# worktree (X:\Stellar-Infinity-report-seal), so what it builds is report-seal
+# and nothing on main.
+#
+# The sealed files and the QR signing secret live in the named volume. Losing
+# the volume invalidates every QR already printed — back it up before any
+# `down -v`. PUBLIC_BASE_URL is the origin baked into every QR; localhost is
+# right only while this is a desk instance. Point it at the public hostname
+# before a sealed report leaves the building.
+name: report-seal
+
+services:
+  seal:
+    build: .
+    image: report-seal
+    # The sealing page's sign-in (SEAL_USER / SEAL_PASSWORD) lives in .env,
+    # gitignored, beside this file. With SEAL_PASSWORD unset the page is open —
+    # right for a desk instance, wrong behind a public hostname.
+    env_file:
+      - .env
+    environment:
+      PORT: "8080"
+      DATA_DIR: /app/data
+      # The origin baked into every QR: the public hostname the tunnel serves
+      # (~/.cloudflared/config.yml on the host), so a printed QR works from a
+      # phone.
+      PUBLIC_BASE_URL: "https://seal.genomicslab.in"
+      MAX_UPLOAD_MB: "25"
+    volumes:
+      - report-seal-data:/app/data
+    ports:
+      - "127.0.0.1:3123:8080"
+    restart: unless-stopped
+
+volumes:
+  report-seal-data:

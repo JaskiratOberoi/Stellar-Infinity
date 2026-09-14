@@ -20,6 +20,7 @@
  * only part meant to be reachable from the open internet.
  */
 import { createServer } from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -36,6 +37,33 @@ const MAX_UPLOAD = Math.max(1, Number(process.env.MAX_UPLOAD_MB ?? 25)) * 1024 *
 /** Where the QR must resolve. Empty: taken from each sealing request's own host. */
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL ?? '').trim().replace(/\/+$/, '');
 const PUBLIC_DIR = path.join(here, 'public');
+/**
+ * The sealing page's sign-in. The README asks for the page to sit behind the
+ * deployment's own access control; behind a public hostname with nothing in
+ * front, this is it: HTTP Basic Auth, one shared user and password from the
+ * environment. Unset, the page is open — right for a desk instance only.
+ *
+ * What stays open regardless is exactly what the README says must: the QR
+ * landing page (/r/<id>), the download and the QR image behind it
+ * (/api/public/*), the static files that page needs, and the health probe.
+ * Everything else — the sealing page, its script, upload, seal, defaults —
+ * asks for the credentials first.
+ */
+const SEAL_USER = (process.env.SEAL_USER ?? 'noble').trim();
+const SEAL_PASSWORD = (process.env.SEAL_PASSWORD ?? '').trim();
+const OPEN_PATHS = new Set(['/api/health', '/styles.css', '/favicon.svg', '/report.js']);
+const isOpen = (p) => OPEN_PATHS.has(p) || /^\/r\/[^/]+$/.test(p) || p.startsWith('/api/public/');
+const same = (a, b) => {
+  const x = Buffer.from(a), y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
+};
+const authorised = (req) => {
+  if (!SEAL_PASSWORD) return true;
+  const h = req.headers.authorization ?? '';
+  if (!h.startsWith('Basic ')) return false;
+  const [user, ...rest] = Buffer.from(h.slice(6), 'base64').toString('utf8').split(':');
+  return same(user ?? '', SEAL_USER) && same(rest.join(':'), SEAL_PASSWORD);
+};
 /** Uploads wait here between analysis and sealing; anything older than this is swept. */
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 const UPLOAD_TTL_MS = 2 * 60 * 60 * 1000;
@@ -285,6 +313,15 @@ async function handle(req, res) {
   const url = new URL(req.url ?? '/', 'http://localhost');
   const p = url.pathname;
   baseHeaders(res);
+
+  if (!isOpen(p) && !authorised(req)) {
+    res.writeHead(401, {
+      'www-authenticate': 'Basic realm="Report Seal", charset="UTF-8"',
+      'content-type': 'text/plain; charset=utf-8',
+      'cache-control': 'no-store',
+    });
+    return res.end('Sign in to seal a report.');
+  }
 
   if (req.method === 'GET' || req.method === 'HEAD') {
     const file = STATIC.get(p);
