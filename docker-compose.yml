@@ -28,15 +28,35 @@ services:
     environment:
       PORT: "8080"
       DATA_DIR: /app/data
-      # The origin baked into every QR: the public hostname the tunnel serves
-      # (~/.cloudflared/config.yml on the host), so a printed QR works from a
-      # phone.
-      PUBLIC_BASE_URL: "https://seal.genomicslab.in"
+      # No PUBLIC_BASE_URL on purpose: the origin baked into every QR is taken
+      # from each sealing request's own Host and X-Forwarded-Proto, which is
+      # whatever hostname the quick tunnel below was given. Set it only once
+      # this portal has a domain of its own (see the tunnel service).
       MAX_UPLOAD_MB: "25"
     volumes:
       - report-seal-data:/app/data
     ports:
       - "127.0.0.1:3123:8080"
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------- tunnel --
+  # A Cloudflare QUICK tunnel: a random *.trycloudflare.com hostname, free,
+  # HTTPS, and carrying no Noble / Qugen / Genomics name - this portal is kept
+  # apart from that branding on purpose. The hostname is printed in this
+  # container's log at start:  docker compose -p report-seal logs tunnel
+  #
+  # The trade, stated plainly: a quick tunnel's hostname is assigned when the
+  # tunnel starts and is NOT kept. If this container restarts - a reboot, an
+  # image update - the portal moves to a new random hostname, and every QR
+  # printed under the old one stops resolving. Good enough while the portal is
+  # being tried out; before sealed reports go to patients in numbers, give it
+  # a domain of its own (any cheap registrable one, added to the Cloudflare
+  # account and routed through the named tunnel) and set PUBLIC_BASE_URL.
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --url http://seal:8080
+    depends_on:
+      - seal
     restart: unless-stopped
 
 volumes:
