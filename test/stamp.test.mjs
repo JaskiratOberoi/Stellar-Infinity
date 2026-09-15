@@ -73,9 +73,9 @@ test('row marks: drawn on their page, shared image, tolerant of junk', async () 
   assert.equal(xobjectCount(out.getPage(2)), 1);
 });
 
-test('the usual defaults: symbol beside and qr in place of the report\'s own, certificate MC-2547', () => {
+test('the usual defaults: symbol beside and qr in place of the report\'s own, no certificate number', () => {
   const o = normalizeOptions({});
-  assert.equal(o.cert, 'MC-2547');
+  assert.equal(o.cert, '');
   assert.equal(o.mark, 'original');
   assert.equal(o.qr, 'original');
   assert.equal(o.rowSize, DEFAULTS.rowSize);
