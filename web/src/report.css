@@ -422,13 +422,11 @@
 .lr__c-name.lr__indent { padding-left: 21px; }
 .lr__c-name-inner { display: flex; align-items: flex-start; gap: 6px; }
 .lr__c-name-text { font-size: 12px; font-weight: 500; }
-/* The flagged analyte's name, in the value's ink and weight but at the
-   name's own size, so the row reads as one flagged line end to end. */
-/* Heavier than the face can go: the renderer's Liberation Sans stops at
-   bold, so 900 alone draws 700. A hairline stroke in the same red thickens
-   every glyph a third of a pixel each side — a true black weight on paper,
-   without a second font. */
-.lr__c-name-text--abnormal { font-weight: 900; color: #000; -webkit-text-stroke: 0.35px #000; }
+/* The flagged analyte's NAME keeps the name's own weight (2026-09-15). The
+   flag is the VALUE — the heavy black figure and its chevron — and a heavy
+   name beside it made the row shout twice. The class stays on the markup so
+   the two can differ again later; it sets nothing now, in either format. */
+.lr__c-name-text--abnormal { }
 .lr__c-value { padding: 2px 12px 2px 0; }
 /* A long text value, spanning into the Unit (and empty Reference) column —
    see ResultRow. Half a point smaller with the tracking pulled in, so a
