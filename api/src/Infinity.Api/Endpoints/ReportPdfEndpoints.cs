@@ -66,6 +66,7 @@ public static class ReportPdfEndpoints
     /// </remarks>
     private static async Task<IResult> GetSmartPdf(
         string sid,
+        string? format,
         System.Security.Claims.ClaimsPrincipal principal,
         HttpContext http,
         ScopeRepository scopes,
@@ -89,7 +90,8 @@ public static class ReportPdfEndpoints
 
         audit.Log("report.smart_pdf", actor: principal.UserId(), sid: sid, ip: Audit.AuditIp.From(http));
 
-        var key = PdfCacheKey("smart", sid, RowStamp(row!), "-");
+        var fmt = ReportFormat.Normalise(format);
+        var key = PdfCacheKey("smart", sid, RowStamp(row!), $"f{fmt}");
         if (await cache.GetBytesAsync(key, ct).ConfigureAwait(false) is { } cached)
         {
             http.Response.Headers["X-Report-Cache"] = "hit";
@@ -100,7 +102,7 @@ public static class ReportPdfEndpoints
         {
             var pdf = await render.RenderAsync(
                 [new RenderClient.ReportRequest(
-                    Url: $"/print/report/{Uri.EscapeDataString(sid)}/smart",
+                    Url: $"/print/report/{Uri.EscapeDataString(sid)}/smart{(fmt == ReportFormat.V2 ? "?format=v2" : string.Empty)}",
                     Attachments: null,
                     Headless: true,
                     PageNumbers: false)],
@@ -124,6 +126,7 @@ public static class ReportPdfEndpoints
     /// </summary>
     private static async Task<IResult> GetPatientSmartPdf(
         string? sids,
+        string? format,
         System.Security.Claims.ClaimsPrincipal principal,
         HttpContext http,
         ScopeRepository scopes,
@@ -150,9 +153,12 @@ public static class ReportPdfEndpoints
 
         var ordered = rows.Select(r => r.Sid).ToList();
         var joined = string.Join(",", ordered);
+        // v2 adds the body-map page, so the two formats are different
+        // documents and key separately — as the clinical PDF does.
+        var fmt = ReportFormat.Normalise(format);
         // Keyed on every sample's stamp: a correction on any tube re-renders
         // the whole booklet, as the merged clinical PDF is keyed.
-        var key = PdfCacheKey("smart", string.Join("+", ordered), string.Join("|", rows.Select(RowStamp)), "-");
+        var key = PdfCacheKey("smart", string.Join("+", ordered), string.Join("|", rows.Select(RowStamp)), $"f{fmt}");
         var name = "Smart_" + ReportFileName.For(rows[0], rows[0].Pid.ToString());
 
         if (await cache.GetBytesAsync(key, ct).ConfigureAwait(false) is { } cached)
@@ -165,7 +171,7 @@ public static class ReportPdfEndpoints
         {
             var pdf = await render.RenderAsync(
                 [new RenderClient.ReportRequest(
-                    Url: $"/print/smart?sids={Uri.EscapeDataString(joined)}",
+                    Url: $"/print/smart?sids={Uri.EscapeDataString(joined)}{ReportFormat.Query(fmt)}",
                     Attachments: null,
                     Headless: true,
                     PageNumbers: false)],

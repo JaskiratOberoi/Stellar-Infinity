@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { downloadFile, fmtDateTime } from '../lib/format';
 import { InfinityLoader } from '../components/InfinityLoader';
+import { readStoredFormat } from '../components/ReportFormat';
 
 export interface Gauge {
   kind: 'both' | 'max' | 'min';
@@ -70,7 +71,9 @@ export function SmartReportModal({ sids, onClose }: { sids: string[]; onClose: (
     setBusy(true);
     setDownloadError(null);
     try {
-      await downloadFile(`/api/reports/smart/pdf?${query}`);
+      // The desk's Format choice (v1/v2) applies to the booklet as it does to
+      // the clinical report: v2 adds the body-map page.
+      await downloadFile(`/api/reports/smart/pdf?${query}&format=${readStoredFormat()}`);
     } catch (e) {
       setDownloadError(e instanceof Error ? e.message : 'The download failed.');
     } finally {

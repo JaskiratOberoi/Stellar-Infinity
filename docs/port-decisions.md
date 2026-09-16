@@ -378,6 +378,28 @@ e-mail addresses, the QR caption and the prose blocks (interpretations, notes,
 descriptive results, culture free text) keep their case. Pagination, paper
 and content are untouched. The format is in the PDF cache key.
 
+## Smart Report format v2 — the body-map page (2026-09-16)
+
+The booklet now has a FORMAT like the clinical report: v1 is the booklet as
+issued since launch; v2 is v1 plus one page, "Your body map", after the
+snapshot and before the chapters. A front-on figure with the organs the
+report looked at drawn in and labelled — the booklet's own body-system
+categories, so "Heart & Cholesterol" points at the heart and "Blood Sugar"
+at the pancreas — indigo where every result in the system is in range, red
+where any is flagged (the Attention badge's rule, deliberately binary), and
+the untested organs left faint and unlabelled so the figure still reads as a
+body. Under it, the flagged results by system. Carried exactly as the
+clinical format is: `?format=` on the print route, `format` on both smart
+PDF routes (in the cache key), and the desk's existing Format select — one
+choice covers both documents. Staging only, with the clinical v2.
+
+Fixed at the same time, in both formats: the cover's headline and tagline
+had a text-shadow, which Chromium's PDF writer rasterises — so the words sat
+on a faintly different rectangle over the photo scrim. The scrim carries the
+legibility on its own; the shadow is gone. And the cover greeted the patient
+by the first WORD of the stored name — "Mrs" for "Mrs Rose" — where the
+welcome letter already used the first name; the cover now does too.
+
 ## Reporting groups by patient across pages, not only within one (2026-09-13)
 
 The list procedure ordered by registration time alone, and the pages grouped a

@@ -1,4 +1,5 @@
 import type { ReportSigner, ProcessingUnit } from './ReportViewer';
+import { BodyMapPage, type BodySystem } from './SmartBodyMap';
 import {
   caloriesForSex,
   calorieBandForAge,
@@ -1488,7 +1489,7 @@ function Cover({ data }: { data: SmartBookletData }) {
 
 // ── Welcome letter (page 2) ───────────────────────────────────────────────
 
-function Welcome({ data }: { data: SmartBookletData }) {
+function Welcome({ data, format }: { data: SmartBookletData; format: SmartFormat }) {
   const greetName = titleCaseName(firstName(data.patientName));
   const referredBy =
     data.refDoctor && !/^self$/i.test(data.refDoctor.trim())
@@ -1502,12 +1503,15 @@ function Welcome({ data }: { data: SmartBookletData }) {
   ];
 
   const toc = [
-    { n: '01', c: BRAND, t: 'Your snapshot', d: 'How your results look at a glance.' },
-    { n: '02', c: TRACK_GREEN, t: 'Your health areas at a glance', d: 'A quick read on each body system.' },
-    { n: '03', c: AMBER_LINE, t: 'Your results, explained', d: 'Every test in clear, everyday words, with a visual guide and what it means.' },
-    { n: '04', c: '#0f766e', t: 'Your Wellness plan', d: 'Personalised habits, tips and the checks worth keeping up.' },
-    { n: '05', c: BRAND2, t: 'Summary for your doctor', d: 'A compact list of every result to share at your next visit.' },
-  ];
+    { c: BRAND, t: 'Your snapshot', d: 'How your results look at a glance.' },
+    { c: TRACK_GREEN, t: 'Your health areas at a glance', d: 'A quick read on each body system.' },
+    ...(format === 'v2'
+      ? [{ c: '#5b50c0', t: 'Your body map', d: 'The organs this report looked at, marked on a figure — red where something needs attention.' }]
+      : []),
+    { c: AMBER_LINE, t: 'Your results, explained', d: 'Every test in clear, everyday words, with a visual guide and what it means.' },
+    { c: '#0f766e', t: 'Your Wellness plan', d: 'Personalised habits, tips and the checks worth keeping up.' },
+    { c: BRAND2, t: 'Summary for your doctor', d: 'A compact list of every result to share at your next visit.' },
+  ].map((s, i) => ({ ...s, n: String(i + 1).padStart(2, '0') }));
 
   return (
     <div style={{ breakAfter: 'page', pageBreakAfter: 'always', paddingTop: '2px' }}>
@@ -1640,7 +1644,19 @@ function Welcome({ data }: { data: SmartBookletData }) {
 
 // ── Main component ────────────────────────────────────────────────────────
 
-export function SmartBooklet({ data }: { data: SmartBookletData }) {
+/**
+ * The booklet's FORMAT, carried the same way as the clinical report's
+ * (`?format=` on the print route, `format` on the PDF routes, the same
+ * per-desk Format select).
+ *
+ *  v1  the booklet as issued since launch.
+ *  v2  v1 plus one page: "Your body map", after the snapshot and before the
+ *      chapters — the organs this report looked at, marked on a figure, red
+ *      where something needs attention. Asked for on 2026-09-16.
+ */
+export type SmartFormat = 'v1' | 'v2';
+
+export function SmartBooklet({ data, format = 'v1' }: { data: SmartBookletData; format?: SmartFormat }) {
   const { analytes, categories } = readSections(data.sections);
   const total = analytes.length;
   const alerts = analytes.filter((a) => a.alert);
@@ -1676,7 +1692,7 @@ export function SmartBooklet({ data }: { data: SmartBookletData }) {
 
       {/* Everything from here sits on the margined content pages (2+). */}
       <div style={{ maxWidth: '820px', margin: '0 auto', padding: '2px 2px 8px' }}>
-        <Welcome data={data} />
+        <Welcome data={data} format={format} />
 
         {/* ── Snapshot ── */}
         <div style={{ breakBefore: 'page', pageBreakBefore: 'always' }}>
@@ -1834,6 +1850,30 @@ export function SmartBooklet({ data }: { data: SmartBookletData }) {
             </div>
           )}
         </div>
+
+        {/* ── Body map (format v2 only) — its own page between the glance and the chapters ── */}
+        {format === 'v2' && (
+          <BodyMapPage
+            name={name}
+            systems={orderedCategories.map((cat): BodySystem => {
+              const list = byCategory.get(cat.id)!;
+              const flagged = list.filter((a) => a.alert);
+              return {
+                id: cat.id,
+                title: cat.title,
+                tests: list.length,
+                alerts: flagged.length,
+                flagged: flagged.map((a) => ({
+                  name: a.friendlyName.replace(/ —.*$/, ''),
+                  value: a.row.value,
+                  unit: a.row.unit,
+                })),
+              };
+            })}
+            renderIcon={(icon, color, size) => <OrganIcon name={icon} color={color} size={size} />}
+            title={(children) => <SectionTitle>{children}</SectionTitle>}
+          />
+        )}
 
         {/* ── Chapters ── */}
         <div style={{ marginTop: '22px' }}>

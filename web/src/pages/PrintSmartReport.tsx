@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
-import { SmartBooklet, type SmartBookletData } from './SmartBooklet';
+import { SmartBooklet, type SmartBookletData, type SmartFormat } from './SmartBooklet';
 
 /**
  * The Smart Report, printed.
@@ -48,6 +48,9 @@ export function PrintSmartReport() {
    * simply becomes a one-sample list. Both read the same patient route.
    */
   const query = search.get('sids') || sid;
+  // The booklet's format, carried on the URL like the clinical report's;
+  // anything but v2 is v1, so an old caller never gets the test format.
+  const format: SmartFormat = search.get('format') === 'v2' ? 'v2' : 'v1';
   const [data, setData] = useState<SmartBookletData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -92,7 +95,7 @@ export function PrintSmartReport() {
       {error ? (
         <p style={{ padding: '2rem', fontSize: '10pt' }}>{error}</p>
       ) : !data ? null : (
-        <SmartBooklet data={data} />
+        <SmartBooklet data={data} format={format} />
       )}
     </div>
   );
