@@ -1243,7 +1243,9 @@ function coverPhotoFor(sex: string | null): string | null {
 }
 
 function Cover({ data }: { data: SmartBookletData }) {
-  const name = titleCaseName(data.patientName);
+  // The FIRST NAME, not the first word: the LIS stores "Mrs Rose", and the
+  // first word of that greeted her as "Mrs." — firstName() drops the title.
+  const name = titleCaseName(firstName(data.patientName));
   const coverPhoto = coverPhotoFor(data.sex);
   return (
     <div
@@ -1426,12 +1428,17 @@ function Cover({ data }: { data: SmartBookletData }) {
             Smart Health Report
           </span>
         </div>
-        <div style={{ fontSize: '42px', fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em', marginTop: '15px', textWrap: 'balance', textShadow: '0 1px 14px rgba(16,12,50,0.32)' }}>
+        {/* No text-shadow on either line, on purpose. Chromium's PDF writer
+            cannot draw a blurred shadow as vectors, so it rasterised the
+            shadowed text into a bitmap — and that bitmap printed as a faintly
+            different rectangle behind "Here's to better health" on the scrim.
+            The scrim alone carries the legibility. */}
+        <div style={{ fontSize: '42px', fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em', marginTop: '15px', textWrap: 'balance' }}>
           Here’s to better
           <br />
           health, {name.split(' ')[0]}.
         </div>
-        <div style={{ fontSize: '15px', lineHeight: 1.65, color: '#efeafa', marginTop: '20px', maxWidth: '470px', textShadow: '0 1px 10px rgba(16,12,50,0.28)' }}>
+        <div style={{ fontSize: '15px', lineHeight: 1.65, color: '#efeafa', marginTop: '20px', maxWidth: '470px' }}>
           This is your Smart Health Report — a warm, patient-friendly look at what your latest
           results say about your health, and practical steps to keep feeling your best.
         </div>

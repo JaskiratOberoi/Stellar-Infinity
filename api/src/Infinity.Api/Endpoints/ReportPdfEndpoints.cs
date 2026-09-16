@@ -376,7 +376,8 @@ public static class ReportPdfEndpoints
     // 23: the patient box unwashed with a Noble-purple rule; flagged names heavier.
     // 24: a long text value spans into the Unit / empty Reference column, unit inline.
     // 25: the fit also pulls a light last page back onto the sheet, with two more zoom steps.
-    private const string PdfCacheV = "28";
+    // 29: the smart cover's headline loses its text-shadow (printed as a raster box).
+    private const string PdfCacheV = "29";
     private static readonly TimeSpan PdfCacheTtl = TimeSpan.FromMinutes(45);
 
     private static string PdfCacheKey(
