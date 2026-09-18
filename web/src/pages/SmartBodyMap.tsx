@@ -116,16 +116,21 @@ const ORGAN_MAP: ReadonlyArray<{
 /* ── the page's frame ───────────────────────────────────────────────────── */
 
 /** The drawing cropped at mid-thigh, with a column each side for callouts. */
-const VIEW = { x: -120, y: 70, w: 1520, h: 1250 };
-const LEFT_CX = 30;
-const RIGHT_CX = 1250;
-const R = 58;
+/** The WHOLE figure, head to feet (the drawing's outline runs to y ≈ 2290
+ *  though its own canvas stops at the thigh), with a wide column each side
+ *  for the callouts. The frame is squarer than the figure on purpose: at the
+ *  page's width it stands about 700px tall, which is what one sheet holds
+ *  under the title and over the results strip. */
+const VIEW = { x: -640, y: 60, w: 2540, h: 2250 };
+const LEFT_CX = -330;
+const RIGHT_CX = 1610;
+const R = 115;
 
 function slotY(n: number, i: number): number {
-  const top = 200;
-  const bottom = 1090;
-  if (n <= 1) return 520;
-  const span = Math.min(bottom - top, (n - 1) * 230);
+  const top = 260;
+  const bottom = 1960;
+  if (n <= 1) return 900;
+  const span = Math.min(bottom - top, (n - 1) * 425);
   const start = top + ((bottom - top) - span) / 2;
   return start + (span * i) / (n - 1);
 }
@@ -207,7 +212,7 @@ function Callout({ sys, side, y, at, pic, win, renderPic }: {
   const attn = sys.alerts > 0;
   const c = attn ? ATTN : GREEN;
   const edgeX = side === 'left' ? cx + R : cx - R;
-  const kneeX = side === 'left' ? edgeX + 50 : edgeX - 50;
+  const kneeX = side === 'left' ? edgeX + 90 : edgeX - 90;
   const status = attn
     ? `${sys.alerts} of ${sys.tests} to look at`
     : `${sys.tests} ${sys.tests === 1 ? 'result' : 'results'} · healthy`;
@@ -218,27 +223,27 @@ function Callout({ sys, side, y, at, pic, win, renderPic }: {
         d={`M${edgeX} ${y} L${kneeX} ${y} L${at[0]} ${at[1]}`}
         fill="none"
         stroke={attn ? ATTN : LEADER}
-        strokeWidth={attn ? 3.2 : 2.4}
+        strokeWidth={attn ? 5.5 : 4}
         strokeLinejoin="round"
       />
-      <circle cx={at[0]} cy={at[1]} r="8" fill="#fff" stroke={c} strokeWidth="3.5" />
-      {attn && <circle cx={at[0]} cy={at[1]} r="18" fill="none" stroke={ATTN} strokeOpacity="0.35" strokeWidth="4" />}
+      <circle cx={at[0]} cy={at[1]} r="14" fill="#fff" stroke={c} strokeWidth="6" />
+      {attn && <circle cx={at[0]} cy={at[1]} r="30" fill="none" stroke={ATTN} strokeOpacity="0.35" strokeWidth="7" />}
 
-      {attn && <circle cx={cx} cy={y} r={R + 10} fill={ATTN} fillOpacity="0.1" />}
-      <circle cx={cx} cy={y} r={R} fill="#fff" stroke={c} strokeWidth="4" />
-      <clipPath id={`bm-disc-${sys.id}`}><circle cx={cx} cy={y} r={R - 5} /></clipPath>
+      {attn && <circle cx={cx} cy={y} r={R + 18} fill={ATTN} fillOpacity="0.1" />}
+      <circle cx={cx} cy={y} r={R} fill="#fff" stroke={c} strokeWidth="7" />
+      <clipPath id={`bm-disc-${sys.id}`}><circle cx={cx} cy={y} r={R - 9} /></clipPath>
       <g clipPath={`url(#bm-disc-${sys.id})`}>
-        <svg x={cx - R + 5} y={y - R + 5} width={2 * R - 10} height={2 * R - 10} viewBox={`${win[0]} ${win[1]} ${win[2]} ${win[3]}`} preserveAspectRatio="xMidYMid meet">
-          {renderPic(pic, win, 2 * R - 10)}
+        <svg x={cx - R + 9} y={y - R + 9} width={2 * R - 18} height={2 * R - 18} viewBox={`${win[0]} ${win[1]} ${win[2]} ${win[3]}`} preserveAspectRatio="xMidYMid meet">
+          {renderPic(pic, win, 2 * R - 18)}
         </svg>
       </g>
 
       {lines.map((l, i) => (
-        <text key={i} x={cx} y={y + R + 30 + i * 24} textAnchor="middle" fontSize="21" fontWeight="800" fill={INK}>
+        <text key={i} x={cx} y={y + R + 54 + i * 42} textAnchor="middle" fontSize="38" fontWeight="800" fill={INK}>
           {l}
         </text>
       ))}
-      <text x={cx} y={y + R + 30 + lines.length * 24} textAnchor="middle" fontSize="16.5" fontWeight="700" fill={c}>
+      <text x={cx} y={y + R + 54 + lines.length * 42} textAnchor="middle" fontSize="29" fontWeight="700" fill={c}>
         {status}
       </text>
     </g>
@@ -341,7 +346,7 @@ export function BodyMapPage({ systems, name, title, onReady }: {
               />
               <feFlood floodColor="#d0262d" floodOpacity="0.55" result="red" />
               <feComposite in="red" in2="SourceAlpha" operator="in" result="redShape" />
-              <feGaussianBlur in="redShape" stdDeviation="9" result="glow" />
+              <feGaussianBlur in="redShape" stdDeviation="12" result="glow" />
               <feMerge>
                 <feMergeNode in="glow" />
                 <feMergeNode in="tinted" />
