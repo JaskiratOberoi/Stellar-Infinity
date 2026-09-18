@@ -50,7 +50,10 @@ export function PrintSmartReport() {
   const query = search.get('sids') || sid;
   // The booklet's format, carried on the URL like the clinical report's;
   // anything but v2 is v1, so an old caller never gets the test format.
-  const format: SmartFormat = search.get('format') === 'v2' ? 'v2' : 'v1';
+  // The booklet has no v3 of its own — v3 is a clinical-report typeface — so
+  // a desk set to v3 gets the v2 booklet (the body map) rather than v1.
+  const formatParam = search.get('format');
+  const format: SmartFormat = formatParam === 'v2' || formatParam === 'v3' ? 'v2' : 'v1';
   const [data, setData] = useState<SmartBookletData | null>(null);
   const [error, setError] = useState<string | null>(null);
 

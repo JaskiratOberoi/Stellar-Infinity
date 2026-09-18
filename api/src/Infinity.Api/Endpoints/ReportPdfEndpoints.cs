@@ -102,7 +102,7 @@ public static class ReportPdfEndpoints
         {
             var pdf = await render.RenderAsync(
                 [new RenderClient.ReportRequest(
-                    Url: $"/print/report/{Uri.EscapeDataString(sid)}/smart{(fmt == ReportFormat.V2 ? "?format=v2" : string.Empty)}",
+                    Url: $"/print/report/{Uri.EscapeDataString(sid)}/smart{(fmt == ReportFormat.V1 ? string.Empty : $"?format={fmt}")}",
                     Attachments: null,
                     Headless: true,
                     PageNumbers: false)],

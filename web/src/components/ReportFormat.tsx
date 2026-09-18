@@ -7,21 +7,24 @@ import { useState } from 'react';
  *  v2  the same layout set in a serif face with the tabular text in
  *      capitals, so the sheet reads larger without a size change. Asked for
  *      on 2026-09-12 for side-by-side testing.
+ *  v3  v2 exactly, in Playfair Display instead of Georgia. Asked for on
+ *      2026-09-19. The Smart Report has no v3 of its own: it treats v3 as v2.
  *
  * Carried the same way as the paper: `?format=` on the print route, `format`
  * on the PDF routes, remembered per desk in localStorage. Nothing about the
  * content, the pagination rules or the paper changes with it — see the
- * `.lr--v2` rules in report.css for exactly what does.
+ * `.lr--v2` and `.lr--v3` rules in report.css for exactly what does.
  */
-export type ReportFormat = 'v1' | 'v2';
+export type ReportFormat = 'v1' | 'v2' | 'v3';
 
 export const FORMAT_OPTIONS: ReadonlyArray<{ value: ReportFormat; label: string; hint: string }> = [
   { value: 'v1', label: 'Format v1', hint: 'The standard report: Helvetica, mixed case.' },
-  { value: 'v2', label: 'Format v2', hint: 'Serif face, tabular text in capitals. Under test.' },
+  { value: 'v2', label: 'Format v2', hint: 'Serif face (Georgia), tabular text in capitals. Under test.' },
+  { value: 'v3', label: 'Format v3', hint: 'As v2, set in Playfair Display. Under test.' },
 ];
 
 export function isReportFormat(v: unknown): v is ReportFormat {
-  return v === 'v1' || v === 'v2';
+  return v === 'v1' || v === 'v2' || v === 'v3';
 }
 
 const KEY = 'inf.report-format';

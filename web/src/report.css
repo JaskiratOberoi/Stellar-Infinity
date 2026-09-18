@@ -789,6 +789,30 @@
    notes, descriptive results, culture free text — stay in sentence case,
    because a paragraph in capitals is slower to read, not bigger. */
 .lr--v2 { font-family: Georgia, "Times New Roman", Times, serif; }
+
+/* Format v3: v2 to the letter — same capitals, same layout — set in Playfair
+   Display (SIL Open Font License) instead of Georgia. The face is SHIPPED
+   with the app: the render service's Chromium has no route to Google Fonts,
+   so a stylesheet link there would silently fall back to Georgia in the PDF
+   while the preview on a desk with internet showed Playfair. One variable
+   file per style covers 400 and 700 (the latin subset, which is every glyph
+   a report sets). v3 carries the .lr--v2 class as well, so every v2 rule
+   applies unchanged and only the face differs. Asked for on 2026-09-19. */
+@font-face {
+  font-family: "Playfair Display";
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: block;
+  src: url("/fonts/PlayfairDisplay-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Playfair Display";
+  font-style: italic;
+  font-weight: 400 900;
+  font-display: block;
+  src: url("/fonts/PlayfairDisplay-Italic-latin.woff2") format("woff2");
+}
+.lr--v3 { font-family: "Playfair Display", Georgia, "Times New Roman", Times, serif; }
 /* On the CELLS, not the table: the reset above sets text-transform: none on
    every th and td directly, and a property set on the element beats one
    inherited from its table. */

@@ -455,3 +455,16 @@ from `tbl_med_resaon_master` or typed, modifiedby/modifieddate, a "Sample
 Rejected" activity row, and an `inf_audit_log` 'sample.rejected' row. Both
 report per-SID verdicts, and the page names the skipped ones. The Sample-ID
 queue is unchanged: LIS orders always carry their tubes from registration.
+
+## Report format v3 — v2 in Playfair Display (2026-09-19)
+
+A third clinical-report format, "everything the same as v2, just Playfair
+Display": the root carries both `.lr--v2` and `.lr--v3`, so every v2 rule
+(serif, tabular text in capitals, the case exceptions) applies unchanged and
+v3 adds only the face. The font ships with the app (SIL OFL, latin subset,
+one variable file per style under public/fonts) because the render
+service's Chromium has no route to Google Fonts — a stylesheet link would
+have printed Georgia while the desk's preview showed Playfair. Carried like
+v2: `?format=v3`, `format` on the PDF routes and cache keys, the Format
+select. The Smart Report has no v3 of its own and treats v3 as v2 (the body
+map). Staging only, with v2.

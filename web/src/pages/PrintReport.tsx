@@ -189,12 +189,17 @@ export function PrintReport() {
   // "Headless" to the layout: no artwork band drawn. Two of the three papers
   // are headless; only the margins tell them apart, and that is @page's job.
   const headless = paper !== 'letterhead';
-  // The format — typography only. v2 is a class on the root; see ReportFormat.
-  const [format, setFormat] = useState<ReportFormat>(() => (params.get('format') === 'v2' ? 'v2' : 'v1'));
+  // The format — typography only. v2 is a class on the root; v3 is v2's class
+  // plus its own, so every v2 rule applies and only the face differs. See
+  // ReportFormat.
+  const [format, setFormat] = useState<ReportFormat>(() => {
+    const f = params.get('format');
+    return f === 'v2' || f === 'v3' ? f : 'v1';
+  });
   // The root's base class. The fit pass below rewrites the root's className
   // outright while it measures, so the format has to be IN the base or the
   // first measurement strips it — which is exactly what happened.
-  const rootBase = format === 'v2' ? 'lr lr--v2' : 'lr';
+  const rootBase = format === 'v3' ? 'lr lr--v2 lr--v3' : format === 'v2' ? 'lr lr--v2' : 'lr';
   const [excluded, setExcluded] = useState<Set<number>>(() => parseExcluded(params.get('exclude')));
 
   useEffect(() => {
