@@ -130,8 +130,22 @@ export function Accessioning() {
   const kindParam = params.get('kind');
   const kind: OrderChannel | null = kindParam === 'b2b' ? 'b2b' : kindParam === 'b2c' ? 'b2c' : null;
 
+  /*
+   * Two tabs, accessioning FIRST. The queues were stacked with the Sample-ID
+   * list on top, which put the desk's daily work — tubes in hand, waiting to
+   * be received — below a hundred-row list of orders still to be barcoded.
+   * The receiving desk is the primary job; barcoding is the counter's. The
+   * tab is in the URL too, and a channel filter implies the Sample-ID tab,
+   * so the nav's /accessioning?kind=b2b still lands where it always did.
+   */
+  const tab: 'accession' | 'sids' = params.get('tab') === 'sids' || kind ? 'sids' : 'accession';
+
+  const setTab = useCallback((t: 'accession' | 'sids') => {
+    setParams(t === 'sids' ? { tab: 'sids', ...(kind ? { kind } : {}) } : {}, { replace: true });
+  }, [setParams, kind]);
+
   const setKind = useCallback((k: OrderChannel | null) => {
-    setParams(k ? { kind: k } : {}, { replace: true });
+    setParams(k ? { tab: 'sids', kind: k } : { tab: 'sids' }, { replace: true });
   }, [setParams]);
 
   const pageSize = 100;
@@ -244,24 +258,26 @@ export function Accessioning() {
       {error && <div className="alert alert--error" style={{ marginBottom: '.8rem' }}>{error}</div>}
       {notice && <div className="alert alert--ok" style={{ marginBottom: '.8rem' }}>{notice}</div>}
 
-      {/* Both queues on one page, stacked, the way Telo lays them out.
-          The jump is what makes that work here: Telo's lists are a handful of
-          rows, this first one is routinely a hundred, and the second queue
-          would otherwise be a scroll nobody knows is there. */}
-      {!loading && (
-        <div className="queuebar">
-          <span><b>{pendingTotal.toLocaleString('en-IN')}</b> awaiting Sample IDs</span>
-          <a href="#awaiting-accessioning">
-            <b>{unregTotal.toLocaleString('en-IN')}</b> awaiting accessioning ↓
-          </a>
-        </div>
-      )}
+      {/* One queue at a time. The counts stay on both tabs so the other
+          queue is never a surprise; the accessioning count is the filtered
+          one, which is what the desk is working through. */}
+      <div className="tabs" role="tablist" aria-label="Accessioning queues" style={{ marginBottom: '.8rem' }}>
+        <button role="tab" className={`tab${tab === 'accession' ? ' tab--on' : ''}`}
+                aria-selected={tab === 'accession'} onClick={() => setTab('accession')}>
+          AWAITING ACCESSIONING
+          {!loading && <span className="tab__count">{unregTotal.toLocaleString('en-IN')}</span>}
+        </button>
+        <button role="tab" className={`tab${tab === 'sids' ? ' tab--on' : ''}`}
+                aria-selected={tab === 'sids'} onClick={() => setTab('sids')}>
+          AWAITING SAMPLE IDS
+          {!loading && <span className="tab__count">{pendingTotal.toLocaleString('en-IN')}</span>}
+        </button>
+      </div>
 
       {loading ? (
         <div className="center"><InfinityLoader /><span className="muted">Loading queues…</span></div>
-      ) : (
+      ) : tab === 'sids' ? (
         <>
-          <h2 className="queue__title">Awaiting Sample IDs</h2>
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline',
                                         gap: '1rem', flexWrap: 'wrap', margin: '.6rem 0' }}>
             <p className="muted" style={{ fontSize: '.78rem', margin: 0 }}>
@@ -353,13 +369,10 @@ export function Accessioning() {
             <Pager page={pendingPage} pageSize={pageSize} total={pendingTotal} noun="order"
                    onPage={setPendingPage} />
           </div>
-
-          {/* scroll-margin so the sticky top bar does not cover the heading
-              when the jump link lands here — see .queue__title. */}
-          <h2 className="queue__title queue__title--next" id="awaiting-accessioning">
-            Awaiting accessioning
-          </h2>
-          <p className="muted" style={{ fontSize: '.78rem', margin: '.6rem 0' }}>
+        </>
+      ) : (
+        <>
+          <p className="muted" style={{ fontSize: '.78rem', margin: '.2rem 0 .6rem' }}>
             Every tube still marked <b>Sample Sent</b> — whether the client registered it in the legacy LIS,
             in Infinity or in Telo. The lab has not received it, so it is not on the worksheet.
             Registering is what hands it to the bench; rejecting records why it never will be.
