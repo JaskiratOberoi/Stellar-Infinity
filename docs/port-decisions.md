@@ -388,10 +388,16 @@ categories, so "Heart & Cholesterol" points at the heart and "Blood Sugar"
 at the pancreas — drawn in their natural colours with a green callout where
 every result in the system is in range, red where any is flagged (the
 Attention badge's rule, deliberately binary), and the untested organs left
-faint grey and unlabelled so the figure still reads as a body. Drawn in
-code, no licensed artwork: the silhouette is one mirrored half-outline and
-the organs hand-set paths in a 600×1000 space, redrawn the same day after a
-cruder first figure. Under it, the flagged results by system. Carried exactly as the
+faint and unlabelled so the figure still reads as a body. Two hand-drawn
+figures were tried and rejected as cartoonish; the map now uses a real
+anatomical illustration — the organ renderings from "Man shadow anatomy.svg"
+(Mikael Häggström, Wikimedia Commons, CC0), each organ its own image under
+public/branding/anatomy, placed by the artist's own matrices inside that
+drawing's body outline (web/src/pages/bodyOutline.ts). Untested organs are
+desaturated and faded; flagged ones get a red cast and glow via SVG filters;
+the callout discs show the organ's own picture. The images load after the
+data, so the print route holds data-print-ready until the map reports them
+loaded. Under it, the flagged results by system. Carried exactly as the
 clinical format is: `?format=` on the print route, `format` on both smart
 PDF routes (in the cache key), and the desk's existing Format select — one
 choice covers both documents. Staging only, with the clinical v2.

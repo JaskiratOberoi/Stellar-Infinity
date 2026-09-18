@@ -87,7 +87,10 @@ export function PrintSmartReport() {
    * document. Nothing should reach that path anyway — the API refuses an
    * unsigned or unpurchased booklet before the renderer is ever started.
    */
-  const ready = data !== null;
+  // v2's body map is built from illustrations that load after the data; the
+  // page is not ready to photograph until they have.
+  const [mapReady, setMapReady] = useState(false);
+  const ready = data !== null && (format !== 'v2' || mapReady);
 
   return (
     <div className="smartbooklet" data-print-ready={ready ? 'true' : 'false'}>
@@ -95,7 +98,7 @@ export function PrintSmartReport() {
       {error ? (
         <p style={{ padding: '2rem', fontSize: '10pt' }}>{error}</p>
       ) : !data ? null : (
-        <SmartBooklet data={data} format={format} />
+        <SmartBooklet data={data} format={format} onMapReady={() => setMapReady(true)} />
       )}
     </div>
   );

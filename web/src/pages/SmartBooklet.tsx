@@ -1656,7 +1656,12 @@ function Welcome({ data, format }: { data: SmartBookletData; format: SmartFormat
  */
 export type SmartFormat = 'v1' | 'v2';
 
-export function SmartBooklet({ data, format = 'v1' }: { data: SmartBookletData; format?: SmartFormat }) {
+export function SmartBooklet({ data, format = 'v1', onMapReady }: {
+  data: SmartBookletData;
+  format?: SmartFormat;
+  /** v2 only: fires once the body map's illustrations have loaded, so the print route can declare itself ready. */
+  onMapReady?: () => void;
+}) {
   const { analytes, categories } = readSections(data.sections);
   const total = analytes.length;
   const alerts = analytes.filter((a) => a.alert);
@@ -1870,8 +1875,8 @@ export function SmartBooklet({ data, format = 'v1' }: { data: SmartBookletData; 
                 })),
               };
             })}
-            renderIcon={(icon, color, size) => <OrganIcon name={icon} color={color} size={size} />}
             title={(children) => <SectionTitle>{children}</SectionTitle>}
+            onReady={onMapReady}
           />
         )}
 
