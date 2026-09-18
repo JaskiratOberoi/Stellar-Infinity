@@ -428,3 +428,30 @@ it, and the page grouping needs no luck. Reporting always asks for it; the
 worksheet passes its own Group-by-patient toggle, since a bench sometimes
 works in pure registration order. Two limits stay: grouping applies within
 the date window asked for, and a group can still straddle a page cut.
+
+## Accessioning is one desk: every Sample Sent tube, whoever registered it (2026-09-18)
+
+The accessioning queue was platform-only by design — "native LIS samples are
+accessioned in the LIS itself" — which left the lab with two receiving desks
+and the worse one for the bulk of the work: the network's clients register
+in the legacy LIS (5,500 tubes a week at status 1), the legacy Accession page
+hides anything registered before today unless its date boxes are widened by
+hand, and a tube registered on the 14th sat invisible to the technician
+holding it on the 18th (PB0007, SID 9338277). Now `usp_inf_pending_registrations`
+lists every Sample Sent tube in scope with the legacy page's own filters
+(registration date range, SID contains, patient name or mobile, client
+scope) plus an origin filter (LIS / Infinity / Telo) and the client's
+business unit; the page opens on the last seven days, and the filters are
+optional where the legacy's are forced. A scan box registers one tube on
+Enter whatever the list is filtered to — the legacy's by-SID receive.
+
+Register still goes through `usp_telo_accession_samples` (status, result
+skeleton, charge-once billing). What the legacy page does beside it is now
+done too, by `usp_inf_accession_stamp` after a successful register: the
+receiving user's business unit onto the tube (reports resolve signatories
+through it) and the LIS's "Sample Registered" activity row. Reject is new to
+Infinity, `usp_inf_accession_reject`: Sample Sent → Rejected with a reason
+from `tbl_med_resaon_master` or typed, modifiedby/modifieddate, a "Sample
+Rejected" activity row, and an `inf_audit_log` 'sample.rejected' row. Both
+report per-SID verdicts, and the page names the skipped ones. The Sample-ID
+queue is unchanged: LIS orders always carry their tubes from registration.

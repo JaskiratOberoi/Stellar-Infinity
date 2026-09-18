@@ -98,6 +98,7 @@ const KIND_LABEL: Record<string, string> = {
   'mcc.online_payment.initiated': 'Online payment started',
   'mcc.online_payment.result': 'Online payment result',
   'sample.accessioned': 'Samples registered to worksheet',
+  'sample.rejected': 'Samples rejected at accessioning',
   'sample.sids_attached': 'Barcodes attached',
   'report.viewed': 'Report viewed',
   'report.rendered': 'Report rendered for a PDF',

@@ -864,14 +864,36 @@ export interface PendingRegistration {
   vailid: string | null;
   patientId: number;
   patientName: string | null;
+  mobile: string | null;
   mccCode: number | null;
   clientCode: string | null;
+  businessUnit: string | null;
   sampleStatus: number;
   sampleTypeName: string | null;
   testNames: string | null;
   addedAt: string | null;
+  registeredBy: string | null;
+  /** lis | telo | infinity — who registered the tube. */
   origin: string;
 }
+
+/** The accessioning queue's filters — the legacy Accession page's, all optional. */
+export interface RegistrationFilter {
+  from?: string;      // yyyy-MM-dd, on the registration date
+  to?: string;
+  sid?: string;       // contains
+  patient?: string;   // name or mobile contains
+  origin?: 'lis' | 'telo' | 'infinity';
+  unit?: number;      // the client's business unit
+}
+
+export interface AccessionDetail { vailid: string; outcome: 'registered' | 'skipped' | string; resultRows: number }
+export interface AccessionResponse { ok: boolean; registered: number; skipped: number; details: AccessionDetail[] }
+export interface RejectResponse {
+  ok: boolean; rejected: number; skipped: number;
+  details: { vailid: string; outcome: 'rejected' | 'skipped' | string }[];
+}
+export interface RejectReason { id: number; reason: string }
 
 export const accessionApi = {
   // `kind` filters the queue by channel; omit for both.
@@ -880,14 +902,23 @@ export const accessionApi = {
     if (kind) p.set('kind', kind);
     return api.get<PagedResponse<PendingAccession>>(`/api/accessioning/pending?${p}`);
   },
-  unregistered: (page = 1, pageSize = 100) =>
-    api.get<PagedResponse<PendingRegistration>>(
-      `/api/accessioning/unregistered?page=${page}&pageSize=${pageSize}`),
+  unregistered: (page = 1, pageSize = 100, f: RegistrationFilter = {}) => {
+    const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (f.from) p.set('from', f.from);
+    if (f.to) p.set('to', f.to);
+    if (f.sid?.trim()) p.set('sid', f.sid.trim());
+    if (f.patient?.trim()) p.set('patient', f.patient.trim());
+    if (f.origin) p.set('origin', f.origin);
+    if (f.unit != null) p.set('unit', String(f.unit));
+    return api.get<PagedResponse<PendingRegistration>>(`/api/accessioning/unregistered?${p}`);
+  },
   addSids: (patientId: number, mcc: number, sids: { sampleTypeId: number; vailid: string }[]) =>
     api.post<{ ok: boolean; samples: unknown[] }>('/api/accessioning/sids', { patientId, mcc, sids }),
   register: (vailids: string[]) =>
-    api.post<{ ok: boolean; registered: number; skipped: number }>(
-      '/api/accessioning/register', { vailids }),
+    api.post<AccessionResponse>('/api/accessioning/register', { vailids }),
+  reject: (vailids: string[], reason: string) =>
+    api.post<RejectResponse>('/api/accessioning/reject', { vailids, reason }),
+  rejectReasons: () => api.get<{ reasons: RejectReason[] }>('/api/accessioning/reject-reasons'),
 };
 
 export interface OrderTube {

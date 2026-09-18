@@ -33,12 +33,16 @@ public sealed record PendingRegistration(
     string? Vailid,
     int PatientId,
     string? PatientName,
+    string? Mobile,
     int? MccCode,
     string? ClientCode,
+    string? BusinessUnit,
     int SampleStatus,
     string? SampleTypeName,
     string? TestNames,
     DateTimeOffset? AddedAt,
+    string? RegisteredBy,
+    /// <summary>lis | telo | infinity — who registered the tube.</summary>
     string Origin);
 
 /// <param name="ExistingVailid">
@@ -57,7 +61,8 @@ public sealed record AddSidsResult(
 /// appear on the worksheet.
 /// </param>
 public sealed record AccessionResult(
-    bool Ok, string? ErrorCode, string? Message, int Registered, int Skipped);
+    bool Ok, string? ErrorCode, string? Message, int Registered, int Skipped,
+    IReadOnlyList<AccessionDetail> Details);
 
 /// <summary>
 /// Accessioning: the two steps between a booked order and a sample on the
@@ -125,17 +130,35 @@ public sealed class AccessionRepository(NobleConnectionFactory db, SqlRetry retr
                 return new Paged<PendingAccession>(rows, total, p, size);
             }, token), ct);
 
+    /// <summary>
+    /// Every Sample Sent tube in scope, whoever registered it — the LIS's
+    /// clients included, since 2026-09-18. See the procedure's own note.
+    /// </summary>
     public Task<Paged<PendingRegistration>> PendingRegistrationsAsync(
-        IReadOnlyList<string> clientCodes, int page, int pageSize, CancellationToken ct = default) =>
+        IReadOnlyList<string> clientCodes, int page, int pageSize,
+        RegistrationFilter? filter = null, CancellationToken ct = default) =>
         retry.ExecuteAsync("accession.pendingReg", token =>
             db.QueryAsync("accession.pendingReg", async (conn, inner) =>
             {
                 var (p, size) = Paged<PendingRegistration>.Clamp(page, pageSize, 100);
+                var f = filter ?? new RegistrationFilter();
 
                 await using var cmd = db.CreateWriteCommand(conn, "dbo.usp_inf_pending_registrations");
                 AddCodesTvp(cmd, clientCodes);
                 cmd.Parameters.Add("@page", SqlDbType.Int).Value = p;
                 cmd.Parameters.Add("@page_size", SqlDbType.Int).Value = size;
+                cmd.Parameters.Add("@from_date", SqlDbType.Date).Value =
+                    f.From.HasValue ? f.From.Value.ToDateTime(TimeOnly.MinValue) : DBNull.Value;
+                cmd.Parameters.Add("@to_date", SqlDbType.Date).Value =
+                    f.To.HasValue ? f.To.Value.ToDateTime(TimeOnly.MinValue) : DBNull.Value;
+                cmd.Parameters.Add("@sid", SqlDbType.NVarChar, 50).Value =
+                    string.IsNullOrWhiteSpace(f.Sid) ? DBNull.Value : f.Sid.Trim();
+                cmd.Parameters.Add("@patient", SqlDbType.NVarChar, 100).Value =
+                    string.IsNullOrWhiteSpace(f.Patient) ? DBNull.Value : f.Patient.Trim();
+                cmd.Parameters.Add("@origin", SqlDbType.VarChar, 10).Value =
+                    string.IsNullOrWhiteSpace(f.Origin) ? DBNull.Value : f.Origin.Trim().ToLowerInvariant();
+                cmd.Parameters.Add("@business_unit", SqlDbType.Int).Value =
+                    f.BusinessUnit.HasValue ? f.BusinessUnit.Value : DBNull.Value;
 
                 await using var r = await cmd.ExecuteReaderAsync(CommandBehavior.SingleResult, inner)
                     .ConfigureAwait(false);
@@ -151,17 +174,99 @@ public sealed class AccessionRepository(NobleConnectionFactory db, SqlRetry retr
                         Vailid: r.Str("vailid"),
                         PatientId: r.Int("patientId"),
                         PatientName: r.Str("patientName")?.Trim(),
+                        Mobile: r.Str("mobile")?.Trim(),
                         MccCode: r.NullableInt("mccCode"),
                         ClientCode: r.Str("clientCode"),
+                        BusinessUnit: r.Str("businessUnit")?.Trim(),
                         SampleStatus: r.NullableInt("sampleStatus") ?? 0,
                         SampleTypeName: r.Str("sampleTypeName"),
                         TestNames: r.Str("testNames"),
                         AddedAt: Domain.NobleTime.ToIst(r.Date("addedAt")),
-                        Origin: r.Str("origin") ?? "telo"));
+                        RegisteredBy: r.Str("registeredBy"),
+                        Origin: r.Str("origin") ?? "lis"));
                 }
 
                 return new Paged<PendingRegistration>(rows, total, p, size);
             }, token), ct);
+
+    /// <summary>The LIS's reject-reason list, as the legacy Reject dropdown shows it.</summary>
+    public Task<IReadOnlyList<RejectReason>> RejectReasonsAsync(CancellationToken ct = default) =>
+        retry.ExecuteAsync("accession.rejectReasons", token =>
+            db.QueryAsync("accession.rejectReasons", async (conn, inner) =>
+            {
+                await using var cmd = db.CreateWriteCommand(conn, "dbo.usp_inf_reject_reasons");
+                await using var r = await cmd.ExecuteReaderAsync(CommandBehavior.SingleResult, inner)
+                    .ConfigureAwait(false);
+                var list = new List<RejectReason>();
+                while (await r.ReadAsync(inner).ConfigureAwait(false))
+                    list.Add(new RejectReason(r.Int("id"), r.Str("reason") ?? string.Empty));
+                return (IReadOnlyList<RejectReason>)list;
+            }, token), ct);
+
+    /// <summary>
+    /// What the legacy page does BESIDE registering: the receiving user's
+    /// business unit onto the tube, and the "Sample Registered" activity row.
+    /// Called after a successful Register with the SIDs it registered. Not
+    /// retried: the activity rows would double.
+    /// </summary>
+    public Task<int> StampRegisteredAsync(
+        int userId, string username, IReadOnlyList<string> vailids, string? ip,
+        CancellationToken ct = default) =>
+        db.QueryAsync("accession.stamp", async (conn, inner) =>
+        {
+            await using var cmd = db.CreateWriteCommand(conn, "dbo.usp_inf_accession_stamp");
+            cmd.Parameters.Add("@userId", SqlDbType.Int).Value = userId;
+            cmd.Parameters.Add("@user", SqlDbType.NVarChar, 50).Value = username;
+            AddVailidsTvp(cmd, vailids);
+            cmd.Parameters.Add("@ip", SqlDbType.VarChar, 64).Value = (object?)ip ?? DBNull.Value;
+
+            await using var r = await cmd.ExecuteReaderAsync(CommandBehavior.SingleRow, inner).ConfigureAwait(false);
+            return await r.ReadAsync(inner).ConfigureAwait(false) ? r.NullableInt("stamped") ?? 0 : 0;
+        }, ct);
+
+    /// <summary>
+    /// Reject Sample Sent tubes at the desk: status 1 → 3 with the reason, as
+    /// the legacy page's Reject tick does. Not retried — a replay would re-log.
+    /// </summary>
+    public Task<RejectResult> RejectAsync(
+        int userId, string username, IReadOnlyList<string> vailids, string reason, string? ip,
+        CancellationToken ct = default) =>
+        db.QueryAsync("accession.reject", async (conn, inner) =>
+        {
+            await using var cmd = db.CreateWriteCommand(conn, "dbo.usp_inf_accession_reject");
+            cmd.Parameters.Add("@userId", SqlDbType.Int).Value = userId;
+            cmd.Parameters.Add("@user", SqlDbType.NVarChar, 50).Value = username;
+            AddVailidsTvp(cmd, vailids);
+            cmd.Parameters.Add("@reason", SqlDbType.NVarChar, 200).Value = reason;
+            cmd.Parameters.Add("@ip", SqlDbType.VarChar, 64).Value = (object?)ip ?? DBNull.Value;
+
+            await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);
+
+            var ok = false;
+            string? code = null, message = null;
+            var rejected = 0;
+            var skipped = 0;
+            if (await r.ReadAsync(inner).ConfigureAwait(false))
+            {
+                ok = r.GetOrdinalBool("ok");
+                code = r.Str("error_code");
+                message = r.Str("message");
+                rejected = r.NullableInt("rejected") ?? 0;
+                skipped = r.NullableInt("skipped") ?? 0;
+            }
+
+            var details = new List<RejectDetail>();
+            if (await r.NextResultAsync(inner).ConfigureAwait(false))
+            {
+                while (await r.ReadAsync(inner).ConfigureAwait(false))
+                {
+                    var v = r.Str("vailid");
+                    if (v is not null) details.Add(new RejectDetail(v, r.Str("outcome") ?? "skipped"));
+                }
+            }
+
+            return new RejectResult(ok, code, message, rejected, skipped, details);
+        }, ct);
 
     /// <summary>
     /// The tubes one existing order needs, and which already have a barcode.
@@ -331,18 +436,7 @@ public sealed class AccessionRepository(NobleConnectionFactory db, SqlRetry retr
 
             cmd.Parameters.Add("@userId", SqlDbType.Int).Value = userId;
             cmd.Parameters.Add("@user", SqlDbType.NVarChar, 50).Value = username;
-
-            var t = new DataTable();
-            t.Columns.Add("vailid", typeof(string));
-            foreach (var v in vailids.Where(v => !string.IsNullOrWhiteSpace(v))
-                                     .Select(v => v.Trim())
-                                     .Distinct(StringComparer.OrdinalIgnoreCase))
-            {
-                t.Rows.Add(v);
-            }
-            var p = cmd.Parameters.AddWithValue("@vailids", t);
-            p.SqlDbType = SqlDbType.Structured;
-            p.TypeName = "dbo.TeloVailidList";
+            AddVailidsTvp(cmd, vailids);
 
             await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);
 
@@ -359,8 +453,36 @@ public sealed class AccessionRepository(NobleConnectionFactory db, SqlRetry retr
                 skipped = r.NullableInt("skipped") ?? 0;
             }
 
-            return new AccessionResult(ok, code, message, registered, skipped);
+            // The per-SID verdicts — which of a scanned rack actually went
+            // through. The desk stamps and reports on exactly these.
+            var details = new List<AccessionDetail>();
+            if (await r.NextResultAsync(inner).ConfigureAwait(false))
+            {
+                while (await r.ReadAsync(inner).ConfigureAwait(false))
+                {
+                    var v = r.Str("vailid");
+                    if (v is not null)
+                        details.Add(new AccessionDetail(v, r.Str("outcome") ?? "skipped", r.NullableInt("result_rows") ?? 0));
+                }
+            }
+
+            return new AccessionResult(ok, code, message, registered, skipped, details);
         }, ct);
+
+    private static void AddVailidsTvp(SqlCommand cmd, IReadOnlyList<string> vailids)
+    {
+        var t = new DataTable();
+        t.Columns.Add("vailid", typeof(string));
+        foreach (var v in vailids.Where(v => !string.IsNullOrWhiteSpace(v))
+                                 .Select(v => v.Trim())
+                                 .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            t.Rows.Add(v);
+        }
+        var p = cmd.Parameters.AddWithValue("@vailids", t);
+        p.SqlDbType = SqlDbType.Structured;
+        p.TypeName = "dbo.TeloVailidList";
+    }
 
     private static void AddCodesTvp(SqlCommand cmd, IReadOnlyList<string> clientCodes)
     {

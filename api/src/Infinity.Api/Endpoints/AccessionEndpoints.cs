@@ -42,6 +42,14 @@ public static class AccessionEndpoints
         g.MapPost("/register", Register)
          .RequireCapability(Capabilities.OrderAccession)
          .WithName("RegisterSamples");
+
+        g.MapPost("/reject", Reject)
+         .RequireCapability(Capabilities.OrderAccession)
+         .WithName("RejectSamples");
+
+        g.MapGet("/reject-reasons", RejectReasons)
+         .RequireCapability(Capabilities.OrderView)
+         .WithName("RejectReasons");
     }
 
     private static async Task<IResult> PendingAccessions(
@@ -66,21 +74,90 @@ public static class AccessionEndpoints
         return Page(result.Rows, result.Total, result.Page, result.PageSize, result.PageCount);
     }
 
+    /// <summary>
+    /// Every Sample Sent tube in scope, whoever registered it, with the legacy
+    /// Accession page's filters. Dates are yyyy-MM-dd on the registration
+    /// date and optional; origin is lis | telo | infinity; unit is the
+    /// client's business unit.
+    /// </summary>
     private static async Task<IResult> PendingRegistrations(
         System.Security.Claims.ClaimsPrincipal principal,
         ScopeRepository scopes,
         AccessionRepository repo,
         CancellationToken ct,
         int page = 1,
-        int pageSize = 100)
+        int pageSize = 100,
+        string? from = null,
+        string? to = null,
+        string? sid = null,
+        string? patient = null,
+        string? origin = null,
+        int? unit = null)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
 
         var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
         if (scope.IsDenied) return Empty(pageSize);
 
-        var result = await repo.PendingRegistrationsAsync(scope.ClientCodes, page, pageSize, ct).ConfigureAwait(false);
+        static DateOnly? Day(string? s) =>
+            DateOnly.TryParseExact(s, "yyyy-MM-dd", out var d) ? d : null;
+
+        var filter = new RegistrationFilter(
+            From: Day(from), To: Day(to),
+            Sid: sid, Patient: patient,
+            Origin: origin is "lis" or "telo" or "infinity" ? origin : null,
+            BusinessUnit: unit);
+
+        var result = await repo.PendingRegistrationsAsync(scope.ClientCodes, page, pageSize, filter, ct)
+            .ConfigureAwait(false);
         return Page(result.Rows, result.Total, result.Page, result.PageSize, result.PageCount);
+    }
+
+    private static async Task<IResult> RejectReasons(AccessionRepository repo, CancellationToken ct) =>
+        Results.Ok(new { reasons = await repo.RejectReasonsAsync(ct).ConfigureAwait(false) });
+
+    public sealed record RejectRequest(IReadOnlyList<string> Vailids, string? Reason);
+
+    /// <summary>
+    /// Reject Sample Sent tubes at the desk — the legacy page's Reject tick.
+    /// The reason is one of the LIS's own list, or free text; both land in
+    /// reject_comments as the legacy writes it.
+    /// </summary>
+    private static async Task<IResult> Reject(
+        [FromBody] RejectRequest body,
+        System.Security.Claims.ClaimsPrincipal principal,
+        AccessionRepository repo,
+        Audit.AuditLog audit,
+        HttpContext http,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+
+        var username = principal.Username();
+        if (string.IsNullOrWhiteSpace(username))
+            return Results.BadRequest(new { error = "The acting user could not be identified." });
+
+        if (body.Vailids is null || body.Vailids.Count == 0)
+            return Results.BadRequest(new { error = "No Sample IDs supplied." });
+        var reason = body.Reason?.Trim();
+        if (string.IsNullOrWhiteSpace(reason))
+            return Results.BadRequest(new { error = "A reason is required to reject a sample." });
+        if (reason.Length > 200) reason = reason[..200];
+
+        var ip = Audit.AuditIp.From(http);
+        var result = await repo.RejectAsync(userId, username!, body.Vailids, reason, ip, ct).ConfigureAwait(false);
+
+        if (result.Ok)
+        {
+            var rejected = result.Details.Where(d => d.Outcome == "rejected").Select(d => d.Vailid).ToList();
+            audit.Log("sample.rejected", actor: userId, ip: ip,
+                sid: rejected.Count == 1 ? rejected[0] : null,
+                details: new { rejected = result.Rejected, skipped = result.Skipped, reason,
+                               sids = rejected.Take(50).ToList() });
+        }
+        return result.Ok
+            ? Results.Ok(result)
+            : Results.BadRequest(new { error = result.Message, code = result.ErrorCode });
     }
 
     /// <summary>The tubes one order needs, for the barcode form.</summary>
@@ -190,13 +267,36 @@ public static class AccessionEndpoints
         // it can see; a barcode belonging elsewhere simply does not register.
         var result = await repo.AccessionAsync(userId, username!, body.Vailids, ct).ConfigureAwait(false);
 
+        var ip = Audit.AuditIp.From(http);
+        var registered = result.Details.Where(d => d.Outcome == "registered").Select(d => d.Vailid).ToList();
+
+        // What the legacy page does beside the register: the receiving unit
+        // onto the tube, and the LIS's own activity row. Best effort after the
+        // register has committed — a failure here must not read as "not
+        // registered" to a desk that has just put a rack through.
+        if (result.Ok && registered.Count > 0)
+        {
+            try
+            {
+                await repo.StampRegisteredAsync(userId, username!, registered, ip, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                http.RequestServices.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("Accession")
+                    .LogError(ex, "accession.stamp.failed user={User} sids={Sids}", userId, registered.Count);
+            }
+        }
+
         // The moment the wallet debit happens (CheckTransCash), so the trail
         // must carry it: this row is what "when was this charged" resolves to.
         if (result.Ok)
-            audit.Log("sample.accessioned", actor: userId, ip: Audit.AuditIp.From(http),
-                sid: body.Vailids.Count == 1 ? body.Vailids[0] : null,
+            audit.Log("sample.accessioned", actor: userId, ip: ip,
+                sid: registered.Count == 1 ? registered[0] : (body.Vailids.Count == 1 ? body.Vailids[0] : null),
                 details: new { registered = result.Registered, skipped = result.Skipped,
-                               sids = body.Vailids.Count });
+                               sids = registered.Take(50).ToList(),
+                               skippedSids = result.Details.Where(d => d.Outcome != "registered")
+                                                   .Select(d => d.Vailid).Take(50).ToList() });
         return result.Ok
             ? Results.Ok(result)
             : Results.BadRequest(new { error = result.Message, code = result.ErrorCode });

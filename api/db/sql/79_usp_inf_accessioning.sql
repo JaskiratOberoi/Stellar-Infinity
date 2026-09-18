@@ -27,9 +27,19 @@ GO
  * be accessioned by someone working in the other, and its sample would sit
  * unbarcoded indefinitely with nothing anywhere reporting it as stuck.
  *
- * The lab is one lab. These match telo: OR inf:, exactly like the mobile
- * allowance in usp_telo_create_order. Native LIS orders are still excluded —
- * they are accessioned in the LIS itself and are not this queue's business.
+ * The lab is one lab. The SAMPLE-ID queue matches telo: OR inf:, exactly like
+ * the mobile allowance in usp_telo_create_order; native LIS orders always
+ * carry their tubes from registration, so they never appear there.
+ *
+ * The ACCESSIONING queue (usp_inf_pending_registrations) spans every origin
+ * since 2026-09-18. It began as platform-only — "native LIS samples are
+ * accessioned in the LIS itself" — and that left the lab with two receiving
+ * desks: a sample the client registered in the legacy LIS (the bulk of the
+ * network, thousands a week) could not be received in Infinity at all, and
+ * the legacy screen hides anything registered before today unless the dates
+ * are widened by hand. Now it is one desk: every Sample Sent tube, whoever
+ * registered it, with the filters the legacy page has (dates, SID, patient,
+ * client) and an origin filter in place of the old exclusion.
  *
  * NOTE: the converse change on Telo's side has NOT been made. Telo's queues
  * still show only telo: orders, so an Infinity-booked order is currently
@@ -232,10 +242,27 @@ END
 GO
 
 -- ------------------------------------------------------- awaiting accessioning --
+/*
+ * Every Sample Sent tube the caller may see, whoever registered it.
+ *
+ * Filters mirror the legacy Accession page (dates on the registration date,
+ * SID contains, patient name or mobile contains, client scope) plus an origin
+ * filter and the client's business unit. Dates are OPTIONAL here where the
+ * legacy forces them: 345,000 LIS tubes sit at status 1 going back years, so
+ * the page defaults to a recent window, but a technician holding a tube
+ * registered a fortnight ago can clear the dates and search the SID instead
+ * of guessing when it was booked — the exact failure this replaces.
+ */
 CREATE OR ALTER PROCEDURE dbo.usp_inf_pending_registrations
-    @client_codes dbo.ClientCodeList READONLY,
-    @page         INT = 1,
-    @page_size    INT = 100
+    @client_codes  dbo.ClientCodeList READONLY,
+    @page          INT           = 1,
+    @page_size     INT           = 100,
+    @from_date     DATE          = NULL,   -- on addeddate; NULL = no lower bound
+    @to_date       DATE          = NULL,   -- inclusive; NULL = no upper bound
+    @sid           NVARCHAR(50)  = NULL,   -- contains
+    @patient       NVARCHAR(100) = NULL,   -- name or mobile contains
+    @origin        VARCHAR(10)   = NULL,   -- 'lis' | 'telo' | 'infinity' | NULL for all
+    @business_unit INT           = NULL    -- the CLIENT's business unit
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -249,34 +276,53 @@ BEGIN
     DECLARE @offset INT = (@pageSafe - 1) * @size;
 
     DECLARE @codeCount INT = (SELECT COUNT(*) FROM @client_codes);
+    DECLARE @from DATETIME = CASE WHEN @from_date IS NULL THEN NULL ELSE CAST(@from_date AS DATETIME) END;
+    DECLARE @to   DATETIME = CASE WHEN @to_date   IS NULL THEN NULL ELSE DATEADD(DAY, 1, CAST(@to_date AS DATETIME)) END;
+    DECLARE @sidSafe NVARCHAR(50)  = NULLIF(LTRIM(RTRIM(@sid)), N'');
+    DECLARE @patSafe NVARCHAR(100) = NULLIF(LTRIM(RTRIM(@patient)), N'');
+    DECLARE @originSafe VARCHAR(10) = NULLIF(LOWER(LTRIM(RTRIM(@origin))), '');
 
     SELECT
         s.id            AS sampleId,
         s.vailid        AS vailid,
         s.patient_id    AS patientId,
         p.name          AS patientName,
+        p.mobile_number AS mobile,
         p.mcc_code      AS mccCode,
         u.MCCUnitCode   AS clientCode,
+        bu.BusinessUnitName AS businessUnit,
         s.sample_status AS sampleStatus,
         -- The tube type. Column is `sampleid` on the sample row and
-        -- `Sampletype` on the master — neither name matches the other, and
-        -- neither matches what Telo's TypeScript calls them.
+        -- `Sampletype` on the master — neither name matches the other.
         st.Sampletype   AS sampleTypeName,
         s.testnames     AS testNames,
         s.addeddate     AS addedAt,
-        origin = CASE WHEN s.addedby LIKE 'inf:%' THEN 'infinity' ELSE 'telo' END,
+        s.addedby       AS registeredBy,
+        origin = CASE WHEN s.addedby LIKE 'inf:%'  THEN 'infinity'
+                      WHEN s.addedby LIKE 'telo:%' THEN 'telo'
+                      ELSE 'lis' END,
         COUNT(*) OVER() AS total_count
     FROM dbo.tbl_med_mcc_patient_samples s
     JOIN dbo.tbl_med_mcc_patient_master p ON p.id = s.patient_id
     LEFT JOIN dbo.tbl_med_mcc_unit_master u ON u.id = p.mcc_code
+    LEFT JOIN dbo.tbl_med_business_unit_master bu ON bu.id = u.BusinessUnitCode
     LEFT JOIN dbo.tbl_med_sample_master st ON st.id = s.sampleid
     -- Status 1 is Sample Sent: the barcode exists, the LIS has not received it,
     -- and the worksheet excludes it. This queue is exactly that gap.
     WHERE s.sample_status = 1
-      AND (s.addedby LIKE 'telo:%' OR s.addedby LIKE 'inf:%')
+      AND (@from IS NULL OR s.addeddate >= @from)
+      AND (@to   IS NULL OR s.addeddate <  @to)
+      AND (@sidSafe IS NULL OR s.vailid LIKE '%' + @sidSafe + '%')
+      AND (@patSafe IS NULL OR p.name LIKE '%' + @patSafe + '%'
+                            OR p.mobile_number LIKE '%' + @patSafe + '%')
+      AND (@originSafe IS NULL
+           OR @originSafe = CASE WHEN s.addedby LIKE 'inf:%'  THEN 'infinity'
+                                 WHEN s.addedby LIKE 'telo:%' THEN 'telo'
+                                 ELSE 'lis' END)
+      AND (@business_unit IS NULL OR u.BusinessUnitCode = @business_unit)
       AND (@codeCount = 0
            OR EXISTS (SELECT 1 FROM @client_codes c WHERE c.code = u.MCCUnitCode))
-    ORDER BY s.id DESC
+    ORDER BY s.addeddate DESC, s.id DESC
     OFFSET @offset ROWS FETCH NEXT @size ROWS ONLY;
 END
 GO

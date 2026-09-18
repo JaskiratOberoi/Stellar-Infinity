@@ -2042,6 +2042,8 @@ tbody tr:hover { background: var(--accent-softer); }
 }
 .badge--infinity { color: var(--teal);    border-color: var(--accent-ring); background: var(--accent-soft); }
 .badge--telo     { color: var(--warn);    border-color: var(--warn-line);   background: var(--warn-soft); }
+/* Registered in the legacy LIS by the client itself — most of the network. */
+.badge--lis      { color: var(--muted);   border-color: var(--hair);        background: var(--surface-2, transparent); }
 .badge--lis      { color: var(--ink-dim); border-color: var(--line);        background: var(--neutral-soft); }
 /* Paid by the centre through the gateway - nobody in either system posted it,
    which is why it is not the Infinity colour. */

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   accessionApi, orderTubesApi,
   type OrderChannel, type OrderTube, type PendingAccession, type PendingRegistration,
+  type RegistrationFilter, type RejectReason,
 } from '../api/client';
 import { Link, useSearchParams } from 'react-router-dom';
 import { fmtDateTime, inr, plainText } from '../lib/format';
@@ -39,11 +40,21 @@ function DocButtons({ billId }: { billId: number }) {
   );
 }
 
-/** Which platform booked the order. Both queues span the two while Telo runs. */
+/** Who registered it. The Sample-ID queue spans Telo and Infinity; the
+ *  accessioning queue also carries the LIS's own clients — most of the network. */
 function OriginBadge({ origin }: { origin: string }) {
-  return origin === 'infinity'
-    ? <span className="badge badge--infinity">infinity</span>
-    : <span className="badge badge--telo">telo</span>;
+  if (origin === 'infinity') return <span className="badge badge--infinity">infinity</span>;
+  if (origin === 'telo') return <span className="badge badge--telo">telo</span>;
+  return <span className="badge badge--lis" title="Registered in the legacy LIS">LIS</span>;
+}
+
+/** Local calendar date as yyyy-MM-dd, shifted by `days` — not toISOString,
+ *  which is UTC and names yesterday for the first 5.5 IST hours of every day. */
+function localDay(days = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 /**
@@ -82,6 +93,26 @@ export function Accessioning() {
   const [busy, setBusy] = useState(false);
 
   /*
+   * The accessioning queue's filters — the legacy Accession page's, made
+   * optional. It opens on the last seven days: the legacy opens on TODAY,
+   * which is exactly how a tube registered on the 14th became invisible to
+   * the technician holding it on the 18th. The text filters apply on Enter
+   * or when the field loses focus, so typing a SID does not fire a query per
+   * keystroke against a 345,000-row backlog.
+   */
+  const [filter, setFilter] = useState<RegistrationFilter>({ from: localDay(-7), to: localDay() });
+  const [sidDraft, setSidDraft] = useState('');
+  const [patientDraft, setPatientDraft] = useState('');
+
+  /* Scan-to-register: the barcode gun at the desk. One SID, straight through. */
+  const [scan, setScan] = useState('');
+
+  /* Reject: a reason from the LIS's own list, or typed. */
+  const [reasons, setReasons] = useState<RejectReason[]>([]);
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState('');
+
+  /*
    * Which channel's orders to show, or null for both — held in the URL.
    *
    * Telo reaches the same place with two separate routes, /orders/new and
@@ -111,7 +142,7 @@ export function Accessioning() {
     try {
       const [p, u] = await Promise.all([
         accessionApi.pending(pendingPage, pageSize, kind ?? undefined),
-        accessionApi.unregistered(unregPage, pageSize),
+        accessionApi.unregistered(unregPage, pageSize, filter),
       ]);
       setPending(p.rows); setPendingTotal(p.total);
       setUnreg(u.rows); setUnregTotal(u.total);
@@ -120,21 +151,34 @@ export function Accessioning() {
     } finally {
       setLoading(false);
     }
-  }, [pendingPage, unregPage, kind]);
+  }, [pendingPage, unregPage, kind, filter]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    accessionApi.rejectReasons()
+      .then((r) => setReasons(r.reasons))
+      .catch(() => setReasons([]));
+  }, []);
+
+  /** The per-SID verdict, spelled out: a rack of twelve with three skipped
+   *  names the three, because those are the ones not on the worksheet. */
+  function describe(
+    verb: string, done: number, details: { vailid: string; outcome: string }[],
+  ): string {
+    const skipped = details.filter((d) => d.outcome === 'skipped').map((d) => d.vailid);
+    const head = `${done} sample${done === 1 ? '' : 's'} ${verb}`;
+    if (skipped.length === 0) return `${head}.`;
+    const list = skipped.slice(0, 6).join(', ') + (skipped.length > 6 ? ` +${skipped.length - 6} more` : '');
+    return `${head} · ${skipped.length} skipped — already accessioned, rejected, or not a Sample ID we know: ${list}.`;
+  }
 
   async function register(vailids: string[]) {
     if (vailids.length === 0) return;
     setBusy(true); setError(null); setNotice(null);
     try {
       const r = await accessionApi.register(vailids);
-      // `skipped` is reported, not swallowed. Being told "12 registered" when
-      // three were skipped hides exactly the three that will not reach the
-      // worksheet.
-      setNotice(r.skipped > 0
-        ? `${r.registered} registered · ${r.skipped} skipped (already accessioned, or not found).`
-        : `${r.registered} sample${r.registered === 1 ? '' : 's'} registered — now on the worksheet.`);
+      setNotice(describe('registered — now on the worksheet', r.registered, r.details ?? []));
       setSelected(new Set());
       await load();
     } catch (e) {
@@ -143,6 +187,32 @@ export function Accessioning() {
       setBusy(false);
     }
   }
+
+  async function reject(vailids: string[]) {
+    if (vailids.length === 0 || !reason.trim()) return;
+    setBusy(true); setError(null); setNotice(null);
+    try {
+      const r = await accessionApi.reject(vailids, reason.trim());
+      setNotice(describe(`rejected (${reason.trim()})`, r.rejected, r.details ?? []));
+      setSelected(new Set());
+      setRejecting(false);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Rejection failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** The barcode gun: one SID, registered on Enter, whatever the filters show. */
+  async function quickRegister() {
+    const sid = scan.trim();
+    if (!sid) return;
+    setScan('');
+    await register([sid]);
+  }
+
+  const applyText = () => setFilter((f) => ({ ...f, sid: sidDraft, patient: patientDraft }));
 
   const toggle = (v: string) => setSelected((s) => {
     const next = new Set(s);
@@ -290,15 +360,83 @@ export function Accessioning() {
             Awaiting accessioning
           </h2>
           <p className="muted" style={{ fontSize: '.78rem', margin: '.6rem 0' }}>
-            Barcodes exist, but the lab has not received them — still <b>Sample Sent</b>, so still off the
-            worksheet. Registering is what hands them to the bench.
+            Every tube still marked <b>Sample Sent</b> — whether the client registered it in the legacy LIS,
+            in Infinity or in Telo. The lab has not received it, so it is not on the worksheet.
+            Registering is what hands it to the bench; rejecting records why it never will be.
           </p>
 
-          <div className="row" style={{ marginBottom: '.7rem' }}>
+          {/* The barcode gun. A tube in hand is registered from here whatever
+              the list below is filtered to — the legacy page's own by-SID
+              receive, which ignores its date boxes. */}
+          <form className="row" style={{ gap: '.5rem', marginBottom: '.7rem', flexWrap: 'wrap' }}
+                onSubmit={(e) => { e.preventDefault(); void quickRegister(); }}>
+            <input className="input mono" inputMode="numeric" placeholder="Scan a Sample ID to register it"
+                   aria-label="Scan a Sample ID to register it"
+                   value={scan} onChange={(e) => setScan(e.target.value.trim())}
+                   disabled={busy} style={{ width: 260 }} autoFocus />
+            <button className="btn btn--primary btn--sm" type="submit" disabled={busy || !scan.trim()}>
+              Register this tube
+            </button>
+          </form>
+
+          {/* The filters, the legacy page's own — dates on the registration
+              date, SID, patient — plus who registered it. Text fields apply
+              on Enter or blur. */}
+          <div className="row" style={{ gap: '.5rem', marginBottom: '.7rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <label className="field" style={{ margin: 0 }}>
+              <span className="muted" style={{ fontSize: '.7rem' }}>Registered from</span>
+              <input className="input input--sm" type="date" value={filter.from ?? ''}
+                     onChange={(e) => { setFilter((f) => ({ ...f, from: e.target.value || undefined })); setUnregPage(1); }} />
+            </label>
+            <label className="field" style={{ margin: 0 }}>
+              <span className="muted" style={{ fontSize: '.7rem' }}>to</span>
+              <input className="input input--sm" type="date" value={filter.to ?? ''}
+                     onChange={(e) => { setFilter((f) => ({ ...f, to: e.target.value || undefined })); setUnregPage(1); }} />
+            </label>
+            <label className="field" style={{ margin: 0 }}>
+              <span className="muted" style={{ fontSize: '.7rem' }}>Sample ID</span>
+              <input className="input input--sm mono" value={sidDraft} placeholder="contains"
+                     onChange={(e) => setSidDraft(e.target.value)}
+                     onBlur={applyText}
+                     onKeyDown={(e) => { if (e.key === 'Enter') { applyText(); setUnregPage(1); } }} />
+            </label>
+            <label className="field" style={{ margin: 0 }}>
+              <span className="muted" style={{ fontSize: '.7rem' }}>Patient or mobile</span>
+              <input className="input input--sm" value={patientDraft} placeholder="contains"
+                     onChange={(e) => setPatientDraft(e.target.value)}
+                     onBlur={applyText}
+                     onKeyDown={(e) => { if (e.key === 'Enter') { applyText(); setUnregPage(1); } }} />
+            </label>
+            <div className="seg" role="group" aria-label="Registered in">
+              {([[undefined, 'All'], ['lis', 'LIS'], ['infinity', 'Infinity'], ['telo', 'Telo']] as const).map(([o, label]) => (
+                <button key={label}
+                        className={`seg__btn${(filter.origin ?? undefined) === o ? ' is-on' : ''}`}
+                        aria-pressed={(filter.origin ?? undefined) === o}
+                        onClick={() => { setFilter((f) => ({ ...f, origin: o })); setUnregPage(1); }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {(filter.from || filter.to || filter.sid || filter.patient || filter.origin) && (
+              <button className="btn btn--ghost btn--sm"
+                      onClick={() => { setFilter({}); setSidDraft(''); setPatientDraft(''); setUnregPage(1); }}
+                      title="Every Sample Sent tube in your scope, whenever it was registered">
+                Clear filters
+              </button>
+            )}
+          </div>
+
+          <div className="row" style={{ marginBottom: '.7rem', flexWrap: 'wrap', gap: '.5rem' }}>
             <button className="btn btn--primary btn--sm"
                     disabled={selected.size === 0 || busy}
                     onClick={() => void register([...selected])}>
-              {busy ? 'Registering…' : `Register ${selected.size || ''} selected`}
+              {busy ? 'Working…' : `Register ${selected.size || ''} selected`}
+            </button>
+            <button className="btn btn--ghost btn--sm"
+                    disabled={selected.size === 0 || busy}
+                    onClick={() => setRejecting((v) => !v)}
+                    aria-expanded={rejecting}>
+              Reject {selected.size || ''} selected…
             </button>
             <button className="btn btn--ghost btn--sm"
                     disabled={unreg.length === 0}
@@ -306,11 +444,31 @@ export function Accessioning() {
               Select all on this page
             </button>
             {selected.size > 0 && (
-              <button className="btn btn--ghost btn--sm" onClick={() => setSelected(new Set())}>
+              <button className="btn btn--ghost btn--sm" onClick={() => { setSelected(new Set()); setRejecting(false); }}>
                 Clear
               </button>
             )}
           </div>
+
+          {rejecting && selected.size > 0 && (
+            <div className="alert alert--warn" style={{ marginBottom: '.7rem' }}>
+              <div className="row" style={{ gap: '.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                <span>Reject <b>{selected.size}</b> sample{selected.size === 1 ? '' : 's'} — reason:</span>
+                <select className="input input--sm" value={reasons.some((x) => x.reason === reason) ? reason : ''}
+                        onChange={(e) => setReason(e.target.value)} aria-label="Reject reason">
+                  <option value="">Choose a reason…</option>
+                  {reasons.map((x) => <option key={x.id} value={x.reason}>{x.reason}</option>)}
+                </select>
+                <input className="input input--sm" placeholder="or type one" value={reasons.some((x) => x.reason === reason) ? '' : reason}
+                       onChange={(e) => setReason(e.target.value)} style={{ width: 220 }} aria-label="Reject reason, typed" />
+                <button className="btn btn--primary btn--sm" disabled={busy || !reason.trim()}
+                        onClick={() => void reject([...selected])}>
+                  Confirm reject
+                </button>
+                <button className="btn btn--ghost btn--sm" onClick={() => setRejecting(false)}>Cancel</button>
+              </div>
+            </div>
+          )}
 
           <div className="table-wrap table-wrap--cards">
             <table>
@@ -322,7 +480,8 @@ export function Accessioning() {
                   <th>Client</th>
                   <th>Tube</th>
                   <th>Tests</th>
-                  <th>Booked in</th>
+                  <th>Registered</th>
+                  <th>By</th>
                 </tr>
               </thead>
               <tbody>
@@ -337,8 +496,12 @@ export function Accessioning() {
                     <td className="mono cell--lead"><b>{r.vailid ?? '—'}</b></td>
                     <td className="cell--meta" data-label="Patient">
                       {plainText(r.patientName) || <span className="muted">Unnamed</span>}
+                      {r.mobile && <div className="muted mono" style={{ fontSize: '.7rem' }}>{r.mobile}</div>}
                     </td>
-                    <td className="muted cell--meta" data-label="Client">{r.clientCode ?? '—'}</td>
+                    <td className="muted cell--meta" data-label="Client">
+                      {r.clientCode ?? '—'}
+                      {r.businessUnit && <div style={{ fontSize: '.7rem' }}>{r.businessUnit}</div>}
+                    </td>
                     <td className="muted cell--meta" data-label="Tube">{r.sampleTypeName ?? '—'}</td>
                     <td className="muted cell--body" data-label="Tests" style={{ maxWidth: 260 }}>
                       <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
@@ -346,14 +509,25 @@ export function Accessioning() {
                         {plainText(r.testNames) || '—'}
                       </div>
                     </td>
-                    <td className="cell--tag"><OriginBadge origin={r.origin} /></td>
+                    <td className="muted cell--meta" data-label="Registered" style={{ whiteSpace: 'nowrap' }}>
+                      {fmtDateTime(r.addedAt)}
+                    </td>
+                    <td className="cell--tag" data-label="By">
+                      <OriginBadge origin={r.origin} />
+                      {r.origin === 'lis' && r.registeredBy && (
+                        <div className="muted mono" style={{ fontSize: '.68rem' }}>{r.registeredBy}</div>
+                      )}
+                    </td>
                   </tr>
                 ))}
 
                 {unreg.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="muted" style={{ textAlign: 'center', padding: '2rem' }}>
-                      Nothing awaiting accessioning.
+                    <td colSpan={8} className="muted" style={{ textAlign: 'center', padding: '2rem' }}>
+                      Nothing awaiting accessioning
+                      {(filter.from || filter.to || filter.sid || filter.patient || filter.origin)
+                        ? ' in this window — clear the filters to see every Sample Sent tube.'
+                        : '.'}
                     </td>
                   </tr>
                 )}
