@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { downloadFile, fmtDateTime } from '../lib/format';
 import { InfinityLoader } from '../components/InfinityLoader';
-import { readStoredFormat } from '../components/ReportFormat';
+import { FormatSelect, useReportFormat } from '../components/ReportFormat';
 
 export interface Gauge {
   kind: 'both' | 'max' | 'min';
@@ -65,15 +65,18 @@ export interface SmartReportData {
 export function SmartReportModal({ sids, onClose }: { sids: string[]; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  // The same per-desk Format choice the report viewer keeps (v1/v2), shown
+  // HERE as well: a booklet downloaded from this modal in a format chosen on
+  // another page reads as the wrong document with no way to see why. v2 adds
+  // the body-map page.
+  const [format, setFormat] = useReportFormat();
   const query = `sids=${encodeURIComponent(sids.join(','))}`;
 
   const download = async () => {
     setBusy(true);
     setDownloadError(null);
     try {
-      // The desk's Format choice (v1/v2) applies to the booklet as it does to
-      // the clinical report: v2 adds the body-map page.
-      await downloadFile(`/api/reports/smart/pdf?${query}&format=${readStoredFormat()}`);
+      await downloadFile(`/api/reports/smart/pdf?${query}&format=${format}`);
     } catch (e) {
       setDownloadError(e instanceof Error ? e.message : 'The download failed.');
     } finally {
@@ -194,7 +197,8 @@ export function SmartReportModal({ sids, onClose }: { sids: string[]; onClose: (
               <div className="alert alert--error" style={{ fontSize: '.8rem' }}>{downloadError}</div>
             )}
 
-            <div className="modal__actions">
+            <div className="modal__actions" style={{ alignItems: 'center', gap: '.5rem' }}>
+              <FormatSelect value={format} onChange={setFormat} disabled={busy} ariaLabel="Smart Report format" />
               <button className="btn btn--ghost" onClick={onClose}>Close</button>
               <button className="btn btn--primary" disabled={busy}
                       onClick={() => void download()}>
