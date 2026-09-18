@@ -395,9 +395,14 @@ anatomical illustration — the organ renderings from "Man shadow anatomy.svg"
 public/branding/anatomy, placed by the artist's own matrices inside that
 drawing's body outline (web/src/pages/bodyOutline.ts). Untested organs are
 desaturated and faded; flagged ones get a red cast and glow via SVG filters;
-the callout discs show the organ's own picture. The images load after the
-data, so the print route holds data-print-ready until the map reports them
-loaded. Under it, the flagged results by system. Carried exactly as the
+the callout discs show the organ's own picture. The figure follows the
+patient's sex — Häggström's female drawing and placement for a female
+patient, the male otherwise — and shows the whole body, head to feet. The
+images load after the data, so the print route holds data-print-ready until
+the map reports them loaded. Organ files are kept near their printed
+resolution (arm bones cropped to the upper arm, the urinary tract split into
+kidneys and bladder), so a v2 booklet carries about 1 MB more than v1.
+Under it, the flagged results by system. Carried exactly as the
 clinical format is: `?format=` on the print route, `format` on both smart
 PDF routes (in the cache key), and the desk's existing Format select — one
 choice covers both documents. Staging only, with the clinical v2.

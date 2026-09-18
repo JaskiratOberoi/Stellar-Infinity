@@ -1860,6 +1860,7 @@ export function SmartBooklet({ data, format = 'v1', onMapReady }: {
         {format === 'v2' && (
           <BodyMapPage
             name={name}
+            sex={data.sex}
             systems={orderedCategories.map((cat): BodySystem => {
               const list = byCategory.get(cat.id)!;
               const flagged = list.filter((a) => a.alert);
