@@ -4,9 +4,9 @@ import { useAuth } from '../auth/AuthContext';
 import { InfinityLoader } from '../components/InfinityLoader';
 
 interface StatusCount { status: string; count: number }
-interface TrendPoint { date: string; revenue: number }
+export interface TrendPoint { date: string; revenue: number }
 
-interface LeaderRow { code: string; name: string | null; amount: number; count: number }
+export interface LeaderRow { code: string; name: string | null; amount: number; count: number }
 
 interface MonthStats {
   month: string;
@@ -44,7 +44,7 @@ interface DayStats {
   trend: TrendPoint[];
 }
 
-const inr = (n: number) =>
+export const inr = (n: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n);
 
 /**
@@ -75,7 +75,7 @@ function fmtAxis(iso: string) {
  * correctly) covered today. That is the mismatch of a screen disagreeing with
  * itself for the first six hours of every shift.
  */
-function todayIst() {
+export function todayIst() {
   return new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
 }
 
@@ -287,7 +287,7 @@ export function Dashboard() {
   );
 }
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
+export function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <h2 style={{ fontSize: '.68rem', fontWeight: 600, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-dim)', marginBottom: '.8rem' }}>
       {children}
@@ -302,7 +302,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
  * rather than showing a zero — a zero here is a real number ("nothing billed
  * this month") and must not be confused with "not known yet".
  */
-function Kpi({ label, value, sub, accent = false, mtd }: {
+export function Kpi({ label, value, sub, accent = false, mtd }: {
   label: string;
   value: string;
   sub?: string;
@@ -344,7 +344,7 @@ function Kpi({ label, value, sub, accent = false, mtd }: {
  * matters when somebody is deciding whether the client they are looking for is
  * absent or merely eleventh.
  */
-function Board({ title, rows, loading, error, render, meta, label, empty }: {
+export function Board({ title, rows, loading, error, render, meta, label, empty }: {
   title: string;
   rows: LeaderRow[] | undefined;
   loading: boolean;
@@ -409,7 +409,7 @@ function niceCeil(v: number) {
 }
 
 /** Compact for an axis: ₹91k, ₹1.2L. Full precision belongs in the readout. */
-function shortInr(n: number) {
+export function shortInr(n: number) {
   if (n >= 1e7) return `₹${(n / 1e7).toFixed(n % 1e7 === 0 ? 0 : 1)}Cr`;
   if (n >= 1e5) return `₹${(n / 1e5).toFixed(n % 1e5 === 0 ? 0 : 1)}L`;
   if (n >= 1e3) return `₹${Math.round(n / 1e3)}k`;
@@ -432,7 +432,7 @@ function shortInr(n: number) {
  * values in native <title> tooltips, which means a value is only available to
  * somebody who knows to hover and then waits a second for it.
  */
-function RevenueChart({ points, selected }: { points: TrendPoint[]; selected: string }) {
+export function RevenueChart({ points, selected }: { points: TrendPoint[]; selected: string }) {
   const box = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [active, setActive] = useState<number | null>(null);

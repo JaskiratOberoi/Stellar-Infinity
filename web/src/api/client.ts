@@ -1419,3 +1419,74 @@ export const interfacingApi = {
   businessUnits: () =>
     api.get<{ units: BusinessUnit[] }>('/api/interfacing/business-units'),
 };
+
+/* ---------------------------------------------------------- sales -------- */
+
+/** One centre in a salesperson's territory: this month's and last month's business. */
+export interface SalesCentre {
+  mcc: number;
+  code: string;
+  name: string | null;
+  city: string | null;
+  month: number;
+  prevMonth: number;
+  patients: number;
+}
+
+export interface SalesMonthPoint { year: number; month: number; target: number; achieved: number }
+export interface SalesDayPoint { date: string; amount: number }
+
+/** A salesperson's month and financial year, as /api/sales-dashboard draws them. */
+export interface SalesDashboard {
+  userId: number;
+  username: string;
+  name: string | null;
+  /** yyyy-MM */
+  month: string;
+  from: string;
+  /** The last day counted: today for the current month, the month's end otherwise. */
+  through: string;
+  daysCounted: number;
+  daysInMonth: number;
+  target: number;
+  achieved: number;
+  prevMonthToDate: number;
+  prevMonthTotal: number;
+  projected: number;
+  patients: number;
+  centres: number;
+  activeCentres: number;
+  daily: SalesDayPoint[];
+  fyLabel: string;
+  fyTarget: number;
+  fyAchieved: number;
+  fyMonths: SalesMonthPoint[];
+  topCentres: SalesCentre[];
+  silentCentres: SalesCentre[];
+  newCentres: SalesCentre[];
+}
+
+export interface SalesTeamRow {
+  userId: number;
+  username: string;
+  name: string | null;
+  type: string | null;
+  centres: number;
+  target: number;
+  achieved: number;
+  patients: number;
+}
+
+export const salesApi = {
+  /** The signed-in salesperson's own dashboard. */
+  mine: (month?: string) =>
+    api.get<SalesDashboard>(`/api/sales-dashboard/${month ? `?month=${month}` : ''}`),
+  /** A team member's dashboard — Sales Admin and above. */
+  of: (userId: number, month?: string) =>
+    api.get<SalesDashboard>(`/api/sales-dashboard/team/${userId}${month ? `?month=${month}` : ''}`),
+  team: (month?: string) =>
+    api.get<SalesTeamRow[]>(`/api/sales-dashboard/team${month ? `?month=${month}` : ''}`),
+  setTarget: (userId: number, year: number, month: number, target: number) =>
+    api.put<{ userId: number; year: number; month: number; target: number }>(
+      `/api/sales-dashboard/team/${userId}/target`, { year, month, target }),
+};

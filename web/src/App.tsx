@@ -8,6 +8,8 @@ import { NobleMark } from './components/NobleMark';
 import { SpellCheckUndo } from './components/SpellChecked';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
+import { SalesDashboard } from './pages/SalesDashboard';
+import { SalesTeam } from './pages/SalesTeam';
 import { ClientHome } from './pages/ClientHome';
 import { SubClientHome } from './pages/SubClientHome';
 import { Orders } from './pages/Orders';
@@ -190,6 +192,12 @@ const NAV: NavEntry[] = [
       {
         to: '/sales', label: 'Sales', icon: 'orders', cap: 'billing:view',
         hideForRoles: ['client_b2c', 'client_reporting'],
+      },
+      // The field force against its targets. The salesperson's own picture
+      // is the dashboard at "/"; this is the team, for whoever runs it.
+      {
+        to: '/sales-team', label: 'Sales team', icon: 'dashboard', cap: 'sales:view',
+        onlyForRoles: ['super_admin', 'admin', 'sales'],
       },
       // Per-patient billing for the B2C franchise brands — Telo's balances
       // screen. The route double-checks the code server-side; this only
@@ -395,6 +403,9 @@ export function App() {
             rather than an explanation of what they lack. */}
         <Route path="/" element={
           can('analytics:view') ? <Dashboard />
+          // A salesperson opens on its own territory against its target -
+          // not the lab's revenue dashboard, which its role does not hold.
+          : can('sales:view') ? <SalesDashboard />
           // A sub-franchise gets the three-door home — order, reports, pay —
           // with none of the money ClientHome shows, because that money is
           // the parent's. The API refuses those reads regardless.
@@ -437,6 +448,13 @@ export function App() {
           !can('billing:view') ? <Navigate to="/" replace />
           : ['client_b2c', 'client_reporting'].includes(user.role) ? <Navigate to="/bills" replace />
           : <SalesHome />} />
+        {/* The sales team and a member's dashboard: Sales Admin and above.
+            The API refuses a salesperson these regardless; the role check
+            here only decides who is pointed at them. */}
+        <Route path="/sales-team" element={
+          can('sales:view') && ['super_admin', 'admin', 'sales'].includes(user.role) ? <SalesTeam /> : <Navigate to="/" replace />} />
+        <Route path="/sales-team/:userId" element={
+          can('sales:view') && ['super_admin', 'admin', 'sales'].includes(user.role) ? <SalesDashboard /> : <Navigate to="/" replace />} />
         <Route path="/bills" element={can('billing:view') ? <BillsHome /> : <Navigate to="/" replace />} />
         <Route path="/bills/:mcc" element={can('billing:view') ? <Bills /> : <Navigate to="/" replace />} />
         {/* billing:view to look; rate:manage is checked inside for every edit,

@@ -5241,3 +5241,23 @@ tbody tr.row-status--quiet > td:first-child {
   .revperiod .seg { margin-left: 0 !important; }
   .revperiod__figures { gap: .5rem 1rem; }
 }
+
+/* ---------- the sales dashboard ----------
+   A target's progress and the financial year's bars. Built on the same card
+   and KPI the lab dashboard uses; only what those lack is added here. */
+.progress { height: 6px; margin-top: .55rem; border-radius: 999px; background: var(--neutral-soft); overflow: hidden; }
+.progress__bar { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--cyan), var(--teal)); transition: width .4s ease; }
+.progress__bar--met { background: linear-gradient(90deg, var(--teal), var(--blue)); }
+
+.fy { display: flex; align-items: flex-end; gap: .35rem; height: 160px; }
+.fy__col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; height: 100%; }
+.fy__bars { flex: 1 1 auto; width: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 2px; }
+.fy__bar { width: 38%; min-height: 1px; border-radius: 3px 3px 0 0; }
+.fy__bar--sales { background: linear-gradient(180deg, var(--cyan), var(--teal)); }
+.fy__bar--met { background: linear-gradient(180deg, var(--teal), var(--blue)); }
+.fy__bar--target { background: var(--line); border: 1px dashed var(--ink-dim); border-bottom: 0; box-sizing: border-box; }
+.fy__value { font-size: .62rem; color: var(--ink-dim); margin-top: .25rem; white-space: nowrap; }
+.fy__label { font-size: .62rem; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-dim); }
+.fy__key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: .3rem; }
+.fy__key--sales { background: var(--teal); }
+.fy__key--target { background: var(--line); border: 1px dashed var(--ink-dim); box-sizing: border-box; }

@@ -17,6 +17,15 @@ public static class InfinityRoles
     public const string Admin = "admin";
     /// <summary>The LIS's SALES ADMIN: Admin without the instrument fleet. See RoleCapabilities.</summary>
     public const string Sales = "sales";
+    /// <summary>
+    /// A field salesperson — the LIS's "Sales and Marketing", SALES and RSM
+    /// user types: an account with a territory (tbl_med_user_sales_mcc_mapping)
+    /// and, where set, a monthly target (tbl_med_sales_user_target). Sees its
+    /// own sales dashboard in place of the lab's revenue one, and the orders,
+    /// patients and balances of its own centres. Distinct from <see cref="Sales"/>,
+    /// the SALES ADMIN, which is the Admin shape and runs the whole team.
+    /// </summary>
+    public const string SalesExec = "sales_exec";
     public const string LabManager = "lab_manager";
     public const string Technician = "technician";
     public const string Reporting = "reporting";
@@ -49,7 +58,7 @@ public static class InfinityRoles
     /// </summary>
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
-        SuperAdmin, Admin, Sales, LabManager, Technician, Reporting, Client, ClientB2c, ClientReporting,
+        SuperAdmin, Admin, Sales, SalesExec, LabManager, Technician, Reporting, Client, ClientB2c, ClientReporting,
         SubClient, Viewer,
     };
 
@@ -77,7 +86,7 @@ public static class InfinityRoles
                 Capabilities.AutoAuthManage,
                 Capabilities.ReportView, Capabilities.ReportRelease,
                 Capabilities.BillingView, Capabilities.PaymentCapture, Capabilities.RateManage,
-                Capabilities.AnalyticsView, Capabilities.InterfacingView),
+                Capabilities.AnalyticsView, Capabilities.InterfacingView, Capabilities.SalesView),
 
             // Everything Super Admin has except user management — the one
             // capability that can escalate privilege.
@@ -90,7 +99,7 @@ public static class InfinityRoles
                 Capabilities.AutoAuthManage,
                 Capabilities.ReportView, Capabilities.ReportRelease,
                 Capabilities.BillingView, Capabilities.PaymentCapture, Capabilities.RateManage,
-                Capabilities.AnalyticsView, Capabilities.InterfacingView),
+                Capabilities.AnalyticsView, Capabilities.InterfacingView, Capabilities.SalesView),
 
             // The LIS's SALES ADMIN login. It used to land on Admin outright,
             // which put the lab's instrument fleet on a commercial account's
@@ -108,7 +117,15 @@ public static class InfinityRoles
                 Capabilities.AutoAuthManage,
                 Capabilities.ReportView, Capabilities.ReportRelease,
                 Capabilities.BillingView, Capabilities.PaymentCapture, Capabilities.RateManage,
-                Capabilities.AnalyticsView),
+                Capabilities.AnalyticsView, Capabilities.SalesView),
+
+            // The field salesperson: reads on its own territory - the orders,
+            // patients and balances of the centres mapped to it - and the
+            // sales dashboard, which is what it opens on. No analytics:view,
+            // deliberately: the lab's revenue dashboard is not its picture.
+            [SalesExec] = Caps(
+                Capabilities.OrderView, Capabilities.PatientView,
+                Capabilities.BillingView, Capabilities.SalesView),
 
             // Amends and rejects, but NOT reopen — reversing a completed
             // sign-off stays with Admin and above.
@@ -209,6 +226,14 @@ public static class InfinityRoles
         [26] = Admin,       // Director
         [28] = Admin,       // BAS ADMIN
         [32] = Sales,       // SALES ADMIN — Admin minus the instrument fleet
+        // The field force. Each carries a territory in
+        // tbl_med_user_sales_mcc_mapping - 6 alone is sixty-odd logins with
+        // between fifty and fifteen hundred centres each - and used to fall
+        // through to Viewer, which handed it the lab's revenue dashboard.
+        [6]  = SalesExec,   // Sales and Marketing
+        [13] = SalesExec,   // RSM
+        [15] = SalesExec,   // SALES
+        [27] = SalesExec,   // RSM Kashmir
 
         [2] = Client,       // Client
         [7] = SubClient,    // Sub Client — a child code under a parent client
@@ -362,6 +387,14 @@ public static class Capabilities
     /// </summary>
     public const string RateManage = "rate:manage";
     public const string AnalyticsView = "analytics:view";
+    /// <summary>
+    /// The sales dashboard: a salesperson's own territory against its target,
+    /// this month and this financial year. A salesperson holds it for itself;
+    /// the Sales Admin and above hold it for the whole team, with the power to
+    /// set the targets. Separate from analytics:view, which is the lab's
+    /// revenue picture and is not what a salesperson opens on.
+    /// </summary>
+    public const string SalesView = "sales:view";
     /// <summary>
     /// The Interfacing tab: the remote-lab middleware fleet, its throughput
     /// and where results are entered from. Split out of analytics:view, which
