@@ -499,3 +499,28 @@ activity logged — by `api/db/data/hs3-thyroid-repair-20260919.sql`. The six
 already-printed ones need a lab decision. The pre-change procedure bodies
 are kept in `E:\Downloads\noble-proc-backups-20260919`. Telo shares both
 procedures; its `60_`/`65_` copies carry the same change.
+
+## The catalogue is scanned for definition drift, and a profile books as defined (2026-09-19)
+
+After the HS3 incident the whole catalogue was scanned for the family of
+defects behind it — a package or profile whose definition does not match
+what gets booked. The scan is `api/db/checks/catalogue_consistency.sql`,
+read-only and re-runnable; every result set is labelled and an empty set is
+a pass. What it found on 2026-09-19: ten active packages carrying an
+inactive profile (Thyroid Profile II in eight, Kidney Basic Screen in two),
+eight carrying an inactive test (one of them literally named "DELETED"),
+thirty-six packages listing a test both directly and inside a member
+profile — which puts the test on the report twice, confirmed on printed
+BG003 and BXP003 reports — thirteen active profiles whose tests span
+several sample types, which Telo and Infinity split into loose test codes
+with no profile header while the LIS keeps the profile on one tube, and one
+active profile (CD19 CD20 MARKERS) holding an inactive test. Nineteen
+Infinity package orders between 11 and 19 September lost Thyroid Profile
+II; two were repaired the same day, three more unprinted ones have a
+prepared repair (`api/db/data/hs3-thyroid-repair-2-20260919.sql`), fourteen
+were already printed. Script 147 completes the rule 146 started: a profile
+ordered as its own line also expands by its definition, active or not, as
+the LIS's `GetTestsByProfileID` does; only a test ordered as its own line
+must be active. Which inactive members to reactivate or remove, how to
+represent a multi-tube profile, and what to do about the printed reports
+are lab decisions the scan output is meant to inform.
