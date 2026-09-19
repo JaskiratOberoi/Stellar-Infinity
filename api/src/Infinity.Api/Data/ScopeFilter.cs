@@ -53,7 +53,12 @@ public sealed class ScopeFilter
         var names = new string[scope.Count];
         for (var i = 0; i < scope.Count; i++)
         {
-            var name = $"@{prefix}{i}";
+            // A separator between prefix and index, always. Without it two
+            // filters on one command with prefixes "t" and "t7" both produced
+            // "@t70" once the scope reached seventy centres - "@t" + "70" and
+            // "@t7" + "0" - and the day dashboard answered 500 for every
+            // salesperson mapped to a large territory (215 centres, 2026-09-19).
+            var name = $"@{prefix}_{i}";
             names[i] = name;
             cmd.Parameters.Add(name, SqlDbType.Int).Value = scope[i];
         }
