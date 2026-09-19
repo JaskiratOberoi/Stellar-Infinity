@@ -51,7 +51,12 @@ $cs = "Server=$($env_['Noble__Server']);Database=$($env_['Noble__Database']);" +
       "User Id=$($env_['Noble__User']);Password=$($env_['Noble__Password']);" +
       "TrustServerCertificate=true;Encrypt=true;Application Name=InfinityDeploy"
 
-$sql = Get-Content $path -Raw
+# Read as UTF-8 explicitly. Get-Content in Windows PowerShell 5.1 assumes the
+# ANSI codepage for a file without a BOM, which turned every non-ASCII
+# character in these scripts (em dashes, the rupee sign, circled digits in
+# comments and, worse, in user-facing messages) into mojibake inside the
+# deployed procedure text. Found 2026-09-19 on usp_telo_create_order.
+$sql = [IO.File]::ReadAllText($path, [Text.Encoding]::UTF8)
 
 # Split on a line that is only GO. A naive -split 'GO' would cut the word out
 # of the middle of an identifier or a comment.

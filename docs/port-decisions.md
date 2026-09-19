@@ -468,3 +468,34 @@ have printed Georgia while the desk's preview showed Playfair. Carried like
 v2: `?format=v3`, `format` on the PDF routes and cache keys, the Format
 select. The Smart Report has no v3 of its own and treats v3 as v2 (the body
 map). Staging only, with v2.
+
+## A package expands by its definition, and the tube reads as the LIS writes it (2026-09-19)
+
+HEALTH SCREEN 3 booked from Infinity came out without Thyroid Profile II —
+no FT3, FT4 or TSH — and the legacy Sample Worksheet listed the serum tube
+as loose tests with no package name. Both had one cause in the shared order
+procedures (`usp_telo_create_order`, `usp_telo_add_sids`): a master
+profile's child profiles and tests were joined with `IsActive = 1`, and
+Thyroid Profile II is flagged inactive in the catalogue while still being a
+member of HS3 and nine other live packages. The LIS never filtered —
+`PatientWorkOrder.aspx.cs` walks `GetListofProfileinMaster` /
+`GetListofTestsInMaster` as they come — so a legacy booking of the same
+package carried the profile and Infinity's did not. Script 146 makes the
+expansion follow the definition: no active filter on package members
+(direct lines keep theirs), members in the definition's own row order under
+the definition's own member names, and the package name tagged onto the
+package's last profile and last test exactly as the LIS does
+(`…&nbsp;<i><b>[HEALTH SCREEN 3]</b></i>`), which is the string the legacy
+worksheet shows. Verified byte-for-byte against legacy bookings of HS3,
+P035A and PCOD PROFILE HALDWANI, then by a rolled-back booking on ZZTEST01
+through the live procedure. Two divergences kept on purpose: directly
+ordered lines still sort by code after the package (the LIS keeps selection
+order, which a procedure cannot know), and the LIS's habit of tagging
+whatever line happened to be last when a package has no profiles is not
+reproduced. The two unprinted HS3 orders (SIDs 9338332, 9338334) were
+repaired in place — profile added to the tube, result skeleton inserted in
+the accession procedure's shape, tube moved back to Partially Authorised,
+activity logged — by `api/db/data/hs3-thyroid-repair-20260919.sql`. The six
+already-printed ones need a lab decision. The pre-change procedure bodies
+are kept in `E:\Downloads\noble-proc-backups-20260919`. Telo shares both
+procedures; its `60_`/`65_` copies carry the same change.
