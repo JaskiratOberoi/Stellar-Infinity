@@ -1678,10 +1678,28 @@ export function SmartBooklet({ data, format = 'v1', onMapReady }: {
   const orderedCategories = categories.filter((c) => byCategory.has(c.id));
 
   const name = firstName(data.patientName);
+  /*
+   * The headline and its sentence follow the actual split. A full package
+   * nearly always has a healthy majority, but a one-profile visit — an
+   * HbA1c alone, a vitamin pair — can be flagged in every reading, and
+   * "a largely healthy picture, 0 of 2 in range" is not a sentence anyone
+   * should receive. Three tiers: none flagged, a healthy majority, and a
+   * flagged majority (or half), each said plainly.
+   */
+  const mostlyHealthy = normalCount > alertCount;
+  const closerLook = `${alertCount} ${alertCount === 1 ? 'is worth a closer look' : 'are worth a closer look'} with your doctor`;
+  const headline =
+    alertCount === 0 ? 'Everything looks great.'
+    : mostlyHealthy ? (alertCount === 1 ? 'A mostly healthy picture.' : 'A largely healthy picture.')
+    : 'A few things to go over together.';
   const summaryLine =
     alertCount === 0
       ? `Good news — every one of your ${total} results is sitting in a healthy range.`
-      : `Most of your results look good. ${normalCount} of ${total} are in a healthy range, and ${alertCount} ${alertCount === 1 ? 'is worth a closer look' : 'are worth a closer look'} with your doctor.`;
+      : mostlyHealthy
+        ? `Most of your results look good. ${normalCount} of ${total} are in a healthy range, and ${closerLook}.`
+        : normalCount === 0
+          ? `${total === 1 ? 'Your result is' : `All ${total} of your results are`} outside the usual range — ${total === 1 ? 'it is' : 'they are'} worth a closer look with your doctor, who can put ${total === 1 ? 'it' : 'them'} in context.`
+          : `${normalCount} of ${total} results are in a healthy range, and ${closerLook}.`;
 
   return (
     <div
@@ -1727,7 +1745,7 @@ export function SmartBooklet({ data, format = 'v1', onMapReady }: {
 
               <div style={{ flex: '1 1 280px', minWidth: '270px' }}>
                 <div style={{ fontSize: '16px', fontWeight: 800, color: BRAND, letterSpacing: '-0.01em' }}>
-                  {alertCount === 0 ? 'Everything looks great.' : alertCount === 1 ? 'A mostly healthy picture.' : 'A largely healthy picture.'}
+                  {headline}
                 </div>
                 <div style={{ fontSize: '12px', color: MUTED, lineHeight: 1.55, marginTop: '4px', maxWidth: '470px' }}>
                   <span style={{ fontWeight: 800, color: INK }}>{name}, </span>
