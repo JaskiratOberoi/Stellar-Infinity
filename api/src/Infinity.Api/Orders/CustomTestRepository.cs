@@ -13,15 +13,43 @@ namespace Infinity.Api.Orders;
 /// order. The form offers it only when the cart carries one; placement
 /// refuses it otherwise.
 /// </param>
+/// <param name="MiniWith">
+/// The small profiles and single tests the extra is ALSO sold with, at
+/// <paramref name="MiniMrp"/> instead of <paramref name="Mrp"/> — the Smart
+/// Report's introductory ₹21 with a KFT, LFT, CBC, HbA1c and the like
+/// (inf_smart_report_mini, script 148). B2B orders only. A cart that carries
+/// a full package is priced by the package rule even when a mini profile is
+/// also present.
+/// </param>
 public sealed record CustomTest(
     int Id, string Code, string Name, int Mrp, bool RequiresMrd, bool AllowQty,
-    IReadOnlyList<int>? OnlyWithPackages = null)
+    IReadOnlyList<int>? OnlyWithPackages = null,
+    IReadOnlyList<MiniItem>? MiniWith = null,
+    int? MiniMrp = null)
 {
     /// <summary>True when the extra may be sold with these cart items.</summary>
-    public bool OfferedWith(IEnumerable<CartItem> items) =>
-        OnlyWithPackages is not { Count: > 0 } need
-        || items.Any(i => string.Equals(i.Kind, "master", StringComparison.OrdinalIgnoreCase) && need.Contains(i.Id));
+    public bool OfferedWith(IEnumerable<CartItem> items, bool b2b) => PriceFor(items, b2b) is not null;
+
+    /// <summary>
+    /// What the extra costs on an order of these items, or null when it is
+    /// not offered with them at all. The ONE place the tier is decided, so
+    /// the form's chip, the 50% floor and the bill cannot disagree.
+    /// </summary>
+    public int? PriceFor(IEnumerable<CartItem> items, bool b2b)
+    {
+        if (OnlyWithPackages is not { Count: > 0 } need) return Mrp;
+        var list = items as IReadOnlyCollection<CartItem> ?? items.ToList();
+        if (list.Any(i => string.Equals(i.Kind, "master", StringComparison.OrdinalIgnoreCase) && need.Contains(i.Id)))
+            return Mrp;
+        if (b2b && MiniMrp is int mini && MiniWith is { Count: > 0 } minis
+            && list.Any(i => minis.Any(m => string.Equals(m.Kind, i.Kind, StringComparison.OrdinalIgnoreCase) && m.Id == i.Id)))
+            return mini;
+        return null;
+    }
 }
+
+/// <summary>A cart item kind ('profile' or 'test') and catalogue id an extra is sold with.</summary>
+public sealed record MiniItem(string Kind, int Id);
 
 /// <summary>
 /// "Custom" tests — charged by the lab, not carried out by it.
@@ -66,6 +94,11 @@ public sealed class CustomTestRepository(NobleConnectionFactory db, SqlRetry ret
         -- The packages the Smart Report is sold with (144). Second result
         -- set, so the offer and its condition arrive together.
         SELECT master_profile_id FROM dbo.inf_smart_report_package;
+
+        -- The mini profiles it is sold with at the introductory price (148).
+        -- Third result set; the price rides with each row so raising it is
+        -- an UPDATE here and nowhere else.
+        SELECT kind, catalogue_id, mrp FROM dbo.inf_smart_report_mini;
         """;
 
     /// <summary>Active custom tests offered to one client.</summary>
@@ -98,6 +131,20 @@ public sealed class CustomTestRepository(NobleConnectionFactory db, SqlRetry ret
                 {
                     while (await r.ReadAsync(inner).ConfigureAwait(false)) packages.Add(r.GetInt32(0));
                 }
+                // The mini tier: the items and ONE price. The table carries a
+                // price per row so a single item could differ, but the offer
+                // is one introductory price; the lowest wins if they ever do.
+                var minis = new List<MiniItem>();
+                int? miniMrp = null;
+                if (await r.NextResultAsync(inner).ConfigureAwait(false))
+                {
+                    while (await r.ReadAsync(inner).ConfigureAwait(false))
+                    {
+                        minis.Add(new MiniItem((r.Str("kind") ?? string.Empty).Trim().ToLowerInvariant(), r.Int("catalogue_id")));
+                        var price = r.Int("mrp");
+                        miniMrp = miniMrp is int m ? Math.Min(m, price) : price;
+                    }
+                }
                 // The Smart Report is the one extra with a condition. An empty
                 // list would mean "with nothing", so it is left unconditioned
                 // only when the table is empty — which it is not seeded to be.
@@ -106,7 +153,12 @@ public sealed class CustomTestRepository(NobleConnectionFactory db, SqlRetry ret
                     for (var i = 0; i < rows.Count; i++)
                     {
                         if (string.Equals(rows[i].Code, Reports.SmartReportAccessRepository.SmartReportCode, StringComparison.OrdinalIgnoreCase))
-                            rows[i] = rows[i] with { OnlyWithPackages = packages };
+                            rows[i] = rows[i] with
+                            {
+                                OnlyWithPackages = packages,
+                                MiniWith = minis.Count > 0 ? minis : null,
+                                MiniMrp = minis.Count > 0 ? miniMrp : null,
+                            };
                     }
                 }
                 return (IReadOnlyList<CustomTest>)rows;

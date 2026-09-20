@@ -309,9 +309,27 @@ export function NewOrder() {
    * refuses the line otherwise, so this is the courtesy; and a tick that
    * loses its package is untucked with it rather than left to be refused.
    */
-  const offeredCustomTests = customTests.filter((t) =>
-    !t.onlyWithPackages?.length
-    || cart.items.some((i) => i.kind === 'master' && t.onlyWithPackages!.includes(i.id)));
+  /*
+   * The tier an extra is offered at for THIS cart — mirrors CustomTest.PriceFor
+   * on the server, which is what actually bills:
+   *   'any'     no condition on the extra;
+   *   'package' the cart carries one of its packages, at the list price;
+   *   'mini'    a B2B cart carries one of the small profiles it is introduced
+   *             with (KFT, LFT, CBC, HbA1c…), at the introductory price;
+   *   null      not offered.
+   * A package outranks a mini profile, so adding a package to a cart that
+   * qualified through an LFT moves the extra back to its full price.
+   */
+  const orderIsB2b = (preview?.channel ?? channel) === 'b2b';
+  const extraTier = (t: CustomTest): 'any' | 'package' | 'mini' | null => {
+    if (!t.onlyWithPackages?.length) return 'any';
+    if (cart.items.some((i) => i.kind === 'master' && t.onlyWithPackages!.includes(i.id))) return 'package';
+    if (orderIsB2b && t.miniMrp != null && t.miniWith?.length
+        && cart.items.some((i) => t.miniWith!.some((m) => m.kind === i.kind && m.id === i.id))) return 'mini';
+    return null;
+  };
+  const extraPrice = (t: CustomTest) => (extraTier(t) === 'mini' ? (t.miniMrp ?? t.mrp) : t.mrp);
+  const offeredCustomTests = customTests.filter((t) => extraTier(t) != null);
   const offeredKey = offeredCustomTests.map((t) => t.id).join(',');
   useEffect(() => {
     const keep = new Set(offeredKey.split(',').filter(Boolean).map(Number));
@@ -582,7 +600,7 @@ export function NewOrder() {
   const goldTotal = (preview?.lines ?? []).reduce(
     (sum, l) => sum + Math.round((l.rate ?? 0) / 2), 0);
   const customTotal = offeredCustomTests.reduce(
-    (sum, t) => sum + t.mrp * (customPicked[t.id] ?? 0), 0);
+    (sum, t) => sum + extraPrice(t) * (customPicked[t.id] ?? 0), 0);
   const hasBillable = cart.items.length > 0 || customTotal > 0;
   const effectiveTotal = (goldApplied ? goldTotal : (preview?.total ?? 0)) + customTotal;
 
@@ -1782,10 +1800,17 @@ export function NewOrder() {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.5rem' }}>
                 {offeredCustomTests.map((t) => {
                   const on = (customPicked[t.id] ?? 0) > 0;
+                  const tier = extraTier(t);
+                  const price = extraPrice(t);
+                  const intro = tier === 'mini';
                   return (
+                    /* The key carries the tier, so the chip remounts — and its
+                       entrance animation plays — the moment an order starts
+                       qualifying through a mini profile, which is the instant
+                       the operator should notice it. */
                     <label
-                      key={t.id}
-                      className={`chip${on ? ' chip--on' : ''}`}
+                      key={`${t.id}:${tier}`}
+                      className={`chip${on ? ' chip--on' : ''}${intro ? ' extra--intro' : ''}`}
                       style={{
                         display: 'inline-flex', alignItems: 'center', gap: '.45rem',
                         border: '1px solid var(--line)', borderRadius: '999px',
@@ -1794,7 +1819,9 @@ export function NewOrder() {
                       }}
                       title={hidePrices
                         ? `${t.name} — billed by the lab, not performed in it`
-                        : `${t.name} — billed at ${inr(t.mrp)}, not performed in the lab`}
+                        : intro
+                          ? `${t.name} — introductory offer at ${inr(price)} with this profile (${inr(t.mrp)} with a health package), not performed in the lab`
+                          : `${t.name} — billed at ${inr(price)}, not performed in the lab`}
                     >
                       <input
                         type="checkbox"
@@ -1806,7 +1833,13 @@ export function NewOrder() {
                         })}
                       />
                       <span style={{ fontSize: '.8rem', fontWeight: 600 }}>{t.name}</span>
-                      {!hidePrices && <span className="muted" style={{ fontSize: '.74rem' }}>{inr(t.mrp)}</span>}
+                      {intro && <span className="extra__offer">Introductory offer</span>}
+                      {!hidePrices && (
+                        <span className="muted" style={{ fontSize: '.74rem' }}>
+                          {intro && <s style={{ marginRight: '.3em', opacity: .7 }}>{inr(t.mrp)}</s>}
+                          {inr(price)}
+                        </span>
+                      )}
                     </label>
                   );
                 })}

@@ -3850,6 +3850,46 @@ select.preview__paper { width: 11.75rem; flex: none; }
 .chip:disabled { opacity: .5; cursor: not-allowed; }
 .chip:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
 
+/* ---------- an extra on introductory offer (order form) ----------
+   The Smart Report chip when the cart qualifies through a mini profile. It
+   arrives with a short rise-and-settle, then three soft ring pulses — enough
+   to draw the eye once, not a beacon that keeps flashing while the operator
+   types. The badge stays. Reduced-motion users get the badge only. */
+.extra--intro {
+  position: relative;
+  border-color: var(--accent-ring) !important;
+  animation: extra-arrive .5s cubic-bezier(.2, .9, .3, 1.2) both,
+             extra-pulse 1.6s ease-out .5s 3;
+}
+.extra__offer {
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  padding: .12em .5em;
+  border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(120deg, var(--teal), var(--accent, var(--teal)));
+  background-size: 200% 100%;
+  animation: extra-shimmer 2.4s linear infinite;
+}
+@keyframes extra-arrive {
+  from { opacity: 0; transform: translateY(6px) scale(.96); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes extra-pulse {
+  0%   { box-shadow: 0 0 0 0 var(--accent-ring); }
+  70%  { box-shadow: 0 0 0 9px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@keyframes extra-shimmer {
+  from { background-position: 0% 0; }
+  to   { background-position: 200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .extra--intro, .extra__offer { animation: none; }
+}
+
 /* ---------- reference-range cell (worksheet) ---------- */
 
 .range-cell { position: relative; }

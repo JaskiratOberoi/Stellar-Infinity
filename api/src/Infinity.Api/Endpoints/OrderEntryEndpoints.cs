@@ -521,8 +521,12 @@ public static class OrderEntryEndpoints
             var customTotal = 0;
             foreach (var l in body.CustomLines ?? [])
             {
-                var t = await customTests.ResolveAsync(body.Mcc, l.CustomTestId, ct).ConfigureAwait(false);
-                if (t is not null) customTotal += t.Mrp * Math.Max(1, l.Qty);
+                // (id, mcc) — the arguments were the other way round, so no
+                // extra ever resolved and none ever counted toward the floor.
+                var t = await customTests.ResolveAsync(l.CustomTestId, body.Mcc, ct).ConfigureAwait(false);
+                // At the tier this cart earns (the floor is a walk-in rule, so
+                // never the B2B-only mini price), or nothing if not offered.
+                if (t?.PriceFor(body.Items, b2b: false) is int price) customTotal += price * Math.Max(1, l.Qty);
             }
 
             /*
@@ -637,23 +641,26 @@ public static class OrderEntryEndpoints
             var test = await customTests
                 .ResolveAsync(line.CustomTestId, body.Mcc, ct)
                 .ConfigureAwait(false);
-            if (test is not null) resolved.Add((test, line.Qty));
-        }
-        // The Smart Report is sold only on an order that carries one of the
-        // packages it is built for (inf_smart_report_package — the HR health
-        // packages). The form offers it only then; this is the rule, and it
-        // refuses rather than drops so a draft that lost its package is not
-        // booked without the extra the operator thought they had added.
-        foreach (var (test, _) in resolved)
-        {
-            if (!test.OfferedWith(placed.Items))
+            if (test is null) continue;
+            // The Smart Report is sold only on an order that carries one of
+            // the packages it is built for (inf_smart_report_package — the HR
+            // health packages), or, on a B2B order, one of the mini profiles
+            // at the introductory price (inf_smart_report_mini). The form
+            // offers it only then; this is the rule, and it refuses rather
+            // than drops so a draft that lost its package is not booked
+            // without the extra the operator thought they had added.
+            if (test.PriceFor(placed.Items, channel == B2b) is not int price)
             {
                 return Results.BadRequest(new
                 {
-                    error = $"{test.Name} is offered only with an HR health package. Add the package, or remove the extra.",
+                    error = $"{test.Name} is offered only with an HR health package, or on a B2B order with one of the profiles it is introduced with. Add one, or remove the extra.",
                     code = "SMART_REPORT_NEEDS_PACKAGE",
                 });
             }
+            // The tier's price is what reaches the bill: the procedure writes
+            // the line at test.Mrp, so the record it gets carries the price
+            // this cart earned, not the list price.
+            resolved.Add((test with { Mrp = price }, line.Qty));
         }
         var result = await orders.CreateAsync(userId, placed, resolved, ct).ConfigureAwait(false);
         if (!result.Ok)

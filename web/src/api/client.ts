@@ -765,6 +765,11 @@ export interface CustomTest {
   /** Master profile ids this extra is sold with — the Smart Report and the
    *  HR health packages. Null or empty: offered on any order. */
   onlyWithPackages?: number[] | null;
+  /** The small profiles and single tests it is ALSO sold with, at miniMrp
+   *  instead of mrp, on B2B orders — the Smart Report's introductory offer
+   *  with a KFT, LFT, CBC and the like. */
+  miniWith?: { kind: string; id: number }[] | null;
+  miniMrp?: number | null;
 }
 
 /** A queued order as the run list draws it — everything but the payload. */
