@@ -16,16 +16,22 @@ namespace Infinity.Api.Orders;
 /// <param name="MiniWith">
 /// The small profiles and single tests the extra is ALSO sold with, at
 /// <paramref name="MiniMrp"/> instead of <paramref name="Mrp"/> — the Smart
-/// Report's introductory ₹21 with a KFT, LFT, CBC, HbA1c and the like
+/// Report's ₹21 with a KFT, LFT, CBC, HbA1c and the like
 /// (inf_smart_report_mini, script 148). B2B orders only. A cart that carries
 /// a full package is priced by the package rule even when a mini profile is
 /// also present.
+/// </param>
+/// <param name="MiniOfferMrp">
+/// The introductory price the mini tier bills at while an offer is on (149):
+/// the form strikes <paramref name="MiniMrp"/> and shows this. Null: no
+/// offer, the mini tier bills <paramref name="MiniMrp"/>.
 /// </param>
 public sealed record CustomTest(
     int Id, string Code, string Name, int Mrp, bool RequiresMrd, bool AllowQty,
     IReadOnlyList<int>? OnlyWithPackages = null,
     IReadOnlyList<MiniItem>? MiniWith = null,
-    int? MiniMrp = null)
+    int? MiniMrp = null,
+    int? MiniOfferMrp = null)
 {
     /// <summary>True when the extra may be sold with these cart items.</summary>
     public bool OfferedWith(IEnumerable<CartItem> items, bool b2b) => PriceFor(items, b2b) is not null;
@@ -43,7 +49,7 @@ public sealed record CustomTest(
             return Mrp;
         if (b2b && MiniMrp is int mini && MiniWith is { Count: > 0 } minis
             && list.Any(i => minis.Any(m => string.Equals(m.Kind, i.Kind, StringComparison.OrdinalIgnoreCase) && m.Id == i.Id)))
-            return mini;
+            return MiniOfferMrp ?? mini;
         return null;
     }
 }
@@ -98,7 +104,7 @@ public sealed class CustomTestRepository(NobleConnectionFactory db, SqlRetry ret
         -- The mini profiles it is sold with at the introductory price (148).
         -- Third result set; the price rides with each row so raising it is
         -- an UPDATE here and nowhere else.
-        SELECT kind, catalogue_id, mrp FROM dbo.inf_smart_report_mini;
+        SELECT kind, catalogue_id, mrp, offer_mrp FROM dbo.inf_smart_report_mini;
         """;
 
     /// <summary>Active custom tests offered to one client.</summary>
@@ -135,7 +141,7 @@ public sealed class CustomTestRepository(NobleConnectionFactory db, SqlRetry ret
                 // price per row so a single item could differ, but the offer
                 // is one introductory price; the lowest wins if they ever do.
                 var minis = new List<MiniItem>();
-                int? miniMrp = null;
+                int? miniMrp = null, miniOffer = null;
                 if (await r.NextResultAsync(inner).ConfigureAwait(false))
                 {
                     while (await r.ReadAsync(inner).ConfigureAwait(false))
@@ -143,6 +149,8 @@ public sealed class CustomTestRepository(NobleConnectionFactory db, SqlRetry ret
                         minis.Add(new MiniItem((r.Str("kind") ?? string.Empty).Trim().ToLowerInvariant(), r.Int("catalogue_id")));
                         var price = r.Int("mrp");
                         miniMrp = miniMrp is int m ? Math.Min(m, price) : price;
+                        if (r.NullableInt("offer_mrp") is int offer)
+                            miniOffer = miniOffer is int o ? Math.Min(o, offer) : offer;
                     }
                 }
                 // The Smart Report is the one extra with a condition. An empty
@@ -158,6 +166,7 @@ public sealed class CustomTestRepository(NobleConnectionFactory db, SqlRetry ret
                                 OnlyWithPackages = packages,
                                 MiniWith = minis.Count > 0 ? minis : null,
                                 MiniMrp = minis.Count > 0 ? miniMrp : null,
+                                MiniOfferMrp = minis.Count > 0 ? miniOffer : null,
                             };
                     }
                 }

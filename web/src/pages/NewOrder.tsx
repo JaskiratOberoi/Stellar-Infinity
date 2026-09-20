@@ -328,7 +328,8 @@ export function NewOrder() {
         && cart.items.some((i) => t.miniWith!.some((m) => m.kind === i.kind && m.id === i.id))) return 'mini';
     return null;
   };
-  const extraPrice = (t: CustomTest) => (extraTier(t) === 'mini' ? (t.miniMrp ?? t.mrp) : t.mrp);
+  const extraPrice = (t: CustomTest) =>
+    (extraTier(t) === 'mini' ? (t.miniOfferMrp ?? t.miniMrp ?? t.mrp) : t.mrp);
   const offeredCustomTests = customTests.filter((t) => extraTier(t) != null);
   const offeredKey = offeredCustomTests.map((t) => t.id).join(',');
   useEffect(() => {
@@ -1802,7 +1803,10 @@ export function NewOrder() {
                   const on = (customPicked[t.id] ?? 0) > 0;
                   const tier = extraTier(t);
                   const price = extraPrice(t);
-                  const intro = tier === 'mini';
+                  // The offer strikes the mini tier's own price, not the
+                  // package price: ₹21 struck, ₹11 shown. No offer on, no strike.
+                  const intro = tier === 'mini' && t.miniOfferMrp != null;
+                  const struck = intro ? (t.miniMrp ?? t.mrp) : null;
                   return (
                     /* The key carries the tier, so the chip remounts — and its
                        entrance animation plays — the moment an order starts
@@ -1820,7 +1824,7 @@ export function NewOrder() {
                       title={hidePrices
                         ? `${t.name} — billed by the lab, not performed in it`
                         : intro
-                          ? `${t.name} — introductory offer at ${inr(price)} with this profile (${inr(t.mrp)} with a health package), not performed in the lab`
+                          ? `${t.name} — introductory offer at ${inr(price)} with this profile (usually ${inr(struck ?? t.mrp)}), not performed in the lab`
                           : `${t.name} — billed at ${inr(price)}, not performed in the lab`}
                     >
                       <input
@@ -1836,7 +1840,7 @@ export function NewOrder() {
                       {intro && <span className="extra__offer">Introductory offer</span>}
                       {!hidePrices && (
                         <span className="muted" style={{ fontSize: '.74rem' }}>
-                          {intro && <s style={{ marginRight: '.3em', opacity: .7 }}>{inr(t.mrp)}</s>}
+                          {struck != null && <s style={{ marginRight: '.3em', opacity: .7 }}>{inr(struck)}</s>}
                           {inr(price)}
                         </span>
                       )}

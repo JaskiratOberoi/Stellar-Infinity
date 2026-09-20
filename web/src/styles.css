@@ -3861,15 +3861,19 @@ select.preview__paper { width: 11.75rem; flex: none; }
   animation: extra-arrive .5s cubic-bezier(.2, .9, .3, 1.2) both,
              extra-pulse 1.6s ease-out .5s 3;
 }
+/* Fixed colours on purpose: white on the theme teal is 3.9:1 in light and
+   1.9:1 in dark, neither enough for text this small. White on these deep
+   teals is 5.4:1 at the light end and 7.5:1 at the dark end of the shimmer,
+   in both themes. */
 .extra__offer {
   font-size: .62rem;
   font-weight: 700;
   letter-spacing: .08em;
   text-transform: uppercase;
-  padding: .12em .5em;
+  padding: .14em .55em;
   border-radius: 999px;
   color: #fff;
-  background: linear-gradient(120deg, var(--teal), var(--accent, var(--teal)));
+  background: linear-gradient(120deg, #0f766e, #134e4a, #0f766e);
   background-size: 200% 100%;
   animation: extra-shimmer 2.4s linear infinite;
 }

@@ -525,31 +525,35 @@ must be active. Which inactive members to reactivate or remove, how to
 represent a multi-tube profile, and what to do about the printed reports
 are lab decisions the scan output is meant to inform.
 
-## The Smart Report is introduced with mini profiles at ₹21, on B2B orders (2026-09-20)
+## The Smart Report is introduced with mini profiles at ₹11, on B2B orders (2026-09-20)
 
 The booklet is sold with the HR health packages at ₹99 (the 2026-09-10
 decision). The lab now wants to see whether centres will take it with a
 single small profile — KFT, LFT, CBC, CBC with ESR, HbA1c, Iron Profile,
-Vitamin Profile, Anemia Profile — at a nominal ₹21, and expects to raise the
-price on demand. `inf_smart_report_mini` (148) lists those items by the
+Vitamin Profile, Anemia Profile — at ₹21, with an introductory ₹11 against
+it while the offer runs, and expects to raise the price on demand. `inf_smart_report_mini` (148) lists those items by the
 order form's own kinds, 'profile' or 'test' (CBC and HbA1c are single
-parameterised tests, not profiles), each row carrying the price, so the
-offer is data: adding an item or raising the price is one row, and the
-form, the floor and the bill follow. The tier is decided in ONE place,
+parameterised tests, not profiles), each row carrying the mini price and the
+offer price (149), so the offer is data: adding an item, raising the price
+or ending the offer (offer_mrp to NULL) is one row, and the form, the floor
+and the bill follow. The tier is decided in ONE place,
 `CustomTest.PriceFor`: a cart with an HR package is priced by 144 even when
 a mini profile is also present; a B2B cart with a mini profile and no
-package gets the introductory price; a walk-in cart with only a mini profile
+package gets the offer price, or the mini price once the offer ends; a walk-in cart with only a mini profile
 is not offered the booklet, because the lab named B2B. Placement re-prices
 from that rule and the record it hands the order procedure carries the
-tier's price, so the `telo_custom_test_order` row reads ₹21 and the Smart
+tier's price, so the `telo_custom_test_order` row reads ₹11 and the Smart
 Report gate — keyed on the purchase, not the price — opens as before. On
 the form the chip remounts when the tier changes, so the moment an LFT makes
 the order qualify it rises in, pulses three times and carries an
-"Introductory offer" badge with the list price struck through; reduced
-motion keeps the badge only. The booklet itself needed no change: its
+"Introductory offer" badge with the mini price struck through beside the
+offer price (₹21 struck, ₹11); reduced motion keeps the badge only. The
+badge uses fixed deep teals rather than the theme teal: white on the theme
+colour is 3.9:1 in light and 1.9:1 in dark, below the 4.5:1 text this small
+needs; the fixed pair is 5.4:1 and 7.5:1 in both themes. The booklet itself needed no change: its
 content is keyed on analyte names, not on the package, so an LFT-only visit
 yields a coherent one-chapter booklet. Eight review bookings live on
-ZZTEST01 (ZZMINI01–08, `api/db/data/zztest01-smart-mini-fixtures-20260920.sql`).
+ZZTEST01 under invented but realistic patient names (ZZMINI01–08, `api/db/data/zztest01-smart-mini-fixtures-20260920.sql`).
 Found on the way: the 50% counter floor called ResolveAsync with its
 arguments swapped, so no extra ever counted toward it; fixed. The Anemia
 Profile is inactive in the catalogue and cannot be ordered until the lab

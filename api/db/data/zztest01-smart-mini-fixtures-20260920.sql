@@ -13,19 +13,22 @@ GO
  * patientid set on every result so the booklet has a signatory, and the
  * SMART-RPT line at ₹21 — the price the mini tier books at.
  *
- *   ZZMINI01  ZZ TEST MINI KFT        F 38  Kidney Function Test with Electrolytes
- *   ZZMINI02  ZZ TEST MINI LFT        M 51  Liver Function Test
- *   ZZMINI03  ZZ TEST MINI CBC        F 29  Complete Blood Count
- *   ZZMINI04  ZZ TEST MINI CBC ESR    M 44  CBC with ESR
- *   ZZMINI05  ZZ TEST MINI HBA1C      M 56  Glycated Hemoglobin
- *   ZZMINI06  ZZ TEST MINI IRON       F 33  Iron Profile
- *   ZZMINI07  ZZ TEST MINI VITAMINS   M 40  Vitamin Profile (B12, D)
- *   ZZMINI08  ZZ TEST MINI ANEMIA     F 47  Anemia Profile
+ *   ZZMINI01  Priya Sharma          F 38  Kidney Function Test with Electrolytes
+ *   ZZMINI02  Rajesh Malhotra       M 51  Liver Function Test
+ *   ZZMINI03  Anjali Verma          F 29  Complete Blood Count
+ *   ZZMINI04  Harpreet Singh        M 44  CBC with ESR
+ *   ZZMINI05  Suresh Kumar Gupta    M 56  Glycated Hemoglobin
+ *   ZZMINI06  Neha Kapoor           F 33  Iron Profile
+ *   ZZMINI07  Amit Chaudhary        M 40  Vitamin Profile (B12, D)
+ *   ZZMINI08  Sunita Devi           F 47  Anemia Profile
  *
- * Each carries a plausible mix of healthy and flagged readings so the
- * chapter, the gauges and the body map all have something to show. The
- * test ids, codes and reference ranges are the catalogue's own for that age
- * and sex. Test orders go on ZZTEST only, never on a live client code.
+ * Realistic names so the demo reads as a real booklet ("Dear Priya", not
+ * "Dear Zz"); they are invented, and the SIDs (ZZMINI…) and the throwaway
+ * centre are what mark them as fixtures. Each carries a plausible mix of
+ * healthy and flagged readings so the chapter, the gauges and the body map
+ * all have something to show. The test ids, codes and reference ranges are
+ * the catalogue's own for that age and sex. Test orders go on ZZTEST only,
+ * never on a live client code.
  *
  * Re-runnable: it clears its own previous rows first. Remove it with
  * zztest01-smart-mini-fixtures-cleanup-20260920.sql.
@@ -39,8 +42,12 @@ DECLARE @mcc INT = 6094;
 DECLARE @who NVARCHAR(50) = N'inf:jas';
 
 /* ── clear our previous rows ─────────────────────────────────────────── */
+-- keyed on the fixture SIDs (and the earlier placeholder names), never on a name a real patient could share
 DECLARE @old TABLE (pid INT);
 INSERT INTO @old (pid)
+SELECT DISTINCT s.patient_id FROM dbo.tbl_med_mcc_patient_samples s JOIN dbo.tbl_med_mcc_patient_master p ON p.id = s.patient_id
+WHERE p.mcc_code = @mcc AND s.vailid LIKE N'ZZMINI0_'
+UNION
 SELECT id FROM dbo.tbl_med_mcc_patient_master WHERE mcc_code = @mcc AND name LIKE N'ZZ TEST MINI %';
 
 DELETE FROM dbo.tbl_med_mcc_patient_test_result WHERE vailid LIKE N'ZZMINI0_';
@@ -51,14 +58,14 @@ DELETE FROM dbo.tbl_med_mcc_patient_master      WHERE id IN (SELECT pid FROM @ol
 /* ── the eight visits ────────────────────────────────────────────────── */
 DECLARE @visits TABLE (n INT, sid NVARCHAR(50), name NVARCHAR(100), gender INT, age INT, profile NVARCHAR(200), pid INT NULL);
 INSERT INTO @visits (n, sid, name, gender, age, profile) VALUES
-    (1, N'ZZMINI01', N'ZZ TEST MINI KFT',      2, 38, N'Kidney Function Test with Electrolytes'),
-    (2, N'ZZMINI02', N'ZZ TEST MINI LFT',      1, 51, N'Liver Function Test'),
-    (3, N'ZZMINI03', N'ZZ TEST MINI CBC',      2, 29, N'Complete Blood Count (CBC)'),
-    (4, N'ZZMINI04', N'ZZ TEST MINI CBC ESR',  1, 44, N'CBC WITH ESR'),
-    (5, N'ZZMINI05', N'ZZ TEST MINI HBA1C',    1, 56, N'Glycated Hemoglobin (HBA1c)'),
-    (6, N'ZZMINI06', N'ZZ TEST MINI IRON',     2, 33, N'IRON PROFILE'),
-    (7, N'ZZMINI07', N'ZZ TEST MINI VITAMINS', 1, 40, N'VITAMIN PROFILE'),
-    (8, N'ZZMINI08', N'ZZ TEST MINI ANEMIA',   2, 47, N'Anemia Profile');
+    (1, N'ZZMINI01', N'PRIYA SHARMA',       2, 38, N'Kidney Function Test with Electrolytes'),
+    (2, N'ZZMINI02', N'RAJESH MALHOTRA',    1, 51, N'Liver Function Test'),
+    (3, N'ZZMINI03', N'ANJALI VERMA',       2, 29, N'Complete Blood Count (CBC)'),
+    (4, N'ZZMINI04', N'HARPREET SINGH',     1, 44, N'CBC WITH ESR'),
+    (5, N'ZZMINI05', N'SURESH KUMAR GUPTA', 1, 56, N'Glycated Hemoglobin (HBA1c)'),
+    (6, N'ZZMINI06', N'NEHA KAPOOR',        2, 33, N'IRON PROFILE'),
+    (7, N'ZZMINI07', N'AMIT CHAUDHARY',     1, 40, N'VITAMIN PROFILE'),
+    (8, N'ZZMINI08', N'SUNITA DEVI',        2, 47, N'Anemia Profile');
 
 DECLARE @n INT = 1, @sid NVARCHAR(50), @name NVARCHAR(100), @gender INT, @age INT, @profile NVARCHAR(200), @pid INT;
 WHILE @n <= 8
@@ -78,11 +85,12 @@ BEGIN
            CASE @n WHEN 3 THEN N't' WHEN 5 THEN N't' ELSE N'p' END,
            N'Test sample for the Smart Report mini-profile review.';
 
-    -- The paid extra, at the introductory price. THIS row is what entitles the
-    -- patient to the booklet (SmartReportAccessRepository).
+    -- The paid extra, at the introductory price (149: ₹11 against the mini
+    -- tier's ₹21). THIS row is what entitles the patient to the booklet
+    -- (SmartReportAccessRepository).
     INSERT INTO dbo.telo_custom_test_order
         (bill_id, patient_id, custom_test_id, code, name, unit_amount, qty, mcc_code, created_by)
-    VALUES (0, @pid, 3, N'SMART-RPT', N'Smart Report', 21, 1, @mcc, @who);
+    VALUES (0, @pid, 3, N'SMART-RPT', N'Smart Report', 11, 1, @mcc, @who);
 
     SET @n += 1;
 END

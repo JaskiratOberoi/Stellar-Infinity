@@ -770,6 +770,9 @@ export interface CustomTest {
    *  with a KFT, LFT, CBC and the like. */
   miniWith?: { kind: string; id: number }[] | null;
   miniMrp?: number | null;
+  /** The introductory price the mini tier bills at while an offer is on:
+   *  the chip strikes miniMrp and shows this. Null: no offer. */
+  miniOfferMrp?: number | null;
 }
 
 /** A queued order as the run list draws it — everything but the payload. */

@@ -6,6 +6,9 @@ SET XACT_ABORT ON;
 BEGIN TRAN;
 DECLARE @old TABLE (pid INT);
 INSERT INTO @old (pid)
+SELECT DISTINCT s.patient_id FROM dbo.tbl_med_mcc_patient_samples s JOIN dbo.tbl_med_mcc_patient_master p ON p.id = s.patient_id
+WHERE p.mcc_code = 6094 AND s.vailid LIKE N'ZZMINI0_'
+UNION
 SELECT id FROM dbo.tbl_med_mcc_patient_master WHERE mcc_code = 6094 AND name LIKE N'ZZ TEST MINI %';
 DELETE FROM dbo.tbl_med_mcc_patient_test_result WHERE vailid LIKE N'ZZMINI0_';
 DELETE FROM dbo.tbl_med_mcc_patient_samples     WHERE vailid LIKE N'ZZMINI0_';
