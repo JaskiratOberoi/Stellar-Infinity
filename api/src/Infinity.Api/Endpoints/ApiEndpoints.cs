@@ -49,6 +49,15 @@ public static class ApiEndpoints
            .RequireCapability(Capabilities.AnalyticsView)
            .WithName("GetDashboardMonthStats");
 
+        // The Smart Report's own numbers — booklets sold by profile, centre
+        // and price, and how much reached the centres' accounts. The handler
+        // refuses everyone but the super admin: the figures are the lab's
+        // product economics, not a centre's operations.
+        app.MapGet("/api/dashboard/smart-reports", GetSmartReportStats)
+           .RequireAuthorization()
+           .RequireCapability(Capabilities.AnalyticsView)
+           .WithName("GetDashboardSmartReportStats");
+
         app.MapGet("/api/me/scope", GetMyScope)
            .RequireAuthorization()
            .WithName("GetMyScope");
@@ -182,6 +191,21 @@ public static class ApiEndpoints
     /// different periods. Defaults to today; a future date falls back to the
     /// current month rather than returning a period the caller cannot explain.
     /// </param>
+    private static async Task<IResult> GetSmartReportStats(
+        System.Security.Claims.ClaimsPrincipal principal,
+        SmartReportStatsRepository smart,
+        CancellationToken ct,
+        string? date = null)
+    {
+        if (principal.UserId() is not int) return Results.Unauthorized();
+        // 404, not 403: the section does not exist for anyone else, and the
+        // dashboard never asks for it on their behalf.
+        if (!string.Equals(principal.Role(), InfinityRoles.SuperAdmin, StringComparison.Ordinal))
+            return Results.NotFound();
+        var result = await smart.GetAsync(date, ct).ConfigureAwait(false);
+        return Results.Ok(new { smart = result });
+    }
+
     private static async Task<IResult> GetMonthStats(
         System.Security.Claims.ClaimsPrincipal principal,
         ScopeRepository scopes,

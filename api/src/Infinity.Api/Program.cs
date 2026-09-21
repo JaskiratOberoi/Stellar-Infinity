@@ -33,6 +33,7 @@ builder.Services.AddSingleton<SqlRetry>();
 builder.Services.AddSingleton<SampleHeaderRepository>();
 builder.Services.AddSingleton<StatsRepository>();
 builder.Services.AddSingleton<MonthStatsRepository>();
+builder.Services.AddSingleton<SmartReportStatsRepository>();
 builder.Services.AddSingleton<RevenueRepository>();
 builder.Services.AddSingleton<SalesRepository>();
 builder.Services.AddSingleton<OrdersRepository>();

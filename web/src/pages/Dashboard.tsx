@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { InfinityLoader } from '../components/InfinityLoader';
+import { SmartReportPanel } from './SmartReportPanel';
 
 interface StatusCount { status: string; count: number }
 export interface TrendPoint { date: string; revenue: number }
@@ -270,6 +271,11 @@ export function Dashboard() {
               <b>{inr(stats.refunded)}</b> refunded on this day.
             </div>
           )}
+
+          {/* The lab's own product, for the one role that reads product
+              economics rather than a centre's operations. The API refuses
+              anyone else, so this is the only place it is asked for. */}
+          {user.role === 'super_admin' && <SmartReportPanel date={date} />}
 
           <p className="muted" style={{ fontSize: '.72rem', marginTop: '1rem', lineHeight: 1.6 }}>
             <b>Lab sales</b> covers everything the lab sold, LIS included, keyed to the patient's registration date.

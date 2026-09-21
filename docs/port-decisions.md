@@ -619,3 +619,22 @@ request, posts them. Found on the way: the Infinity client ledger listed
 payments only, because the charges that move a balance live in
 `tbl_med_mcc_test_transactions`, not the detail table it read; 152 lists
 both, so a centre can reconcile its balance against its statement.
+
+## The dashboard has a Smart Report section, for the super admin (2026-09-21)
+
+The home dashboard gains a section on the lab's own product: booklets sold
+this month and all time, what they were billed at, how much of that has
+reached a centre's account (the charge latch from 151 — a booklet booked
+but not yet accessioned shows as billed and not yet charged), and how many
+were actually downloaded (a booklet fetched at least once, not fetches);
+then booklets per day for thirty days, and three boards — by the profile
+that qualified the sale (the HR package on the order if there is one, else
+the mini profile or test, else "no qualifying profile" for the sales made
+before the offer was restricted), by centre this month, and by price point,
+which is how the introductory offers read. Super admin only: the API
+answers 404 to every other role and the page never asks on their behalf,
+because these are product economics, not a centre's operations. Read from
+the custom-line rows that entitle a patient to the booklet, keyed on the
+bill date, so the throwaway centre's fixtures (no bill) never count.
+`/api/dashboard/smart-reports?date=` · `SmartReportStatsRepository` ·
+`SmartReportPanel.tsx`.
