@@ -328,8 +328,15 @@ export function NewOrder() {
         && cart.items.some((i) => t.miniWith!.some((m) => m.kind === i.kind && m.id === i.id))) return 'mini';
     return null;
   };
-  const extraPrice = (t: CustomTest) =>
-    (extraTier(t) === 'mini' ? (t.miniOfferMrp ?? t.miniMrp ?? t.mrp) : t.mrp);
+  /* Each tier has a list price and, while a dated offer is in force, an
+     offer price the server sends only until its last day. Mirrors
+     CustomTest.PriceFor, which is what actually bills. */
+  const extraListPrice = (t: CustomTest) =>
+    (extraTier(t) === 'mini' ? (t.miniMrp ?? t.mrp) : t.mrp);
+  const extraOfferPrice = (t: CustomTest): number | null =>
+    (extraTier(t) === 'mini' ? (t.miniOfferMrp ?? null)
+      : extraTier(t) === 'package' ? (t.offerMrp ?? null) : null);
+  const extraPrice = (t: CustomTest) => extraOfferPrice(t) ?? extraListPrice(t);
   const offeredCustomTests = customTests.filter((t) => extraTier(t) != null);
   const offeredKey = offeredCustomTests.map((t) => t.id).join(',');
   useEffect(() => {
@@ -1803,10 +1810,13 @@ export function NewOrder() {
                   const on = (customPicked[t.id] ?? 0) > 0;
                   const tier = extraTier(t);
                   const price = extraPrice(t);
-                  // The offer strikes the mini tier's own price, not the
-                  // package price: ₹21 struck, ₹11 shown. No offer on, no strike.
-                  const intro = tier === 'mini' && t.miniOfferMrp != null;
-                  const struck = intro ? (t.miniMrp ?? t.mrp) : null;
+                  // An offer strikes ITS tier's list price: ₹99 → ₹49 with a
+                  // package, ₹21 → ₹11 with a mini profile. No offer in
+                  // force, no strike and no badge — the server stops sending
+                  // the offer the day after it ends.
+                  const intro = extraOfferPrice(t) != null;
+                  const struck = intro ? extraListPrice(t) : null;
+                  const offerNote = t.offerNote ? ` ${t.offerNote}` : '';
                   return (
                     /* The key carries the tier, so the chip remounts — and its
                        entrance animation plays — the moment an order starts
@@ -1824,7 +1834,7 @@ export function NewOrder() {
                       title={hidePrices
                         ? `${t.name} — billed by the lab, not performed in it`
                         : intro
-                          ? `${t.name} — introductory offer at ${inr(price)} with this profile (usually ${inr(struck ?? t.mrp)}), not performed in the lab`
+                          ? `${t.name} — introductory offer${offerNote}: ${inr(price)} instead of ${inr(struck ?? t.mrp)}, not performed in the lab`
                           : `${t.name} — billed at ${inr(price)}, not performed in the lab`}
                     >
                       <input
@@ -1837,7 +1847,7 @@ export function NewOrder() {
                         })}
                       />
                       <span style={{ fontSize: '.8rem', fontWeight: 600 }}>{t.name}</span>
-                      {intro && <span className="extra__offer">Introductory offer</span>}
+                      {intro && <span className="extra__offer" title={t.offerNote ?? undefined}>Introductory offer{t.offerNote ? ` · ${t.offerNote}` : ''}</span>}
                       {!hidePrices && (
                         <span className="muted" style={{ fontSize: '.74rem' }}>
                           {struck != null && <s style={{ marginRight: '.3em', opacity: .7 }}>{inr(struck)}</s>}

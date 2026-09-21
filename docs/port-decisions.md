@@ -575,3 +575,20 @@ leaves out of main is therefore: the clinical formats' WEB files only
 `format` plumbing, which the booklet now needs and which the v1 clinical
 page simply ignores). The mini-profile offer was reviewed on staging the
 same day and went to production with everything else.
+
+## The Smart Report's introductory prices are dated, and end after Diwali 2026 (2026-09-21)
+
+Both tiers are on offer: the booklet with a health package at ₹49 instead
+of ₹99, and with a mini profile at ₹11 instead of ₹21, "till Diwali 2026" —
+Sunday 8 November — after which both revert to list. `inf_smart_report_offer`
+(150) holds one row per tier with the offer price, the last day and the
+note the operator sees; the API sends only offers still in force, so on
+9 November the chip shows the list price with no badge and nothing has to
+be switched off. `CustomTest.PriceFor` bills the offer price while it
+lasts and the list price after, and the chip strikes its tier's list
+price beside the offer, with "Introductory offer · till Diwali 2026" on
+the badge. The list prices themselves are untouched: ₹99 stays in Telo's
+`telo_custom_test`, ₹21 in `inf_smart_report_mini`. That table's own
+offer_mrp (149) is superseded and ignored by code from 150 onward; it is
+cleared once every stack reads from the offer table. Extending an offer is
+an UPDATE of offer_until; ending one early is dating it yesterday.

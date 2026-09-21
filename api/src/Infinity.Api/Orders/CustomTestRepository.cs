@@ -21,17 +21,24 @@ namespace Infinity.Api.Orders;
 /// a full package is priced by the package rule even when a mini profile is
 /// also present.
 /// </param>
-/// <param name="MiniOfferMrp">
-/// The introductory price the mini tier bills at while an offer is on (149):
-/// the form strikes <paramref name="MiniMrp"/> and shows this. Null: no
-/// offer, the mini tier bills <paramref name="MiniMrp"/>.
+/// <param name="OfferMrp">
+/// The introductory price the PACKAGE tier bills at while a dated offer is
+/// in force (inf_smart_report_offer, script 150): the form strikes
+/// <paramref name="Mrp"/> and shows this. Null: no offer, list price.
 /// </param>
+/// <param name="MiniOfferMrp">
+/// The same for the mini tier: strikes <paramref name="MiniMrp"/>, shows this.
+/// </param>
+/// <param name="OfferUntil">The last day the offer applies; with <paramref name="OfferNote"/> ("till Diwali 2026") for the operator's tooltip.</param>
 public sealed record CustomTest(
     int Id, string Code, string Name, int Mrp, bool RequiresMrd, bool AllowQty,
     IReadOnlyList<int>? OnlyWithPackages = null,
     IReadOnlyList<MiniItem>? MiniWith = null,
     int? MiniMrp = null,
-    int? MiniOfferMrp = null)
+    int? MiniOfferMrp = null,
+    int? OfferMrp = null,
+    DateOnly? OfferUntil = null,
+    string? OfferNote = null)
 {
     /// <summary>True when the extra may be sold with these cart items.</summary>
     public bool OfferedWith(IEnumerable<CartItem> items, bool b2b) => PriceFor(items, b2b) is not null;
@@ -46,7 +53,7 @@ public sealed record CustomTest(
         if (OnlyWithPackages is not { Count: > 0 } need) return Mrp;
         var list = items as IReadOnlyCollection<CartItem> ?? items.ToList();
         if (list.Any(i => string.Equals(i.Kind, "master", StringComparison.OrdinalIgnoreCase) && need.Contains(i.Id)))
-            return Mrp;
+            return OfferMrp ?? Mrp;
         if (b2b && MiniMrp is int mini && MiniWith is { Count: > 0 } minis
             && list.Any(i => minis.Any(m => string.Equals(m.Kind, i.Kind, StringComparison.OrdinalIgnoreCase) && m.Id == i.Id)))
             return MiniOfferMrp ?? mini;
@@ -104,7 +111,15 @@ public sealed class CustomTestRepository(NobleConnectionFactory db, SqlRetry ret
         -- The mini profiles it is sold with at the introductory price (148).
         -- Third result set; the price rides with each row so raising it is
         -- an UPDATE here and nowhere else.
-        SELECT kind, catalogue_id, mrp, offer_mrp FROM dbo.inf_smart_report_mini;
+        SELECT kind, catalogue_id, mrp FROM dbo.inf_smart_report_mini;
+
+        -- The dated introductory offers, one per tier (150). Only rows still
+        -- in force: the day after offer_until the tier bills its list price
+        -- and the badge is gone, with nobody having to switch anything off.
+        -- GETDATE() is the database server's clock, which is the lab's.
+        SELECT tier, offer_mrp, offer_until, note
+        FROM dbo.inf_smart_report_offer
+        WHERE offer_until >= CAST(GETDATE() AS DATE);
         """;
 
     /// <summary>Active custom tests offered to one client.</summary>
@@ -141,7 +156,7 @@ public sealed class CustomTestRepository(NobleConnectionFactory db, SqlRetry ret
                 // price per row so a single item could differ, but the offer
                 // is one introductory price; the lowest wins if they ever do.
                 var minis = new List<MiniItem>();
-                int? miniMrp = null, miniOffer = null;
+                int? miniMrp = null;
                 if (await r.NextResultAsync(inner).ConfigureAwait(false))
                 {
                     while (await r.ReadAsync(inner).ConfigureAwait(false))
@@ -149,8 +164,25 @@ public sealed class CustomTestRepository(NobleConnectionFactory db, SqlRetry ret
                         minis.Add(new MiniItem((r.Str("kind") ?? string.Empty).Trim().ToLowerInvariant(), r.Int("catalogue_id")));
                         var price = r.Int("mrp");
                         miniMrp = miniMrp is int m ? Math.Min(m, price) : price;
-                        if (r.NullableInt("offer_mrp") is int offer)
-                            miniOffer = miniOffer is int o ? Math.Min(o, offer) : offer;
+                    }
+                }
+                // The offers in force today, by tier.
+                int? packageOffer = null, miniOffer = null;
+                DateOnly? offerUntil = null;
+                string? offerNote = null;
+                if (await r.NextResultAsync(inner).ConfigureAwait(false))
+                {
+                    while (await r.ReadAsync(inner).ConfigureAwait(false))
+                    {
+                        var tier = (r.Str("tier") ?? string.Empty).Trim().ToLowerInvariant();
+                        var price = r.Int("offer_mrp");
+                        if (tier == "package") packageOffer = price;
+                        else if (tier == "mini") miniOffer = price;
+                        else continue;
+                        if (r.Date("offer_until") is not DateTime untilDt) continue;
+                        var until = DateOnly.FromDateTime(untilDt);
+                        // One note and one date for the chip: the earliest end wins.
+                        if (offerUntil is null || until < offerUntil) { offerUntil = until; offerNote = r.Str("note"); }
                     }
                 }
                 // The Smart Report is the one extra with a condition. An empty
@@ -167,6 +199,9 @@ public sealed class CustomTestRepository(NobleConnectionFactory db, SqlRetry ret
                                 MiniWith = minis.Count > 0 ? minis : null,
                                 MiniMrp = minis.Count > 0 ? miniMrp : null,
                                 MiniOfferMrp = minis.Count > 0 ? miniOffer : null,
+                                OfferMrp = packageOffer,
+                                OfferUntil = offerUntil,
+                                OfferNote = offerNote,
                             };
                     }
                 }

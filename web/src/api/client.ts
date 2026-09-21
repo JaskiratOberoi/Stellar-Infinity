@@ -773,6 +773,12 @@ export interface CustomTest {
   /** The introductory price the mini tier bills at while an offer is on:
    *  the chip strikes miniMrp and shows this. Null: no offer. */
   miniOfferMrp?: number | null;
+  /** The same for the package tier: strikes mrp, shows this. */
+  offerMrp?: number | null;
+  /** Last day the offer applies (ISO date) and the note for the operator,
+   *  e.g. "till Diwali 2026". The server sends only offers in force. */
+  offerUntil?: string | null;
+  offerNote?: string | null;
 }
 
 /** A queued order as the run list draws it — everything but the payload. */
