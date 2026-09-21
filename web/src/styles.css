@@ -3917,7 +3917,10 @@ select.preview__paper { width: 11.75rem; flex: none; }
   background-size: 200% 100%;
   animation: extra-shimmer 2.4s linear infinite;
 }
-.extra__offer-note { font-weight: 600; opacity: .9; }
+/* The separator lives in CSS: a leading space inside a flex item is
+   stripped, so "OFFER· TILL" is what a literal " · " renders as. */
+.extra__offer-note { font-weight: 600; opacity: .9; margin-left: .55em; }
+.extra__offer-note::before { content: '· '; white-space: pre; opacity: .8; }
 @keyframes extra-arrive {
   from { opacity: 0; transform: translateY(6px) scale(.96); }
   to   { opacity: 1; transform: none; }

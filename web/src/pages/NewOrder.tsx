@@ -1853,7 +1853,7 @@ export function NewOrder() {
                         </span>
                         {intro && (
                           <span className="extra__offer">
-                            Introductory offer{t.offerNote ? <span className="extra__offer-note"> · {t.offerNote}</span> : null}
+                            Introductory offer{t.offerNote ? <span className="extra__offer-note">{t.offerNote}</span> : null}
                           </span>
                         )}
                       </span>
