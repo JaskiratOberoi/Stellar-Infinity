@@ -1333,6 +1333,22 @@ function PanelBlock({
     }
   }
 
+  /*
+   * A panel whose members each carry a page-third of commentary (TORCH:
+   * four parameters, four long notes) cannot share a sheet, so the browser
+   * must split it — and a sheet that opens with a bare parameter under the
+   * column headers reads as if its panel title fell off. So the pagination
+   * is taken in hand: a heavy member (a spoken interpretation longer than
+   * HEAVY) starts a fresh sheet, so does whatever follows one, and every
+   * such sheet opens with the panel title again, marked "(contd.)". Light
+   * members keep flowing and breaking where the browser sees fit. Print
+   * only: on screen there are no pages to continue onto.
+   */
+  const HEAVY = 650;
+  const heavy = visible.map((c, i) => speaks(c, i) && (childText(c)?.length ?? 0) > HEAVY);
+  const paginate = pdf && heavy.filter(Boolean).length >= 2;
+  const continues = (i: number) => paginate && i > 0 && (heavy[i] || heavy[i - 1]);
+
   return (
     <>
       <tr className={`lr__panel-row${panelOff ? ' lr__off' : ''}`}>
@@ -1349,7 +1365,21 @@ function PanelBlock({
           </span>
         </td>
       </tr>
-      {visible.map((child, i) => renderChild(child, { interactive, excluded, panelOff, pdf, onToggle, showInterpretation: speaks(child, i) }))}
+      {visible.map((child, i) => (
+        <Fragment key={child.kind === 'group' ? `g${child.group?.resultId}` : `r${child.row?.resultId ?? i}`}>
+          {continues(i) && (
+            <tr className={`lr__panel-row lr__panel-row--contd lr__sheet-start${panelOff ? ' lr__off' : ''}`}>
+              <td colSpan={5} className="lr__panel-cell">
+                <span className="lr__title">
+                  <span className="lr__title-text lr__title-text--panel">{panel.title ?? ''}</span>
+                  <span className="lr__contd"> (contd.)</span>
+                </span>
+              </td>
+            </tr>
+          )}
+          {renderChild(child, { interactive, excluded, panelOff, pdf, onToggle, showInterpretation: speaks(child, i) })}
+        </Fragment>
+      ))}
       {interpretation && <InterpretationRow text={interpretation} dim={panelOff} />}
       <NoteRow notes={notesForCodes(codes)} dim={panelOff} />
     </>

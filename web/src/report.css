@@ -843,3 +843,9 @@
 .lr--v2 .lr__culture-pre, .lr--v2 .lr__culture-remarks {
   text-transform: none;
 }
+
+/* The panel title said again at the top of a sheet its members spill onto,
+   marked as a continuation so nobody reads the second sheet as a second
+   panel. Set a shade lighter than the title so the mark is a note, not a
+   word of the name. */
+.lr__contd { font-weight: 500; font-style: italic; color: #4b5563; text-transform: none; letter-spacing: 0; }
