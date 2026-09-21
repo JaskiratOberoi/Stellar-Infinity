@@ -1476,17 +1476,22 @@ function GroupBlock({
   if (pdf && visible.length === 0 && !isTitleHead(group)) return null;
 
   const includedCodes = group.rows.filter((r) => !rowOff(r)).map((r) => r.code);
+  // The group's own interpretation and notes follow its LAST row; that row
+  // must not close a page with them opening the next — see SingleBlock.
+  const followed = (!hideInterpretation && (!!group.interpretation || !!group.interpretationImage))
+    || (!hideNotes && notesForCodes(includedCodes).length > 0);
 
   return (
     <>
       {heading}
-      {visible.map((r) => (
+      {visible.map((r, i) => (
         <ResultRow
           key={r.resultId}
           row={r}
           dim={rowOff(r)}
           indent={indent}
           wide={descriptive}
+          keepWithNext={followed && i === visible.length - 1}
           lead={interactive ? (
             <IncludeToggle
               label={r.name ?? 'parameter'}
@@ -1525,12 +1530,20 @@ function SingleBlock({
   /** Inside a profile the static notes print once, at the panel's foot. */
   hideNotes?: boolean;
 }) {
+  // What follows the row on the sheet — its interpretation, its notes — is
+  // read with it, so the row must not close a page with them opening the
+  // next one (TORCH IgM, 21/09/2026: four parameters each with a page-third
+  // of commentary, the panel too tall to keep whole, and the break fell
+  // between a value and its note).
+  const followed = (!hideInterpretation && (!!interpretation || !!interpretationImage))
+    || (!hideNotes && notesForCodes([row.code]).length > 0);
   return (
     <>
       <ResultRow
         row={row}
         dim={excluded}
         indent={indent}
+        keepWithNext={followed}
         lead={interactive ? (
           <IncludeToggle
             label={row.name ?? 'test'}
@@ -1552,9 +1565,13 @@ function SingleBlock({
 }
 
 function ResultRow({
-  row, dim, lead, indent, wide,
-}: { row: ReportRow; dim?: boolean; lead?: ReactNode; indent?: boolean; wide?: boolean }) {
+  row, dim, lead, indent, wide, keepWithNext,
+}: { row: ReportRow; dim?: boolean; lead?: ReactNode; indent?: boolean; wide?: boolean;
+     /** The row is followed by prose that belongs to it (an interpretation,
+      *  notes): no page break between the two. */
+     keepWithNext?: boolean }) {
   const off = dim ? ' lr__off' : '';
+  const keep = keepWithNext ? ' lr__row--keep' : '';
   /*
    * A descriptive result — the Desc Report editor writes real HTML, and here
    * the presentation IS the result. It gets the page, not the 12% value
@@ -1585,7 +1602,7 @@ function ResultRow({
   const textSpan = longText ? (row.range ? 2 : 3) : 1;
   return (
     <>
-      <tr className={`lr__row${wide ? ' lr__row--desc' : ''}${off}`}>
+      <tr className={`lr__row${wide ? ' lr__row--desc' : ''}${off}${keep}`}>
         <td className={`lr__c-name${indent ? ' lr__indent' : ''}`}>
           <div className="lr__c-name-inner">
             {lead}
@@ -1641,7 +1658,7 @@ function ResultRow({
         </tr>
       )}
       {row.comments && (
-        <tr className={`lr__note-row${off}`}>
+        <tr className={`lr__note-row lr__attach${off}${keep}`}>
           <td colSpan={5}>
             <b>Doctor&apos;s Note:</b> <b>{row.comments}</b>
           </td>
@@ -1697,7 +1714,7 @@ function RangeCell({ range }: { range: string | null }) {
 function InterpretationRow({ text, dim }: { text: string; dim?: boolean }) {
   const { heading, body } = splitInterp(text);
   return (
-    <tr className={dim ? 'lr__off' : undefined}>
+    <tr className={`lr__attach${dim ? ' lr__off' : ''}`}>
       <td colSpan={5} className="lr__interp-cell">
         <div className="lr__interp">
           <h3>{heading}</h3>
@@ -1712,7 +1729,7 @@ function InterpretationRow({ text, dim }: { text: string; dim?: boolean }) {
  *  carry ONLY this and no text; it prints below any text there is. */
 function InterpretationImageRow({ src, dim }: { src: string; dim?: boolean }) {
   return (
-    <tr className={dim ? 'lr__off' : undefined}>
+    <tr className={`lr__attach${dim ? ' lr__off' : ''}`}>
       <td colSpan={5} className="lr__interp-cell">
         <div className="lr__interp-img">
           <img src={src} alt="Interpretation" />
@@ -1727,7 +1744,7 @@ function InterpretationImageRow({ src, dim }: { src: string; dim?: boolean }) {
 function NoteRow({ notes, dim }: { notes: string[]; dim?: boolean }) {
   if (notes.length === 0) return null;
   return (
-    <tr className={dim ? 'lr__off' : undefined}>
+    <tr className={`lr__attach${dim ? ' lr__off' : ''}`}>
       <td colSpan={5} className="lr__notes-cell">
         <div className="lr__notes">
           <p>Note</p>

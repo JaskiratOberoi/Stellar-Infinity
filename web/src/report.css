@@ -410,6 +410,14 @@
    the first row UNDER it: a heading alone at the foot of a page, its
    parameters overleaf, reads as a test with no result. */
 .lr__row { vertical-align: top; break-inside: avoid; }
+/* A row and the prose that belongs to it — its interpretation, its notes,
+   the doctor's note — are one reading unit. The section is the keep-together
+   body, but a panel of four tests each with a third of a page of commentary
+   (TORCH) is taller than a sheet and must split somewhere; these keep the
+   split from falling between a value and its note, which read as a report
+   with a page missing. Chromium honours these on table rows. */
+.lr__row--keep { break-after: avoid; }
+.lr__attach { break-before: avoid; }
 .lr__panel-row,
 .lr__group-row { break-inside: avoid; break-after: avoid; }
 
