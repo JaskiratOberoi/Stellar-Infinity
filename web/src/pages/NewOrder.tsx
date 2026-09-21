@@ -1947,8 +1947,16 @@ export function NewOrder() {
                 {!hidePrices && (
                   <span style={{ fontSize: '1.05rem' }}>
                     {/* preview.total sums the BILLED rates — in B2B that is the
-                        client's number, not the patient's. */}
-                    {b2b ? 'Bill total' : 'Total'} <b>{inr(preview.total)}</b>
+                        client's number, not the patient's. The extras ticked
+                        above bill too (the procedure adds them to the bill's
+                        total and writes them as bill lines), so the figure
+                        here is what the bill will say, extras included. */}
+                    {b2b ? 'Bill total' : 'Total'} <b>{inr(preview.total + customTotal)}</b>
+                    {customTotal > 0 && (
+                      <span className="muted" style={{ fontSize: '.78rem', marginLeft: '.5rem' }}>
+                        incl. extras {inr(customTotal)}
+                      </span>
+                    )}
                   </span>
                 )}
 
@@ -1959,8 +1967,11 @@ export function NewOrder() {
                 {preview.margin.comparableLines > 0 && !b2cBrand && !hidePrices && (
                   <span className="muted" style={{ fontSize: '.8rem' }}>
                     {b2b
+                      /* The extras are owed to the lab like any line; they
+                         carry no MRP, so they add to what is owed and not to
+                         what the centre keeps. */
                       ? <>Centre keeps <b>{inr(preview.margin.amount)}</b> · owes the lab{' '}
-                          <b>{inr(preview.margin.rateTotal)}</b></>
+                          <b>{inr(preview.margin.rateTotal + customTotal)}</b></>
                       : <>{preview.margin.amount >= 0 ? 'Discount vs MRP' : 'Above MRP'}{' '}
                           <b>{inr(Math.abs(preview.margin.amount))}</b></>}
                     {' '}on {preview.margin.comparableLines} of {preview.lines.length} line
