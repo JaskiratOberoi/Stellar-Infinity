@@ -25,4 +25,15 @@ public static class ReportFormat
 
     /// <summary>The query fragment for the print route: nothing for v1.</summary>
     public static string Query(string format) => format == V1 ? string.Empty : $"&format={format}";
+
+    /// <summary>
+    /// The Smart Report's format. The booklet has two: v1, the original, and
+    /// v2 with the body-map page, which is the booklet since 2026-09-21 —
+    /// every download, in every product, unless a caller asks for v1 by
+    /// name (kept so the two can be compared). The clinical report's v3 is a
+    /// typeface and means nothing to the booklet; it, and anything else, is
+    /// the default.
+    /// </summary>
+    public static string NormaliseSmart(string? format) =>
+        string.Equals(format?.Trim(), V1, StringComparison.OrdinalIgnoreCase) ? V1 : V2;
 }

@@ -90,7 +90,7 @@ public static class ReportPdfEndpoints
 
         audit.Log("report.smart_pdf", actor: principal.UserId(), sid: sid, ip: Audit.AuditIp.From(http));
 
-        var fmt = ReportFormat.Normalise(format);
+        var fmt = ReportFormat.NormaliseSmart(format);
         var key = PdfCacheKey("smart", sid, RowStamp(row!), $"f{fmt}");
         if (await cache.GetBytesAsync(key, ct).ConfigureAwait(false) is { } cached)
         {
@@ -102,7 +102,8 @@ public static class ReportPdfEndpoints
         {
             var pdf = await render.RenderAsync(
                 [new RenderClient.ReportRequest(
-                    Url: $"/print/report/{Uri.EscapeDataString(sid)}/smart{(fmt == ReportFormat.V1 ? string.Empty : $"?format={fmt}")}",
+                    // Always explicit, so the page and the cache key can never disagree.
+                    Url: $"/print/report/{Uri.EscapeDataString(sid)}/smart?format={fmt}",
                     Attachments: null,
                     Headless: true,
                     PageNumbers: false)],
@@ -153,9 +154,9 @@ public static class ReportPdfEndpoints
 
         var ordered = rows.Select(r => r.Sid).ToList();
         var joined = string.Join(",", ordered);
-        // v2 adds the body-map page, so the two formats are different
-        // documents and key separately — as the clinical PDF does.
-        var fmt = ReportFormat.Normalise(format);
+        // v2 — the body-map booklet — is the Smart Report; v1 only by name.
+        // The two are different documents and key separately.
+        var fmt = ReportFormat.NormaliseSmart(format);
         // Keyed on every sample's stamp: a correction on any tube re-renders
         // the whole booklet, as the merged clinical PDF is keyed.
         var key = PdfCacheKey("smart", string.Join("+", ordered), string.Join("|", rows.Select(RowStamp)), $"f{fmt}");
@@ -171,7 +172,7 @@ public static class ReportPdfEndpoints
         {
             var pdf = await render.RenderAsync(
                 [new RenderClient.ReportRequest(
-                    Url: $"/print/smart?sids={Uri.EscapeDataString(joined)}{ReportFormat.Query(fmt)}",
+                    Url: $"/print/smart?sids={Uri.EscapeDataString(joined)}&format={fmt}",
                     Attachments: null,
                     Headless: true,
                     PageNumbers: false)],

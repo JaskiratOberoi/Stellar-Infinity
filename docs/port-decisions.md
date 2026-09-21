@@ -559,3 +559,19 @@ arguments swapped, so no extra ever counted toward it; fixed. The Anemia
 Profile is inactive in the catalogue and cannot be ordered until the lab
 reactivates it — listed so it is covered when that happens, the catalogue
 untouched. Staging only until the lab has reviewed the booklets.
+
+## The body-map booklet is the Smart Report (2026-09-21)
+
+Smart Report format v2 — the booklet with the body-map page — is no longer
+"under test": it is the Smart Report, everywhere, with no picker. The print
+route renders it unless a caller asks for `format=v1` by name (kept so the
+two can be compared), the PDF routes default to it the same way through
+`ReportFormat.NormaliseSmart`, and the modal's Format select is gone —
+the lab does not want a choice offered in production, just the one booklet.
+The clinical report's per-desk Format select is untouched by this and stays
+where it was: its v2 and v3 remain staging-only. What the production build
+leaves out of main is therefore: the clinical formats' WEB files only
+(2589c9f, 3ca9dca, 4d9c2c0 — the API keeps `ReportFormat` and the
+`format` plumbing, which the booklet now needs and which the v1 clinical
+page simply ignores), and the mini-profile Smart Report offer (982cc8f,
+2a21f3c), which is still under review on staging.

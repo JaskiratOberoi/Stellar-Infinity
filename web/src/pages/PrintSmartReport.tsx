@@ -48,12 +48,11 @@ export function PrintSmartReport() {
    * simply becomes a one-sample list. Both read the same patient route.
    */
   const query = search.get('sids') || sid;
-  // The booklet's format, carried on the URL like the clinical report's;
-  // anything but v2 is v1, so an old caller never gets the test format.
-  // The booklet has no v3 of its own — v3 is a clinical-report typeface — so
-  // a desk set to v3 gets the v2 booklet (the body map) rather than v1.
-  const formatParam = search.get('format');
-  const format: SmartFormat = formatParam === 'v2' || formatParam === 'v3' ? 'v2' : 'v1';
+  // The booklet's format. v2 — the body-map booklet — IS the Smart Report
+  // since 2026-09-21: it renders unless a caller asks for v1 by name, which
+  // is kept only so the two can be compared. There is no picker anywhere;
+  // the clinical report's v3 is a typeface and means nothing here.
+  const format: SmartFormat = search.get('format') === 'v1' ? 'v1' : 'v2';
   const [data, setData] = useState<SmartBookletData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
