@@ -3850,33 +3850,74 @@ select.preview__paper { width: 11.75rem; flex: none; }
 .chip:disabled { opacity: .5; cursor: not-allowed; }
 .chip:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
 
-/* ---------- an extra on introductory offer (order form) ----------
-   The Smart Report chip when the cart qualifies through a mini profile. It
-   arrives with a short rise-and-settle, then three soft ring pulses — enough
-   to draw the eye once, not a beacon that keeps flashing while the operator
-   types. The badge stays. Reduced-motion users get the badge only. */
+/* ---------- an extra (order form) ----------
+   One thing the lab bills for but never performs — the Smart Report. A small
+   card rather than a pill: a 15px native checkbox, the name and the price on
+   one line, and, while an introductory offer is in force, the offer badge on
+   a second line. Not .chip — that is the removable client-code chip, whose
+   hover turns red to mean "remove", which is the wrong promise here. */
+.extra {
+  display: inline-flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .5rem .85rem .5rem .65rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color .15s, background .15s, box-shadow .15s;
+}
+.extra:hover { border-color: var(--accent-ring); }
+.extra--on { border-color: var(--teal); background: var(--accent-soft); }
+.extra:focus-within { box-shadow: 0 0 0 3px var(--accent-ring); }
+.extra__check {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--teal);
+  cursor: pointer;
+}
+.extra__body { display: flex; flex-direction: column; gap: .3rem; min-width: 0; }
+.extra__row { display: flex; align-items: baseline; gap: .7rem; }
+.extra__name { font-size: .84rem; font-weight: 600; color: var(--ink); line-height: 1.2; }
+.extra__price { font-size: .8rem; font-variant-numeric: tabular-nums; line-height: 1.2; white-space: nowrap; }
+.extra__price s { opacity: .55; margin-right: .35em; font-weight: 400; }
+.extra__price b { font-weight: 700; color: var(--teal); }
+
+/* The introductory offer: the card arrives with a short rise-and-settle,
+   then three soft ring pulses — enough to draw the eye once, not a beacon
+   that keeps flashing while the operator types. The badge stays.
+   Reduced-motion users get the badge only. */
 .extra--intro {
   position: relative;
-  border-color: var(--accent-ring) !important;
+  border-color: var(--accent-ring);
   animation: extra-arrive .5s cubic-bezier(.2, .9, .3, 1.2) both,
              extra-pulse 1.6s ease-out .5s 3;
 }
 /* Fixed colours on purpose: white on the theme teal is 3.9:1 in light and
    1.9:1 in dark, neither enough for text this small. White on these deep
    teals is 5.4:1 at the light end and 7.5:1 at the dark end of the shimmer,
-   in both themes. */
+   in both themes. Flex + line-height 1 so the capitals sit centred in the
+   pill instead of riding on the descender line. */
 .extra__offer {
-  font-size: .62rem;
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  line-height: 1;
+  font-size: .6rem;
   font-weight: 700;
   letter-spacing: .08em;
   text-transform: uppercase;
-  padding: .14em .55em;
+  padding: .32em .6em;
   border-radius: 999px;
   color: #fff;
   background: linear-gradient(120deg, #0f766e, #134e4a, #0f766e);
   background-size: 200% 100%;
   animation: extra-shimmer 2.4s linear infinite;
 }
+.extra__offer-note { font-weight: 600; opacity: .9; }
 @keyframes extra-arrive {
   from { opacity: 0; transform: translateY(6px) scale(.96); }
   to   { opacity: 1; transform: none; }

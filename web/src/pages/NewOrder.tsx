@@ -1824,13 +1824,7 @@ export function NewOrder() {
                        the operator should notice it. */
                     <label
                       key={`${t.id}:${tier}`}
-                      className={`chip${on ? ' chip--on' : ''}${intro ? ' extra--intro' : ''}`}
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', gap: '.45rem',
-                        border: '1px solid var(--line)', borderRadius: '999px',
-                        padding: '.35rem .7rem', cursor: 'pointer',
-                        background: on ? 'var(--accent-soft)' : 'transparent',
-                      }}
+                      className={`extra${on ? ' extra--on' : ''}${intro ? ' extra--intro' : ''}`}
                       title={hidePrices
                         ? `${t.name} — billed by the lab, not performed in it`
                         : intro
@@ -1839,6 +1833,7 @@ export function NewOrder() {
                     >
                       <input
                         type="checkbox"
+                        className="extra__check"
                         checked={on}
                         onChange={(e) => setCustomPicked((prev) => {
                           const next = { ...prev };
@@ -1846,14 +1841,22 @@ export function NewOrder() {
                           return next;
                         })}
                       />
-                      <span style={{ fontSize: '.8rem', fontWeight: 600 }}>{t.name}</span>
-                      {intro && <span className="extra__offer" title={t.offerNote ?? undefined}>Introductory offer{t.offerNote ? ` · ${t.offerNote}` : ''}</span>}
-                      {!hidePrices && (
-                        <span className="muted" style={{ fontSize: '.74rem' }}>
-                          {struck != null && <s style={{ marginRight: '.3em', opacity: .7 }}>{inr(struck)}</s>}
-                          {inr(price)}
+                      <span className="extra__body">
+                        <span className="extra__row">
+                          <span className="extra__name">{t.name}</span>
+                          {!hidePrices && (
+                            <span className="extra__price">
+                              {struck != null && <s>{inr(struck)}</s>}
+                              <b>{inr(price)}</b>
+                            </span>
+                          )}
                         </span>
-                      )}
+                        {intro && (
+                          <span className="extra__offer">
+                            Introductory offer{t.offerNote ? <span className="extra__offer-note"> · {t.offerNote}</span> : null}
+                          </span>
+                        )}
+                      </span>
                     </label>
                   );
                 })}
