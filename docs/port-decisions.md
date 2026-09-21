@@ -573,5 +573,5 @@ where it was: its v2 and v3 remain staging-only. What the production build
 leaves out of main is therefore: the clinical formats' WEB files only
 (2589c9f, 3ca9dca, 4d9c2c0 — the API keeps `ReportFormat` and the
 `format` plumbing, which the booklet now needs and which the v1 clinical
-page simply ignores), and the mini-profile Smart Report offer (982cc8f,
-2a21f3c), which is still under review on staging.
+page simply ignores). The mini-profile offer was reviewed on staging the
+same day and went to production with everything else.
