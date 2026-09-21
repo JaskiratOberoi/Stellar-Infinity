@@ -592,3 +592,30 @@ the badge. The list prices themselves are untouched: ₹99 stays in Telo's
 offer_mrp (149) is superseded and ignored by code from 150 onward; it is
 cleared once every stack reads from the offer table. Extending an offer is
 an UPDATE of offer_until; ending one early is dating it yesterday.
+
+## A custom line is charged to the centre's account like any test (2026-09-21)
+
+Asked to make sure the Smart Report goes through the accounts route like
+every other B2B transaction, the trace found it did not — and that nothing
+sold as a custom line ever had. The bill was right (the procedure adds
+extras to the bill's amount and writes them as bill lines), but the
+centre's ACCOUNT is charged at accessioning, one LIS test row at a time
+matched to the sample's codes, and a custom line has neither a test row
+nor a sample. A custom-only order is never accessioned at all. Three
+booklets and 108 of Medicare's external glucose and blood-gas lines —
+₹31,117 since July — were billed with no account movement. 151 fixes the
+route for good: `telo_custom_line_charge` is the charge-once latch (keyed
+on bill and custom test, because a bill edit deletes and re-inserts the
+custom order rows), `usp_telo_charge_custom_lines` posts a patient's
+uncharged extras through `sp_mcc_test_account_101` exactly as a test is
+posted, `usp_telo_accession_samples` calls it when any of the patient's
+samples is first registered, and `usp_telo_create_order` calls it at
+placement when the order has no tests. Proved on ZZTEST01 in a rolled-back
+transaction: ₹11 at placement for a custom-only booking, ₹375 plus ₹11 at
+registration for a booking with an LFT, nothing on re-registration. Telo's
+copies carry the same change. The historical lines are a lab decision —
+`api/db/data/custom-line-charge-backfill-20260921.sql` lists and, on
+request, posts them. Found on the way: the Infinity client ledger listed
+payments only, because the charges that move a balance live in
+`tbl_med_mcc_test_transactions`, not the detail table it read; 152 lists
+both, so a centre can reconcile its balance against its statement.
