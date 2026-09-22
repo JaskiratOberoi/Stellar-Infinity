@@ -2053,22 +2053,6 @@ tbody tr:hover { background: var(--accent-softer); }
    820px of height the page, its cards, rows, fields and buttons close up so
    the desk sees rows instead of margins. Nothing changes size in the type
    itself except the page title. */
-@media (max-height: 820px) {
-  .page { padding: 1rem 1.2rem 3rem; }
-  .page__head { margin-bottom: .7rem; gap: .8rem; }
-  .page__title { font-size: 1.2rem; }
-  .topbar { padding: .45rem 1.2rem; }
-  .card { padding: .85rem .95rem; }
-  th { padding: .45rem .7rem; }
-  td { padding: .42rem .7rem; }
-  .grid2, .grid3 { gap: .6rem; }
-  .field { gap: .25rem; }
-  .field input, .field select, .input { padding: .48rem .7rem; }
-  .btn { padding: .52rem 1rem; }
-  .btn--sm { padding: .32rem .7rem; }
-  .tab { padding: .4rem .8rem; }
-  .modal { --modal-pad: 1.1rem; }
-}
 
 .muted { color: var(--ink-dim); }
 .mono { font-variant-numeric: tabular-nums; }
@@ -5394,3 +5378,57 @@ tbody tr.row-status--quiet > td:first-child {
 .fy__key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: .3rem; }
 .fy__key--sales { background: var(--teal); }
 .fy__key--target { background: var(--line); border: 1px dashed var(--ink-dim); box-sizing: border-box; }
+
+/* ---------- fit a short screen ----------
+   Kept at the END of the file on purpose: these are overrides of component
+   rules declared above at equal specificity, and the cascade takes the later
+   one. A copy of this block that sat mid-file silently lost to every rule
+   written after it. */
+@media (max-height: 820px) {
+  .page { padding: 1rem 1.2rem 3rem; }
+  .page__head { margin-bottom: .7rem; gap: .8rem; }
+  .page__title { font-size: 1.2rem; }
+  .topbar { padding: .45rem 1.2rem; }
+  .card { padding: .85rem .95rem; }
+  th { padding: .45rem .7rem; }
+  td { padding: .42rem .7rem; }
+  .grid2, .grid3 { gap: .6rem; }
+  .field { gap: .25rem; }
+  .field input, .field select, .input { padding: .48rem .7rem; }
+  .btn { padding: .52rem 1rem; }
+  .btn--sm { padding: .32rem .7rem; }
+  .tab { padding: .4rem .8rem; }
+  .modal { --modal-pad: 1.1rem; }
+
+  /* Below: the page-specific blocks the generic rules above do not reach.
+     Measured on a 1280×720 screen, and every one is spacing — no control is
+     hidden or folded (the worksheet filters must stay in view), and no type
+     shrinks except the two headline figures, which are still the largest
+     thing on their pages. */
+
+  /* Filter panels (worksheet, reports, inward): the panel was 191px tall and
+     the first result row sat below half the screen. */
+  .filter-panel { padding: .55rem .8rem; gap: .45rem 1.2rem; margin-bottom: .6rem; }
+  .fgroup > legend { margin-bottom: .2rem; }
+  .fgroup__grid { gap: .3rem .6rem; }
+  .filter-panel .input, .filter-panel .combo__btn { padding: .34rem .5rem; }
+  .filter-panel__foot { margin-top: .1rem; padding-top: .4rem; }
+  .field label { line-height: 1.1; }
+
+  /* The scan box and its verdict above the inward list. */
+  .scanbox { margin-bottom: .5rem; gap: .6rem; }
+  .scan-verdict { margin-bottom: .5rem; }
+
+  /* Bills: four summary tiles were 136px tall, and they sit above the list. */
+  .bills__tiles { gap: .5rem; margin-bottom: .6rem; }
+  .bills__tiles > .card { padding: .6rem .8rem; }
+
+  /* General air between stacked blocks: new-order columns, dashboard grids,
+     alerts, the gap before the second accessioning queue, leaderboard rows. */
+  .stack, .order-grid__col { gap: .6rem; }
+  .alert { padding: .5rem .8rem; }
+  .queue__title--next { margin-top: 1.4rem; padding-top: .9rem; }
+  .board li { padding: .22rem 0; }
+  .clienthome__amount { font-size: 2rem; }
+  .revperiod__amount { font-size: 1.4rem; }
+}

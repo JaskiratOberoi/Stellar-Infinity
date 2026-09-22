@@ -709,3 +709,22 @@ shell — the print shell marks its root with a `data-shell` attribute (not a cl
 document must not change with the renderer's viewport: a few booklet and
 invoice measurements are in rem. Verified: the shell scales to 14px at
 1280 wide and 16px at 1920; the printed report's root stays at 16px.
+
+## Every desk measured on a 720p screen (2026-09-22)
+
+With the root at 14px, each route was measured at 1280×720: where the
+first row starts and how many rows sit above the fold. The plain lists
+(orders, accounts, sales, catalogue, rate lists) already showed 12–18 rows.
+The desks with a filter panel or a tile row did not: worksheet 387px to the
+first row, reports 369, inward 352, bills 408, interfacing 421. The
+short-screen block now also closes up the filter panels, the scan box, the
+bills tiles, alerts, the leaderboard rows and the gap before the second
+accessioning queue. Spacing only — no control folds or hides (the worksheet
+filters stay in view by decision), and no type shrinks except the two
+headline figures on the client home and revenue cards. Result: worksheet
+351, reports 333, inward 338, bills 401, interfacing 415.
+
+The block moved to the END of the stylesheet. It overrides component rules
+at equal specificity, and the cascade takes the later declaration; the copy
+that sat mid-file silently lost to every rule written after it, which is
+why the first measurement after adding the rules showed no change.
