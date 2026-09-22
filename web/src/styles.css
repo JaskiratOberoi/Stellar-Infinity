@@ -151,7 +151,7 @@ html, body, #root { height: 100%; }
 /* Scoped to the application shell: the print shell (print.html) marks its
    root, because a rendered document must not change size with the renderer
    viewport — a few booklet and invoice measurements are in rem. */
-html:not(.print) { font-size: clamp(14px, calc(9px + 0.38vw), 16px); }
+html:not([data-shell="print"]) { font-size: clamp(14px, calc(9px + 0.38vw), 16px); }
 
 body {
   font-family: var(--font);

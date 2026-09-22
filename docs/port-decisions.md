@@ -705,7 +705,7 @@ on a 1280–1366 screen, and never below 14px, which keeps table text at
 height: under 820px the page, its cards, rows, fields, buttons, tabs and
 modals close up so the screen shows rows rather than margins; the type
 itself does not change except the page title. Scoped to the application
-shell — the print shell marks its root `class="print"` — because a rendered
+shell — the print shell marks its root with a `data-shell` attribute (not a class: `.print` is already the invoice wrapper, and a class on the root pulled in its 10.5pt size, padding and 210mm width) — because a rendered
 document must not change with the renderer's viewport: a few booklet and
 invoice measurements are in rem. Verified: the shell scales to 14px at
 1280 wide and 16px at 1920; the printed report's root stays at 16px.
