@@ -692,3 +692,20 @@ messages are what the operator meets; and the client names a 413 for
 what it is. The rest of the attachment path — list, download with range
 support, delete, the PDF/PNG/JPEG signature check, the audit row — was
 reviewed and left as it was.
+
+## The application fits a 720p monitor without zooming (2026-09-22)
+
+On a 1280×720 or 1366×768 bench monitor the components read large and a
+technologist zoomed the browser to 60–70% to see a page whole — 70% is
+11px type, past what anyone should be made to read all day. Everything in
+the application is sized in rem, so the root font size is the one dial:
+it now follows the viewport width between 16px on a wide desktop and 14px
+on a 1280–1366 screen, and never below 14px, which keeps table text at
+11.8px and body text at 12.4px. The other half of the complaint was
+height: under 820px the page, its cards, rows, fields, buttons, tabs and
+modals close up so the screen shows rows rather than margins; the type
+itself does not change except the page title. Scoped to the application
+shell — the print shell marks its root `class="print"` — because a rendered
+document must not change with the renderer's viewport: a few booklet and
+invoice measurements are in rem. Verified: the shell scales to 14px at
+1280 wide and 16px at 1920; the printed report's root stays at 16px.

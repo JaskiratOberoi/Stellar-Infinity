@@ -140,6 +140,19 @@
 
 html, body, #root { height: 100%; }
 
+/* ---------- fit the screen ----------
+   Everything below is sized in rem, so the root font size is the one dial
+   for the whole application. It follows the viewport width between two
+   bounds: 16px on a wide desktop, 14px on a 1280–1366 screen, and never
+   less — a 720p bench monitor asked for 60–70% zoom to see a page whole,
+   and 70% is 11px type, which is past what a technologist should be made to
+   read all day. 14px keeps table text at 11.8px and body text at 12.4px.
+   Print and report stylesheets are in px and pt and are untouched. */
+/* Scoped to the application shell: the print shell (print.html) marks its
+   root, because a rendered document must not change size with the renderer
+   viewport — a few booklet and invoice measurements are in rem. */
+html:not(.print) { font-size: clamp(14px, calc(9px + 0.38vw), 16px); }
+
 body {
   font-family: var(--font);
   color: var(--ink);
@@ -2033,6 +2046,29 @@ th {
 td { padding: .65rem .9rem; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover { background: var(--accent-softer); }
+
+/* A SHORT screen — a 720p or 768-line monitor with the browser's own chrome
+   taking a hundred pixels — is the other half of the same complaint: the
+   rem dial shrinks the type, but the vertical room went into padding. Under
+   820px of height the page, its cards, rows, fields and buttons close up so
+   the desk sees rows instead of margins. Nothing changes size in the type
+   itself except the page title. */
+@media (max-height: 820px) {
+  .page { padding: 1rem 1.2rem 3rem; }
+  .page__head { margin-bottom: .7rem; gap: .8rem; }
+  .page__title { font-size: 1.2rem; }
+  .topbar { padding: .45rem 1.2rem; }
+  .card { padding: .85rem .95rem; }
+  th { padding: .45rem .7rem; }
+  td { padding: .42rem .7rem; }
+  .grid2, .grid3 { gap: .6rem; }
+  .field { gap: .25rem; }
+  .field input, .field select, .input { padding: .48rem .7rem; }
+  .btn { padding: .52rem 1rem; }
+  .btn--sm { padding: .32rem .7rem; }
+  .tab { padding: .4rem .8rem; }
+  .modal { --modal-pad: 1.1rem; }
+}
 
 .muted { color: var(--ink-dim); }
 .mono { font-variant-numeric: tabular-nums; }
