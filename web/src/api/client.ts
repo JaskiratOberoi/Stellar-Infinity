@@ -1305,7 +1305,13 @@ export const attachmentApi = {
 
     if (!res.ok) {
       const problem = await res.json().catch(() => null) as { error?: string; detail?: string } | null;
-      throw new ApiError(res.status, problem?.error ?? problem?.detail ?? `Upload failed (${res.status})`);
+      // A 413 is the PROXY refusing the body before the API saw it, with an
+      // HTML page for a message; say what it means rather than "Upload
+      // failed (413)".
+      const fallback = res.status === 413
+        ? 'That file is too large for the upload limit (10 MB).'
+        : `Upload failed (${res.status})`;
+      throw new ApiError(res.status, problem?.error ?? problem?.detail ?? fallback);
     }
     return (await res.json()) as { id: number };
   },

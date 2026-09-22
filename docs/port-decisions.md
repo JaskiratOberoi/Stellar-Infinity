@@ -678,3 +678,17 @@ travelled and where it was last scanned — with the log narrowed to that
 barcode beneath; "Inward this sample" is a second, deliberate press. A
 barcode with no work order is said so and can still be inwarded, since the
 vial physically arrived and losing the scan would be data loss.
+
+## The proxy accepts what the worksheet allows (2026-09-22)
+
+A graph replaced on the worksheet — the LIS-uploaded PDF removed, a 1 MB
+PDF uploaded in its place — was refused with a bare "Upload failed
+(413)". Not the API: its limit is 10 MB, and it checks the file's bytes,
+not just its name. nginx in front of it refuses any request body over
+1 MB by default, with an HTML page the client could not read, before the
+API ever sees the request. The proxy's API location now allows 12 MB,
+the API's limit plus the multipart envelope, so the API's own checks and
+messages are what the operator meets; and the client names a 413 for
+what it is. The rest of the attachment path — list, download with range
+support, delete, the PDF/PNG/JPEG signature check, the audit row — was
+reviewed and left as it was.
