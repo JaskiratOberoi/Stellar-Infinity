@@ -3357,6 +3357,11 @@ select.preview__paper { width: 11.75rem; flex: none; }
 
 .tab:hover { color: var(--ink); }
 .tab--on { color: var(--teal); border-bottom-color: var(--teal); }
+/* A queue the signed-in role may not open: still listed, so the desk knows
+   it exists and who works it, but dimmed, with a lock in place of its count. */
+.tab--locked { opacity: .55; cursor: not-allowed; }
+.tab--locked:hover { color: inherit; }
+.tab__lock { margin-right: .35em; font-size: .85em; }
 .tab:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); border-radius: 6px 6px 0 0; }
 
 .tab__count {

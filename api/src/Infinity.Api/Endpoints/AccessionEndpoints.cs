@@ -19,6 +19,23 @@ namespace Infinity.Api.Endpoints;
 /// </summary>
 public static class AccessionEndpoints
 {
+    /// <summary>
+    /// The Sample-ID queue — orders with no barcode yet, and the act of
+    /// attaching one — is locked (2026-09-22): it is the B2C counter's job,
+    /// so it opens for B2C accounts and, among super admins, for Jas alone.
+    /// Every other role, capability or not, is refused here and sees the
+    /// tab locked on the page. Username rather than user id so the rule
+    /// reads as the lab states it; the LIS login is unique.
+    /// </summary>
+    private static bool MaySeeSidQueue(System.Security.Claims.ClaimsPrincipal principal) =>
+        principal.Role() == InfinityRoles.ClientB2c
+        || (principal.Role() == InfinityRoles.SuperAdmin
+            && string.Equals(principal.Username()?.Trim(), "Jas", StringComparison.OrdinalIgnoreCase));
+
+    private static IResult SidQueueLocked() => Results.Json(
+        new { error = "The Sample-ID queue is locked. Sample IDs are attached by B2C accounts.", code = "SID_QUEUE_LOCKED" },
+        statusCode: StatusCodes.Status403Forbidden);
+
     public static void MapAccessionEndpoints(this WebApplication app)
     {
         var g = app.MapGroup("/api/accessioning").RequireAuthorization();
@@ -65,6 +82,7 @@ public static class AccessionEndpoints
         string? kind = null)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
+        if (!MaySeeSidQueue(principal)) return SidQueueLocked();
 
         var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
         if (scope.IsDenied) return Empty(pageSize);
@@ -217,6 +235,7 @@ public static class AccessionEndpoints
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
+        if (!MaySeeSidQueue(principal)) return SidQueueLocked();
         if (body.Sids is null || body.Sids.Count == 0)
             return Results.BadRequest(new { error = "No Sample IDs supplied." });
 

@@ -73,8 +73,17 @@ export function Accessioning() {
   // The invoice routes are gated on billing:view server-side. Hiding the
   // buttons from a technologist who would only get a 403 is the same call the
   // order detail modal makes.
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   const canSeeMoney = can('billing:view');
+  /*
+   * The Sample-ID queue is locked (22/09/2026): attaching barcodes is the
+   * B2C counter's job, so the tab opens for B2C accounts and, among super
+   * admins, for Jas alone. Everyone else sees it locked and cannot land on
+   * it by URL either. The API refuses the same people, so this is the
+   * courtesy, not the rule.
+   */
+  const sidQueueUnlocked = user?.role === 'client_b2c'
+    || (user?.role === 'super_admin' && (user.username ?? '').trim().toLowerCase() === 'jas');
 
   const [pending, setPending] = useState<PendingAccession[]>([]);
   const [pendingTotal, setPendingTotal] = useState(0);
@@ -138,7 +147,8 @@ export function Accessioning() {
    * tab is in the URL too, and a channel filter implies the Sample-ID tab,
    * so the nav's /accessioning?kind=b2b still lands where it always did.
    */
-  const tab: 'accession' | 'sids' = params.get('tab') === 'sids' || kind ? 'sids' : 'accession';
+  const tab: 'accession' | 'sids' =
+    sidQueueUnlocked && (params.get('tab') === 'sids' || kind) ? 'sids' : 'accession';
 
   const setTab = useCallback((t: 'accession' | 'sids') => {
     setParams(t === 'sids' ? { tab: 'sids', ...(kind ? { kind } : {}) } : {}, { replace: true });
@@ -155,17 +165,19 @@ export function Accessioning() {
     setError(null);
     try {
       const [p, u] = await Promise.all([
-        accessionApi.pending(pendingPage, pageSize, kind ?? undefined),
+        // A locked queue is not asked for: the API would refuse, and the
+        // refusal would read as a failure of the queue that is open.
+        sidQueueUnlocked ? accessionApi.pending(pendingPage, pageSize, kind ?? undefined) : null,
         accessionApi.unregistered(unregPage, pageSize, filter),
       ]);
-      setPending(p.rows); setPendingTotal(p.total);
+      if (p) { setPending(p.rows); setPendingTotal(p.total); } else { setPending([]); setPendingTotal(0); }
       setUnreg(u.rows); setUnregTotal(u.total);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load the queues.');
     } finally {
       setLoading(false);
     }
-  }, [pendingPage, unregPage, kind, filter]);
+  }, [pendingPage, unregPage, kind, filter, sidQueueUnlocked]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -284,10 +296,14 @@ export function Accessioning() {
           AWAITING ACCESSIONING
           {!loading && <span className="tab__count">{unregTotal.toLocaleString('en-IN')}</span>}
         </button>
-        <button role="tab" className={`tab${tab === 'sids' ? ' tab--on' : ''}`}
-                aria-selected={tab === 'sids'} onClick={() => setTab('sids')}>
+        <button role="tab" className={`tab${tab === 'sids' ? ' tab--on' : ''}${sidQueueUnlocked ? '' : ' tab--locked'}`}
+                aria-selected={tab === 'sids'} aria-disabled={!sidQueueUnlocked}
+                title={sidQueueUnlocked ? undefined : 'Locked — Sample IDs are attached by B2C accounts'}
+                onClick={() => { if (sidQueueUnlocked) setTab('sids'); }}>
+          {!sidQueueUnlocked && <span className="tab__lock" aria-hidden="true">🔒</span>}
           AWAITING SAMPLE IDS
-          {!loading && <span className="tab__count">{pendingTotal.toLocaleString('en-IN')}</span>}
+          {sidQueueUnlocked && !loading && <span className="tab__count">{pendingTotal.toLocaleString('en-IN')}</span>}
+          {!sidQueueUnlocked && <span className="tab__count">locked</span>}
         </button>
       </div>
 

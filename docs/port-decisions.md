@@ -638,3 +638,19 @@ the custom-line rows that entitle a patient to the booklet, keyed on the
 bill date, so the throwaway centre's fixtures (no bill) never count.
 `/api/dashboard/smart-reports?date=` · `SmartReportStatsRepository` ·
 `SmartReportPanel.tsx`.
+
+## The scan finds; the Sample-ID queue is locked to the B2C counter (2026-09-22)
+
+Two changes to the accessioning desk. The barcode gun ends every scan
+with Enter, and Enter registered the tube outright — a technician who
+scanned a tube to look at it had registered it before the list refreshed.
+Enter now finds: the list narrows to that Sample ID with the date boxes
+cleared, as the legacy by-SID receive ignores its dates, and "Register
+this tube" is a separate button a scanner cannot press. And the
+Awaiting Sample IDs queue — orders with no barcode yet, and the act of
+attaching one — is locked: it is the B2C counter's job, so it opens for
+`client_b2c` accounts and, among super admins, for Jas alone. Every other
+role sees the tab dimmed with a lock in place of its count and cannot land
+on it by URL; the API refuses the list and the attach call with 403, so
+the page is the courtesy and the API is the rule. The receiving queue is
+unchanged for everyone.
