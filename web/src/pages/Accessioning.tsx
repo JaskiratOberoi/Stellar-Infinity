@@ -218,7 +218,24 @@ export function Accessioning() {
     }
   }
 
-  /** The barcode gun: one SID, registered on Enter, whatever the filters show. */
+  /*
+   * The barcode gun ends every scan with Enter, and Enter used to register
+   * the tube outright — so a technician who scanned a tube to LOOK at it
+   * had registered it before the list had even refreshed (22/09/2026). Now
+   * Enter finds: the list narrows to that Sample ID whatever the date boxes
+   * say (the legacy page's by-SID receive ignores its dates too), the tube
+   * is there to be read, and registering it is a deliberate second click.
+   */
+  function findScanned() {
+    const sid = scan.trim();
+    if (!sid) return;
+    setSidDraft(sid);
+    setPatientDraft('');
+    setFilter((f) => ({ ...f, from: undefined, to: undefined, sid, patient: '' }));
+    setUnregPage(1);
+  }
+
+  /** The secondary action: the scanned tube, registered whatever the list shows. */
   async function quickRegister() {
     const sid = scan.trim();
     if (!sid) return;
@@ -378,16 +395,22 @@ export function Accessioning() {
             Registering is what hands it to the bench; rejecting records why it never will be.
           </p>
 
-          {/* The barcode gun. A tube in hand is registered from here whatever
-              the list below is filtered to — the legacy page's own by-SID
-              receive, which ignores its date boxes. */}
+          {/* The barcode gun. Its Enter FINDS the tube — the list narrows to
+              that Sample ID, dates ignored — and registering is the second,
+              deliberate button. A scanner must never be able to register a
+              tube by itself. */}
           <form className="row" style={{ gap: '.5rem', marginBottom: '.7rem', flexWrap: 'wrap' }}
-                onSubmit={(e) => { e.preventDefault(); void quickRegister(); }}>
-            <input className="input mono" inputMode="numeric" placeholder="Scan a Sample ID to register it"
-                   aria-label="Scan a Sample ID to register it"
+                onSubmit={(e) => { e.preventDefault(); findScanned(); }}>
+            <input className="input mono" inputMode="numeric" placeholder="Scan or type a Sample ID to find it"
+                   aria-label="Scan or type a Sample ID to find it"
                    value={scan} onChange={(e) => setScan(e.target.value.trim())}
                    disabled={busy} style={{ width: 260 }} autoFocus />
             <button className="btn btn--primary btn--sm" type="submit" disabled={busy || !scan.trim()}>
+              Find
+            </button>
+            <button className="btn btn--ghost btn--sm" type="button" disabled={busy || !scan.trim()}
+                    onClick={() => void quickRegister()}
+                    title="Register the scanned tube now, whatever the list shows">
               Register this tube
             </button>
           </form>
