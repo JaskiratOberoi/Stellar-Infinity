@@ -654,3 +654,27 @@ role sees the tab dimmed with a lock in place of its count and cannot land
 on it by URL; the API refuses the list and the attach call with 403, so
 the page is the courtesy and the API is the rule. The receiving queue is
 unchanged for everyone.
+
+## The receiving queue answers in milliseconds; inward scans find first (2026-09-22)
+
+The accessioning queue took 0.7–1.4 s per load and 1.2 s per Sample-ID
+search over the 348,000 tubes still at Sample Sent; the same predicates
+run ad hoc took 25–35 ms. Two causes, both in the procedure (153): one
+cached plan for every combination of optional filters, so the first
+caller's shape was reused for all the rest, and a contains match on the
+Sample ID that no index can serve. The procedure now recompiles per call,
+as the inward list already did, and matches the Sample ID by prefix — a
+barcode is scanned whole and typed from the start — which the SID index
+serves directly. Measured after: the default week 689 → 54 ms, a Sample-ID
+search 1,194 → 8 ms, a patient search 490 → 34 ms. The unfiltered whole
+backlog is still a second, and the page never asks for it by default.
+The inward list was already fast (14 ms for a day, 92 ms for a dateless
+SID hunt) and its scan was left as it was — except that a scan no longer
+inwards. The gun's Enter now looks the tube up through a new lookup route
+(its own query: the sample-header route is a reporting read that excludes
+Sample Sent tubes, exactly the ones arriving) and shows a card — patient,
+client, status, tests, registered when and by whom, how many legs it has
+travelled and where it was last scanned — with the log narrowed to that
+barcode beneath; "Inward this sample" is a second, deliberate press. A
+barcode with no work order is said so and can still be inwarded, since the
+vial physically arrived and losing the scan would be data loss.

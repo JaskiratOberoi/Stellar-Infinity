@@ -671,6 +671,10 @@ button, input, select { font: inherit; color: inherit; }
 .scanbox__input { font-size: 1.05rem; letter-spacing: .04em; }
 
 .scan-verdict { margin-bottom: .8rem; }
+/* The tube a scan found, laid out to be READ before it is inwarded: a teal
+   edge for a known tube, amber for a barcode with no work order. */
+.inward-card { border-left: 4px solid var(--teal); }
+.inward-card--warn { border-left-color: #d97706; }
 
 .scan-verdict__tests {
   font-size: .75rem;

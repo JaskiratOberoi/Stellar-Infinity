@@ -28,6 +28,33 @@ public sealed record InwardRow(
 
 public sealed record InwardList(IReadOnlyList<InwardRow> Rows, int Total);
 
+/// <summary>
+/// What a scanned barcode IS, before anyone inwards it: the sample and its
+/// patient, client, status and tests, and how far it has travelled so far.
+/// The desk reads this and then decides; the scan used to be the decision.
+/// </summary>
+public sealed record InwardLookup(
+    string Sid,
+    int PatientId,
+    string? PatientName,
+    string? Sex,
+    int? Age,
+    string? AgeUnit,
+    int? MccId,
+    string? ClientCode,
+    string? ClientName,
+    /// <summary>The unit the sample currently points at — the last one that scanned it, or the booking unit.</summary>
+    string? BusinessUnit,
+    int? SampleStatus,
+    string? StatusName,
+    string? Tests,
+    DateTimeOffset? RegisteredAt,
+    string? RegisteredBy,
+    /// <summary>Transit legs already logged for this barcode, any unit.</summary>
+    int Legs,
+    DateTimeOffset? LastScanAt,
+    string? LastScanUnit);
+
 /// <param name="Outcome">new_leg | checkpoint_1 | checkpoint_2 | checkpoint_3 | already_full.</param>
 /// <param name="NoWorkorder">The vial has no matching sample. The scan is still
 /// LOGGED (contract KEEP #3 — the vial physically arrived); this flag is what
@@ -144,6 +171,66 @@ public sealed class InwardRepository(NobleConnectionFactory db, SqlRetry retry)
     /// second checkpoint slot with the same user seconds apart — precisely the
     /// double-write the procedure's locking exists to prevent.
     /// </summary>
+    /// <summary>
+    /// The sample behind a barcode, for the desk to verify BEFORE inwarding.
+    /// Null when no sample carries the SID — a scan of that barcode is still
+    /// logged (chain of custody), but the desk is told first.
+    /// </summary>
+    /// <remarks>
+    /// Its own query rather than the sample-header route: that route is a
+    /// reporting read and excludes Sample Sent tubes (status 1), which are
+    /// exactly the tubes arriving here. Seeks on the vailid index; the leg
+    /// counts use the exact barcode, as the scan's own lookup does, so a
+    /// whitespace-damaged legacy leg is not counted — an accepted blindness
+    /// the scan procedure documents.
+    /// </remarks>
+    public Task<InwardLookup?> LookupAsync(string vailid, CancellationToken ct = default) =>
+        retry.ExecuteAsync("inward.lookup", token =>
+            db.QueryAsync("inward.lookup", async (conn, inner) =>
+            {
+                await using var cmd = NobleConnectionFactory.CreateCommand(conn, """
+                    SELECT TOP 1
+                        s.vailid AS sid, s.patient_id, p.name AS patient_name, p.gender, p.age, p.age_type,
+                        u.id AS mcc_id, u.MCCUnitCode AS client_code, u.MCCUnitName AS client_name,
+                        bu.BusinessUnitCode AS business_unit,
+                        s.sample_status, st.status AS status_name, s.testnames AS tests,
+                        s.addeddate AS registered_at, s.addedby AS registered_by,
+                        legs = (SELECT COUNT(*) FROM dbo.tbl_acc_inward_sample_tracking t WHERE t.vailid = @sid),
+                        last_scan_at = (SELECT MAX(t.scan_datetime) FROM dbo.tbl_acc_inward_sample_tracking t WHERE t.vailid = @sid),
+                        last_scan_unit = (SELECT TOP 1 t.bunit FROM dbo.tbl_acc_inward_sample_tracking t
+                                          WHERE t.vailid = @sid ORDER BY t.scan_datetime DESC, t.id DESC)
+                    FROM dbo.tbl_med_mcc_patient_samples s
+                    JOIN dbo.tbl_med_mcc_patient_master p ON p.id = s.patient_id
+                    LEFT JOIN dbo.tbl_med_mcc_unit_master u ON u.id = p.mcc_code
+                    LEFT JOIN dbo.tbl_med_business_unit_master bu ON bu.id = s.business_unit_id
+                    LEFT JOIN dbo.tbl_med_mcc_patient_samples_status_master st ON st.id = s.sample_status
+                    WHERE s.vailid = @sid
+                    ORDER BY s.id;
+                    """);
+                cmd.Parameters.Add("@sid", SqlDbType.NVarChar, 50).Value = vailid.Trim();
+                await using var r = await cmd.ExecuteReaderAsync(CommandBehavior.SingleRow, inner).ConfigureAwait(false);
+                if (!await r.ReadAsync(inner).ConfigureAwait(false)) return null;
+                return new InwardLookup(
+                    Sid: r.Str("sid") ?? vailid.Trim(),
+                    PatientId: r.Int("patient_id"),
+                    PatientName: r.Str("patient_name")?.Trim(),
+                    Sex: MapSex(r.NullableInt("gender")),
+                    Age: r.NullableInt("age"),
+                    AgeUnit: r.NullableInt("age_type") switch { 1 => "years", 2 => "months", 3 => "days", _ => null },
+                    MccId: r.NullableInt("mcc_id"),
+                    ClientCode: r.Str("client_code")?.Trim(),
+                    ClientName: r.Str("client_name")?.Trim(),
+                    BusinessUnit: r.Str("business_unit")?.Trim(),
+                    SampleStatus: r.NullableInt("sample_status"),
+                    StatusName: r.Str("status_name")?.Trim(),
+                    Tests: r.Str("tests"),
+                    RegisteredAt: Domain.NobleTime.ToIst(r.Date("registered_at")),
+                    RegisteredBy: r.Str("registered_by")?.Trim(),
+                    Legs: r.Int("legs"),
+                    LastScanAt: Domain.NobleTime.ToIst(r.Date("last_scan_at")),
+                    LastScanUnit: r.Str("last_scan_unit")?.Trim());
+            }, token), ct);
+
     public async Task<InwardScanOutcome> ScanAsync(
         string vailid, AuditActor actor, CancellationToken ct = default)
     {

@@ -33,6 +33,38 @@ public static class InwardEndpoints
         g.MapPost("/scan", Scan)
          .RequireCapability(Capabilities.OrderAccession)
          .WithName("InwardScan");
+        // What a barcode is, before it is inwarded (2026-09-22): the gun's
+        // Enter now looks the tube up and the desk inwards it on a second,
+        // deliberate press — a scan alone must never move a sample.
+        g.MapGet("/lookup/{sid}", Lookup)
+         .RequireCapability(Capabilities.OrderAccession)
+         .WithName("InwardLookup");
+    }
+
+    private static async Task<IResult> Lookup(
+        string sid,
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
+        InwardRepository repo,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+        var clean = sid?.Trim();
+        if (string.IsNullOrWhiteSpace(clean) || clean.Length > 50)
+            return Results.BadRequest(new { error = "A Sample ID of 1-50 characters is required." });
+
+        var found = await repo.LookupAsync(clean, ct).ConfigureAwait(false);
+        if (found is null) return Results.NotFound(new { error = "No work order carries this Sample ID.", code = "NO_WORKORDER" });
+
+        // Same scope rule as the list: a client-scoped caller sees only its
+        // own centres' tubes; lab staff, who hold no client codes, are unit
+        // scoped and see any tube that reaches their bench.
+        var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
+        if (!scope.IsDenied && !scope.IsUnrestricted && scope.ClientCodes.Count > 0
+            && !scope.ClientCodes.Contains(found.ClientCode ?? string.Empty, StringComparer.OrdinalIgnoreCase))
+            return Results.NotFound(new { error = "No work order carries this Sample ID.", code = "NO_WORKORDER" });
+
+        return Results.Ok(found);
     }
 
     private static async Task<IResult> List(

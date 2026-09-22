@@ -1007,6 +1007,30 @@ export interface InwardScanResponse {
   };
 }
 
+/** What a scanned barcode is, before anyone inwards it. */
+export interface InwardLookup {
+  sid: string;
+  patientId: number;
+  patientName: string | null;
+  sex: string | null;
+  age: number | null;
+  ageUnit: string | null;
+  mccId: number | null;
+  clientCode: string | null;
+  clientName: string | null;
+  /** The unit the sample currently points at. */
+  businessUnit: string | null;
+  sampleStatus: number | null;
+  statusName: string | null;
+  tests: string | null;
+  registeredAt: string | null;
+  registeredBy: string | null;
+  /** Transit legs already logged for this barcode, any unit. */
+  legs: number;
+  lastScanAt: string | null;
+  lastScanUnit: string | null;
+}
+
 export interface InwardFilters {
   from?: string;
   to?: string;
@@ -1030,6 +1054,10 @@ export const inwardApi = {
 
   scan: (vailid: string) =>
     api.post<InwardScanResponse>('/api/inward/scan', { vailid }),
+
+  /** The tube behind a barcode, to verify before inwarding. 404 = no work order. */
+  lookup: (vailid: string) =>
+    api.get<InwardLookup>(`/api/inward/lookup/${encodeURIComponent(vailid.trim())}`),
 
   /** Same-origin, cookie-authenticated GET — usable with downloadFile(). */
   csvHref: (f: InwardFilters) => {

@@ -447,7 +447,10 @@ export function Accessioning() {
             </label>
             <label className="field" style={{ margin: 0 }}>
               <span className="muted" style={{ fontSize: '.7rem' }}>Sample ID</span>
-              <input className="input input--sm mono" value={sidDraft} placeholder="contains"
+              {/* Starts-with, not contains: a barcode is scanned whole and typed
+                  from the start, and a prefix is what the SID index can serve —
+                  the contains search walked 348,000 tubes (153). */}
+              <input className="input input--sm mono" value={sidDraft} placeholder="starts with"
                      onChange={(e) => setSidDraft(e.target.value)}
                      onBlur={applyText}
                      onKeyDown={(e) => { if (e.key === 'Enter') { applyText(); setUnregPage(1); } }} />

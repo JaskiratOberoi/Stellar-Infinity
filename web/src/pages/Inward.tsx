@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ApiError, type InwardLookup } from '../api/client';
 import {
   inwardApi, type InwardFilters, type InwardRow, type InwardScanResponse,
 } from '../api/client';
@@ -99,6 +100,18 @@ export function Inward() {
   const [verdict, setVerdict] = useState<InwardScanResponse | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const scanRef = useRef<HTMLInputElement>(null);
+  /*
+   * Scan, THEN inward (22/09/2026). The gun's Enter used to inward the tube
+   * on the spot; now it looks the tube up — patient, client, tests, status,
+   * how far it has travelled — and narrows the log to it, and inwarding is a
+   * second, deliberate press once the technician has read the card. A
+   * barcode with no work order is said so, and can still be inwarded, since
+   * the vial physically arrived and losing the scan would be data loss.
+   */
+  const [finding, setFinding] = useState(false);
+  const [found, setFound] = useState<InwardLookup | null>(null);
+  const [foundSid, setFoundSid] = useState<string | null>(null);   // set even when nothing was found
+  const [noWorkorder, setNoWorkorder] = useState(false);
 
   /* ---- the log ---- */
   const [from, setFrom] = useState(todayLocal());
@@ -151,11 +164,39 @@ export function Inward() {
   // The gun needs a focused input before the first trigger pull.
   useEffect(() => { if (canScan) scanRef.current?.focus(); }, [canScan]);
 
-  async function scan() {
+  /** The gun's Enter: look the tube up and show the log for it. Nothing moves. */
+  async function find() {
     const sid = sidInput.trim();
+    if (!sid || finding || scanning) return;
+    setFinding(true);
+    setVerdict(null);
+    setScanError(null);
+    setFound(null);
+    setNoWorkorder(false);
+    setFoundSid(sid);
+    // The log narrows to this SID across all dates, so its earlier legs show
+    // under the card.
+    setSearchSid(sid);
+    try {
+      setFound(await inwardApi.lookup(sid));
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) setNoWorkorder(true);
+      else setScanError(e instanceof Error ? e.message : 'The lookup failed.');
+    } finally {
+      setFinding(false);
+      scanRef.current?.focus();
+    }
+  }
+
+  /** The second press: inward the tube the card describes. */
+  async function scan() {
+    const sid = (foundSid ?? sidInput).trim();
     if (!sid || scanning) return;
 
     setScanning(true);
+    setFound(null);
+    setFoundSid(null);
+    setNoWorkorder(false);
     // The previous verdict is cleared FIRST: feedback that lingers over the
     // next scan reads as feedback about it.
     setVerdict(null);
@@ -211,23 +252,81 @@ export function Inward() {
             <input
               ref={scanRef}
               className="input mono scanbox__input"
-              placeholder="Scan or type, then Enter"
+              placeholder="Scan or type, then Enter to find it"
               value={sidInput}
               // readOnly, NOT disabled: disabling a focused input blurs it, and
               // the refocus in scan()'s finally ran before React re-enabled the
               // element — so focus never actually returned and the gun's next
               // pull typed into nothing. readOnly rejects input but keeps focus.
-              readOnly={scanning}
+              readOnly={scanning || finding}
               maxLength={50}
-              onChange={(e) => setSidInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void scan(); } }}
+              onChange={(e) => { setSidInput(e.target.value); if (found || noWorkorder) { setFound(null); setNoWorkorder(false); setFoundSid(null); } }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void find(); } }}
               aria-label="Scan a Sample ID"
             />
           </label>
-          <button className="btn btn--primary" disabled={scanning || !sidInput.trim()}
-                  onClick={() => void scan()}>
-            {scanning ? 'Scanning…' : 'Inward'}
+          <button className="btn btn--primary" disabled={finding || scanning || !sidInput.trim()}
+                  onClick={() => void find()}>
+            {finding ? 'Finding…' : 'Find'}
           </button>
+        </div>
+      )}
+
+      {/* The card: what the barcode is, read before it is moved. */}
+      {canScan && foundSid && (found || noWorkorder) && (
+        <div className={`card ${noWorkorder ? 'inward-card inward-card--warn' : 'inward-card'}`} style={{ marginBottom: '.8rem' }}>
+          {found ? (
+            <>
+              <div className="row" style={{ justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', alignItems: 'baseline' }}>
+                <div>
+                  <span className="mono" style={{ fontSize: '1.05rem', fontWeight: 700 }}>{found.sid}</span>
+                  <span className="muted" style={{ marginLeft: '.6rem', fontSize: '.8rem' }}>
+                    {found.statusName ?? (found.sampleStatus != null ? `status ${found.sampleStatus}` : 'status unknown')}
+                    {found.businessUnit && <> · at <b>{found.businessUnit}</b></>}
+                  </span>
+                </div>
+                <span className="muted" style={{ fontSize: '.78rem' }}>
+                  {found.legs === 0
+                    ? 'Not scanned anywhere yet'
+                    : <>{found.legs} scan{found.legs === 1 ? '' : 's'} so far
+                        {found.lastScanUnit && <> · last at <b>{found.lastScanUnit}</b></>}
+                        {found.lastScanAt && <> {fmtDateTime(found.lastScanAt)}</>}</>}
+                </span>
+              </div>
+              <div className="grid2" style={{ marginTop: '.6rem', gap: '.4rem 1.2rem' }}>
+                <div><span className="muted" style={{ fontSize: '.7rem', letterSpacing: '.1em', textTransform: 'uppercase' }}>Patient</span>
+                  <div><b>{found.patientName ? plainText(found.patientName) : '—'}</b>
+                    {(found.sex || found.age != null) && (
+                      <span className="muted"> · {[found.sex, found.age != null ? `${found.age} ${found.ageUnit ?? ''}`.trim() : null].filter(Boolean).join(' / ')}</span>
+                    )}
+                  </div>
+                </div>
+                <div><span className="muted" style={{ fontSize: '.7rem', letterSpacing: '.1em', textTransform: 'uppercase' }}>Client</span>
+                  <div><b>{found.clientCode ?? '—'}</b>{found.clientName && <span className="muted"> · {found.clientName}</span>}</div>
+                </div>
+                <div><span className="muted" style={{ fontSize: '.7rem', letterSpacing: '.1em', textTransform: 'uppercase' }}>Registered</span>
+                  <div>{found.registeredAt ? fmtDateTime(found.registeredAt) : '—'}{found.registeredBy && <span className="muted"> · {found.registeredBy}</span>}</div>
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}><span className="muted" style={{ fontSize: '.7rem', letterSpacing: '.1em', textTransform: 'uppercase' }}>Tests</span>
+                  <div style={{ fontSize: '.84rem' }}>{found.tests ? plainText(found.tests) : '—'}</div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div>
+              <b className="mono">{foundSid}</b> — <b>no work order</b> carries this Sample ID. The vial can still be
+              inwarded so its arrival is on record; the registration will have to catch up with it.
+            </div>
+          )}
+          <div className="row" style={{ marginTop: '.8rem', gap: '.5rem' }}>
+            <button className="btn btn--primary" disabled={scanning} onClick={() => void scan()}>
+              {scanning ? 'Inwarding…' : noWorkorder ? 'Inward anyway' : 'Inward this sample'}
+            </button>
+            <button className="btn btn--ghost" disabled={scanning}
+                    onClick={() => { setFound(null); setNoWorkorder(false); setFoundSid(null); setSidInput(''); scanRef.current?.focus(); }}>
+              Not this one
+            </button>
+          </div>
         </div>
       )}
 
