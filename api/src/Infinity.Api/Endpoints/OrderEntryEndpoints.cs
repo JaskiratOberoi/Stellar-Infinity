@@ -455,6 +455,35 @@ public static class OrderEntryEndpoints
         var (channel, channelError) = ResolveChannel(principal, body.Channel);
         if (channelError is not null) return channelError;
         /*
+         * A client (B2B) order carries a Sample ID on EVERY tube. The centre
+         * is holding the tubes and the sticker sheet when it books, and a
+         * tube booked without its barcode is one the lab has to find and
+         * label on Accessioning later — which is where the mix-ups happened.
+         * Enforced here as well as in the form, because the form's copy is a
+         * courtesy. Walk-in (B2C) orders are untouched: the sample is usually
+         * drawn after the order and there is nothing to scan yet. The tubes
+         * are the ones the preview quotes for this basket, so the two cannot
+         * disagree; a custom-only order has no tubes and nothing to require.
+         */
+        if (channel == B2b && body.Items.Count > 0)
+        {
+            var tubes = await orders.PreviewSampleGroupsAsync(body.Items, ct).ConfigureAwait(false);
+            var labelled = (body.SampleSids ?? [])
+                .Where(s => !string.IsNullOrWhiteSpace(s.Vailid))
+                .Select(s => s.SampleTypeId)
+                .ToHashSet();
+            var missing = tubes.Where(t => !labelled.Contains(t.SampleTypeId)).ToList();
+            if (missing.Count > 0)
+            {
+                var names = string.Join(", ", missing.Select(t => t.SampleTypeName ?? "unspecified"));
+                return Results.BadRequest(new
+                {
+                    error = $"A client order needs a Sample ID on every tube — {missing.Count} of {tubes.Count} still blank ({names}).",
+                    code = "B2B_SIDS_REQUIRED",
+                });
+            }
+        }
+        /*
          * The walk-in counter's money rules, ported from Telo and enforced
          * HERE because the browser's copy is a courtesy. B2C only: a B2B
          * order takes no money at the counter and the procedure ignores the
@@ -649,7 +678,7 @@ public static class OrderEntryEndpoints
             // offers it only then; this is the rule, and it refuses rather
             // than drops so a draft that lost its package is not booked
             // without the extra the operator thought they had added.
-            if (test.PriceFor(placed.Items, channel == B2b) is not int price)
+            if (test.BilledAs(placed.Items, channel == B2b) is not CustomTest billed)
             {
                 return Results.BadRequest(new
                 {
@@ -657,10 +686,11 @@ public static class OrderEntryEndpoints
                     code = "SMART_REPORT_NEEDS_PACKAGE",
                 });
             }
-            // The tier's price is what reaches the bill: the procedure writes
-            // the line at test.Mrp, so the record it gets carries the price
-            // this cart earned, not the list price.
-            resolved.Add((test with { Mrp = price }, line.Qty));
+            // The tier's LINE is what reaches the bill: the procedure writes
+            // the code, the name and the price it is handed, so the record it
+            // gets is the one this cart earned — "Smart Report - Mini" at the
+            // mini price on a mini-profile order, not the list line.
+            resolved.Add((billed, line.Qty));
         }
         var result = await orders.CreateAsync(userId, placed, resolved, ct).ConfigureAwait(false);
         if (!result.Ok)

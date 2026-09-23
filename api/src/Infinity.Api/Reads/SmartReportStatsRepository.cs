@@ -147,7 +147,9 @@ public sealed class SmartReportStatsRepository(NobleConnectionFactory db, SqlRet
                        ON (mi.kind = N'profile' AND t.test_type IN ('Profile', 'p') AND mi.catalogue_id = t.test_id)
                        OR (mi.kind = N'test'    AND t.test_type IN ('Test', 't')    AND mi.catalogue_id = t.test_id)
                      WHERE t.patient_id = c.patient_id ORDER BY t.id) mn
-        WHERE c.code = 'SMART-RPT' AND c.bill_id > 0;
+        -- Both codes: the mini tier bills as its own line (SMART-MINI) since
+        -- 2026-09-23; earlier mini sales carry SMART-RPT at the mini price.
+        WHERE c.code IN ('SMART-RPT', 'SMART-MINI') AND c.bill_id > 0;
 
         -- A sold booklet counts as downloaded when any of the patient's
         -- samples has a smart-PDF audit row; the multi-sample route logs one

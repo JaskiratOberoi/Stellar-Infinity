@@ -731,6 +731,13 @@ export function NewOrder() {
   for (const s of enteredSids) sidCounts.set(s.vailid, (sidCounts.get(s.vailid) ?? 0) + 1);
   const dupSid = (v: string) => v.trim() !== '' && (sidCounts.get(v.trim()) ?? 0) > 1;
 
+  // A client order books every tube WITH its barcode: the counter is holding
+  // the tubes and the sticker sheet, and a tube booked blank is one the lab
+  // has to find and label later. Walk-ins keep barcodes optional — the sample
+  // is usually drawn after the order. The server enforces the same rule
+  // (B2B_SIDS_REQUIRED); this copy is what keeps the button honest.
+  const sidsMissing = isB2b ? groups.length - enteredSids.length : 0;
+
   const sidTaken = enteredSids.some((s) => sidStatus[s.sampleTypeId] === 'taken' || dupSid(s.vailid));
   // A check still in flight blocks for the half-second it takes. Letting it
   // through would trade a disabled button for a rejected order.
@@ -1109,8 +1116,10 @@ export function NewOrder() {
     && (!goldApplied || goldDetailsOk)
     && !belowMinPaid
     && (preview?.unpriced ?? 0) === 0
-    // Barcodes are optional, but a barcode that is WRONG is not — the create
-    // procedure would reject the order after the operator had typed all of it.
+    // Barcodes are required on a client order and optional on a walk-in, and
+    // a barcode that is WRONG is never allowed — the create procedure would
+    // reject the order after the operator had typed all of it.
+    && sidsMissing === 0
     && !sidTaken
     && !sidChecking
     && !busy;
@@ -1231,6 +1240,7 @@ export function NewOrder() {
                 ? 'A mobile number is required for walk-in orders here.'
                 : 'The mobile number is incomplete.')
             : belowMinPaid ? `Collect at least ${inr(minPaid)} — half the bill — to place this order.`
+            : sidsMissing > 0 ? `Scan a Sample ID for every tube — ${sidsMissing} of ${groups.length} still blank.`
             : sidTaken ? 'A Sample ID is already in use — see the barcodes above.'
             : sidChecking ? 'Still checking a Sample ID…'
             : 'Some tests have no price for this client.'}
@@ -2042,7 +2052,7 @@ export function NewOrder() {
           {b2b && groups.length > 0 && (
             <div className="sid-inline">
               <h3 className="sid-inline__title">
-                Sample IDs <span className="muted">· one per tube · blank ones attach later on Accessioning</span>
+                Sample IDs <span className="muted">· one per tube · required on a client order</span>
               </h3>
               {groups.map((g) => (
                 <SidField

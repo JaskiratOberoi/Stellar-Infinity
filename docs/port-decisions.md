@@ -728,3 +728,39 @@ The block moved to the END of the stylesheet. It overrides component rules
 at equal specificity, and the cascade takes the later declaration; the copy
 that sat mid-file silently lost to every rule written after it, which is
 why the first measurement after adding the rules showed no change.
+
+## The Smart Report's two tiers are two bill lines (2026-09-23)
+
+Asked how a Smart Report shows when a client takes its bills from the
+legacy LIS. It already did: the order procedure writes every custom line
+into tbl_billing_patient_test_detail (code, name and amount as text — the
+line needs no catalogue row), the bill header's amount includes it, the LIS
+prints bills from those tables (Billx.rpt by bill id), and the charge
+reaches the client ledger through sp_mcc_test_account_101 with the line's
+name, which the LIS ledger reads back without a catalogue join. What was
+missing was the tier: a package order and a mini-profile order both
+printed "Smart Report", at ₹49 on one bill and ₹11 on the next.
+
+Now the mini tier bills as its own line, SMART-MINI "Smart Report - Mini"
+(₹21 list, ₹11 on the introductory offer), and the package tier stays
+SMART-RPT "Smart Report" (₹99 list, ₹49 offer). One custom test still backs
+both (telo_custom_test id 3): CustomTest.BilledAs decides the line at
+placement, so nothing in Telo's own order form changes and the shared
+catalogue is untouched — the earlier decision that the legacy catalogue is
+never edited for a Telo/Infinity need stands. Every reader that asks "did
+this patient buy the booklet" accepts either code: the two access queries,
+the dashboard's stats, and Telo's own button (customTests.ts). Earlier mini
+sales keep SMART-RPT at the mini price; the stats attribute them by profile
+as before. The code is 10 characters because tbl_billing_patient_test_detail
+matches on LEFT(code, 10).
+
+## A client order carries a Sample ID on every tube (2026-09-23)
+
+On a B2B order the counter is holding the tubes and the sticker sheet, and
+a tube booked without its barcode is one the lab has to find and label on
+Accessioning later — where the mix-ups were happening. The form's place
+button now waits until every tube the preview quotes has a barcode, saying
+how many are blank, and the API refuses the same order with
+B2B_SIDS_REQUIRED, naming the tubes. Walk-in orders are untouched: the
+sample is usually drawn after the order. A custom-only order has no tubes
+and nothing to require.

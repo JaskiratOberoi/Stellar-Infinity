@@ -48,15 +48,32 @@ public sealed record CustomTest(
     /// not offered with them at all. The ONE place the tier is decided, so
     /// the form's chip, the 50% floor and the bill cannot disagree.
     /// </summary>
-    public int? PriceFor(IEnumerable<CartItem> items, bool b2b)
+    public int? PriceFor(IEnumerable<CartItem> items, bool b2b) => BilledAs(items, b2b)?.Mrp;
+
+    /// <summary>
+    /// The LINE this extra goes onto the bill as for these cart items, or
+    /// null when it is not offered with them: the code, the name and the
+    /// price the tier earned. The package tier (and an unconditioned extra)
+    /// bills under its own code and name; the mini tier bills as
+    /// <c>SMART-MINI</c> "Smart Report - Mini", so the legacy LIS bill, the
+    /// client ledger and the statement name the tier that was bought instead
+    /// of showing one "Smart Report" at ₹49 on one bill and ₹11 on the next.
+    /// The Id stays — one custom test backs both lines.
+    /// </summary>
+    public CustomTest? BilledAs(IEnumerable<CartItem> items, bool b2b)
     {
-        if (OnlyWithPackages is not { Count: > 0 } need) return Mrp;
+        if (OnlyWithPackages is not { Count: > 0 } need) return this;
         var list = items as IReadOnlyCollection<CartItem> ?? items.ToList();
         if (list.Any(i => string.Equals(i.Kind, "master", StringComparison.OrdinalIgnoreCase) && need.Contains(i.Id)))
-            return OfferMrp ?? Mrp;
+            return this with { Mrp = OfferMrp ?? Mrp };
         if (b2b && MiniMrp is int mini && MiniWith is { Count: > 0 } minis
             && list.Any(i => minis.Any(m => string.Equals(m.Kind, i.Kind, StringComparison.OrdinalIgnoreCase) && m.Id == i.Id)))
-            return MiniOfferMrp ?? mini;
+            return this with
+            {
+                Code = Reports.SmartReportAccessRepository.SmartReportMiniCode,
+                Name = Reports.SmartReportAccessRepository.SmartReportMiniName,
+                Mrp = MiniOfferMrp ?? mini,
+            };
         return null;
     }
 }

@@ -36,6 +36,18 @@ public sealed class SmartReportAccessRepository(NobleConnectionFactory db, SqlRe
     public const string SmartReportCode = "SMART-RPT";
 
     /// <summary>
+    /// The same booklet sold with a mini profile on a B2B order, billed as
+    /// its own line (<c>SMART-MINI</c>, "Smart Report - Mini", ₹21 list) so
+    /// the legacy LIS bill and the client ledger show which tier was bought
+    /// rather than one name at two prices. One custom test still backs both
+    /// (telo_custom_test id 3): the tier is decided at placement, see
+    /// <see cref="Orders.CustomTest.BilledAs"/>. Every reader that asks
+    /// "did this patient buy the Smart Report" accepts either code.
+    /// </summary>
+    public const string SmartReportMiniCode = "SMART-MINI";
+    public const string SmartReportMiniName = "Smart Report - Mini";
+
+    /// <summary>
     /// A page of the reporting list can be a hundred rows; asking per row would
     /// be a hundred round trips to decide whether to draw a button. Capped so a
     /// pathological page cannot build an unbounded IN list.
@@ -58,9 +70,10 @@ public sealed class SmartReportAccessRepository(NobleConnectionFactory db, SqlRe
                 await using var cmd = NobleConnectionFactory.CreateCommand(conn, $"""
                     SELECT DISTINCT patient_id
                     FROM dbo.telo_custom_test_order
-                    WHERE code = @code AND patient_id IN ({list});
+                    WHERE code IN (@code, @mini) AND patient_id IN ({list});
                     """);
                 cmd.Parameters.Add("@code", SqlDbType.NVarChar, 50).Value = SmartReportCode;
+                cmd.Parameters.Add("@mini", SqlDbType.NVarChar, 50).Value = SmartReportMiniCode;
                 for (var i = 0; i < ids.Length; i++)
                     cmd.Parameters.Add("@p" + i.ToString(System.Globalization.CultureInfo.InvariantCulture), SqlDbType.Int).Value = ids[i];
 
@@ -90,10 +103,11 @@ public sealed class SmartReportAccessRepository(NobleConnectionFactory db, SqlRe
                     SELECT TOP 1 1
                     FROM dbo.tbl_med_mcc_patient_samples s
                     JOIN dbo.telo_custom_test_order o ON o.patient_id = s.patient_id
-                    WHERE s.vailid = @sid AND o.code = @code;
+                    WHERE s.vailid = @sid AND o.code IN (@code, @mini);
                     """);
                 cmd.Parameters.Add("@sid", SqlDbType.NVarChar, 50).Value = target;
                 cmd.Parameters.Add("@code", SqlDbType.NVarChar, 50).Value = SmartReportCode;
+                cmd.Parameters.Add("@mini", SqlDbType.NVarChar, 50).Value = SmartReportMiniCode;
 
                 var hit = await cmd.ExecuteScalarAsync(inner).ConfigureAwait(false);
                 return hit is not null and not DBNull;
