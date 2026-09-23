@@ -40,7 +40,12 @@ public sealed class SampleHeaderRepository(NobleConnectionFactory db, SqlRetry r
             END                         AS age_unit,
             U.MCCUnitCode               AS client_code,
             BU.BusinessUnitCode         AS business_unit,
-            P.sample_time               AS sample_drawn,
+            -- Two legacy columns: sample_date holds the day, sample_time the
+            -- clock time on whatever day the record was saved. The LIS shows
+            -- date from the first and time from the second; so does this (156).
+            CASE WHEN P.sample_date IS NULL OR P.sample_time IS NULL THEN COALESCE(P.sample_time, P.sample_date)
+                 ELSE DATEADD(DAY, DATEDIFF(DAY, 0, P.sample_date), CAST(CAST(P.sample_time AS TIME) AS DATETIME)) END
+                                        AS sample_drawn,
             S.modifieddate              AS regd_at,
             S.lastmodified_date         AS last_modified_at,
             STAT.status                 AS status,

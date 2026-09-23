@@ -893,3 +893,17 @@ first) of a test the catalogue marks Has_graph, which is then flagged,
 else on the sample's first row, flagged. The two stranded rows from that
 day were re-homed the same way. Infinity's own list is by vail_id and is
 unchanged; no build was needed, the procedure serves both stacks.
+
+## The drawn stamp is two legacy columns (2026-09-23)
+
+A report showed Collected 23/09/2026 11:39 PM where the LIS showed 22-09
+23:39. The LIS keeps the draw in two columns — sample_date is the day at
+midnight, sample_time is the clock time on whatever day the record was
+saved (its order forms build it from the time string alone) — and shows
+date from the first, time from the second. Infinity read sample_time
+alone, so a draw keyed in after midnight printed a day late: 1,322 of the
+last 30 days' 115,977 registrations carry a date part that differs. The
+worksheet, the worksheet list, the report procedure (script 156, each
+re-issued whole after diffing against the deployed body) and the API's
+sample header now compose the stamp the way the LIS does. Infinity's own
+patient edit already wrote both columns consistently.
