@@ -879,3 +879,17 @@ procedure re-issued whole from 51 with that one change, diffed against
 the deployed body first). The status count still treats the mark as
 filled, as the LIS does, so Partially Tested is unchanged; the report
 already printed such a value as a blank.
+
+## A whole-sample attachment is filed on the LIS's paperclip row (2026-09-23)
+
+A graph uploaded from Infinity's worksheet did not show in the legacy LIS.
+The LIS lists a sample's attachments per result row and draws its clip
+only on a row whose `attachment` bit is set (copied from the catalogue's
+Has_graph at registration); Infinity's whole-sample upload stored the row
+with no result_id, so the LIS never listed it. Script 155 re-issues
+usp_inf_attachment_add from 56 with one addition: a sample-level upload is
+filed on the sample's first flagged row, else on the first row (Head
+first) of a test the catalogue marks Has_graph, which is then flagged,
+else on the sample's first row, flagged. The two stranded rows from that
+day were re-homed the same way. Infinity's own list is by vail_id and is
+unchanged; no build was needed, the procedure serves both stacks.
