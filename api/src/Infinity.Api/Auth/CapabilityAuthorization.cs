@@ -35,12 +35,42 @@ public sealed class RequireCapabilityFilter(string capability) : IEndpointFilter
     }
 }
 
+/// <summary>
+/// The same gate for an action two desks share: the caller needs ANY one of
+/// the capabilities. The clinical-history routes are the case — a centre
+/// attaches history from the Reporting tab (report:view) and the lab desk
+/// attaches it while registering the tube (order:accession).
+/// </summary>
+public sealed class RequireAnyCapabilityFilter(string[] capabilities) : IEndpointFilter
+{
+    public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+    {
+        var user = context.HttpContext.User;
+        if (user.Identity?.IsAuthenticated != true) return Results.Unauthorized();
+        if (!capabilities.Any(user.HasCapability))
+        {
+            return Results.Problem(
+                title: "Forbidden",
+                detail: $"This action requires one of the '{string.Join("', '", capabilities)}' capabilities.",
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+        return await next(context);
+    }
+}
+
 public static class CapabilityExtensions
 {
     public static TBuilder RequireCapability<TBuilder>(this TBuilder builder, string capability)
         where TBuilder : IEndpointConventionBuilder
     {
         builder.AddEndpointFilter(new RequireCapabilityFilter(capability));
+        return builder;
+    }
+
+    public static TBuilder RequireAnyCapability<TBuilder>(this TBuilder builder, params string[] capabilities)
+        where TBuilder : IEndpointConventionBuilder
+    {
+        builder.AddEndpointFilter(new RequireAnyCapabilityFilter(capabilities));
         return builder;
     }
 

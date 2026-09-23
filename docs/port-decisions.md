@@ -791,3 +791,23 @@ trend — is live sales only. The code is a constant in the repository,
 because the rule that every test order goes on ZZTEST01 and never a live
 client is already fixed by decision; a second test centre would be added
 beside it, not by editing the catalogue.
+
+## Patient history is filed at the accessioning desk (2026-09-23)
+
+The referral note or prescription arrives in the box with the tube, and
+the desk that opens the box is the desk that should file it — not a step
+saved for the Reporting tab after the worksheet already has the sample.
+The Awaiting Accessioning queue now carries the same clinical-history
+dialog the Reporting tab has: a paperclip on every row, lit when a PDF is
+already attached, and an "Attach history" button beside "Register this
+tube" for the scanned barcode, so the note can be filed before or while
+the tube is registered. One component (components/ClinicalHistoryModal)
+serves both tabs, keyed on the SID alone.
+
+The routes moved out of the report:view group into their own, gated on
+report:view OR order:accession: a technician can register tubes but has no
+report view, and a group filter cannot be relaxed per route. A caller who
+may register tubes is treated as unrestricted for these routes — the desk
+already sees every Sample Sent tube whatever centre sent it — while
+everyone else stays held to their report scope. Nothing on that queue is
+signed out, so the dialog is never locked there.

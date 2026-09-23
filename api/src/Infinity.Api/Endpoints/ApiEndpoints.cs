@@ -96,10 +96,18 @@ public static class ApiEndpoints
         // living on the Reporting tab here. Stored SID-keyed exactly as the
         // legacy worksheet reads it, so the lab tech sees an Infinity upload
         // through the LIS with no LIS change.
-        reports.MapPost("/clinical-history/flags", GetClinicalHistoryFlags).WithName("GetClinicalHistoryFlags");
-        reports.MapGet("/{sid}/clinical-history", GetClinicalHistory).WithName("GetClinicalHistory");
-        reports.MapPut("/{sid}/clinical-history", PutClinicalHistory).WithName("PutClinicalHistory");
-        reports.MapDelete("/{sid}/clinical-history", DeleteClinicalHistory).WithName("DeleteClinicalHistory");
+        // Their own group under the same prefix: the Reporting tab reaches
+        // them with report:view, and the Accessioning desk — a technician
+        // has no report:view — with order:accession, attaching history to a
+        // tube it is about to register. A group filter cannot be relaxed
+        // per route, so the routes sit outside the report:view group.
+        var clihis = app.MapGroup("/api/reports")
+                        .RequireAuthorization()
+                        .RequireAnyCapability(Capabilities.ReportView, Capabilities.OrderAccession);
+        clihis.MapPost("/clinical-history/flags", GetClinicalHistoryFlags).WithName("GetClinicalHistoryFlags");
+        clihis.MapGet("/{sid}/clinical-history", GetClinicalHistory).WithName("GetClinicalHistory");
+        clihis.MapPut("/{sid}/clinical-history", PutClinicalHistory).WithName("PutClinicalHistory");
+        clihis.MapDelete("/{sid}/clinical-history", DeleteClinicalHistory).WithName("DeleteClinicalHistory");
     }
 
     /// <summary>
@@ -906,7 +914,12 @@ public static class ApiEndpoints
         string sid,
         CancellationToken ct)
     {
-        var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
+        // The accessioning desk sees every Sample Sent tube already, whatever
+        // centre sent it, so a caller who may register tubes may attach
+        // history to any of them; everyone else is held to their report scope.
+        var scope = principal.HasCapability(Capabilities.OrderAccession)
+            ? ReportScope.Unrestricted
+            : await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
         if (scope.IsDenied) return null;
         // Including a tube the lab has not received yet (status 1, "Sample
         // Sent"): attaching clinical history is the one thing a centre does
@@ -946,7 +959,9 @@ public static class ApiEndpoints
         // Existence only — no per-SID header lookups. A flag leaks nothing a
         // scoped list has not already shown, and the file itself stays behind
         // the scope-checked GET below.
-        var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
+        var scope = principal.HasCapability(Capabilities.OrderAccession)
+            ? ReportScope.Unrestricted
+            : await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
         if (scope.IsDenied) return Results.Ok(new { sids = Array.Empty<string>() });
 
         var found = await clihis.ExistsManyAsync(sids, ct).ConfigureAwait(false);

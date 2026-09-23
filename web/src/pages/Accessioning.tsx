@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  accessionApi, orderTubesApi,
+  accessionApi, api, orderTubesApi,
   type OrderChannel, type OrderTube, type PendingAccession, type PendingRegistration,
   type RegistrationFilter, type RejectReason,
 } from '../api/client';
+import { ClinicalHistoryModal, ClipGlyph } from '../components/ClinicalHistoryModal';
 import { Link, useSearchParams } from 'react-router-dom';
 import { fmtDateTime, inr, plainText } from '../lib/format';
 import { Pager } from '../components/Pager';
@@ -115,6 +116,18 @@ export function Accessioning() {
 
   /* Scan-to-register: the barcode gun at the desk. One SID, straight through. */
   const [scan, setScan] = useState('');
+  /*
+   * Patient history, attached BEFORE or WHILE the tube is registered. The
+   * referral note or prescription arrives in the box with the tube, and the
+   * desk that opens the box is the desk that should file it — not a step
+   * saved for the Reporting tab after the worksheet already has the sample.
+   * Same dialog and same SID-keyed file the Reporting tab and the legacy
+   * worksheet use, so the bench sees it wherever it looks.
+   */
+  /** SIDs on this page that already carry a history PDF, for the paperclip. */
+  const [cliHis, setCliHis] = useState<Set<string>>(new Set());
+  /** The tube whose history dialog is open — a list row, or the scanned SID. */
+  const [cliFor, setCliFor] = useState<{ sid: string; patientName: string | null } | null>(null);
 
   /* Reject: a reason from the LIS's own list, or typed. */
   const [reasons, setReasons] = useState<RejectReason[]>([]);
@@ -172,6 +185,15 @@ export function Accessioning() {
       ]);
       if (p) { setPending(p.rows); setPendingTotal(p.total); } else { setPending([]); setPendingTotal(0); }
       setUnreg(u.rows); setUnregTotal(u.total);
+      // Which tubes already carry a history PDF. Advisory: a failure here
+      // leaves every paperclip plain, never the queue empty.
+      const sids = u.rows.map((r) => r.vailid).filter((s): s is string => !!s);
+      if (sids.length > 0) {
+        void api.post<{ sids: string[] }>('/api/reports/clinical-history/flags', { sids })
+          .then((f) => setCliHis(new Set(f.sids))).catch(() => { /* advisory only */ });
+      } else {
+        setCliHis(new Set());
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load the queues.');
     } finally {
@@ -429,6 +451,18 @@ export function Accessioning() {
                     title="Register the scanned tube now, whatever the list shows">
               Register this tube
             </button>
+            {/* The note that came in the box with the tube, filed before the
+                tube is registered. Named from the list when the tube is on
+                it; the dialog works from the SID alone when it is not. */}
+            <button className="btn btn--ghost btn--sm" type="button" disabled={busy || !scan.trim()}
+                    onClick={() => {
+                      const sid = scan.trim();
+                      const row = unreg.find((r) => r.vailid === sid);
+                      setCliFor({ sid, patientName: row ? plainText(row.patientName) : null });
+                    }}
+                    title="Attach the patient's history PDF to the scanned tube">
+              <ClipGlyph /> Attach history
+            </button>
           </form>
 
           {/* The filters, the legacy page's own — dates on the registration
@@ -537,6 +571,7 @@ export function Accessioning() {
                   <th>Tests</th>
                   <th>Registered</th>
                   <th>By</th>
+                  <th>History</th>
                 </tr>
               </thead>
               <tbody>
@@ -573,12 +608,29 @@ export function Accessioning() {
                         <div className="muted mono" style={{ fontSize: '.68rem' }}>{r.registeredBy}</div>
                       )}
                     </td>
+                    <td className="cell--tag" data-label="History">
+                      {r.vailid && (() => {
+                        const has = cliHis.has(r.vailid);
+                        return (
+                          <button
+                            className="btn btn--ghost btn--sm"
+                            title={has ? 'Patient history attached — view or replace' : 'Attach the patient\'s history PDF before registering'}
+                            aria-label={`Patient history for ${r.vailid}`}
+                            style={has ? { color: 'var(--teal)', fontWeight: 600 } : undefined}
+                            disabled={busy}
+                            onClick={() => setCliFor({ sid: r.vailid!, patientName: plainText(r.patientName) || null })}
+                          >
+                            <ClipGlyph />{has ? ' Hist.' : ''}
+                          </button>
+                        );
+                      })()}
+                    </td>
                   </tr>
                 ))}
 
                 {unreg.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="muted" style={{ textAlign: 'center', padding: '2rem' }}>
+                    <td colSpan={9} className="muted" style={{ textAlign: 'center', padding: '2rem' }}>
                       Nothing awaiting accessioning
                       {(filter.from || filter.to || filter.sid || filter.patient || filter.origin)
                         ? ' in this window — clear the filters to see every Sample Sent tube.'
@@ -593,6 +645,28 @@ export function Accessioning() {
                    onPage={setUnregPage} />
           </div>
         </>
+      )}
+
+      {cliFor && (
+        <ClinicalHistoryModal
+          sid={cliFor.sid}
+          patientName={cliFor.patientName}
+          has={cliHis.has(cliFor.sid)}
+          // Nothing here is signed out — every tube is still Sample Sent.
+          locked={false}
+          onClose={() => setCliFor(null)}
+          onChanged={(sid, nowHas) => {
+            setCliHis((prev) => {
+              const next = new Set(prev);
+              if (nowHas) next.add(sid); else next.delete(sid);
+              return next;
+            });
+            setNotice(nowHas
+              ? `Patient history attached to ${sid} — the bench sees it on the worksheet once the tube is registered.`
+              : `Patient history removed from ${sid}.`);
+            setCliFor(null);
+          }}
+        />
       )}
 
       {barcodeFor && (
