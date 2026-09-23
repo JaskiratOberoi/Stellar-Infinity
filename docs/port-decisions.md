@@ -839,3 +839,10 @@ and the label is set at 11.5px with the text at 10.5px so the heading
 outweighs what it introduces. Cytology sections only, by department name;
 histopathology stays at the descriptive default, where the prose is what
 is read.
+
+Found while verifying: the report model collapsed every result value to one
+line (`clean`), so even a value the LIS stored as lines printed as a run-on
+sentence in the descriptive cell that was styled pre-line for exactly those
+lines. The value now keeps its line breaks (`cleanMultiline`, as the
+reference range already did); a figure has none, and an ordinary column
+still collapses them at render time.

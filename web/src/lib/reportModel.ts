@@ -401,7 +401,13 @@ export function buildSampleReport(results: readonly TestResult[]): SampleReport 
     code: t.testCode ? t.testCode.trim().toUpperCase() : null,
     name: displayTestName(clean(t.testName)),
     method: methodOf(t, headMethod),
-    value: clean(t.value),
+    // Line breaks kept: a descriptive value — a cytology description, a
+    // histopathology impression — is stored as the pathologist's lines, and
+    // the descriptive cell prints them (pre-line). Collapsing them here ran
+    // "VOLUME: 30 ML / COLOUR: PALE YELLOW / APPEARANCE: TURBID" into one
+    // sentence. A figure has no line break and is unchanged; a value in an
+    // ordinary column collapses at render time as before.
+    value: cleanMultiline(t.value),
     // "." and "-" are the LIS's way of leaving a unit or range EMPTY — a
     // qualitative test (rapid HCV, VDRL) carries unit "." — and printing the
     // dot in the Unit column reads as a typo. The value is NOT filtered: a
