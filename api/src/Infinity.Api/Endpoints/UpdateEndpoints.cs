@@ -27,6 +27,11 @@ public static class UpdateEndpoints
         @"^(latest\.yml|Stellar-Synapse-Setup-[0-9A-Za-z.\-]+\.(exe|blockmap))$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    /// <summary>The installer named by electron-builder's manifest: its top-level "path:" line.</summary>
+    private static readonly Regex ManifestPath = new(
+        @"^path:\s*(\S+)\s*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     public static void MapUpdateEndpoints(this WebApplication app)
     {
         // Anonymous by design: the caller is an unattended lab PC, not a user.
@@ -36,6 +41,104 @@ public static class UpdateEndpoints
            .AllowAnonymous()
            .RequireRateLimiting(Auth.RateLimitPolicies.Site)
            .WithName("SynapseUpdateFeed");
+
+        // Stable link for first installs: always the installer latest.yml
+        // currently points at, resolved per request so the URL survives every
+        // release. Guarded by HTTP Basic auth against Updates:DownloadPassword
+        // (api/.env) — the browser prompts once, the credential travels only
+        // over TLS. Only the exe is reachable here; the manifest and blockmaps
+        // stay on the keyed feed above, so the updater's own path is unchanged.
+        app.MapGet("/api/downloads/synapse/latest", GetLatestInstaller)
+           .AllowAnonymous()
+           .RequireRateLimiting(Auth.RateLimitPolicies.Site)
+           .WithName("SynapseLatestInstaller");
+    }
+
+    private static IResult GetLatestInstaller(HttpContext http, IConfiguration config)
+    {
+        var password = config["Updates:DownloadPassword"];
+        if (string.IsNullOrEmpty(password))
+        {
+            // Not configured on this deployment: indistinguishable from absent.
+            return Results.NotFound();
+        }
+
+        if (!BasicAuthMatches(http.Request.Headers.Authorization.ToString(), password))
+        {
+            http.Response.Headers.WWWAuthenticate = "Basic realm=\"Stellar Synapse installer\", charset=\"UTF-8\"";
+            return Results.Problem(
+                title: "Unauthorized",
+                detail: "Password required.",
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var directory = Path.GetFullPath(config["Updates:Directory"] ?? "/updates/synapse");
+        var manifest = Path.Combine(directory, "latest.yml");
+        if (!File.Exists(manifest))
+        {
+            return Results.NotFound();
+        }
+
+        string? fileName = null;
+        foreach (var line in File.ReadLines(manifest))
+        {
+            var m = ManifestPath.Match(line);
+            if (m.Success)
+            {
+                fileName = m.Groups[1].Value;
+                break;
+            }
+        }
+
+        // Serve only an installer the feed itself would serve, and only the exe.
+        if (fileName is null
+            || !AllowedFile.IsMatch(fileName)
+            || !fileName.EndsWith(".exe", StringComparison.Ordinal))
+        {
+            return Results.NotFound();
+        }
+
+        var path = Path.GetFullPath(Path.Combine(directory, fileName));
+        if (!path.StartsWith(directory, StringComparison.Ordinal) || !File.Exists(path))
+        {
+            return Results.NotFound();
+        }
+
+        // Constant URL, changing content, and a credentialed response: no cache
+        // on the way (Cloudflare included) may store or replay it.
+        http.Response.Headers.CacheControl = "no-store";
+        return Results.File(
+            path,
+            "application/octet-stream",
+            fileDownloadName: fileName,
+            enableRangeProcessing: true);
+    }
+
+    /// <summary>
+    /// "Basic base64(user:password)" — any user name, the password compared in
+    /// constant time. Malformed headers simply fail.
+    /// </summary>
+    private static bool BasicAuthMatches(string header, string expectedPassword)
+    {
+        const string scheme = "Basic ";
+        if (!header.StartsWith(scheme, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string decoded;
+        try
+        {
+            decoded = Encoding.UTF8.GetString(Convert.FromBase64String(header[scheme.Length..].Trim()));
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+
+        var colon = decoded.IndexOf(':');
+        var presented = colon < 0 ? decoded : decoded[(colon + 1)..];
+        return FixedTimeEquals(presented, expectedPassword);
     }
 
     private static IResult Get(string fileName, HttpContext http, IConfiguration config)
