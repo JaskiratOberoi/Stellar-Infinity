@@ -56,7 +56,7 @@ public sealed class SampleHeaderRepository(NobleConnectionFactory db, SqlRetry r
         LEFT JOIN dbo.tbl_med_mcc_patient_samples_status_master STAT
             ON STAT.id = S.sample_status
         WHERE S.vailid = @sid
-          AND S.sample_status > 1
+          AND (S.sample_status > 1 OR @sent = 1)
         ORDER BY S.modifieddate DESC
         """;
 
@@ -67,7 +67,15 @@ public sealed class SampleHeaderRepository(NobleConnectionFactory db, SqlRetry r
     /// hands back Unspecified DateTimes untouched, so no CONVERT-to-string
     /// workaround is needed and the encoding never depends on container TZ.
     /// </summary>
-    public Task<IReadOnlyList<SampleHeader>> GetAllAsync(string sid, CancellationToken ct = default)
+    /// <param name="includeSent">
+    /// Also match a tube the centre has SENT but the lab has not yet received
+    /// (sample_status 1). Off by default — nothing about such a tube is
+    /// reportable — and on for the one thing a centre does to a tube it has
+    /// only just sent: attach its clinical history, exactly as the LIS's
+    /// Sample Status upload lets it. With the default, that upload answered
+    /// 404 to every client until the lab had received the tube.
+    /// </param>
+    public Task<IReadOnlyList<SampleHeader>> GetAllAsync(string sid, CancellationToken ct = default, bool includeSent = false)
     {
         var target = (sid ?? "").Trim();
         if (target.Length == 0) return Task.FromResult<IReadOnlyList<SampleHeader>>([]);
@@ -78,6 +86,7 @@ public sealed class SampleHeaderRepository(NobleConnectionFactory db, SqlRetry r
                 await using var cmd = NobleConnectionFactory.CreateCommand(conn, Sql);
                 cmd.Parameters.Add("@sid", SqlDbType.NVarChar, 50).Value = target;
                 cmd.Parameters.Add("@top", SqlDbType.Int).Value = MaxRows;
+                cmd.Parameters.Add("@sent", SqlDbType.Bit).Value = includeSent;
 
                 // Deliberately NOT SequentialAccess: it would force every future
                 // edit to this mapping to preserve strict column order, for no
@@ -99,6 +108,17 @@ public sealed class SampleHeaderRepository(NobleConnectionFactory db, SqlRetry r
     public async Task<SampleHeader?> GetAsync(string sid, CancellationToken ct = default)
     {
         var rows = await GetAllAsync(sid, ct).ConfigureAwait(false);
+        return rows.Count > 0 ? rows[0] : null;
+    }
+
+    /// <summary>
+    /// The header for a SID whether or not the lab has received the tube — the
+    /// lookup for attaching clinical history to a sample a centre has just
+    /// sent. See <see cref="GetAllAsync"/>'s <c>includeSent</c>.
+    /// </summary>
+    public async Task<SampleHeader?> GetIncludingSentAsync(string sid, CancellationToken ct = default)
+    {
+        var rows = await GetAllAsync(sid, ct, includeSent: true).ConfigureAwait(false);
         return rows.Count > 0 ? rows[0] : null;
     }
 

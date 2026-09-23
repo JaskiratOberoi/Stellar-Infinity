@@ -764,3 +764,19 @@ how many are blank, and the API refuses the same order with
 B2B_SIDS_REQUIRED, naming the tubes. Walk-in orders are untouched: the
 sample is usually drawn after the order. A custom-only order has no tubes
 and nothing to require.
+
+## Clinical history attaches to a tube the lab has not received yet (2026-09-23)
+
+A client's upload of a patient-history PDF from the portal answered 404.
+The proxy log showed the request reaching the API (PUT
+/api/reports/9333816/clinical-history); the tube was at status 1, "Sample
+Sent", registered by the centre five minutes earlier. The scope check
+behind the upload used the reportable-only header lookup (sample_status >
+1), so every client upload was refused until the lab received the tube —
+which defeats the feature: attaching history to a tube it has just sent is
+the one thing a centre does with it, and the LIS's Sample Status upload
+allows exactly that. The clinical-history routes now look the tube up
+including status 1; the store and delete procedures already refused only
+signed-out samples (7, 8, 9). The reportable-only lookup stays the default
+for every other caller. The client-code comparison is trimmed on both
+sides as well, since the unit master pads some codes.

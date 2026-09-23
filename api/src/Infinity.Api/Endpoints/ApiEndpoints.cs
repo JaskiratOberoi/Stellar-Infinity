@@ -908,10 +908,17 @@ public static class ApiEndpoints
     {
         var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
         if (scope.IsDenied) return null;
-        var header = await headers.GetAsync(sid, ct).ConfigureAwait(false);
+        // Including a tube the lab has not received yet (status 1, "Sample
+        // Sent"): attaching clinical history is the one thing a centre does
+        // to a tube it has only just sent, and it is what the LIS's Sample
+        // Status upload allows. The reportable-only lookup answered 404 to
+        // every client upload until the tube was received at the lab.
+        var header = await headers.GetIncludingSentAsync(sid, ct).ConfigureAwait(false);
         if (header is null) return null;
+        // Trimmed on both sides: the unit master pads some codes, and the
+        // scope list is trimmed when it is built.
         if (!scope.IsUnrestricted
-            && !scope.ClientCodes.Contains(header.ClientCode ?? "", StringComparer.OrdinalIgnoreCase))
+            && !scope.ClientCodes.Contains((header.ClientCode ?? "").Trim(), StringComparer.OrdinalIgnoreCase))
         {
             return null;
         }
