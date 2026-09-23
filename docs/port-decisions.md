@@ -907,3 +907,13 @@ worksheet, the worksheet list, the report procedure (script 156, each
 re-issued whole after diffing against the deployed body) and the API's
 sample header now compose the stamp the way the LIS does. Infinity's own
 patient edit already wrote both columns consistently.
+
+## Health Screen 2 carries the Smart Report (2026-09-23)
+
+Added HS2 (master profile 5) to inf_smart_report_package (script 157)
+after the booklet was added by hand to a Health Screen 2 patient on
+JK0213. The order form now offers the Smart Report on an HS2 order,
+placement accepts it at the package tier, and the dashboard attributes
+HS2 sales to HS2 — including that first one. Only HS2 itself: HEALTH
+SCREEN 2 MD, HEALTH SCREEN 2.1 and the JK/SKH/Medigene screens are
+separate profiles and each is its own decision.
