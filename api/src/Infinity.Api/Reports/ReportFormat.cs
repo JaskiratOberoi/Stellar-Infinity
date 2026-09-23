@@ -7,7 +7,7 @@ namespace Infinity.Api.Reports;
 /// set in Playfair Display, under test since 2026-09-19. The print page reads
 /// <c>?format=</c>; the PDF routes carry it into the print URL and into the
 /// cache key, since the formats are different documents. Anything
-/// unrecognised is v1, so an old caller never gets a test format.
+/// unrecognised is v2, the report; only an explicit v1 or v3 gets another.
 /// </summary>
 public static class ReportFormat
 {
@@ -15,16 +15,22 @@ public static class ReportFormat
     public const string V2 = "v2";
     public const string V3 = "v3";
 
+    /// <summary>
+    /// v2 is the report since 2026-09-23. A caller that names no format — the
+    /// render sidecar, a share link, an older bundle — gets it, and only an
+    /// explicit v1 or v3 (the staging picker) gets anything else.
+    /// </summary>
     public static string Normalise(string? format)
     {
         var f = format?.Trim();
-        if (string.Equals(f, V2, StringComparison.OrdinalIgnoreCase)) return V2;
+        if (string.Equals(f, V1, StringComparison.OrdinalIgnoreCase)) return V1;
         if (string.Equals(f, V3, StringComparison.OrdinalIgnoreCase)) return V3;
-        return V1;
+        return V2;
     }
 
-    /// <summary>The query fragment for the print route: nothing for v1.</summary>
-    public static string Query(string format) => format == V1 ? string.Empty : $"&format={format}";
+    /// <summary>The query fragment for the print route — always explicit, so
+    /// the print page and the API cannot disagree about the default.</summary>
+    public static string Query(string format) => $"&format={Normalise(format)}";
 
     /// <summary>
     /// The Smart Report's format. The booklet has two: v1, the original, and

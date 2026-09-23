@@ -193,8 +193,10 @@ export function PrintReport() {
   // plus its own, so every v2 rule applies and only the face differs. See
   // ReportFormat.
   const [format, setFormat] = useState<ReportFormat>(() => {
+    // v2 is the report; a link that names no format gets it, and only an
+    // explicit v1 or v3 (the staging picker) gets anything else.
     const f = params.get('format');
-    return f === 'v2' || f === 'v3' ? f : 'v1';
+    return f === 'v1' || f === 'v3' ? f : 'v2';
   });
   // The root's base class. The fit pass below rewrites the root's className
   // outright while it measures, so the format has to be IN the base or the

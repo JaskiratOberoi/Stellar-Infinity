@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { IS_STAGING } from '../lib/env';
 
 /**
  * Which FORMAT the report is drawn in — the typography, not the paper.
@@ -18,8 +19,8 @@ import { useState } from 'react';
 export type ReportFormat = 'v1' | 'v2' | 'v3';
 
 export const FORMAT_OPTIONS: ReadonlyArray<{ value: ReportFormat; label: string; hint: string }> = [
-  { value: 'v1', label: 'Format v1', hint: 'The standard report: Helvetica, mixed case.' },
-  { value: 'v2', label: 'Format v2', hint: 'Serif face (Georgia), tabular text in capitals. Under test.' },
+  { value: 'v1', label: 'Format v1', hint: 'The earlier report: Helvetica, mixed case.' },
+  { value: 'v2', label: 'Format v2', hint: 'The standard report: serif face (Georgia), tabular text in capitals.' },
   { value: 'v3', label: 'Format v3', hint: 'As v2, set in Playfair Display. Under test.' },
 ];
 
@@ -29,12 +30,24 @@ export function isReportFormat(v: unknown): v is ReportFormat {
 
 const KEY = 'inf.report-format';
 
+/** The report every desk prints unless a staging tester picks another. */
+export const DEFAULT_FORMAT: ReportFormat = 'v2';
+
+/**
+ * The picker exists on STAGING only: it is how a format is tried before it
+ * becomes the report. Production has one format, the default, and no
+ * control to change it — a stored choice from a staging session on the
+ * same browser is ignored there, so a tester's v3 never reaches a patient.
+ */
+export const FORMAT_PICKER = IS_STAGING;
+
 export function readStoredFormat(): ReportFormat {
+  if (!FORMAT_PICKER) return DEFAULT_FORMAT;
   try {
     const v = localStorage.getItem(KEY);
-    return isReportFormat(v) ? v : 'v1';
+    return isReportFormat(v) ? v : DEFAULT_FORMAT;
   } catch {
-    return 'v1';
+    return DEFAULT_FORMAT;
   }
 }
 

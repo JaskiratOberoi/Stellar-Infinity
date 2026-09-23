@@ -4,7 +4,7 @@ import { api } from '../api/client';
 import { downloadFile } from '../lib/format';
 import type { WorksheetRow } from './Reports';
 import { PaperSelect, usePaper } from '../components/PaperSelect';
-import { FormatSelect, useReportFormat } from '../components/ReportFormat';
+import { FORMAT_PICKER, FormatSelect, useReportFormat } from '../components/ReportFormat';
 import { BuTag } from '../components/BuTag';
 
 export interface TestResult {
@@ -299,10 +299,13 @@ export function ReportViewer({
                 paginates like the download. */}
             <PaperSelect className="input input--sm preview__paper" value={paper} onChange={setPaper}
                          disabled={busy !== null} ariaLabel="Paper to print on" />
-            {/* The format under test, beside the paper: same preview, same
-                download, one more remembered answer. */}
-            <FormatSelect className="input input--sm preview__paper" value={format} onChange={setFormat}
-                          disabled={busy !== null} ariaLabel="Report format" />
+            {/* The format picker, STAGING ONLY: how a format is tried before
+                it becomes the report. Production prints the default and
+                shows no control — see FORMAT_PICKER. */}
+            {FORMAT_PICKER && (
+              <FormatSelect className="input input--sm preview__paper" value={format} onChange={setFormat}
+                            disabled={busy !== null} ariaLabel="Report format" />
+            )}
 
             <select className="input input--sm preview__layout" value={split ? 'split' : 'continuous'}
                     aria-label="Report layout"

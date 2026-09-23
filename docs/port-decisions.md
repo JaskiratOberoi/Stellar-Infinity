@@ -846,3 +846,21 @@ sentence in the descriptive cell that was styled pre-line for exactly those
 lines. The value now keeps its line breaks (`cleanMultiline`, as the
 reference range already did); a figure has none, and an ordinary column
 still collapses them at render time.
+
+## Format v2 is the report; the picker is a staging control (2026-09-23)
+
+Jas saw the format picker on production for some accounts and wanted v2
+everywhere with no picker there. The picker now exists only in a staging
+build (VITE_ENVIRONMENT=staging, the same flag the banner reads): on
+production the viewer shows no control and readStoredFormat ignores any
+stored choice, so a tester's v3 from a staging session on the same browser
+never reaches a patient. v2 is the default on every side — the web's
+stored-format fallback, the print page's no-parameter case, and the API's
+Normalise, which the render sidecar and share links go through — so the
+three cannot disagree about what "no format" means.
+
+This retires the production build rule that reverted the v2/v3 commits and
+cut their stylesheet block by hand: production is now built from main as
+it is, like staging, with the environment flag deciding what shows. The
+v2 typography (serif face, tabular text in capitals) is therefore the
+production report from this push.
