@@ -780,3 +780,14 @@ including status 1; the store and delete procedures already refused only
 signed-out samples (7, 8, 9). The reportable-only lookup stays the default
 for every other caller. The client-code comparison is trimmed on both
 sides as well, since the unit master pads some codes.
+
+## The Smart Report dashboard leaves the test centre out (2026-09-23)
+
+Six of the nine booklets the super-admin dashboard counted were ZZTEST01
+fixtures and proof orders, never sales. The stats query now excludes that
+centre by code at the one place it selects sold booklets, so every figure
+downstream — month, all-time, by profile, by client, by price, the daily
+trend — is live sales only. The code is a constant in the repository,
+because the rule that every test order goes on ZZTEST01 and never a live
+client is already fixed by decision; a second test centre would be added
+beside it, not by editing the catalogue.

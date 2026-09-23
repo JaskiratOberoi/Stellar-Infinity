@@ -53,6 +53,13 @@ public sealed class SmartReportStatsRepository(NobleConnectionFactory db, SqlRet
 {
     private const int TopN = 10;
     private const int TrendDays = 30;
+    /// <summary>
+    /// The throwaway centre every test order is booked on (unit 6094). Its
+    /// booklets are fixtures and proof orders, never sales, so the dashboard
+    /// leaves them out. Live client codes are never used for testing — see
+    /// the Smart Report fixture rule in the port log.
+    /// </summary>
+    private const string TestCentreCode = "ZZTEST01";
 
     public async Task<SmartReportStats> GetAsync(string? dateIso = null, CancellationToken ct = default)
     {
@@ -67,6 +74,7 @@ public sealed class SmartReportStatsRepository(NobleConnectionFactory db, SqlRet
                 cmd.Parameters.Add("@day", SqlDbType.Date).Value = day;
                 cmd.Parameters.Add("@trendFrom", SqlDbType.Date).Value = day.AddDays(-(TrendDays - 1));
                 cmd.Parameters.Add("@top", SqlDbType.Int).Value = TopN;
+                cmd.Parameters.Add("@testCentre", SqlDbType.NVarChar, 50).Value = TestCentreCode;
 
                 await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);
 
@@ -149,7 +157,12 @@ public sealed class SmartReportStatsRepository(NobleConnectionFactory db, SqlRet
                      WHERE t.patient_id = c.patient_id ORDER BY t.id) mn
         -- Both codes: the mini tier bills as its own line (SMART-MINI) since
         -- 2026-09-23; earlier mini sales carry SMART-RPT at the mini price.
-        WHERE c.code IN ('SMART-RPT', 'SMART-MINI') AND c.bill_id > 0;
+        -- The throwaway test centre is left out: every booklet booked on it
+        -- is a fixture or a proof order, never a sale, and a dashboard that
+        -- counted them would overstate the month by however many tests were
+        -- run that day.
+        WHERE c.code IN ('SMART-RPT', 'SMART-MINI') AND c.bill_id > 0
+          AND LTRIM(RTRIM(ISNULL(u.MCCUnitCode, N''))) <> @testCentre;
 
         -- A sold booklet counts as downloaded when any of the patient's
         -- samples has a smart-PDF audit row; the multi-sample route logs one
