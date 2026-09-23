@@ -311,6 +311,15 @@ function positionOf(row: WorksheetResultRow, raw: string | null | undefined): Ra
 const isHeading = (r: WorksheetResultRow) => r.testType === 'Head' || r.testType === 'Profile';
 
 /**
+ * A cell holding nothing but dashes or dots is an EMPTY cell. The LIS has no
+ * other way to move a sample to Partially Tested before its figures arrive —
+ * a prenatal panel gets a "-" typed into one row — and the report already
+ * prints such a value as a blank (placeholderToNull in reportModel). Typing
+ * the real figure over it is an entry, not an amendment.
+ */
+const isEmptyMark = (v: string) => /^[-–—.\s]*$/.test(v);
+
+/**
  * The manual abnormal mark — the LIS worksheet's AB checkbox, offered only
  * where the range arithmetic cannot judge. Marked, the value prints bold red
  * on the report exactly as a derived H/L does.
@@ -406,8 +415,12 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
     () => rows.filter((r) => {
       const d = drafts[r.resultId];
       if (d?.value === undefined) return false;
+      // The LIS's own "nothing here yet" marks — a "-" or "." typed into a
+      // cell to move a prenatal panel to Partially Tested — are empty cells,
+      // not results. Replacing one is an entry, not an amendment, so it asks
+      // for no reason. The save procedure draws the same line.
       const original = (r.value ?? '').trim();
-      return original !== '' && d.value !== (r.value ?? '');
+      return !isEmptyMark(original) && d.value !== (r.value ?? '');
     }),
     [rows, drafts],
   );

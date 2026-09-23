@@ -864,3 +864,18 @@ cut their stylesheet block by hand: production is now built from main as
 it is, like staging, with the environment flag deciding what shows. The
 v2 typography (serif face, tabular text in capitals) is therefore the
 production report from this push.
+
+## A cell holding only a dash is an empty cell (2026-09-23)
+
+A prenatal panel is moved to Partially Tested in the LIS by typing "-" into
+one row, because the LIS has no other way to say "started, figures to
+follow". Infinity then took that "-" for an existing result: typing the
+figure over it was an amendment, the reason box appeared below the fold,
+and Save sat disabled with no visible cause — while a row that was truly
+blank saved at once. The form and the save procedure now agree that a
+value made only of dashes or dots is an empty cell: overwriting it is an
+entry, asks for no reason and needs result:enter only (script 154, the
+procedure re-issued whole from 51 with that one change, diffed against
+the deployed body first). The status count still treats the mark as
+filled, as the LIS does, so Partially Tested is unchanged; the report
+already printed such a value as a blank.
