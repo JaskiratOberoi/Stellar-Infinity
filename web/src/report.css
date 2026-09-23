@@ -849,3 +849,12 @@
    panel. Set a shade lighter than the title so the mark is a note, not a
    word of the name. */
 .lr__contd { font-weight: 500; font-style: italic; color: #4b5563; text-transform: none; letter-spacing: 0; }
+
+/* ---------- cytology ----------
+   A cytology report is a column of labels with the text beside each, and
+   the eye should land on the labels first: they are set a size up from the
+   descriptive default and the text a size down, so the heading outweighs
+   what it introduces. Cytology only — a histopathology description is read
+   the other way, as prose. */
+.lr__sec--cyto .lr__c-name-text--label { font-size: 11.5px; }
+.lr__sec--cyto .lr__c-value--wide { font-size: 10.5px; line-height: 1.45; }

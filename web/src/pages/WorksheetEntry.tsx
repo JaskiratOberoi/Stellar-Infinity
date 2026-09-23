@@ -90,7 +90,7 @@ function DescEditor({ title, value, readOnly, onChange, onClose }: {
         <p className="muted" style={{ fontSize: '.78rem', marginTop: '.2rem' }}>
           {readOnly
             ? 'This sample is locked, so the text is shown for reading only.'
-            : 'Formatting prints as written. Saved with the rest of the worksheet — close this and use Save on the grid.'}
+            : 'Line breaks print as written, here and in the legacy LIS. Saved with the rest of the worksheet — close this and use Save on the grid.'}
         </p>
         <RichTextEditor
           value={value}
@@ -152,7 +152,7 @@ function DescReportModal({ sid, rows, valueOf, abnormalOf, readOnly, attachments
         <p className="muted" style={{ fontSize: '.78rem', marginTop: '.2rem' }}>
           {readOnly
             ? 'This sample is locked, so the text is shown for reading only.'
-            : 'Every result on the sample, written long-form. Formatting prints as written; text saves with the worksheet’s Save, attachments upload immediately.'}
+            : 'Every result on the sample, written long-form. Line breaks print as written, here and in the legacy LIS; text saves with the worksheet’s Save, attachments upload immediately.'}
         </p>
 
         <div style={{ overflowY: 'auto', marginTop: '.6rem', display: 'flex',
@@ -597,7 +597,7 @@ export function WorksheetEntry({ sid, onClose, onSaved }: {
                     histopathology and friends. Offered whenever results can
                     be read — locked, it opens for reading. */}
                 <button className="btn btn--ghost btn--sm" onClick={() => setShowDescReport(true)}
-                        title="Write every result long-form, with formatting — the descriptive report editor">
+                        title="Write every result long-form — the descriptive report editor">
                   Desc report
                 </button>
                 <button className="btn btn--ghost btn--sm" onClick={() => setShowHistory(true)}>

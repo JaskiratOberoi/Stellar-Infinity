@@ -234,6 +234,14 @@ public static class WorksheetEndpoints
 
         var actor = AuditActorAccessor.For(http);
 
+        // Values are stored as plain lines — the column is the LIS's too.
+        // See ResultText: a value carrying markup is flattened here whatever
+        // sent it.
+        request = request with
+        {
+            Edits = request.Edits.Select(e => e with { Value = ResultText.Lines(e.Value) }).ToList(),
+        };
+
         try
         {
             var outcome = await writes.SaveAsync(

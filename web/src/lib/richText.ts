@@ -97,3 +97,29 @@ export function sanitizeRich(s: string): string {
   scrub(root, doc);
   return root.innerHTML;
 }
+
+/**
+ * A marked-up value flattened to the plain lines the LIS stores: block
+ * boundaries and <br> become line breaks, entities are decoded, tags go.
+ * Rendered through a detached element and read back as innerText, so the
+ * browser's own line-breaking rules apply — the same rules the editor's
+ * value follows — rather than a hand-written approximation of them.
+ */
+export function htmlToLines(html: string): string {
+  const host = document.createElement('div');
+  host.innerHTML = sanitizeRich(html);
+  // innerText needs layout for block boundaries; a hidden-by-position host
+  // gets it without a flash on screen.
+  host.style.cssText = 'position:absolute;left:-99999px;top:0;white-space:pre-wrap';
+  document.body.appendChild(host);
+  try {
+    return host.innerText
+      .replace(/ /g, ' ')
+      .replace(/\r\n?/g, '\n')
+      .replace(/[ \t]+$/gm, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/\s+$/, '');
+  } finally {
+    host.remove();
+  }
+}

@@ -6,7 +6,7 @@ import nobleLogo from '../assets/noble-logo.png';
 // composite. nabl.png beside it is the LIS's artwork as received, kept
 // untouched; this file is generated from it, not edited into it.
 import nablLogo from '../assets/nabl-mc2547.png';
-import { isRichValue, sanitizeRich } from '../lib/richText';
+import { htmlToLines, isRichValue, sanitizeRich } from '../lib/richText';
 import { code128 } from '../lib/code128';
 import { notesForCodes } from '../lib/reportNotes';
 import {
@@ -523,7 +523,10 @@ export function PrintReport() {
   const keepClass = (sec: Section, i: number, n: number) =>
     'lr__keep'
     + (sec.ownSheet && i > 0 ? ' lr__sheet-start' : '')
-    + (sec.ownSheet && i < n - 1 ? ' lr__sheet-end' : '');
+    + (sec.ownSheet && i < n - 1 ? ' lr__sheet-end' : '')
+    // Cytology reads as a form of labels and text beside them; the labels
+    // are set a size up and the text a size down there, and nowhere else.
+    + (/CYTO/i.test(sec.deptName) ? ' lr__sec--cyto' : '');
 
   /* Sections re-joined into whole departments, for ?split=dept. Built from
      sections rather than from report.departments directly so the exclusion
@@ -1609,12 +1612,21 @@ function ResultRow({
    * full-width beneath it, sanitised through the one gate that may hand LIS
    * markup to dangerouslySetInnerHTML.
    */
-  const rich = isRichValue(row.valueRaw);
+  /*
+   * A descriptive (wide) row shows its text BESIDE the label whatever shape
+   * it was stored in: a value that arrived as markup — the editor wrote
+   * paragraphs as <div>s before 2026-09-23, and the LIS's Desc Report page
+   * can still write HTML — is flattened to its lines and set in the text
+   * column, not printed as a full-width block under the label. Only a rich
+   * value on a NON-descriptive row keeps the full-width rendering.
+   */
+  const wideText = wide && isRichValue(row.valueRaw) ? htmlToLines(row.valueRaw!) : row.value;
+  const rich = !wide && isRichValue(row.valueRaw);
   /* A descriptive row: label and text. The label loses its stored colon and
      is set as a signpost; a field the pathologist left as "-" prints as a
      quiet dash rather than a finding; the impression or diagnosis is set a
      weight heavier, because it is the line the report exists to carry. */
-  const blank = wide && (!row.value || /^[-–—.]+$/.test(row.value));
+  const blank = wide && (!wideText || /^[-–—.]+$/.test(wideText));
   const key = wide && KEY_LABEL.test(row.name ?? '');
   /*
    * A SENTENCE for a value — "LOWER THAN THE LINEAR RANGE OF THE ASSAY",
@@ -1655,7 +1667,7 @@ function ResultRow({
           <td className={`lr__c-value lr__c-value--wide${key ? ' lr__c-value--key' : ''}`} colSpan={4}>
             {blank
               ? <span className="lr__c-value--blank">—</span>
-              : <span className={row.abnormal ? 'lr__abnormal' : undefined}>{row.value}</span>}
+              : <span className={row.abnormal ? 'lr__abnormal' : undefined}>{wideText}</span>}
           </td>
         ) : (
           <>

@@ -811,3 +811,31 @@ may register tubes is treated as unrestricted for these routes — the desk
 already sees every Sample Sent tube whatever centre sent it — while
 everyone else stays held to their report scope. Nothing on that queue is
 signed out, so the dialog is never locked there.
+
+## Descriptive results are stored as lines, never markup (2026-09-23)
+
+A cytology description entered in Infinity came out on the legacy LIS
+worksheet preview as `<div>VOLUME: 30&nbsp; ML</div>…`. The result column
+is the LIS's too: it enters descriptive values through a multi-line
+textbox and stores lines (309 of the last 300,000 rows carry a line break;
+none carry a paragraph tag — the two `<div>` values in the table were that
+day's Infinity writes), and its preview shows the stored value literally.
+Infinity's editor was a small word processor on the premise that the LIS's
+Desc Report page (TinyMCE) wrote real HTML; the data says the lab does not
+use it. So the column keeps one shape, lines: the editor writes the
+element's text (contentEditable plaintext-only, paste as text, autocorrect
+kept), the API flattens any markup a client still sends (ResultText — a
+tag starts with a letter, so "<0.5 and >10" passes untouched), and the two
+stored values were rewritten as lines with the originals kept in
+inf_result_value_backup_20260923. A value that still arrives as markup on
+a descriptive row prints flattened, beside its label; the full-width rich
+rendering survives only for non-descriptive rows that carry markup.
+
+## Cytology: labels a size up, text a size down (2026-09-23)
+
+On a cytology report the text now sits beside its label like every other
+descriptive field (the markup had pushed it under the label as a block),
+and the label is set at 11.5px with the text at 10.5px so the heading
+outweighs what it introduces. Cytology sections only, by department name;
+histopathology stays at the descriptive default, where the prose is what
+is read.
