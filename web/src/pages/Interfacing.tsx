@@ -204,13 +204,23 @@ export function Interfacing() {
             and how their results are entered
           </p>
         </div>
-        {can('user:manage') && (
-          <div className="row" style={{ marginLeft: 'auto' }}>
+        <div className="row" style={{ marginLeft: 'auto' }}>
+          {/* Always the current installer: the API resolves it from latest.yml
+              per request, and the browser asks for the download password. Not
+              gated on a permission — the person setting up a lab PC needs it. */}
+          <a
+            className="btn btn--ghost btn--sm"
+            href="/api/downloads/synapse/latest"
+            title="Download the current Stellar Synapse installer (password required)"
+          >
+            Download Synapse
+          </a>
+          {can('user:manage') && (
             <button className="btn btn--primary btn--sm" onClick={() => setShowRegister(true)}>
               Register lab site
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {error && <div className="alert alert--error" style={{ marginBottom: '.8rem' }}>{error}</div>}
