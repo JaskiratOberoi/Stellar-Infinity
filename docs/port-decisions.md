@@ -1039,3 +1039,14 @@ once and, once dismissed, stays away (sessionStorage keyed by the
 account, cleared for the next account on sign-out). The bubble never
 covers its control. IntroTip is the component; a third tip is a key in
 UserTipRepository.Known and a wrapper.
+
+## "Collected at" is one tick for the whole patient document (2026-09-24)
+
+The PID review shows one sample's page at a time and remembers each
+sample's unticked items separately, so unticking the centre's address on
+the first page left it on every other page of the download. The address
+is the same on every page and the reviewer means the document, so the
+"Collected at" tick is now copied from the page in view to every other
+sample of the patient, both ways; the analyte ticks stay per sample, since
+those are decisions about that sample's results. The complete-report
+download already sends each sample's stored exclusions, so it follows.

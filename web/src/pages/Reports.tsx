@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, csrfHeader } from '../api/client';
 import { downloadFile, fmtDateTime } from '../lib/format';
+import { COLLECTED_AT_KEY } from '../lib/reportModel';
 import { ReportViewer } from './ReportViewer';
 import { SmartReportModal } from './SmartReport';
 import { InfinityLoader } from '../components/InfinityLoader';
@@ -988,8 +989,23 @@ function PatientReportViewer({ pid, patientName, rows, onClose, overrideLock, on
       const d = e.data;
       if (!d || d.type !== 'infinity:report-selection' || !sids.includes(d.sid)) return;
       if (Array.isArray(d.excluded)) {
-        excludesRef.current[d.sid] =
-          d.excluded.filter((n: unknown): n is number => typeof n === 'number');
+        const ex = d.excluded.filter((n: unknown): n is number => typeof n === 'number');
+        excludesRef.current[d.sid] = ex;
+        /* "Collected at" is ONE decision for the whole document, not one per
+           sample: the centre's address is the same on every page, and a
+           reviewer who unticks it on the first page means the download, not
+           that page. So the tick on the sample in view is copied to every
+           other sample of the patient — untick here, unticked everywhere;
+           tick it back, back everywhere. The analyte ticks stay per sample:
+           those really are decisions about that sample's results. */
+        const ccOff = ex.includes(COLLECTED_AT_KEY);
+        for (const other of sids) {
+          if (other === d.sid) continue;
+          const cur = excludesRef.current[other] ?? [];
+          const has = cur.includes(COLLECTED_AT_KEY);
+          if (ccOff && !has) excludesRef.current[other] = [...cur, COLLECTED_AT_KEY];
+          else if (!ccOff && has) excludesRef.current[other] = cur.filter((n) => n !== COLLECTED_AT_KEY);
+        }
       }
       if (typeof d.total === 'number' && typeof d.remaining === 'number') {
         setCounts((prev) => ({ ...prev, [d.sid]: { total: d.total, remaining: d.remaining } }));
