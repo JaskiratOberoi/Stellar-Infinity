@@ -5474,3 +5474,40 @@ tbody tr.row-status--quiet > td:first-child {
 /* The band under both columns of the client home: the Smart Report coverage
    and the day, which are wide by nature. */
 .clienthome__wide { grid-column: 1 / -1; display: grid; gap: .9rem; }
+
+/* ---------- introductory tips ----------
+   A bubble that points at a control the first times an account signs in
+   after the control shipped. Positioned off its child; never covers it. */
+.introtip { position: relative; display: inline-flex; align-items: center; }
+.introtip__bubble {
+  position: absolute; z-index: 60; left: 0; top: calc(100% + 10px);
+  width: max-content; max-width: min(18rem, 80vw);
+  padding: .55rem .7rem .55rem .65rem; border-radius: 10px;
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--accent-ring); box-shadow: var(--shadow-card), 0 0 0 4px var(--accent-soft);
+  font-size: .76rem; font-weight: 400; line-height: 1.45; letter-spacing: 0; text-transform: none;
+  text-align: left; white-space: normal;
+  display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .5rem;
+  animation: introtip-in .35s ease-out both;
+}
+.introtip__bubble::before {
+  content: ''; position: absolute; width: 10px; height: 10px; left: 14px; top: -6px;
+  background: var(--surface); border-left: 1px solid var(--accent-ring); border-top: 1px solid var(--accent-ring);
+  transform: rotate(45deg);
+}
+.introtip__bubble--below-end { left: auto; right: 0; }
+.introtip__bubble--below-end::before { left: auto; right: 14px; }
+.introtip__bubble--above { top: auto; bottom: calc(100% + 10px); }
+.introtip__bubble--above::before { top: auto; bottom: -6px; border: 0; border-right: 1px solid var(--accent-ring); border-bottom: 1px solid var(--accent-ring); }
+.introtip__tag {
+  font-size: .58rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  color: #7c2d12; background: #ffedd5; border: 1px solid #fdba74; border-radius: 999px; padding: .1em .45em;
+}
+.introtip__text { flex: 1 1 10rem; }
+.introtip__ok {
+  margin-left: auto; padding: .22rem .6rem; border-radius: 999px; font-size: .68rem; font-weight: 600;
+  color: #fff; background: var(--teal); border: 1px solid var(--teal); cursor: pointer;
+}
+.introtip__ok:hover { filter: brightness(1.08); }
+@keyframes introtip-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .introtip__bubble { animation: none; } }

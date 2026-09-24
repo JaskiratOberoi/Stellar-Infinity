@@ -69,6 +69,16 @@ public static class ApiEndpoints
            .RequireAuthorization()
            .WithName("GetMyScope");
 
+        // Introductory tips: how many sign-ins each has been shown on, and
+        // the mark that counts one more. Per account, so the bubble stops
+        // after two sign-ins wherever the user signs in.
+        app.MapGet("/api/me/tips", GetMyTips)
+           .RequireAuthorization()
+           .WithName("GetMyTips");
+        app.MapPost("/api/me/tips/{tip}/shown", MarkTipShown)
+           .RequireAuthorization()
+           .WithName("MarkTipShown");
+
         var orders = app.MapGroup("/api/orders")
                         .RequireAuthorization()
                         .RequireCapability(Capabilities.OrderView);
@@ -247,6 +257,31 @@ public static class ApiEndpoints
     }
 
     /// <summary>How many centres the caller can see — lets the UI say so plainly.</summary>
+    private static async Task<IResult> GetMyTips(
+        System.Security.Claims.ClaimsPrincipal principal,
+        UserTipRepository tips,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+        var shown = await tips.GetAsync(userId, ct).ConfigureAwait(false);
+        // Every known tip, with its count — a tip never shown is 0, so the
+        // client need not special-case an absent key.
+        var all = UserTipRepository.Known.ToDictionary(k => k, k => shown.TryGetValue(k, out var n) ? n : 0);
+        return Results.Ok(new { tips = all, max = UserTipRepository.MaxShowings });
+    }
+
+    private static async Task<IResult> MarkTipShown(
+        string tip,
+        System.Security.Claims.ClaimsPrincipal principal,
+        UserTipRepository tips,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+        if (!UserTipRepository.Known.Contains(tip)) return Results.NotFound();
+        var n = await tips.MarkShownAsync(userId, tip, ct).ConfigureAwait(false);
+        return Results.Ok(new { tip, shown = n, max = UserTipRepository.MaxShowings });
+    }
+
     private static async Task<IResult> GetMyScope(
         System.Security.Claims.ClaimsPrincipal principal,
         ScopeRepository scopes,

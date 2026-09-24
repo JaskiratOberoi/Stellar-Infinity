@@ -33,6 +33,7 @@ import { Requests } from './pages/Requests';
 import { Referrers } from './pages/Referrers';
 import { InvoiceConfigPage } from './pages/InvoiceConfig';
 import { ThemeToggle } from './theme/ThemeToggle';
+import { IntroTip, resetIntroTips } from './components/IntroTip';
 import { InfinityLoader } from './components/InfinityLoader';
 import { IdleWarning } from './components/IdleWarning';
 import {
@@ -380,8 +381,13 @@ export function App() {
             shed the visible name — see the shed ladder in styles.css. */}
         <div className="topbar__user" title={`${user.displayName ?? user.username} · ${user.role}`}>
           <span><b>{user.displayName ?? user.username}</b> · {user.role}</span>
-          <ThemeToggle />
-          <button className="btn btn--ghost btn--sm" onClick={signOut}>Sign out</button>
+          {/* Pointed out on an account's first two sign-ins after it shipped
+              — see IntroTip. */}
+          <IntroTip id="dark-mode" side="below-end"
+                    text="Switch between light and dark here. Infinity also follows the time of day on its own.">
+            <ThemeToggle />
+          </IntroTip>
+          <button className="btn btn--ghost btn--sm" onClick={() => { resetIntroTips(); signOut(); }}>Sign out</button>
         </div>
 
         {/* Replaces both of the above below 850px — see NavMenu. */}

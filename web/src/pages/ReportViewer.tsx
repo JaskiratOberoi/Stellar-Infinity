@@ -5,6 +5,7 @@ import { downloadFile } from '../lib/format';
 import type { WorksheetRow } from './Reports';
 import { PaperSelect, usePaper } from '../components/PaperSelect';
 import { FORMAT_PICKER, FormatSelect, useReportFormat } from '../components/ReportFormat';
+import { IntroTip } from '../components/IntroTip';
 import { BuTag } from '../components/BuTag';
 
 export interface TestResult {
@@ -303,8 +304,11 @@ export function ReportViewer({
                 browser, carried on the preview and the download alike. See
                 FORMAT_PICKER. */}
             {FORMAT_PICKER && (
-              <FormatSelect className="input input--sm preview__paper" value={format} onChange={setFormat}
-                            disabled={busy !== null} ariaLabel="Report format" />
+              <IntroTip id="report-format"
+                        text="Choose the report format here. v2, the serif report, is the default; v1 is the earlier look.">
+                <FormatSelect className="input input--sm preview__paper" value={format} onChange={setFormat}
+                              disabled={busy !== null} ariaLabel="Report format" />
+              </IntroTip>
             )}
 
             <select className="input input--sm preview__layout" value={split ? 'split' : 'continuous'}

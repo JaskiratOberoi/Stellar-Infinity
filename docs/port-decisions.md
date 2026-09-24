@@ -1025,3 +1025,17 @@ lasted a day, while v2 became the default. A desk may print v1, v2 or v3,
 the choice is remembered per browser, and v2 remains what a link with no
 format, the render sidecar and a fresh browser get. The environment flag
 (lib/env.ts) stays for the banner and anything staging-only later.
+
+## Introductory tips for the dark-mode switch and the format selector (2026-09-24)
+
+Two controls shipped that nobody would find by accident, so each now gets
+a small "New" bubble pointing at it: the dark-mode switch in the top bar,
+on the home page, and the format selector in the report viewer, when it
+opens. Jas's rule: each account sees a tip on at most two sign-ins, then
+never again; "Got it" closes it for the session. The count is kept per
+ACCOUNT (inf_user_tip, script 161; /api/me/tips and /shown) so it follows
+the user across desks and devices; within a session the bubble is counted
+once and, once dismissed, stays away (sessionStorage keyed by the
+account, cleared for the next account on sign-out). The bubble never
+covers its control. IntroTip is the component; a third tip is a key in
+UserTipRepository.Known and a wrapper.
