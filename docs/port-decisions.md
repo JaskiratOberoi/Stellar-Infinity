@@ -977,3 +977,15 @@ one place at placement (CustomTest.BilledAs), mirrored by the form's chip,
 and every entitlement reader accepts the third code. The dashboard names
 the tiers by the line's code for new sales and by the qualifying profile
 for the older ones.
+
+## A "Smart" badge on the row from the moment the booklet is bought (2026-09-24)
+
+The booklet's own button on the Reporting tab appears only once a report
+is ready, so until then nothing on a row said a booklet was owed — the
+bench could not tell a Smart Report order from any other. Both the
+Reporting rows (beside the PID, once per patient group) and the Worksheet
+rows (beside the SID) now carry a small teal "Smart" badge whenever the
+patient has a booklet line, at any status. The flag was already on every
+row the list endpoint returns (it is by patient, not by status); only the
+mark was missing. Small and quiet on purpose: a fact about the order, not
+an action.

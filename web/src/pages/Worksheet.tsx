@@ -516,7 +516,19 @@ export function Worksheet() {
                         )}
                       </td>
 
-                      <td className="mono cell--lead"><b>{r.sid}</b></td>
+                      <td className="mono cell--lead">
+                        <b>{r.sid}</b>
+                        {/* The order bought the Smart Report. Said here, at
+                            the bench, because the booklet's own button only
+                            appears once the report is ready — and the tech
+                            deciding what to enter and how carefully should
+                            know a booklet will be built from it. */}
+                        {r.smartReport && (
+                          <span className="badge badge--smart" title="This order includes the Smart Report booklet">
+                            Smart
+                          </span>
+                        )}
+                      </td>
                       <td className="cell--body" data-label="Tests">
                         <TestList names={r.testNames} packages={r.packageNames} />
                       </td>

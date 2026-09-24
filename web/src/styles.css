@@ -2080,6 +2080,11 @@ tbody tr:hover { background: var(--accent-softer); }
 .badge--ok       { color: var(--teal);    border-color: var(--accent-ring); background: var(--accent-soft); }
 .badge--bad      { color: var(--danger);  border-color: var(--danger-line); background: var(--danger-soft); }
 .badge--muted    { color: var(--ink-dim); border-color: var(--line);        background: var(--neutral-soft); }
+/* The order bought the Smart Report booklet — on the Reporting and Worksheet
+   rows beside the id, since the booklet's own button only appears once the
+   report is ready. Small and quiet: a fact about the order, not an action. */
+.badge--smart    { color: var(--teal);    border-color: var(--accent-ring); background: var(--accent-soft);
+                   margin-left: .4rem; padding: .12em .45em; font-size: .58rem; vertical-align: 2px; }
 
 /* The processing-lab tag beside a client code (HAL, SRI, AGR): a badge cut
    down to sit inside a muted cell without becoming the thing the eye lands

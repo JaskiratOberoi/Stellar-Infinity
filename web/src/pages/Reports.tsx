@@ -675,6 +675,16 @@ export function Reports() {
                         // band already say whose sample this is.
                         !r.pid && i === 0 ? <span className="muted">—</span> : null
                       )}
+                      {/* The order bought the Smart Report. Said on the PID
+                          row from the moment it is booked, because the
+                          booklet's own button appears only once the report
+                          is ready — and until then nothing on the row said
+                          a booklet was owed. */}
+                      {i === 0 && r.smartReport && (
+                        <span className="badge badge--smart" title="This order includes the Smart Report booklet">
+                          Smart
+                        </span>
+                      )}
                     </td>
                     <td className="mono cell--meta" data-label="SID">{r.sid}</td>
                     <td className="cell--head">
