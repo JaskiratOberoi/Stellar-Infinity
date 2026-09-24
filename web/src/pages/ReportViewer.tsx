@@ -299,9 +299,9 @@ export function ReportViewer({
                 paginates like the download. */}
             <PaperSelect className="input input--sm preview__paper" value={paper} onChange={setPaper}
                          disabled={busy !== null} ariaLabel="Paper to print on" />
-            {/* The format picker, STAGING ONLY: how a format is tried before
-                it becomes the report. Production prints the default and
-                shows no control — see FORMAT_PICKER. */}
+            {/* The format picker — v1, v2 (the default) or v3 — remembered per
+                browser, carried on the preview and the download alike. See
+                FORMAT_PICKER. */}
             {FORMAT_PICKER && (
               <FormatSelect className="input input--sm preview__paper" value={format} onChange={setFormat}
                             disabled={busy !== null} ariaLabel="Report format" />

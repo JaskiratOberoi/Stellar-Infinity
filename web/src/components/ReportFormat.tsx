@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { IS_STAGING } from '../lib/env';
 
 /**
  * Which FORMAT the report is drawn in — the typography, not the paper.
@@ -30,16 +29,16 @@ export function isReportFormat(v: unknown): v is ReportFormat {
 
 const KEY = 'inf.report-format';
 
-/** The report every desk prints unless a staging tester picks another. */
+/** The report every desk prints unless it picks another. */
 export const DEFAULT_FORMAT: ReportFormat = 'v2';
 
 /**
- * The picker exists on STAGING only: it is how a format is tried before it
- * becomes the report. Production has one format, the default, and no
- * control to change it — a stored choice from a staging session on the
- * same browser is ignored there, so a tester's v3 never reaches a patient.
+ * The picker is on every deployment since 2026-09-24 (Jas: put it in
+ * production for the standard PDF reports). It was a staging-only control
+ * for a day, while v2 became the default; now a desk may print v1, v2 or
+ * v3 and the choice is remembered per browser. The default stays v2.
  */
-export const FORMAT_PICKER = IS_STAGING;
+export const FORMAT_PICKER = true;
 
 export function readStoredFormat(): ReportFormat {
   if (!FORMAT_PICKER) return DEFAULT_FORMAT;

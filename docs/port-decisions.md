@@ -1016,3 +1016,12 @@ Revised the same day: recent payments back under the balance on the left,
 pay online alone on the right, and the Smart Report coverage and the day
 in a band across both columns at the bottom (clienthome__wide) — both are
 wide by nature, chips and figures and a trend, and a column squeezed them.
+
+## The format picker is on production too (2026-09-24)
+
+Jas: put the format selector in production for the standard PDF reports.
+FORMAT_PICKER is now true on every deployment; the staging-only gate
+lasted a day, while v2 became the default. A desk may print v1, v2 or v3,
+the choice is remembered per browser, and v2 remains what a link with no
+format, the render sidecar and a fresh browser get. The environment flag
+(lib/env.ts) stays for the banner and anything staging-only later.
