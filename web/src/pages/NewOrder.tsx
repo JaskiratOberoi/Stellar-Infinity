@@ -321,21 +321,42 @@ export function NewOrder() {
    * qualified through an LFT moves the extra back to its full price.
    */
   const orderIsB2b = (preview?.channel ?? channel) === 'b2b';
-  const extraTier = (t: CustomTest): 'any' | 'package' | 'mini' | null => {
+  /*
+   * Three tiers since 2026-09-24, decided from the cart exactly as
+   * CustomTest.BilledAs decides them at placement:
+   *   'package' an HR health package OR a supported profile (LFT, KFT, CBC
+   *             with ESR, iron, vitamins, anemia) — ₹99 list, ₹49 offer;
+   *   'multi'   two or more supported single tests, however many — ₹49 / ₹25;
+   *   'mini'    one supported single test — ₹21 / ₹11.
+   * A package or profile wins over any count of single tests.
+   */
+  const extraTier = (t: CustomTest): 'any' | 'package' | 'multi' | 'mini' | null => {
     if (!t.onlyWithPackages?.length) return 'any';
     if (cart.items.some((i) => i.kind === 'master' && t.onlyWithPackages!.includes(i.id))) return 'package';
-    if (orderIsB2b && t.miniMrp != null && t.miniWith?.length
-        && cart.items.some((i) => t.miniWith!.some((m) => m.kind === i.kind && m.id === i.id))) return 'mini';
+    if (!orderIsB2b || t.miniMrp == null || !t.miniWith?.length) return null;
+    const minis = t.miniWith;
+    if (cart.items.some((i) => i.kind === 'profile' && minis.some((m) => m.kind === 'profile' && m.id === i.id))) return 'package';
+    const singles = cart.items.filter((i) => i.kind === 'test' && minis.some((m) => m.kind === 'test' && m.id === i.id)).length;
+    if (singles >= 2) return t.multiMrp != null ? 'multi' : 'mini';
+    if (singles === 1) return 'mini';
     return null;
   };
   /* Each tier has a list price and, while a dated offer is in force, an
      offer price the server sends only until its last day. Mirrors
-     CustomTest.PriceFor, which is what actually bills. */
-  const extraListPrice = (t: CustomTest) =>
-    (extraTier(t) === 'mini' ? (t.miniMrp ?? t.mrp) : t.mrp);
-  const extraOfferPrice = (t: CustomTest): number | null =>
-    (extraTier(t) === 'mini' ? (t.miniOfferMrp ?? null)
-      : extraTier(t) === 'package' ? (t.offerMrp ?? null) : null);
+     CustomTest.BilledAs, which is what actually bills. */
+  const extraListPrice = (t: CustomTest) => {
+    const tier = extraTier(t);
+    return tier === 'mini' ? (t.miniMrp ?? t.mrp)
+      : tier === 'multi' ? (t.multiMrp ?? t.mrp)
+      : t.mrp;
+  };
+  const extraOfferPrice = (t: CustomTest): number | null => {
+    const tier = extraTier(t);
+    return tier === 'mini' ? (t.miniOfferMrp ?? null)
+      : tier === 'multi' ? (t.multiOfferMrp ?? null)
+      : tier === 'package' ? (t.offerMrp ?? null)
+      : null;
+  };
   const extraPrice = (t: CustomTest) => extraOfferPrice(t) ?? extraListPrice(t);
   const offeredCustomTests = customTests.filter((t) => extraTier(t) != null);
   const offeredKey = offeredCustomTests.map((t) => t.id).join(',');

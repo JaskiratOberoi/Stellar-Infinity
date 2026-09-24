@@ -36,6 +36,10 @@ public sealed record CustomTest(
     IReadOnlyList<MiniItem>? MiniWith = null,
     int? MiniMrp = null,
     int? MiniOfferMrp = null,
+    /// <summary>The multi tier — two or more supported single tests on one B2B
+    /// order (inf_smart_report_tier, script 160): list price and offer price.</summary>
+    int? MultiMrp = null,
+    int? MultiOfferMrp = null,
     int? OfferMrp = null,
     DateOnly? OfferUntil = null,
     string? OfferNote = null)
@@ -64,10 +68,27 @@ public sealed record CustomTest(
     {
         if (OnlyWithPackages is not { Count: > 0 } need) return this;
         var list = items as IReadOnlyCollection<CartItem> ?? items.ToList();
+        // Three tiers (2026-09-24). A package or a supported PROFILE earns the
+        // package price whatever else is on the order; failing that, single
+        // supported tests are counted — two or more is the multi tier, one is
+        // the mini tier. B2B only for anything below a package.
         if (list.Any(i => string.Equals(i.Kind, "master", StringComparison.OrdinalIgnoreCase) && need.Contains(i.Id)))
             return this with { Mrp = OfferMrp ?? Mrp };
-        if (b2b && MiniMrp is int mini && MiniWith is { Count: > 0 } minis
-            && list.Any(i => minis.Any(m => string.Equals(m.Kind, i.Kind, StringComparison.OrdinalIgnoreCase) && m.Id == i.Id)))
+        if (!b2b || MiniMrp is not int mini || MiniWith is not { Count: > 0 } minis) return null;
+        static bool Same(MiniItem m, CartItem i, string kind) =>
+            string.Equals(m.Kind, kind, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(i.Kind, kind, StringComparison.OrdinalIgnoreCase) && m.Id == i.Id;
+        if (list.Any(i => minis.Any(m => Same(m, i, "profile"))))
+            return this with { Mrp = OfferMrp ?? Mrp };
+        var singles = list.Count(i => minis.Any(m => Same(m, i, "test")));
+        if (singles >= 2 && MultiMrp is int multi)
+            return this with
+            {
+                Code = Reports.SmartReportAccessRepository.SmartReportMultiCode,
+                Name = Reports.SmartReportAccessRepository.SmartReportMultiName,
+                Mrp = MultiOfferMrp ?? multi,
+            };
+        if (singles >= 1)
             return this with
             {
                 Code = Reports.SmartReportAccessRepository.SmartReportMiniCode,
@@ -137,6 +158,10 @@ public sealed class CustomTestRepository(NobleConnectionFactory db, SqlRetry ret
         SELECT tier, offer_mrp, offer_until, note
         FROM dbo.inf_smart_report_offer
         WHERE offer_until >= CAST(GETDATE() AS DATE);
+
+        -- The tiers' list prices (160). Fifth result set; the multi tier
+        -- exists only here, the others fall back to the older columns.
+        SELECT tier, list_mrp FROM dbo.inf_smart_report_tier;
         """;
 
     /// <summary>Active custom tests offered to one client.</summary>
@@ -184,7 +209,7 @@ public sealed class CustomTestRepository(NobleConnectionFactory db, SqlRetry ret
                     }
                 }
                 // The offers in force today, by tier.
-                int? packageOffer = null, miniOffer = null;
+                int? packageOffer = null, miniOffer = null, multiOffer = null;
                 DateOnly? offerUntil = null;
                 string? offerNote = null;
                 if (await r.NextResultAsync(inner).ConfigureAwait(false))
@@ -195,6 +220,7 @@ public sealed class CustomTestRepository(NobleConnectionFactory db, SqlRetry ret
                         var price = r.Int("offer_mrp");
                         if (tier == "package") packageOffer = price;
                         else if (tier == "mini") miniOffer = price;
+                        else if (tier == "multi") multiOffer = price;
                         else continue;
                         if (r.Date("offer_until") is not DateTime untilDt) continue;
                         var until = DateOnly.FromDateTime(untilDt);
@@ -202,6 +228,18 @@ public sealed class CustomTestRepository(NobleConnectionFactory db, SqlRetry ret
                         if (offerUntil is null || until < offerUntil) { offerUntil = until; offerNote = r.Str("note"); }
                     }
                 }
+                // The tiers' list prices: the multi tier lives only here.
+                int? multiList = null, miniList = null;
+                if (await r.NextResultAsync(inner).ConfigureAwait(false))
+                {
+                    while (await r.ReadAsync(inner).ConfigureAwait(false))
+                    {
+                        var tier = (r.Str("tier") ?? string.Empty).Trim().ToLowerInvariant();
+                        if (tier == "multi") multiList = r.Int("list_mrp");
+                        else if (tier == "mini") miniList = r.Int("list_mrp");
+                    }
+                }
+                if (miniList is int ml) miniMrp = ml;
                 // The Smart Report is the one extra with a condition. An empty
                 // list would mean "with nothing", so it is left unconditioned
                 // only when the table is empty — which it is not seeded to be.
@@ -216,6 +254,8 @@ public sealed class CustomTestRepository(NobleConnectionFactory db, SqlRetry ret
                                 MiniWith = minis.Count > 0 ? minis : null,
                                 MiniMrp = minis.Count > 0 ? miniMrp : null,
                                 MiniOfferMrp = minis.Count > 0 ? miniOffer : null,
+                                MultiMrp = minis.Count > 0 ? multiList : null,
+                                MultiOfferMrp = minis.Count > 0 ? multiOffer : null,
                                 OfferMrp = packageOffer,
                                 OfferUntil = offerUntil,
                                 OfferNote = offerNote,

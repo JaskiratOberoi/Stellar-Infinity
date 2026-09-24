@@ -952,3 +952,28 @@ when charged. Both now add the CHARGED extras as sale lines, dated by the
 ledger row that charged them; an uncharged line is not yet a sale, as an
 unchecked test is not. The LIS's own Sales report still omits them (the
 LIS is not changed); its bill print and its ledger carry them.
+
+## The historical Smart Report lines, charged (2026-09-24)
+
+Jas lifted the parked decision for the Smart Report only: the two pre-151
+booklets whose orders were received and reported — Shivani on UP1003 and
+Raman Deep on UP1020, ₹99 each — were charged through the usual procedure
+as the ordering users. The third (HR0032, bill 32085) has no sample and no
+test on its patient and was not charged; the 108 MDCARE external lines stay
+parked. The sweep still starts at 2026-09-21.
+
+## Three Smart Report tiers (2026-09-24)
+
+Jas set the pricing by what is on the order: one supported single test
+₹21 / ₹11; two or more supported single tests ₹49 / ₹25, however many
+more are added; a supported profile or an HR package ₹99 / ₹49 — a profile
+or package wins over any count of single tests. The tiers live in
+inf_smart_report_tier (160) with their bill-line codes — SMART-MINI,
+SMART-MULT (10 characters, the bill table's limit), SMART-RPT — and the
+multi offer joins inf_smart_report_offer, whose tier constraint was widened.
+The supported items stay in inf_smart_report_mini; its 'profile' rows now
+price at the package tier and their own mrp is no longer read. Decided in
+one place at placement (CustomTest.BilledAs), mirrored by the form's chip,
+and every entitlement reader accepts the third code. The dashboard names
+the tiers by the line's code for new sales and by the qualifying profile
+for the older ones.

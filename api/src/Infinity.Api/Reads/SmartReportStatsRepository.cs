@@ -136,7 +136,13 @@ public sealed class SmartReportStatsRepository(NobleConnectionFactory db, SqlRet
                clientName = LTRIM(RTRIM(ISNULL(u.MCCUnitName, N''))),
                tierCode = ISNULL(pk.code, ISNULL(mn.code, N'OTHER')),
                tierName = ISNULL(pk.name, ISNULL(mn.name, N'No qualifying profile')),
-               tier = CASE WHEN pk.code IS NOT NULL THEN 'package' WHEN mn.code IS NOT NULL THEN 'mini' ELSE 'other' END,
+               -- The line's own code names its tier since 2026-09-23 (mini) and
+               -- 2026-09-24 (multi); earlier lines all carry SMART-RPT and are
+               -- placed by the profile that qualified them.
+               tier = CASE WHEN c.code = 'SMART-MULT' THEN 'multi'
+                           WHEN c.code = 'SMART-MINI' THEN 'mini'
+                           WHEN pk.code IS NOT NULL THEN 'package'
+                           WHEN mn.code IS NOT NULL THEN 'mini' ELSE 'other' END,
                charged = ISNULL(l.amount, 0)
         INTO #sold
         FROM dbo.telo_custom_test_order c
@@ -161,7 +167,7 @@ public sealed class SmartReportStatsRepository(NobleConnectionFactory db, SqlRet
         -- is a fixture or a proof order, never a sale, and a dashboard that
         -- counted them would overstate the month by however many tests were
         -- run that day.
-        WHERE c.code IN ('SMART-RPT', 'SMART-MINI') AND c.bill_id > 0
+        WHERE c.code IN ('SMART-RPT', 'SMART-MINI', 'SMART-MULT') AND c.bill_id > 0
           AND LTRIM(RTRIM(ISNULL(u.MCCUnitCode, N''))) <> @testCentre;
 
         -- A sold booklet counts as downloaded when any of the patient's

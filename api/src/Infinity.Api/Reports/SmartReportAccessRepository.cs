@@ -48,6 +48,18 @@ public sealed class SmartReportAccessRepository(NobleConnectionFactory db, SqlRe
     public const string SmartReportMiniName = "Smart Report - Mini";
 
     /// <summary>
+    /// The third tier (2026-09-24): two or more supported single tests on one
+    /// order — ₹49 list, ₹25 on the introductory offer — billed as its own
+    /// line. Codes are at most 10 characters: the bill table matches on
+    /// LEFT(code, 10).
+    /// </summary>
+    public const string SmartReportMultiCode = "SMART-MULT";
+    public const string SmartReportMultiName = "Smart Report - Multi";
+
+    /// <summary>Every code a booklet entitlement may carry.</summary>
+    public static readonly string[] AllCodes = [SmartReportCode, SmartReportMiniCode, SmartReportMultiCode];
+
+    /// <summary>
     /// A page of the reporting list can be a hundred rows; asking per row would
     /// be a hundred round trips to decide whether to draw a button. Capped so a
     /// pathological page cannot build an unbounded IN list.
@@ -70,10 +82,11 @@ public sealed class SmartReportAccessRepository(NobleConnectionFactory db, SqlRe
                 await using var cmd = NobleConnectionFactory.CreateCommand(conn, $"""
                     SELECT DISTINCT patient_id
                     FROM dbo.telo_custom_test_order
-                    WHERE code IN (@code, @mini) AND patient_id IN ({list});
+                    WHERE code IN (@code, @mini, @multi) AND patient_id IN ({list});
                     """);
                 cmd.Parameters.Add("@code", SqlDbType.NVarChar, 50).Value = SmartReportCode;
                 cmd.Parameters.Add("@mini", SqlDbType.NVarChar, 50).Value = SmartReportMiniCode;
+                cmd.Parameters.Add("@multi", SqlDbType.NVarChar, 50).Value = SmartReportMultiCode;
                 for (var i = 0; i < ids.Length; i++)
                     cmd.Parameters.Add("@p" + i.ToString(System.Globalization.CultureInfo.InvariantCulture), SqlDbType.Int).Value = ids[i];
 
@@ -103,11 +116,12 @@ public sealed class SmartReportAccessRepository(NobleConnectionFactory db, SqlRe
                     SELECT TOP 1 1
                     FROM dbo.tbl_med_mcc_patient_samples s
                     JOIN dbo.telo_custom_test_order o ON o.patient_id = s.patient_id
-                    WHERE s.vailid = @sid AND o.code IN (@code, @mini);
+                    WHERE s.vailid = @sid AND o.code IN (@code, @mini, @multi);
                     """);
                 cmd.Parameters.Add("@sid", SqlDbType.NVarChar, 50).Value = target;
                 cmd.Parameters.Add("@code", SqlDbType.NVarChar, 50).Value = SmartReportCode;
                 cmd.Parameters.Add("@mini", SqlDbType.NVarChar, 50).Value = SmartReportMiniCode;
+                cmd.Parameters.Add("@multi", SqlDbType.NVarChar, 50).Value = SmartReportMultiCode;
 
                 var hit = await cmd.ExecuteScalarAsync(inner).ConfigureAwait(false);
                 return hit is not null and not DBNull;

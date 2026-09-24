@@ -773,6 +773,10 @@ export interface CustomTest {
   /** The introductory price the mini tier bills at while an offer is on:
    *  the chip strikes miniMrp and shows this. Null: no offer. */
   miniOfferMrp?: number | null;
+  /** The multi tier — two or more supported single tests on one B2B order —
+   *  list price and, while an offer is on, its offer price. */
+  multiMrp?: number | null;
+  multiOfferMrp?: number | null;
   /** The same for the package tier: strikes mrp, shows this. */
   offerMrp?: number | null;
   /** Last day the offer applies (ISO date) and the note for the operator,

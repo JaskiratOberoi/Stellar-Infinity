@@ -7,7 +7,7 @@ import { Kpi, SectionTitle, type LeaderRow } from './Dashboard';
 interface SmartTierRow {
   code: string;
   name: string;
-  tier: 'package' | 'mini' | 'other';
+  tier: 'package' | 'multi' | 'mini' | 'other';
   monthCount: number;
   monthAmount: number;
   allCount: number;
@@ -120,7 +120,10 @@ export function SmartReportPanel({ date }: { date: string }) {
                       <span className="board__name" title={`${r.code} · ${r.tier}`}>
                         {r.name || r.code}
                         <span className="board__sub">
-                          {r.tier === 'package' ? 'health package' : r.tier === 'mini' ? 'mini profile' : 'sold before the offer was restricted'}
+                          {r.tier === 'package' ? 'health package or profile'
+                            : r.tier === 'multi' ? 'two or more single tests'
+                            : r.tier === 'mini' ? 'single test'
+                            : 'sold before the offer was restricted'}
                           {r.monthCount > 0 && ` · ${n(r.monthCount)} this month`}
                         </span>
                       </span>
