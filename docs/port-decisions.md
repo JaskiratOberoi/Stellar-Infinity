@@ -917,3 +917,12 @@ placement accepts it at the package tier, and the dashboard attributes
 HS2 sales to HS2 — including that first one. Only HS2 itself: HEALTH
 SCREEN 2 MD, HEALTH SCREEN 2.1 and the JK/SKH/Medigene screens are
 separate profiles and each is its own decision.
+
+## Uric acid, Vitamin D and fasting glucose join the mini tier (2026-09-24)
+
+Script 158 adds the three single tests (BI227, BI005, BI114) to
+inf_smart_report_mini at the tier's terms: ₹21 list, ₹11 on the
+introductory offer till Diwali 2026. The booklet's knowledge base already
+carried copy for all three, so the chapter is complete for a patient who
+came for one of them. No build: the order form reads the table on every
+order. The mini tier is now eleven items.
