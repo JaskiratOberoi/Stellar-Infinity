@@ -58,6 +58,13 @@ public static class ApiEndpoints
            .RequireCapability(Capabilities.AnalyticsView)
            .WithName("GetDashboardSmartReportStats");
 
+        // What the Smart Report is sold with — for the client home's coverage
+        // panel. Catalogue facts, no figures of the lab's, so any signed-in
+        // user may read it.
+        app.MapGet("/api/dashboard/smart-report-catalogue", GetSmartReportCatalogue)
+           .RequireAuthorization()
+           .WithName("GetDashboardSmartReportCatalogue");
+
         app.MapGet("/api/me/scope", GetMyScope)
            .RequireAuthorization()
            .WithName("GetMyScope");
@@ -199,6 +206,16 @@ public static class ApiEndpoints
     /// different periods. Defaults to today; a future date falls back to the
     /// current month rather than returning a period the caller cannot explain.
     /// </param>
+    private static async Task<IResult> GetSmartReportCatalogue(
+        System.Security.Claims.ClaimsPrincipal principal,
+        SmartReportCatalogueRepository catalogue,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int) return Results.Unauthorized();
+        var result = await catalogue.GetAsync(ct).ConfigureAwait(false);
+        return Results.Ok(result);
+    }
+
     private static async Task<IResult> GetSmartReportStats(
         System.Security.Claims.ClaimsPrincipal principal,
         SmartReportStatsRepository smart,

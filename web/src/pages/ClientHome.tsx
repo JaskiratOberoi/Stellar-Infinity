@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { InfinityLoader } from '../components/InfinityLoader';
 import { Tip } from '../components/Tip';
 import { fmtDateTime } from '../lib/format';
+import { SmartCatalogue } from '../components/SmartCatalogue';
 
 /*
  * What each figure on this page means, in the centre's words.
@@ -386,6 +387,11 @@ export function ClientHome() {
                 </ul>
               )}
             </section>
+
+            {/* What the Smart Report is sold with, and what joined the list
+                lately — a leaflet beside the account, with the prices this
+                centre pays. */}
+            <SmartCatalogue showPrices />
           </div>
 
           {!b2cOnly && (

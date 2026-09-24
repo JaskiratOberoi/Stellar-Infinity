@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { loadClients, type ClientOption } from '../components/ClientPicker';
 import { InfinityLoader } from '../components/InfinityLoader';
+import { SmartCatalogue } from '../components/SmartCatalogue';
 import { useAuth } from '../auth/AuthContext';
 
 /**
@@ -123,6 +124,12 @@ export function SubClientHome() {
             </p>
           )}
         </div>
+      </div>
+
+      {/* What the Smart Report is sold with — coverage only, no prices: a
+          sub-franchise never sees the money, as on the rest of its portal. */}
+      <div style={{ marginTop: '1rem', maxWidth: 980 }}>
+        <SmartCatalogue showPrices={false} />
       </div>
     </div>
   );

@@ -989,3 +989,16 @@ patient has a booklet line, at any status. The flag was already on every
 row the list endpoint returns (it is by patient, not by status); only the
 mark was missing. Small and quiet on purpose: a fact about the order, not
 an action.
+
+## The client home lists what the Smart Report is sold with (2026-09-24)
+
+A centre had no way to know which tests carry the booklet until the chip
+appeared on an order. The client home (and the sub-franchise home,
+without prices) now carries a coverage panel: every supported single
+test, profile and health package, grouped by the tier it earns with the
+tier's list and offer price, and a "New" mark on anything that joined the
+list in the last 24 hours — the list's own created_at, not the
+catalogue's, because a test joining the booklet is the news. Only active
+catalogue rows are shown (the Anemia Profile waits on the list against
+the day it is reactivated). Served by /api/dashboard/smart-report-catalogue
+to any signed-in user: catalogue facts, none of the lab's figures.

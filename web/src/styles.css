@@ -5437,3 +5437,36 @@ tbody tr.row-status--quiet > td:first-child {
   .clienthome__amount { font-size: 2rem; }
   .revperiod__amount { font-size: 1.4rem; }
 }
+
+/* ---------- Smart Report coverage, on the client home ----------
+   A leaflet beside the account: what the booklet is sold with, grouped by
+   the tier it earns, with a "New" mark on anything that joined the list in
+   the last 24 hours. The mark is the one loud thing here — it is the news. */
+.smartcat__head { display: flex; align-items: flex-start; gap: .8rem; }
+.smartcat__sub { font-size: .78rem; margin: .25rem 0 0; line-height: 1.5; }
+.smartcat__fresh { margin-left: auto; white-space: nowrap; align-self: center; }
+.smartcat__groups { display: grid; gap: .85rem; margin-top: .8rem; }
+.smartcat__group-title {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem .9rem;
+  font-size: .68rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ink-dim); margin: 0 0 .35rem;
+}
+.smartcat__tiers { display: inline-flex; flex-wrap: wrap; gap: .2rem .8rem; letter-spacing: 0; text-transform: none; font-weight: 500; font-size: .74rem; }
+.smartcat__price { white-space: nowrap; }
+.smartcat__price s { color: var(--ink-dim); font-weight: 400; margin-right: .15rem; }
+.smartcat__price b { color: var(--teal); }
+.smartcat__list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: .35rem; }
+.smartcat__item {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .28rem .6rem; border-radius: 999px; font-size: .78rem;
+  border: 1px solid var(--line); background: var(--neutral-soft);
+}
+.smartcat__item--new { border-color: var(--accent-ring); background: var(--accent-soft); animation: smartcat-arrive .6s ease-out both; }
+@keyframes smartcat-arrive { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+.badge--new {
+  color: #7c2d12; border-color: #fdba74; background: #ffedd5;
+  padding: .12em .45em; font-size: .58rem; vertical-align: 1px;
+  animation: badge-new-pulse 2.4s ease-in-out infinite;
+}
+@keyframes badge-new-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, .35); } 50% { box-shadow: 0 0 0 4px rgba(249, 115, 22, 0); } }
+@media (prefers-reduced-motion: reduce) { .badge--new, .smartcat__item--new { animation: none; } }

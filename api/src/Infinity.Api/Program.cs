@@ -34,6 +34,7 @@ builder.Services.AddSingleton<SampleHeaderRepository>();
 builder.Services.AddSingleton<StatsRepository>();
 builder.Services.AddSingleton<MonthStatsRepository>();
 builder.Services.AddSingleton<SmartReportStatsRepository>();
+builder.Services.AddSingleton<SmartReportCatalogueRepository>();
 builder.Services.AddSingleton<RevenueRepository>();
 builder.Services.AddSingleton<SalesRepository>();
 // Charges the Smart Report lines the legacy Register button walks past — see CustomLineSweep.
