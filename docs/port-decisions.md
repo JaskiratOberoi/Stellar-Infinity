@@ -1050,3 +1050,17 @@ is the same on every page and the reviewer means the document, so the
 sample of the patient, both ways; the analyte ticks stay per sample, since
 those are decisions about that sample's results. The complete-report
 download already sends each sample's stored exclusions, so it follows.
+
+## The four Health Care Profile packages carry the Smart Report (2026-09-24)
+
+P035A, P036A, P037A and P038A (HEALTH CARE PROFILE 1.1–1.4, master
+profiles 209/210/211/216) join inf_smart_report_package (script 162), at
+the package tier. Four review orders were built on ZZTEST01
+(zztest01-smart-hcp-fixtures-20260924.sql; cleanup beside it), one per
+package, the way 903 builds its demo packages: result-row STRUCTURE cloned
+from one real fully-reported order of each package, VALUES generated from
+each row's own reference range (inside it for most analytes, a little
+above for one in seven; a qualitative row gets its range's normal word).
+The generator stages its parsing through a temp table in small UPDATEs —
+one statement with the derivation nested in CROSS APPLYs hit the
+expression services limit.
