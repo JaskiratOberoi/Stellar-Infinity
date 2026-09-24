@@ -282,12 +282,13 @@ export function ClientHome() {
 
       {error && <div className="alert alert--error">{error}</div>}
 
-      {/* The DAY, before the account — the same operational dashboard Telo
-          shows a client login: today's revenue, collections and sample
-          movement, resolved server-side inside this centre's scope. The
-          account below answers "where do I stand"; this answers "how is
-          today going", which is what a reception desk opens the page for. */}
-      <ClientDayStats />
+      {/* The DAY — the same operational dashboard Telo shows a client login:
+          today's revenue, collections and sample movement, resolved
+          server-side inside this centre's scope. It sits under the balance
+          in the left column (2026-09-24: balance and day on the left; pay,
+          Smart Report and payments on the right); only a login with no
+          account linked gets it here, on its own. */}
+      {!account && <ClientDayStats standalone />}
 
       {!account ? (
         <div className="card">
@@ -296,7 +297,7 @@ export function ClientHome() {
           </p>
         </div>
       ) : (
-        <div className="clienthome" style={b2cOnly ? { gridTemplateColumns: 'minmax(0, 1fr)' } : undefined}>
+        <div className="clienthome">
           {/* Left: what the account IS. Right: what to do about it.
 
               Two columns rather than one long scroll, because the balance and
@@ -360,42 +361,18 @@ export function ClientHome() {
               </div>
             </section>
             )}
-  
-            <section className="card">
-              <div className="row" style={{ alignItems: 'baseline', gap: '.6rem' }}>
-                <h2 className="clienthome__title">Recent payments<Tip text={TIPS.payments} /></h2>
-                <Link to="/accounts" className="muted" style={{ marginLeft: 'auto', fontSize: '.78rem' }}>
-                  Full account →
-                </Link>
-              </div>
-  
-              {ledger.length === 0 ? (
-                <p className="muted" style={{ fontSize: '.82rem', marginTop: '.6rem' }}>
-                  No payments recorded yet.
-                </p>
-              ) : (
-                <ul className="clienthome__pay">
-                  {ledger.map((r) => (
-                    <li key={r.id}>
-                      <span>
-                        {r.occurredAt ? fmtDateTime(r.occurredAt) : '—'}
-                        {r.note && <span className="muted"> · {r.note}</span>}
-                      </span>
-                      <b>{inr(r.amount)}</b>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
 
-            {/* What the Smart Report is sold with, and what joined the list
-                lately — a leaflet beside the account, with the prices this
-                centre pays. */}
-            <SmartCatalogue showPrices />
+            {/* The day, beside the account: today's revenue, collections and
+                sample movement, resolved server-side inside this centre's
+                scope. The balance says where the centre stands; this says how
+                today is going. */}
+            <ClientDayStats />
+  
+
           </div>
 
-          {!b2cOnly && (
           <div className="clienthome__side">
+            {!b2cOnly && (<>
             {/* Pay Noble online.
 
                 Rendered three ways, and which one you get is decided by the
@@ -491,8 +468,40 @@ export function ClientHome() {
                 </p>
               )}
             </section>
+            </>)}
+
+            {/* What the Smart Report is sold with, and what joined the list
+                lately — a leaflet beside the account, with the prices this
+                centre pays. */}
+            <SmartCatalogue showPrices />
+
+            <section className="card">
+              <div className="row" style={{ alignItems: 'baseline', gap: '.6rem' }}>
+                <h2 className="clienthome__title">Recent payments<Tip text={TIPS.payments} /></h2>
+                <Link to="/accounts" className="muted" style={{ marginLeft: 'auto', fontSize: '.78rem' }}>
+                  Full account →
+                </Link>
+              </div>
+  
+              {ledger.length === 0 ? (
+                <p className="muted" style={{ fontSize: '.82rem', marginTop: '.6rem' }}>
+                  No payments recorded yet.
+                </p>
+              ) : (
+                <ul className="clienthome__pay">
+                  {ledger.map((r) => (
+                    <li key={r.id}>
+                      <span>
+                        {r.occurredAt ? fmtDateTime(r.occurredAt) : '—'}
+                        {r.note && <span className="muted"> · {r.note}</span>}
+                      </span>
+                      <b>{inr(r.amount)}</b>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
           </div>
-          )}
         </div>
       )}
     </div>
@@ -527,7 +536,7 @@ function shiftIso(iso: string, days: number): string {
   return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}`;
 }
 
-function ClientDayStats() {
+function ClientDayStats({ standalone = false }: { standalone?: boolean }) {
   const [date, setDate] = useState(todayIso());
   const [stats, setStats] = useState<DayStats | null>(null);
   const [busy, setBusy] = useState(true);
@@ -556,7 +565,7 @@ function ClientDayStats() {
   );
 
   return (
-    <section className="card" style={{ marginBottom: '.9rem' }}>
+    <section className="card" style={standalone ? { marginBottom: '.9rem' } : undefined}>
       <div className="row" style={{ flexWrap: 'wrap', gap: '.6rem', alignItems: 'center' }}>
         <h2 style={{ fontSize: '.95rem', fontWeight: 500, margin: 0 }}>Your day</h2>
         <div className="row" style={{ marginLeft: 'auto', gap: '.35rem' }}>

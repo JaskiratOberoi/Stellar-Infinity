@@ -1002,3 +1002,12 @@ catalogue's, because a test joining the booklet is the news. Only active
 catalogue rows are shown (the Anemia Profile waits on the list against
 the day it is reactivated). Served by /api/dashboard/smart-report-catalogue
 to any signed-in user: catalogue facts, none of the lab's figures.
+
+## Client home columns (2026-09-24)
+
+Jas set the order: left column the balance then the day (today's figures
+with the period and trend inside it); right column pay online, then the
+Smart Report coverage, then recent payments. The day panel used to sit
+full-width above both columns; it stands alone only for a login with no
+account linked. A walk-in-only client keeps two columns as well, with no
+pay card on the right.
