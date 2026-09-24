@@ -1011,3 +1011,8 @@ Smart Report coverage, then recent payments. The day panel used to sit
 full-width above both columns; it stands alone only for a login with no
 account linked. A walk-in-only client keeps two columns as well, with no
 pay card on the right.
+
+Revised the same day: recent payments back under the balance on the left,
+pay online alone on the right, and the Smart Report coverage and the day
+in a band across both columns at the bottom (clienthome__wide) — both are
+wide by nature, chips and figures and a trend, and a column squeezed them.

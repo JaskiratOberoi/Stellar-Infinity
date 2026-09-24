@@ -284,10 +284,10 @@ export function ClientHome() {
 
       {/* The DAY — the same operational dashboard Telo shows a client login:
           today's revenue, collections and sample movement, resolved
-          server-side inside this centre's scope. It sits under the balance
-          in the left column (2026-09-24: balance and day on the left; pay,
-          Smart Report and payments on the right); only a login with no
-          account linked gets it here, on its own. */}
+          server-side inside this centre's scope. It sits in the band under
+          both columns (2026-09-24: balance and payments on the left, pay on
+          the right, Smart Report and the day across the bottom); only a
+          login with no account linked gets it here, on its own. */}
       {!account && <ClientDayStats standalone />}
 
       {!account ? (
@@ -362,11 +362,33 @@ export function ClientHome() {
             </section>
             )}
 
-            {/* The day, beside the account: today's revenue, collections and
-                sample movement, resolved server-side inside this centre's
-                scope. The balance says where the centre stands; this says how
-                today is going. */}
-            <ClientDayStats />
+            <section className="card">
+              <div className="row" style={{ alignItems: 'baseline', gap: '.6rem' }}>
+                <h2 className="clienthome__title">Recent payments<Tip text={TIPS.payments} /></h2>
+                <Link to="/accounts" className="muted" style={{ marginLeft: 'auto', fontSize: '.78rem' }}>
+                  Full account →
+                </Link>
+              </div>
+  
+              {ledger.length === 0 ? (
+                <p className="muted" style={{ fontSize: '.82rem', marginTop: '.6rem' }}>
+                  No payments recorded yet.
+                </p>
+              ) : (
+                <ul className="clienthome__pay">
+                  {ledger.map((r) => (
+                    <li key={r.id}>
+                      <span>
+                        {r.occurredAt ? fmtDateTime(r.occurredAt) : '—'}
+                        {r.note && <span className="muted"> · {r.note}</span>}
+                      </span>
+                      <b>{inr(r.amount)}</b>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
   
 
           </div>
@@ -470,37 +492,19 @@ export function ClientHome() {
             </section>
             </>)}
 
-            {/* What the Smart Report is sold with, and what joined the list
-                lately — a leaflet beside the account, with the prices this
-                centre pays. */}
-            <SmartCatalogue showPrices />
 
-            <section className="card">
-              <div className="row" style={{ alignItems: 'baseline', gap: '.6rem' }}>
-                <h2 className="clienthome__title">Recent payments<Tip text={TIPS.payments} /></h2>
-                <Link to="/accounts" className="muted" style={{ marginLeft: 'auto', fontSize: '.78rem' }}>
-                  Full account →
-                </Link>
-              </div>
-  
-              {ledger.length === 0 ? (
-                <p className="muted" style={{ fontSize: '.82rem', marginTop: '.6rem' }}>
-                  No payments recorded yet.
-                </p>
-              ) : (
-                <ul className="clienthome__pay">
-                  {ledger.map((r) => (
-                    <li key={r.id}>
-                      <span>
-                        {r.occurredAt ? fmtDateTime(r.occurredAt) : '—'}
-                        {r.note && <span className="muted"> · {r.note}</span>}
-                      </span>
-                      <b>{inr(r.amount)}</b>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
+          </div>
+
+          {/* Across both columns: the Smart Report coverage and the day —
+              wide by nature (chips, figures, a trend), so a column would
+              squeeze them. Smart Report first, the day under it. */}
+          <div className="clienthome__wide">
+              {/* What the Smart Report is sold with, and what joined the list
+                  lately — a leaflet beside the account, with the prices this
+                  centre pays. */}
+              <SmartCatalogue showPrices />
+
+            <ClientDayStats />
           </div>
         </div>
       )}

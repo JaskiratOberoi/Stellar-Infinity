@@ -5470,3 +5470,7 @@ tbody tr.row-status--quiet > td:first-child {
 }
 @keyframes badge-new-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, .35); } 50% { box-shadow: 0 0 0 4px rgba(249, 115, 22, 0); } }
 @media (prefers-reduced-motion: reduce) { .badge--new, .smartcat__item--new { animation: none; } }
+
+/* The band under both columns of the client home: the Smart Report coverage
+   and the day, which are wide by nature. */
+.clienthome__wide { grid-column: 1 / -1; display: grid; gap: .9rem; }
