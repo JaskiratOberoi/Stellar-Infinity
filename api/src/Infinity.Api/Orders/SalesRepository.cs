@@ -40,7 +40,9 @@ public sealed record SalesPage(
 /// </summary>
 /// <remarks>
 /// <para>
-/// A PORT OF TELO'S db/read/salesData.ts, queries kept line for line. Both
+/// A PORT OF TELO'S db/read/salesData.ts — plus, since 2026-09-24, the
+/// charged extras (the Smart Report) as sale lines, which Telo and the LIS
+/// Sales report do not show. Otherwise queries kept line for line. Both
 /// products show this screen against the same LIS and the definitions must not
 /// drift: a "sale line" is a billable test
 /// (<c>tbl_med_mcc_patient_tests.amount_checked = 1</c>) dated by the test's
@@ -61,33 +63,65 @@ public sealed class SalesRepository(NobleConnectionFactory db, SqlRetry retry)
     private const int MaxPageSize = 200;
 
     private const string ListSql = """
-        SELECT
-          p.id AS regdNo,
-          p.name AS patientName,
-          (SELECT TOP 1 s.vailid
-             FROM dbo.tbl_med_mcc_patient_samples s
-            WHERE s.patient_id = t.patient_id
-              AND ',' + REPLACE(ISNULL(s.testcodes, ''), ' ', '') + ','
-                  LIKE '%,' + t.test_code + ',%'
-            ORDER BY s.id) AS sid,
-          CONVERT(varchar(10), p.sample_date, 23) AS sampleDate,
-          p.age AS age,
-          p.age_type AS ageType,
-          p.gender AS gender,
-          t.test_code AS testCode,
-          t.test_name AS testName,
-          t.test_rate AS amount,
-          COALESCE(doc.doctor_name, p.ref_doctor_other) AS doctor,
-          COALESCE(cus.customer_name, p.ref_customer_other) AS customer
-        FROM dbo.tbl_med_mcc_patient_tests t
-        JOIN dbo.tbl_med_mcc_patient_master p ON p.id = t.patient_id
-        LEFT JOIN dbo.tbl_med_mcc_doctors  doc ON doc.id = p.ref_doctor
-        LEFT JOIN dbo.tbl_med_mcc_customer cus ON cus.id = p.ref_customer
-        WHERE p.mcc_code = @mcc
-          AND t.amount_checked = 1
-          AND t.updateddate >= CAST(@from AS DATE)
-          AND t.updateddate <  DATEADD(day, 1, CAST(@to AS DATE))
-        ORDER BY t.updateddate DESC, p.id, t.test_code
+        SELECT q.regdNo, q.patientName, q.sid, q.sampleDate, q.age, q.ageType, q.gender,
+               q.testCode, q.testName, q.amount, q.doctor, q.customer
+        FROM (
+          SELECT
+            p.id AS regdNo,
+            p.name AS patientName,
+            (SELECT TOP 1 s.vailid
+               FROM dbo.tbl_med_mcc_patient_samples s
+              WHERE s.patient_id = t.patient_id
+                AND ',' + REPLACE(ISNULL(s.testcodes, ''), ' ', '') + ','
+                    LIKE '%,' + t.test_code + ',%'
+              ORDER BY s.id) AS sid,
+            CONVERT(varchar(10), p.sample_date, 23) AS sampleDate,
+            p.age AS age,
+            p.age_type AS ageType,
+            p.gender AS gender,
+            t.test_code AS testCode,
+            t.test_name AS testName,
+            CAST(t.test_rate AS DECIMAL(18, 2)) AS amount,
+            COALESCE(doc.doctor_name, p.ref_doctor_other) AS doctor,
+            COALESCE(cus.customer_name, p.ref_customer_other) AS customer,
+            t.updateddate AS soldAt
+          FROM dbo.tbl_med_mcc_patient_tests t
+          JOIN dbo.tbl_med_mcc_patient_master p ON p.id = t.patient_id
+          LEFT JOIN dbo.tbl_med_mcc_doctors  doc ON doc.id = p.ref_doctor
+          LEFT JOIN dbo.tbl_med_mcc_customer cus ON cus.id = p.ref_customer
+          WHERE p.mcc_code = @mcc
+            AND t.amount_checked = 1
+            AND t.updateddate >= CAST(@from AS DATE)
+            AND t.updateddate <  DATEADD(day, 1, CAST(@to AS DATE))
+
+          UNION ALL
+
+          -- The extras the centre was charged for — the Smart Report — sold
+          -- like a test: one line, dated by the ledger row that charged it.
+          -- Only charged lines: an uncharged one is not yet a sale, exactly as
+          -- an unchecked test is not.
+          SELECT
+            p.id, p.name,
+            (SELECT TOP 1 s.vailid FROM dbo.tbl_med_mcc_patient_samples s
+              WHERE s.patient_id = p.id ORDER BY s.id),
+            CONVERT(varchar(10), p.sample_date, 23),
+            p.age, p.age_type, p.gender,
+            c.code, c.name,
+            CAST(c.unit_amount * c.qty AS DECIMAL(18, 2)),
+            COALESCE(doc.doctor_name, p.ref_doctor_other),
+            COALESCE(cus.customer_name, p.ref_customer_other),
+            x.transdate
+          FROM dbo.telo_custom_test_order c
+          JOIN dbo.telo_custom_line_charge l ON l.bill_id = c.bill_id AND l.custom_test_id = c.custom_test_id
+          JOIN dbo.tbl_med_mcc_test_transactions x ON x.id = l.txn_id
+          JOIN dbo.tbl_med_mcc_patient_master p ON p.id = c.patient_id
+          LEFT JOIN dbo.tbl_med_mcc_doctors  doc ON doc.id = p.ref_doctor
+          LEFT JOIN dbo.tbl_med_mcc_customer cus ON cus.id = p.ref_customer
+          WHERE p.mcc_code = @mcc
+            AND x.transdate >= CAST(@from AS DATE)
+            AND x.transdate <  DATEADD(day, 1, CAST(@to AS DATE))
+        ) q
+        ORDER BY q.soldAt DESC, q.regdNo, q.testCode
         OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;
         """;
 
@@ -100,20 +134,36 @@ public sealed class SalesRepository(NobleConnectionFactory db, SqlRetry retry)
               AND s.sample_status > 1
               AND s.modifieddate >= CAST(@from AS DATE)
               AND s.modifieddate <  DATEADD(day, 1, CAST(@to AS DATE))) AS sampleCount,
-          (SELECT SUM(t.test_rate)
+          (SELECT ISNULL(SUM(t.test_rate), 0)
              FROM dbo.tbl_med_mcc_patient_tests t
              JOIN dbo.tbl_med_mcc_patient_master p ON p.id = t.patient_id
             WHERE p.mcc_code = @mcc
               AND t.amount_checked = 1
               AND t.updateddate >= CAST(@from AS DATE)
-              AND t.updateddate <  DATEADD(day, 1, CAST(@to AS DATE))) AS saleAmount,
+              AND t.updateddate <  DATEADD(day, 1, CAST(@to AS DATE)))
+          + (SELECT ISNULL(SUM(c.unit_amount * c.qty), 0)
+               FROM dbo.telo_custom_test_order c
+               JOIN dbo.telo_custom_line_charge l ON l.bill_id = c.bill_id AND l.custom_test_id = c.custom_test_id
+               JOIN dbo.tbl_med_mcc_test_transactions x ON x.id = l.txn_id
+               JOIN dbo.tbl_med_mcc_patient_master p ON p.id = c.patient_id
+              WHERE p.mcc_code = @mcc
+                AND x.transdate >= CAST(@from AS DATE)
+                AND x.transdate <  DATEADD(day, 1, CAST(@to AS DATE))) AS saleAmount,
           (SELECT COUNT(*)
              FROM dbo.tbl_med_mcc_patient_tests t
              JOIN dbo.tbl_med_mcc_patient_master p ON p.id = t.patient_id
             WHERE p.mcc_code = @mcc
               AND t.amount_checked = 1
               AND t.updateddate >= CAST(@from AS DATE)
-              AND t.updateddate <  DATEADD(day, 1, CAST(@to AS DATE))) AS lineCount;
+              AND t.updateddate <  DATEADD(day, 1, CAST(@to AS DATE)))
+          + (SELECT COUNT(*)
+               FROM dbo.telo_custom_test_order c
+               JOIN dbo.telo_custom_line_charge l ON l.bill_id = c.bill_id AND l.custom_test_id = c.custom_test_id
+               JOIN dbo.tbl_med_mcc_test_transactions x ON x.id = l.txn_id
+               JOIN dbo.tbl_med_mcc_patient_master p ON p.id = c.patient_id
+              WHERE p.mcc_code = @mcc
+                AND x.transdate >= CAST(@from AS DATE)
+                AND x.transdate <  DATEADD(day, 1, CAST(@to AS DATE))) AS lineCount;
 
         SELECT code = LTRIM(RTRIM(MCCUnitCode)), name = LTRIM(RTRIM(MCCUnitName))
         FROM dbo.tbl_med_mcc_unit_master WHERE id = @mcc;

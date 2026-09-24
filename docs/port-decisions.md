@@ -926,3 +926,29 @@ introductory offer till Diwali 2026. The booklet's knowledge base already
 carried copy for all three, so the chapter is complete for a patient who
 came for one of them. No build: the order form reads the table on every
 order. The mini tier is now eleven items.
+
+## Smart Report revenue: audit and the two gaps closed (2026-09-24)
+
+Audited every Smart Report line outside the test centre: seven, one of them
+a demo entitlement with no bill (inf:demo, centre ABC, 2026-08-19) that no
+figure counts. Every billed line has its bill line and its bill total
+agrees with its lines. The account side had two gaps.
+
+First, orders booked in Infinity with a Smart Report but RECEIVED at the
+bench through the legacy LIS's Register button were charged for their tests
+and never for the booklet — the LIS knows nothing of custom lines, and the
+charge lives in the accession procedure Infinity and Telo call. Two such
+lines (UP1005, JK0239, ₹11 each) sat with tests charged and the extra not.
+usp_inf_custom_line_sweep (159) charges every unlatched line whose sample
+the lab has received, through the same charge procedure, as the ordering
+user; the API runs it every ten minutes (CustomLineSweep). Lines from
+before 2026-09-21 are left alone: that is Jas's parked decision on the
+historical lines, three of which are Smart Reports (₹297).
+
+Second, Infinity's client Sales page and the dashboard's day and month
+sales were test-level only — a port of the LIS Sales report, which counts
+tbl_med_mcc_patient_tests — so the booklet never appeared as a sale even
+when charged. Both now add the CHARGED extras as sale lines, dated by the
+ledger row that charged them; an uncharged line is not yet a sale, as an
+unchecked test is not. The LIS's own Sales report still omits them (the
+LIS is not changed); its bill print and its ledger carry them.

@@ -171,15 +171,33 @@ public sealed class MonthStatsRepository(NobleConnectionFactory db, SqlRetry ret
                     -- Keyed on the patient's registration date, not the test row's
                     -- last-edit stamp the LIS uses, so a corrected typo does not
                     -- book revenue on the day of the correction.
-                    SELECT
-                      ISNULL(SUM(CASE WHEN CAST(sp.sample_date AS DATE) = @day
-                                      THEN t.test_rate END),0) AS sales_day,
-                      ISNULL(SUM(t.test_rate),0)               AS sales_month
-                    FROM dbo.tbl_med_mcc_patient_tests t
-                    JOIN dbo.tbl_med_mcc_patient_master sp ON sp.id = t.patient_id
-                    WHERE CAST(sp.sample_date AS DATE) BETWEEN @from AND @to
-                      AND t.amount_checked = 1
-                      AND {sales.Predicate};
+                    SELECT a.sales_day + b.extras_day     AS sales_day,
+                           a.sales_month + b.extras_month AS sales_month
+                    FROM (
+                      SELECT
+                        ISNULL(SUM(CASE WHEN CAST(sp.sample_date AS DATE) = @day
+                                        THEN t.test_rate END),0) AS sales_day,
+                        ISNULL(SUM(t.test_rate),0)               AS sales_month
+                      FROM dbo.tbl_med_mcc_patient_tests t
+                      JOIN dbo.tbl_med_mcc_patient_master sp ON sp.id = t.patient_id
+                      WHERE CAST(sp.sample_date AS DATE) BETWEEN @from AND @to
+                        AND t.amount_checked = 1
+                        AND {sales.Predicate}
+                    ) a
+                    CROSS JOIN (
+                      -- The charged extras (the Smart Report), sold like a
+                      -- test and keyed the same way; an uncharged one is not
+                      -- yet a sale.
+                      SELECT
+                        ISNULL(SUM(CASE WHEN CAST(sp.sample_date AS DATE) = @day
+                                        THEN c.unit_amount * c.qty END),0) AS extras_day,
+                        ISNULL(SUM(c.unit_amount * c.qty),0)               AS extras_month
+                      FROM dbo.telo_custom_test_order c
+                      JOIN dbo.telo_custom_line_charge l ON l.bill_id = c.bill_id AND l.custom_test_id = c.custom_test_id
+                      JOIN dbo.tbl_med_mcc_patient_master sp ON sp.id = c.patient_id
+                      WHERE CAST(sp.sample_date AS DATE) BETWEEN @from AND @to
+                        AND {sales.Predicate}
+                    ) b;
 
                     -- ---- top clients by what they were BILLED -------------------
                     SELECT TOP (@top)
