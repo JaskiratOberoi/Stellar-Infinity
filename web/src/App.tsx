@@ -12,6 +12,7 @@ import { SalesDashboard } from './pages/SalesDashboard';
 import { SalesTeam } from './pages/SalesTeam';
 import { ClientHome } from './pages/ClientHome';
 import { SubClientHome } from './pages/SubClientHome';
+import { EntryHome } from './pages/EntryHome';
 import { Orders } from './pages/Orders';
 import { NewOrder } from './pages/NewOrder';
 import { Accessioning } from './pages/Accessioning';
@@ -412,6 +413,10 @@ export function App() {
           // A salesperson opens on its own territory against its target -
           // not the lab's revenue dashboard, which its role does not hold.
           : can('sales:view') ? <SalesDashboard />
+          // The lab's front desk (LIS ENTRY) gets its doors — register,
+          // receive, look up — not the revenue dashboard its role withholds,
+          // and not a centre's account page, which it does not have.
+          : user.role === 'entry' ? <EntryHome />
           // A sub-franchise gets the three-door home — order, reports, pay —
           // with none of the money ClientHome shows, because that money is
           // the parent's. The API refuses those reads regardless.

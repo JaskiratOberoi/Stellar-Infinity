@@ -28,6 +28,17 @@ public static class InfinityRoles
     public const string SalesExec = "sales_exec";
     public const string LabManager = "lab_manager";
     public const string Technician = "technician";
+    /// <summary>
+    /// The LIS's ENTRY user type (id 33, description "ACCESSIONI"): the lab's
+    /// own front desk. In the LIS it opens exactly seven pages — Order Request,
+    /// COVID-19 Registration, Accession, Sample Tracking, Patient Reports,
+    /// Customers and Doctors — and no worksheet, no billing, no sales, no
+    /// dashboard. So here: register and view orders on either channel,
+    /// receive and reject tubes, keep referrers, read reports; no results,
+    /// no money, no analytics. Landed on LabManager before 2026-09-25, which
+    /// handed it the day's revenue dashboard and result authorisation.
+    /// </summary>
+    public const string Entry = "entry";
     public const string Reporting = "reporting";
     public const string Client = "client";
     /// <summary>A client centre confined to the WALK-IN channel — the MDCARE
@@ -58,7 +69,7 @@ public static class InfinityRoles
     /// </summary>
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
-        SuperAdmin, Admin, Sales, SalesExec, LabManager, Technician, Reporting, Client, ClientB2c, ClientReporting,
+        SuperAdmin, Admin, Sales, SalesExec, LabManager, Technician, Entry, Reporting, Client, ClientB2c, ClientReporting,
         SubClient, Viewer,
     };
 
@@ -154,6 +165,17 @@ public static class InfinityRoles
                 Capabilities.ResultEnter, Capabilities.ResultAmend,
                 Capabilities.SampleReject),
 
+            // The front desk (LIS ENTRY): registers on both channels, receives
+            // and rejects tubes, keeps the referrer lists and reads reports.
+            // Deliberately without result:enter (no worksheet in the LIS
+            // either), billing:view, sales:view or analytics:view — the day's
+            // sales are not this desk's picture, and the LIS shows it none.
+            [Entry] = Caps(
+                Capabilities.OrderCreate, Capabilities.OrderView, Capabilities.OrderAccession,
+                Capabilities.OrderB2c, Capabilities.OrderB2b,
+                Capabilities.PatientCreate, Capabilities.PatientView, Capabilities.PatientEdit,
+                Capabilities.SampleReject,
+                Capabilities.ReportView),
             [Reporting] = Caps(
                 Capabilities.ReportView, Capabilities.ReportRelease,
                 Capabilities.PatientView, Capabilities.OrderView),
@@ -240,7 +262,7 @@ public static class InfinityRoles
         [12] = Client,      // CLIENT INVOICE
 
         [29] = LabManager,  // WALKIN CODES
-        [33] = LabManager,  // ENTRY
+        [33] = Entry,       // ENTRY — the front desk; see Entry
 
         [4] = Technician,   // Technician
         [9] = Technician,   // Molecular
@@ -282,7 +304,10 @@ public static class InfinityRoles
     /// client's patients to every client.
     /// </summary>
     public static readonly IReadOnlySet<string> UnrestrictedReporters =
-        new HashSet<string>(StringComparer.Ordinal) { SuperAdmin, Admin, Sales, LabManager, Reporting };
+        // Entry is the lab's own desk (no centre of its own), so it reads
+        // every centre's reports, exactly as the LIS's Patient Reports page
+        // shows it everything.
+        new HashSet<string>(StringComparer.Ordinal) { SuperAdmin, Admin, Sales, LabManager, Entry, Reporting };
 
     public static bool IsUnrestrictedReporter(string? role) =>
         role is not null && UnrestrictedReporters.Contains(role);

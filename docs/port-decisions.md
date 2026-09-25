@@ -1081,3 +1081,19 @@ lipids, thyroid, CRP and testosterone but none for rheumatoid factor; an
 entry was added to Infinity's embedded knowledge base (smart-meta.json,
 noted in localAdditions) and must be carried into Telo's smartMeta.ts
 before the next regeneration.
+
+## The front desk: an "entry" role for the LIS ENTRY user type (2026-09-25)
+
+The LIS's ENTRY user type (id 33, description "ACCESSIONI"; MEENAGIRI,
+HASREEN, MUKUL, PREETI) opens exactly seven pages there — Order Request,
+COVID-19 Registration, Accession, Sample Tracking, Patient Reports,
+Customers, Doctors — and no worksheet, billing, sales or dashboard; the
+LIS decides page access per user type in tbl_med_security_master. In
+Infinity that type landed on lab_manager, which handed the front desk the
+day's revenue dashboard and result authorisation. It now derives its own
+role, entry (InfinityRoles, script 164): order:create/view/accession on
+both channels, patient create/view/edit, sample:reject, report:view, and
+an unrestricted report scope like the other lab desks — nothing else. The
+home page is its doors (EntryHome), not the dashboard. Derived from the
+LIS type at sign-in, so every ENTRY login gets it; MEENAGIRI's explicit
+'reporting' assignment was removed so she matches the rest.
