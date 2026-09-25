@@ -78,9 +78,12 @@ public sealed record CustomTest(
         static bool Same(MiniItem m, CartItem i, string kind) =>
             string.Equals(m.Kind, kind, StringComparison.OrdinalIgnoreCase)
             && string.Equals(i.Kind, kind, StringComparison.OrdinalIgnoreCase) && m.Id == i.Id;
-        if (list.Any(i => minis.Any(m => Same(m, i, "profile"))))
+        // A supported profile the lab prices as a profile earns the package
+        // tier; one it prices as a single test (as_single, 163) is counted
+        // with the single tests instead.
+        if (list.Any(i => minis.Any(m => !m.AsSingle && Same(m, i, "profile"))))
             return this with { Mrp = OfferMrp ?? Mrp };
-        var singles = list.Count(i => minis.Any(m => Same(m, i, "test")));
+        var singles = list.Count(i => minis.Any(m => m.AsSingle && (Same(m, i, "test") || Same(m, i, "profile"))));
         if (singles >= 2 && MultiMrp is int multi)
             return this with
             {
@@ -100,7 +103,8 @@ public sealed record CustomTest(
 }
 
 /// <summary>A cart item kind ('profile' or 'test') and catalogue id an extra is sold with.</summary>
-public sealed record MiniItem(string Kind, int Id);
+/// <param name="AsSingle">Counts as a SINGLE TEST for the tier whatever the catalogue calls it (163): every test, and a profile the lab prices as one — Lipid, Thyroid Profile I.</param>
+public sealed record MiniItem(string Kind, int Id, bool AsSingle = true);
 
 /// <summary>
 /// "Custom" tests — charged by the lab, not carried out by it.
@@ -149,7 +153,7 @@ public sealed class CustomTestRepository(NobleConnectionFactory db, SqlRetry ret
         -- The mini profiles it is sold with at the introductory price (148).
         -- Third result set; the price rides with each row so raising it is
         -- an UPDATE here and nowhere else.
-        SELECT kind, catalogue_id, mrp FROM dbo.inf_smart_report_mini;
+        SELECT kind, catalogue_id, mrp, as_single FROM dbo.inf_smart_report_mini;
 
         -- The dated introductory offers, one per tier (150). Only rows still
         -- in force: the day after offer_until the tier bills its list price
@@ -203,7 +207,7 @@ public sealed class CustomTestRepository(NobleConnectionFactory db, SqlRetry ret
                 {
                     while (await r.ReadAsync(inner).ConfigureAwait(false))
                     {
-                        minis.Add(new MiniItem((r.Str("kind") ?? string.Empty).Trim().ToLowerInvariant(), r.Int("catalogue_id")));
+                        minis.Add(new MiniItem((r.Str("kind") ?? string.Empty).Trim().ToLowerInvariant(), r.Int("catalogue_id"), r.Bool("as_single")));
                         var price = r.Int("mrp");
                         miniMrp = miniMrp is int m ? Math.Min(m, price) : price;
                     }

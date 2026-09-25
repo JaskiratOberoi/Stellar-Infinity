@@ -1064,3 +1064,20 @@ above for one in seven; a qualitative row gets its range's normal word).
 The generator stages its parsing through a temp table in small UPDATEs —
 one statement with the derivation nested in CROSS APPLYs hit the
 expression services limit.
+
+## Lipid, TFT, RA factor, CRP and Testosterone join the single-test tier (2026-09-25)
+
+Jas asked for all five at the single-test tier. Three are single tests
+(CRP MS024, Rheumatoid Arthritis Factor by nephelometry MS111,
+Testosterone - Total BI209 — the most-ordered active variant of each);
+two are profiles in the catalogue (LIPID PROFILE CP106, Thyroid Profile I
+CP114), and under the day-old rule a supported profile earned the package
+tier. So the mini list gained a per-item flag (as_single, script 163): a
+flagged profile counts with the single tests — ₹21/₹11 alone, ₹49/₹25
+with any other single — while LFT, KFT, CBC with ESR, iron, vitamins and
+anemia keep the package tier. The pricing rule, the form's chip and the
+client home's coverage panel all read the flag. The booklet had copy for
+lipids, thyroid, CRP and testosterone but none for rheumatoid factor; an
+entry was added to Infinity's embedded knowledge base (smart-meta.json,
+noted in localAdditions) and must be carried into Telo's smartMeta.ts
+before the next regeneration.

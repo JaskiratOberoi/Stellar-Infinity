@@ -48,7 +48,9 @@ public sealed class SmartReportCatalogueRepository(NobleConnectionFactory db, Sq
             JOIN dbo.tbl_med_test_master t ON t.id = m.catalogue_id
             WHERE m.kind = N'test' AND t.IsActive = 1
             UNION ALL
-            SELECT N'profile', LTRIM(RTRIM(p.Profile_Code)), LTRIM(RTRIM(p.Profile_Name)),
+            -- A profile the lab prices as a single test (as_single, 163) is
+            -- listed with the single tests, since that is the price it earns.
+            SELECT CASE WHEN m.as_single = 1 THEN N'test' ELSE N'profile' END, LTRIM(RTRIM(p.Profile_Code)), LTRIM(RTRIM(p.Profile_Name)),
                    m.created_at, CASE WHEN m.created_at >= @since THEN 1 ELSE 0 END
             FROM dbo.inf_smart_report_mini m
             JOIN dbo.tbl_med_test_profile_master p ON p.id = m.catalogue_id

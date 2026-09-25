@@ -335,8 +335,10 @@ export function NewOrder() {
     if (cart.items.some((i) => i.kind === 'master' && t.onlyWithPackages!.includes(i.id))) return 'package';
     if (!orderIsB2b || t.miniMrp == null || !t.miniWith?.length) return null;
     const minis = t.miniWith;
-    if (cart.items.some((i) => i.kind === 'profile' && minis.some((m) => m.kind === 'profile' && m.id === i.id))) return 'package';
-    const singles = cart.items.filter((i) => i.kind === 'test' && minis.some((m) => m.kind === 'test' && m.id === i.id)).length;
+    // A supported profile priced as a profile earns the package tier; one
+    // the lab prices as a single test (asSingle) counts with the single tests.
+    if (cart.items.some((i) => i.kind === 'profile' && minis.some((m) => m.kind === 'profile' && !m.asSingle && m.id === i.id))) return 'package';
+    const singles = cart.items.filter((i) => minis.some((m) => m.kind === i.kind && m.id === i.id && (m.kind === 'test' || m.asSingle))).length;
     if (singles >= 2) return t.multiMrp != null ? 'multi' : 'mini';
     if (singles === 1) return 'mini';
     return null;

@@ -768,7 +768,7 @@ export interface CustomTest {
   /** The small profiles and single tests it is ALSO sold with, at miniMrp
    *  instead of mrp, on B2B orders — the Smart Report's introductory offer
    *  with a KFT, LFT, CBC and the like. */
-  miniWith?: { kind: string; id: number }[] | null;
+  miniWith?: { kind: string; id: number; /** Counts as a single test for the tier whatever the catalogue calls it. */ asSingle?: boolean }[] | null;
   miniMrp?: number | null;
   /** The introductory price the mini tier bills at while an offer is on:
    *  the chip strikes miniMrp and shows this. Null: no offer. */
