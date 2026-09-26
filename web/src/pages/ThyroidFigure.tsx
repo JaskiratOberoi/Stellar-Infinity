@@ -58,10 +58,15 @@ const glyph = (l: Level) => (l === 'high' ? '▲ ' : l === 'low' ? '▼ ' : '');
 function RangeBar({ a, y }: { a: ThyroidAxis; y: number }) {
   // The scale shows the band with a margin of 60% of its width either side,
   // so an out-of-range marker still lands on the bar rather than off it.
+  // TSH is the exception: an underactive thyroid can push it to 50 or 100,
+  // so its scale runs to 100 — on a log axis, or the 0.35–5.50 band would
+  // be a sliver at the left edge and a value of 8 indistinguishable from 80.
   const span = a.hi - a.lo;
-  const min = Math.max(0, a.lo - span * 0.6);
-  const max = a.hi + span * 0.6;
-  const px = (v: number) => BAR_X + ((Math.min(max, Math.max(min, v)) - min) / (max - min)) * BAR_W;
+  const tsh = a.label === 'TSH';
+  const min = tsh ? 0.05 : Math.max(0, a.lo - span * 0.6);
+  const max = tsh ? 100 : a.hi + span * 0.6;
+  const f = (v: number) => (tsh ? Math.log10(v) : v);
+  const px = (v: number) => BAR_X + ((f(Math.min(max, Math.max(min, v))) - f(min)) / (f(max) - f(min))) * BAR_W;
   const lo = px(a.lo);
   const hi = px(a.hi);
   const at = px(a.value);
@@ -83,6 +88,12 @@ function RangeBar({ a, y }: { a: ThyroidAxis; y: number }) {
       <line x1={at} y1={barY} x2={at} y2={barY + 10} stroke={INK} strokeWidth="1.8" />
       <text x={lo} y={barY + 21} fontSize="8.5" fill={FAINT} textAnchor="middle">{a.lo}</text>
       <text x={hi} y={barY + 21} fontSize="8.5" fill={FAINT} textAnchor="middle">{a.hi}</text>
+      {tsh && (
+        <>
+          <text x={px(100)} y={barY + 21} fontSize="8.5" fill={FAINT} textAnchor="end">100</text>
+          <text x={BAR_X + 30} y={y} fontSize="8" fill={FAINT}>· log scale to 100</text>
+        </>
+      )}
     </g>
   );
 }

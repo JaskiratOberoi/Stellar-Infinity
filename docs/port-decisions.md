@@ -1208,3 +1208,9 @@ range is told by weight and the report's own ▲▼ glyph; the scales are
 hatched outside the band and clear within it; the chosen cell has a heavy
 border, a darker fill and a black "this result" tag; the Normal cell is
 dashed and bold. Every text tone clears 7:1 on white (#595959 the lightest).
+
+TSH's scale runs to 100 (2026-09-27): an underactive thyroid can push
+TSH to 50 or 100, and a scale that stopped just past the band pinned
+every such value to its right edge. It is a log axis, marked as such —
+linear to 100 would make the 0.35–5.50 band a sliver and an 8 look like
+an 80. T4 and T3 keep their band-plus-margin scales.
