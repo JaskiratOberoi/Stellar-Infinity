@@ -177,6 +177,49 @@ public sealed partial class InfinityCache : IAsyncDisposable
     }
 
     /// <summary>
+    /// Remove every key under a prefix — the report PDFs when a report switch
+    /// is flipped, so the next download is drawn afresh whichever way the
+    /// switch went. Redis is walked with SCAN (never KEYS) and deleted in
+    /// batches; the in-process fallback cannot be enumerated, so it is
+    /// compacted whole — a rare event, and the local tier is only ever the
+    /// stand-in for an unreachable Redis. Returns how many keys went; never
+    /// throws.
+    /// </summary>
+    public async Task<long> RemoveByPrefixAsync(string prefix, CancellationToken ct = default)
+    {
+        long removed = 0;
+        if (_local is MemoryCache mc) mc.Compact(1.0);
+
+        if (_redis is null || _db is null) return removed;
+        try
+        {
+            var pattern = Key(prefix) + "*";
+            foreach (var endpoint in _redis.GetEndPoints())
+            {
+                var server = _redis.GetServer(endpoint);
+                if (!server.IsConnected || server.IsReplica) continue;
+                var batch = new List<RedisKey>(256);
+                await foreach (var k in server.KeysAsync(pattern: pattern, pageSize: 256).WithCancellation(ct).ConfigureAwait(false))
+                {
+                    batch.Add(k);
+                    if (batch.Count == 256)
+                    {
+                        removed += await _db.KeyDeleteAsync(batch.ToArray()).WaitAsync(ct).ConfigureAwait(false);
+                        batch.Clear();
+                    }
+                }
+                if (batch.Count > 0)
+                    removed += await _db.KeyDeleteAsync(batch.ToArray()).WaitAsync(ct).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex)
+        {
+            LogDegraded(_logger, "removeprefix", ex.Message);
+        }
+        return removed;
+    }
+
+    /// <summary>
     /// Atomically increment a fixed-window counter and return the new count,
     /// setting the expiry on first use.
     ///

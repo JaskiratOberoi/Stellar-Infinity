@@ -267,6 +267,7 @@ public static class ApiEndpoints
         HttpContext http,
         ReportingSettingsBody body,
         Reports.ReportSettings settings,
+        Caching.InfinityCache cache,
         Audit.AuditLog audit,
         CancellationToken ct)
     {
@@ -276,9 +277,13 @@ public static class ApiEndpoints
         var before = settings.ThyroidFigure;
         await settings.SetAsync(Reports.ReportSettings.ThyroidFigureKey, body.ThyroidFigure ? "1" : "0", actor, ct)
             .ConfigureAwait(false);
+        // The key already carries the switch's fingerprint; the flush is belt
+        // and braces, so a flip back within the cache's 45 minutes redraws
+        // too, and nothing rendered under the other setting lingers.
+        var flushed = await cache.RemoveByPrefixAsync("rptpdf:", ct).ConfigureAwait(false);
         audit.Log("settings.reporting", actor: actor, ip: Audit.AuditIp.From(http),
-            details: new { thyroidFigure = new { from = before, to = settings.ThyroidFigure } });
-        return Results.Ok(new { thyroidFigure = settings.ThyroidFigure });
+            details: new { thyroidFigure = new { from = before, to = settings.ThyroidFigure }, pdfCacheFlushed = flushed });
+        return Results.Ok(new { thyroidFigure = settings.ThyroidFigure, pdfCacheFlushed = flushed });
     }
 
     private static async Task<IResult> GetSmartReportStats(

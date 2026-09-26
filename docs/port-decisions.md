@@ -1235,3 +1235,11 @@ untouched by construction: the figure is drawn by Infinity's print page
 from the rows it reads; nothing is written to result, attachment or
 catalogue tables, so a Crystal report of the same sample is what it
 always was.
+
+Flush on flip, same day: saving the switch also removes every cached
+report PDF (InfinityCache.RemoveByPrefixAsync — SCAN in batches, never
+KEYS; the in-process tier compacted whole). The fingerprint in the key
+already kept a stale PDF from being served after a flip; the flush means
+a flip back within the cache's 45 minutes redraws too, and nothing
+rendered under the other setting lingers. The count flushed is on the
+audit row and in the save's reply.
