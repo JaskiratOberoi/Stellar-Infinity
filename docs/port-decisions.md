@@ -1160,3 +1160,14 @@ pelvis is the closest thing that is still his. The brain stays as
 scenery. Twenty-four parameters (CBC section headings, the urine routine
 lines, the smear's Hemoparasites and Impression) still resolve by
 department only — pointed correctly, without booklet copy.
+
+## The Smart Report dashboard leads with the day (2026-09-26)
+
+The super admin's Smart Report section showed the month and all time, with
+the day only as one bar in the thirty-day trend. It now opens with the
+selected day (today unless the dashboard's date says otherwise): booklets
+sold that day split by tier (package / multi / single / other), billed,
+charged to centres and downloaded, and the centres and qualifying profiles
+behind them. Three more result sets on the same stats query, keyed on the
+bill date like everything else there; the throwaway centre stays excluded.
+A day with no sale says so in one line rather than showing empty boards.

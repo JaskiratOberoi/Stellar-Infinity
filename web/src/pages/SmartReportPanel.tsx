@@ -16,6 +16,21 @@ interface SmartTierRow {
 
 interface SmartDayPoint { date: string; count: number; amount: number }
 
+/** The selected day on its own: the tier split, and who sold what. */
+interface SmartDayStats {
+  date: string;
+  count: number;
+  amount: number;
+  charged: number;
+  downloaded: number;
+  package: number;
+  multi: number;
+  mini: number;
+  other: number;
+  byClient: LeaderRow[];
+  byProfile: LeaderRow[];
+}
+
 /** The Smart Report's own numbers, as /api/dashboard/smart-reports returns them. */
 interface SmartReportStats {
   month: string;
@@ -34,6 +49,7 @@ interface SmartReportStats {
   byClient: LeaderRow[];
   byPrice: LeaderRow[];
   daily: SmartDayPoint[];
+  day: SmartDayStats;
 }
 
 const n = (v: number) => v.toLocaleString('en-IN');
@@ -46,11 +62,14 @@ function fmtDay(iso: string) {
 /**
  * The Smart Report section of the home dashboard — super admin only.
  *
- * Four tiles pair the selected month with all time: booklets sold, what they
- * were billed at, how much of that has reached a centre's account, and how
- * many were actually downloaded. Beneath: sales per day for the last thirty
- * days, and three boards — by the profile that qualified the sale, by centre
- * this month, and by price point, which is how the introductory offers read.
+ * The selected day comes first — today unless the dashboard's date says
+ * otherwise: booklets sold that day split by tier, billed, charged and
+ * downloaded, and which centres and profiles they came from. Then four tiles
+ * pair the month with all time: booklets sold, what they were billed at, how
+ * much of that has reached a centre's account, and how many were actually
+ * downloaded. Beneath: sales per day for the last thirty days, and three
+ * boards — by the profile that qualified the sale, by centre this month, and
+ * by price point, which is how the introductory offers read.
  */
 export function SmartReportPanel({ date }: { date: string }) {
   const [data, setData] = useState<SmartReportStats | null>(null);
@@ -90,6 +109,12 @@ export function SmartReportPanel({ date }: { date: string }) {
         </div>
       ) : (
         <>
+          <DayBlock day={data.day} />
+
+          <div className="row" style={{ alignItems: 'baseline', gap: '.6rem', margin: '1.1rem 0 .5rem' }}>
+            <span style={{ fontSize: '.8rem', fontWeight: 700 }}>Month to date</span>
+            <span className="muted" style={{ fontSize: '.72rem' }}>{fmtDay(data.month)} – {fmtDay(data.through)}, with all time alongside</span>
+          </div>
           <div className="grid2" style={{ marginBottom: '1rem' }}>
             <Kpi label="Booklets sold" value={n(data.monthCount)} sub={`${n(data.allCount)} all time`} accent />
             <Kpi label="Billed" value={inr(data.monthAmount)}
@@ -190,6 +215,73 @@ export function SmartReportPanel({ date }: { date: string }) {
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * The selected day: four tiles and, when anything sold, the centres and the
+ * qualifying profiles behind it. A quiet day says so in one line rather than
+ * showing two empty boards.
+ */
+function DayBlock({ day }: { day: SmartDayStats }) {
+  // IST, as the dashboard's own date picker reckons "today".
+  const today = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+  const tiers: string[] = [];
+  if (day.package) tiers.push(`${n(day.package)} package`);
+  if (day.multi) tiers.push(`${n(day.multi)} multi`);
+  if (day.mini) tiers.push(`${n(day.mini)} single`);
+  if (day.other) tiers.push(`${n(day.other)} other`);
+  const board = (rows: LeaderRow[], empty: string) =>
+    rows.length === 0 ? (
+      <p className="muted" style={{ fontSize: '.82rem' }}>{empty}</p>
+    ) : (
+      <ol className="board">
+        {rows.map((r, i) => (
+          <li key={r.code}>
+            <span className="board__rank">{i + 1}</span>
+            <span className="board__name" title={r.name ?? r.code}>
+              {r.name && r.name !== r.code ? r.name : r.code}
+              {r.name && r.name !== r.code && <span className="board__sub">{r.code}</span>}
+            </span>
+            <span className="board__value mono">
+              {n(r.count)}
+              <span className="board__sub">{inr(r.amount)}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+    );
+  return (
+    <>
+      <div className="row" style={{ alignItems: 'baseline', gap: '.6rem', margin: '0 0 .5rem' }}>
+        <span style={{ fontSize: '.8rem', fontWeight: 700 }}>{day.date === today ? 'Today' : fmtDay(day.date)}</span>
+        <span className="muted" style={{ fontSize: '.72rem' }}>
+          {day.date === today ? 'so far · the day picked above' : 'the day picked above'}
+        </span>
+      </div>
+      <div className="grid2" style={{ marginBottom: '1rem' }}>
+        <Kpi label="Booklets sold" value={n(day.count)} sub={tiers.length ? tiers.join(' · ') : 'none yet'} accent />
+        <Kpi label="Billed" value={inr(day.amount)}
+             sub={day.count ? `avg ${inr(Math.round(day.amount / day.count))}` : '—'} />
+        <Kpi label="Charged to centres" value={inr(day.charged)}
+             sub={day.count
+               ? day.charged >= day.amount ? 'every sale on an account' : `${inr(day.amount - day.charged)} not yet on an account`
+               : '—'} />
+        <Kpi label="Downloaded" value={`${n(day.downloaded)} of ${n(day.count)}`} sub="fetched at least once" />
+      </div>
+      {day.count > 0 && (
+        <div className="grid2">
+          <div className="card">
+            <SectionTitle>By centre · {day.date === today ? 'today' : fmtDay(day.date)}</SectionTitle>
+            {board(day.byClient, 'Nothing yet.')}
+          </div>
+          <div className="card">
+            <SectionTitle>By profile · {day.date === today ? 'today' : fmtDay(day.date)}</SectionTitle>
+            {board(day.byProfile, 'Nothing yet.')}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

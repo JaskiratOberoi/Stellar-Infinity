@@ -15,6 +15,20 @@ public sealed record SmartTierRow(
 public sealed record SmartDayPoint(string Date, int Count, decimal Amount);
 
 /// <summary>
+/// The selected day's booklets on their own — the dashboard's date, today
+/// by default — split by tier, with the centres and profiles that sold them.
+/// </summary>
+public sealed record SmartDayStats(
+    string Date, int Count, decimal Amount,
+    /// <summary>What the day's sales have posted to centres' accounts so far.</summary>
+    decimal Charged,
+    /// <summary>The day's sold booklets downloaded at least once.</summary>
+    int Downloaded,
+    int Package, int Multi, int Mini, int Other,
+    IReadOnlyList<LeaderRow> ByClient,
+    IReadOnlyList<LeaderRow> ByProfile);
+
+/// <summary>
 /// The Smart Report's own numbers — how many booklets were sold, with which
 /// profile, to which centres, at what price, and how much of that reached
 /// the centres' accounts. Super-admin only; see the endpoint.
@@ -34,7 +48,8 @@ public sealed record SmartReportStats(
     IReadOnlyList<SmartTierRow> ByProfile,
     IReadOnlyList<LeaderRow> ByClient,
     IReadOnlyList<LeaderRow> ByPrice,
-    IReadOnlyList<SmartDayPoint> Daily);
+    IReadOnlyList<SmartDayPoint> Daily,
+    SmartDayStats Day);
 
 /// <summary>
 /// Reads the booklet's sales from the custom-line rows that entitle a patient
@@ -79,7 +94,7 @@ public sealed class SmartReportStatsRepository(NobleConnectionFactory db, SqlRet
                 await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);
 
                 // 1 — headline
-                if (!await r.ReadAsync(inner).ConfigureAwait(false)) return Empty(first, through);
+                if (!await r.ReadAsync(inner).ConfigureAwait(false)) return Empty(first, through, day);
                 var monthCount = r.Int("monthCount");
                 var monthAmount = r.Dec("monthAmount");
                 var monthCharged = r.Dec("monthCharged");
@@ -119,12 +134,35 @@ public sealed class SmartReportStatsRepository(NobleConnectionFactory db, SqlRet
                             r.Date("day")?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty,
                             r.Int("count"), r.Dec("amount")));
 
+                // 6 — the selected day's headline and tier split
+                var dayStats = EmptyDay(day);
+                if (await r.NextResultAsync(inner).ConfigureAwait(false) && await r.ReadAsync(inner).ConfigureAwait(false))
+                    dayStats = dayStats with
+                    {
+                        Count = r.Int("count"), Amount = r.Dec("amount"), Charged = r.Dec("charged"),
+                        Downloaded = r.Int("downloaded"),
+                        Package = r.Int("package"), Multi = r.Int("multi"), Mini = r.Int("mini"), Other = r.Int("other"),
+                    };
+
+                // 7 — the day's centres
+                var dayClients = new List<LeaderRow>();
+                if (await r.NextResultAsync(inner).ConfigureAwait(false))
+                    while (await r.ReadAsync(inner).ConfigureAwait(false))
+                        dayClients.Add(new LeaderRow(r.Str("code") ?? string.Empty, r.Str("name"), r.Dec("amount"), r.Int("count")));
+
+                // 8 — the day's qualifying profiles
+                var dayProfiles = new List<LeaderRow>();
+                if (await r.NextResultAsync(inner).ConfigureAwait(false))
+                    while (await r.ReadAsync(inner).ConfigureAwait(false))
+                        dayProfiles.Add(new LeaderRow(r.Str("code") ?? string.Empty, r.Str("name"), r.Dec("amount"), r.Int("count")));
+                dayStats = dayStats with { ByClient = dayClients, ByProfile = dayProfiles };
+
                 return new SmartReportStats(
                     Iso(first), Iso(through), firstSale,
                     monthCount, monthAmount, allCount, allAmount,
                     monthCharged, allCharged, uncharged,
                     monthDownloaded, allDownloaded,
-                    byProfile, byClient, byPrice, daily);
+                    byProfile, byClient, byPrice, daily, dayStats);
             }, token), ct).ConfigureAwait(false);
     }
 
@@ -220,13 +258,37 @@ public sealed class SmartReportStatsRepository(NobleConnectionFactory db, SqlRet
         FROM days ORDER BY days.d
         OPTION (MAXRECURSION 400);
 
+        -- 6 ── the selected day on its own, split by tier
+        SELECT count      = COUNT(*),
+               amount     = ISNULL(SUM(amount), 0),
+               charged    = ISNULL(SUM(charged), 0),
+               downloaded = SUM(CASE WHEN EXISTS (SELECT 1 FROM #downloaded d WHERE d.patient_id = s.patient_id) THEN 1 ELSE 0 END),
+               package    = SUM(CASE WHEN tier = 'package' THEN 1 ELSE 0 END),
+               multi      = SUM(CASE WHEN tier = 'multi'   THEN 1 ELSE 0 END),
+               mini       = SUM(CASE WHEN tier = 'mini'    THEN 1 ELSE 0 END),
+               other      = SUM(CASE WHEN tier = 'other'   THEN 1 ELSE 0 END)
+        FROM #sold s WHERE s.day = @day;
+
+        -- 7 ── the day's centres
+        SELECT TOP (@top) code = client, name = clientName, amount = SUM(amount), count = COUNT(*)
+        FROM #sold WHERE day = @day
+        GROUP BY client, clientName ORDER BY COUNT(*) DESC, SUM(amount) DESC;
+
+        -- 8 ── the day's qualifying profiles
+        SELECT TOP (@top) code = tierCode, name = tierName, amount = SUM(amount), count = COUNT(*)
+        FROM #sold WHERE day = @day
+        GROUP BY tierCode, tierName ORDER BY COUNT(*) DESC, SUM(amount) DESC;
+
         DROP TABLE #downloaded; DROP TABLE #sold;
         """;
 
     private static string Iso(DateTime d) => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
-    private static SmartReportStats Empty(DateTime first, DateTime through) =>
-        new(Iso(first), Iso(through), null, 0, 0, 0, 0, 0, 0, 0, 0, 0, [], [], [], []);
+    private static SmartReportStats Empty(DateTime first, DateTime through, DateTime day) =>
+        new(Iso(first), Iso(through), null, 0, 0, 0, 0, 0, 0, 0, 0, 0, [], [], [], [], EmptyDay(day));
+
+    private static SmartDayStats EmptyDay(DateTime day) =>
+        new(Iso(day), 0, 0, 0, 0, 0, 0, 0, 0, [], []);
 
     /// <summary>The month containing the selected day, through that day (or month end).</summary>
     private static (DateTime First, DateTime Through, DateTime Day) NormaliseMonth(string? dateIso)
