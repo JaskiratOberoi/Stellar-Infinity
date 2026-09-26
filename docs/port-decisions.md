@@ -1097,3 +1097,13 @@ an unrestricted report scope like the other lab desks — nothing else. The
 home page is its doors (EntryHome), not the dashboard. Derived from the
 LIS type at sign-in, so every ENTRY login gets it; MEENAGIRI's explicit
 'reporting' assignment was removed so she matches the rest.
+
+## JK HEALTH SCREEN 1, JK HS4, TSH and B12 join the Smart Report (2026-09-26)
+
+Three JK centres sent their package plus the single tests they add to it.
+Script 165 adds JK HEALTH SCREEN 1 (67) and JK HS4 (125, the one JK0094
+orders — not HS4 NEW or EXTENDED) at the package tier, and TSH (BI221) and
+Vitamin B12 - Serum (BI235) at the single-test tier. Vitamin D, HbA1c,
+Lipid, CRP and RA factor were already single tests; LFT, KFT and the
+Vitamin profile already earned the package tier. "Vitamin" on JK0094's
+list was read as the Vitamin profile. No build: the tables are read live.
