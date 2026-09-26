@@ -262,7 +262,10 @@ public sealed class SmartReportStatsRepository(NobleConnectionFactory db, SqlRet
         SELECT count      = COUNT(*),
                amount     = ISNULL(SUM(amount), 0),
                charged    = ISNULL(SUM(charged), 0),
-               downloaded = SUM(CASE WHEN EXISTS (SELECT 1 FROM #downloaded d WHERE d.patient_id = s.patient_id) THEN 1 ELSE 0 END),
+               -- a scalar subquery, not SUM(CASE WHEN EXISTS …): SQL Server
+               -- refuses a subquery inside an aggregate (error 130)
+               downloaded = (SELECT COUNT(*) FROM #sold s2
+                             WHERE s2.day = @day AND EXISTS (SELECT 1 FROM #downloaded d WHERE d.patient_id = s2.patient_id)),
                package    = SUM(CASE WHEN tier = 'package' THEN 1 ELSE 0 END),
                multi      = SUM(CASE WHEN tier = 'multi'   THEN 1 ELSE 0 END),
                mini       = SUM(CASE WHEN tier = 'mini'    THEN 1 ELSE 0 END),
