@@ -65,6 +65,20 @@ public static class ApiEndpoints
            .RequireAuthorization()
            .WithName("GetDashboardSmartReportCatalogue");
 
+        // The lab's report switches (Reporting settings, super admin only):
+        // read and write behind the role; and a public read of the same
+        // values for the print page, which draws with no session when the
+        // renderer drives it. Booleans about layout, nothing of anyone's.
+        app.MapGet("/api/settings/reporting", GetReportingSettings)
+           .RequireAuthorization()
+           .WithName("GetReportingSettings");
+        app.MapPut("/api/settings/reporting", PutReportingSettings)
+           .RequireAuthorization()
+           .WithName("PutReportingSettings");
+        app.MapGet("/api/public/reporting-settings", GetPublicReportingSettings)
+           .AllowAnonymous()
+           .WithName("GetPublicReportingSettings");
+
         app.MapGet("/api/me/scope", GetMyScope)
            .RequireAuthorization()
            .WithName("GetMyScope");
@@ -224,6 +238,47 @@ public static class ApiEndpoints
         if (principal.UserId() is not int) return Results.Unauthorized();
         var result = await catalogue.GetAsync(ct).ConfigureAwait(false);
         return Results.Ok(result);
+    }
+
+    public sealed record ReportingSettingsBody(bool ThyroidFigure);
+
+    private static async Task<IResult> GetPublicReportingSettings(
+        Reports.ReportSettings settings, CancellationToken ct)
+    {
+        await settings.EnsureLoadedAsync(ct).ConfigureAwait(false);
+        return Results.Ok(new { thyroidFigure = settings.ThyroidFigure });
+    }
+
+    private static async Task<IResult> GetReportingSettings(
+        System.Security.Claims.ClaimsPrincipal principal,
+        Reports.ReportSettings settings,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int) return Results.Unauthorized();
+        // 404, not 403: the tab does not exist for anyone else.
+        if (!string.Equals(principal.Role(), InfinityRoles.SuperAdmin, StringComparison.Ordinal))
+            return Results.NotFound();
+        await settings.EnsureLoadedAsync(ct).ConfigureAwait(false);
+        return Results.Ok(new { thyroidFigure = settings.ThyroidFigure });
+    }
+
+    private static async Task<IResult> PutReportingSettings(
+        System.Security.Claims.ClaimsPrincipal principal,
+        HttpContext http,
+        ReportingSettingsBody body,
+        Reports.ReportSettings settings,
+        Audit.AuditLog audit,
+        CancellationToken ct)
+    {
+        if (principal.UserId() is not int actor) return Results.Unauthorized();
+        if (!string.Equals(principal.Role(), InfinityRoles.SuperAdmin, StringComparison.Ordinal))
+            return Results.NotFound();
+        var before = settings.ThyroidFigure;
+        await settings.SetAsync(Reports.ReportSettings.ThyroidFigureKey, body.ThyroidFigure ? "1" : "0", actor, ct)
+            .ConfigureAwait(false);
+        audit.Log("settings.reporting", actor: actor, ip: Audit.AuditIp.From(http),
+            details: new { thyroidFigure = new { from = before, to = settings.ThyroidFigure } });
+        return Results.Ok(new { thyroidFigure = settings.ThyroidFigure });
     }
 
     private static async Task<IResult> GetSmartReportStats(

@@ -158,6 +158,8 @@ export function PrintReport() {
   const { sid = '' } = useParams();
   const [params] = useSearchParams();
   const [row, setRow] = useState<FullRow | null>(null);
+  /** Reporting settings: "Reading this thyroid profile" under thyroid profiles. */
+  const [thyroidOn, setThyroidOn] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const pdfMode = params.get('pdf') === '1';
@@ -222,8 +224,15 @@ export function PrintReport() {
     const url = token
       ? `/api/public/reports/${encodeURIComponent(sid)}?t=${encodeURIComponent(token)}${params.get('pdf') === '1' ? '&render=true' : ''}`
       : `/api/reports/${encodeURIComponent(sid)}${own.toString() ? `?${own.toString()}` : ''}`;
-    api.get<FullRow>(url)
-      .then((r) => { if (live) setRow(r); })
+    // The lab's report switches ride along (a public read: the renderer has
+    // no session either). Read before the row is set, so the page is never
+    // "ready" for the PDF with a switch still unknown; a failed read counts
+    // as off — the failsafe fails safe.
+    Promise.all([
+      api.get<FullRow>(url),
+      api.get<{ thyroidFigure: boolean }>('/api/public/reporting-settings').catch(() => ({ thyroidFigure: false })),
+    ])
+      .then(([r, s]) => { if (live) { setThyroidOn(!!s.thyroidFigure); setRow(r); } })
       .catch((e) => { if (live) setError(e instanceof Error ? e.message : 'Could not load this report.'); });
     return () => { live = false; };
   }, [sid, token]);
@@ -559,6 +568,7 @@ export function PrintReport() {
           excluded={excluded}
           onToggle={toggle}
           pdf={pdfMode}
+          thyroidFigure={thyroidOn}
           interpretation={
             item.panel.profileId != null
               ? (profileInterpretations?.[item.panel.profileId] ?? null)
@@ -1276,7 +1286,7 @@ function IncludeToggle({
  *  under FSH, LH's under LH. Hiding those too printed such profiles with no
  *  interpretation at all, which is a report the lab has never issued. */
 function PanelBlock({
-  panel, interactive, excluded, onToggle, pdf, interpretation,
+  panel, interactive, excluded, onToggle, pdf, interpretation, thyroidFigure,
 }: {
   panel: ReportPanel;
   interactive: boolean;
@@ -1284,6 +1294,8 @@ function PanelBlock({
   onToggle: (id: number) => void;
   pdf: boolean;
   interpretation: string | null;
+  /** The Reporting setting: draw "Reading this thyroid profile" under a thyroid profile. */
+  thyroidFigure: boolean;
 }) {
   const panelOff = excluded.has(panel.resultId);
 
@@ -1330,7 +1342,7 @@ function PanelBlock({
       printedRows.push(child.row);
     }
   }
-  const thyroid = thyroidPatternOf(printedRows);
+  const thyroid = thyroidFigure ? thyroidPatternOf(printedRows) : null;
 
   const childText = (c: ReportBlock): string | null =>
     c.kind === 'group' ? (c.group?.interpretation ?? null) : (c.interpretation ?? null);

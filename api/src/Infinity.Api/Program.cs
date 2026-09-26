@@ -36,6 +36,10 @@ builder.Services.AddSingleton<MonthStatsRepository>();
 builder.Services.AddSingleton<SmartReportStatsRepository>();
 builder.Services.AddSingleton<SmartReportCatalogueRepository>();
 builder.Services.AddSingleton<UserTipRepository>();
+// The report switches: one instance, loaded at start-up (it is also the
+// hosted service), re-read on every save.
+builder.Services.AddSingleton<Infinity.Api.Reports.ReportSettings>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<Infinity.Api.Reports.ReportSettings>());
 builder.Services.AddSingleton<RevenueRepository>();
 builder.Services.AddSingleton<SalesRepository>();
 // Charges the Smart Report lines the legacy Register button walks past — see CustomLineSweep.

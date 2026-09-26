@@ -1214,3 +1214,24 @@ TSH to 50 or 100, and a scale that stopped just past the band pinned
 every such value to its right edge. It is a log axis, marked as such —
 linear to 100 would make the 0.35–5.50 band a sliver and an 8 look like
 an 80. T4 and T3 keep their band-plus-margin scales.
+
+## Reporting settings: a switch for the thyroid figure (2026-09-27)
+
+The figure goes to prod ahead of the lab's verdict, so the super admin
+gets a Reporting settings tab (Admin, super admin alone; the API answers
+404 to anyone else) with one switch: "Reading this thyroid profile" on or
+off, lab-wide, without a deploy. Off, a thyroid profile prints exactly as
+it did before the figure — the catalogue interpretation text and the
+notes. Storage is inf_report_setting (168), Infinity's own table, one row
+per switch; ReportSettings holds the values in memory, loaded at start-up
+and re-read on every save, so no report waits on the table. Two things
+make the switch immediate: its fingerprint rides in the PDF cache key,
+and the print page reads the switches through a public route before it
+declares itself ready — a failed read counts as off, so the failsafe fails
+safe. Each change is on the audit trail (settings.reporting). Both states
+were proved on staging: on, the figure prints and the legacy text stands
+down; off, the report is the old one to the letter. The legacy LIS is
+untouched by construction: the figure is drawn by Infinity's print page
+from the rows it reads; nothing is written to result, attachment or
+catalogue tables, so a Crystal report of the same sample is what it
+always was.

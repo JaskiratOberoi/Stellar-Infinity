@@ -33,6 +33,7 @@ import { AuditTrail } from './pages/AuditTrail';
 import { Requests } from './pages/Requests';
 import { Referrers } from './pages/Referrers';
 import { InvoiceConfigPage } from './pages/InvoiceConfig';
+import { ReportingSettingsPage } from './pages/ReportingSettings';
 import { ThemeToggle } from './theme/ThemeToggle';
 import { IntroTip, resetIntroTips } from './components/IntroTip';
 import { InfinityLoader } from './components/InfinityLoader';
@@ -239,6 +240,9 @@ const NAV: NavEntry[] = [
       // clients receive, and Telo gates its own copy of this screen the same
       // way. The page heading says "Invoice branding" in full.
       { to: '/admin/invoice', label: 'Branding', icon: 'orders', cap: 'user:manage' },
+      // Lab-wide switches for what the standard report prints; the super
+      // admin's alone, and the API answers 404 to anyone else.
+      { to: '/settings/reporting', label: 'Reporting', icon: 'reporting', cap: 'user:manage', onlyForRole: 'super_admin' },
       // Telo's Audit tab, over both platforms' trails. Same gate: the feed
       // names users, bills, amounts and IPs across every client.
       { to: '/admin/audit', label: 'Audit trail', icon: 'users', cap: 'user:manage' },
@@ -498,6 +502,10 @@ export function App() {
         <Route
           path="/admin/invoice"
           element={can('user:manage') ? <InvoiceConfigPage /> : <Navigate to="/" replace />}
+        />
+        <Route
+          path="/settings/reporting"
+          element={user?.role === 'super_admin' ? <ReportingSettingsPage /> : <Navigate to="/" replace />}
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

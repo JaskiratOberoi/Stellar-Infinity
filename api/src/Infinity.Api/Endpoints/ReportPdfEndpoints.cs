@@ -387,9 +387,11 @@ public static class ReportPdfEndpoints
     private const string PdfCacheV = "29";
     private static readonly TimeSpan PdfCacheTtl = TimeSpan.FromMinutes(45);
 
+    // The lab's report switches ride in the key (ReportSettings.Fingerprint),
+    // so a switch flipped is in the next download rather than a cached one.
     private static string PdfCacheKey(
         string kind, string sid, string? stamp, string options) =>
-        $"rptpdf:{PdfCacheV}:{kind}:{sid.ToUpperInvariant()}:{stamp ?? "0"}:{options}";
+        $"rptpdf:{PdfCacheV}:{kind}:{sid.ToUpperInvariant()}:{stamp ?? "0"}:{options}:{ReportSettings.Fingerprint}";
 
     /// <summary>
     /// What makes a cached PDF current: the sample's last-modified stamp, its
