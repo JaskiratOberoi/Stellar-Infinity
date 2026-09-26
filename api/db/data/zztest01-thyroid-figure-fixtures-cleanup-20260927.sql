@@ -1,7 +1,7 @@
 SET QUOTED_IDENTIFIER ON;
 GO
-/* Removes the two Thyroid Profile I review orders on ZZTEST01 (ZZTHY01,
-   ZZTHY02; added by zztest01-thyroid-figure-fixtures-20260927.sql). Keyed on
+/* Removes the six Thyroid Profile I review orders on ZZTEST01 (ZZTHY01 to
+   ZZTHY06; added by zztest01-thyroid-figure-fixtures-20260927.sql). Keyed on
    the fixture SIDs, never on a name a real patient could share. */
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
