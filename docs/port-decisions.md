@@ -1243,3 +1243,23 @@ already kept a stale PDF from being served after a flip; the flush means
 a flip back within the cache's 45 minutes redraws too, and nothing
 rendered under the other setting lingers. The count flushed is on the
 audit row and in the save's reply.
+
+## Signatory parity with the legacy LIS: Srinagar (2026-09-27)
+
+Jas asked for a unit-and-department table of who signs in the legacy LIS
+against Infinity. Both resolve from the same two tables, so the check was
+empirical: the LIS's GET_PATIENT_REPORT_VAIL_ID and usp_inf_report_extras
+run on the same 100 recently released samples across every active unit.
+88 agreed; the twelve that did not were all Srinagar, where two
+department-bound primaries (Histopathology, Microbiology) and no general
+one leave the fall-through "any active DOC_TYPE=1" to an unordered TOP 1.
+The LIS's reads IX_signature_master (Business_Unit_id, DOC_TYPE,
+department_id, IsActive) and so takes the lowest department_id — the
+microbiologist — while 102's ORDER BY prio alone let the pathologist
+through. Script 169 re-issues the procedure with every TOP 1 ordering
+ties by department_id, then id; the rerun agreed on all 100. Parity, not a
+judgement on who should sign Srinagar's routine work: that belongs in the
+LIS Signature Master, as a general primary row, and was left to the lab.
+Units with no release in the window (Gorakhpur, Jhansi, Medsky, Dehradun)
+were not sampled; they carry no unit signatories and fall to the
+department defaults in both systems. Both PDF caches were flushed.
