@@ -19,7 +19,12 @@ import { BODY_OUTLINE_D, BODY_OUTLINE_TRANSFORM } from './bodyOutline';
  * categories): "Heart & Cholesterol" points at the heart, "Blood Sugar" at
  * the pancreas, "Infection & Immunity" at the lymph nodes and spleen, "Blood
  * Counts" at the veins of the arm, "Vitamins, Minerals & Bone" at the bones
- * of the arm. A tested system's organ is drawn at full strength; a system
+ * of the arm, "Hormones & Fertility" at the pelvis — the chapter is AMH, LH,
+ * FSH, prolactin, testosterone and PSA, whose organs live there; neither
+ * drawing renders the ovaries or the testes, so the artist's pelvis stands
+ * for them (the female drawing's own; the male drawing has none, so the
+ * same rendering is set into the male outline's hips at the male kidneys'
+ * scale). A tested system's organ is drawn at full strength; a system
  * with any flagged result is tinted red with a red glow — the Attention
  * badge's rule, deliberately binary; an organ the report never looked at
  * fades to a faint grey so the figure still reads as a body but the eye goes
@@ -111,7 +116,7 @@ interface Figure {
 
 const MALE_LAYERS: Layer[] = [
   { key: 'arm-bones', file: 'arm-bones.png', x: 172.08743, y: 593.96173, w: 286, h: 387.78, m: ID, system: 'vitamins' },
-  { key: 'brain', file: 'brain.gif', x: 544.06586, y: 97.417419, w: 195.72717, h: 172.23991, m: ID, system: 'hormones' },
+  { key: 'brain', file: 'brain.gif', x: 544.06586, y: 97.417419, w: 195.72717, h: 172.23991, m: ID },
   { key: 'lymph', file: 'lymph.gif', x: 558.14343, y: 367.61545, w: 181, h: 150, m: ID, system: 'infection' },
   { key: 'trachea', file: 'trachea.gif', x: 613.5813, y: 289.86914, w: 56, h: 201, m: ID },
   { key: 'larynx', file: 'larynx.gif', x: 602.685, y: 405.01453, w: 78, h: 96, m: ID },
@@ -119,6 +124,9 @@ const MALE_LAYERS: Layer[] = [
   { key: 'thyroid', file: 'thyroid.gif', x: 596.8125, y: 416.89005, w: 102, h: 89, m: ID, system: 'thyroid' },
   { key: 'kidneys', file: 'kidneys.png', x: 506.0394, y: 797.99493, w: 284, h: 263.93, m: ID, system: 'kidney' },
   { key: 'bladder', file: 'bladder.png', x: 506.0394, y: 1061.92, w: 284, h: 161.76, m: ID, system: 'urine' },
+  // The female drawing's pelvis, set into the male hips: centred on the
+  // bladder as it is there, scaled by the two drawings' kidney widths.
+  { key: 'pelvis', file: 'pelvis.png', x: 443.5, y: 986.5, w: 409, h: 299, m: ID, system: 'hormones' },
   { key: 'spleen', file: 'spleen.gif', x: 560.62506, y: 846.58533, w: 95.372612, h: 110.49987, m: [0.9875, -0.1574, 0.1574, 0.9875, 0, 0], follows: 'infection' },
   { key: 'pancreas', file: 'pancreas.png', x: 440.41748, y: 881.45551, w: 224.59381, h: 135.50154, m: [0.9904, -0.1381, 0.1381, 0.9904, 0, 0], system: 'diabetes' },
   { key: 'stomach', file: 'stomach.png', x: 414.48322, y: 816.49908, w: 230.74571, h: 196.66655, m: [0.9891, -0.1476, 0.1711, 0.9853, 0, 0] },
@@ -135,9 +143,9 @@ const MALE_POINTERS: Pointer[] = [
   { id: 'kidney', side: 'left', at: [566, 880], pic: 'kidneys', win: [506, 800, 284, 190] },
   { id: 'urine', side: 'left', at: [640, 1180], pic: 'bladder', win: [560, 1090, 176, 134] },
   { id: 'vitamins', side: 'left', at: [352, 800], pic: 'arm-bones', win: [200, 594, 240, 388] },
-  { id: 'hormones', side: 'right', at: [690, 190], pic: 'brain', win: [540, 94, 204, 180] },
-  { id: 'heart', side: 'right', at: [690, 640], pic: 'heart', win: [570, 474, 164, 284] },
   { id: 'infection', side: 'right', at: [722, 436], pic: 'lymph', win: [556, 366, 186, 154] },
+  { id: 'heart', side: 'right', at: [690, 640], pic: 'heart', win: [570, 474, 164, 284] },
+  { id: 'hormones', side: 'right', at: [806, 1068], pic: 'pelvis', win: [443, 986, 409, 299] },
   { id: 'blood', side: 'right', at: [884, 800], pic: 'veins', win: [790, 540, 220, 580] },
   { id: 'diabetes', side: 'right', at: [700, 872], pic: 'pancreas', win: [452, 800, 340, 220] },
 ];
@@ -156,7 +164,7 @@ const MALE: Figure = {
 
 const FEMALE_LAYERS: Layer[] = [
   { key: 'arm-bones', file: 'female-arm-bones.png', x: 27.082672, y: 501.76453, w: 155, h: 309, m: ID, system: 'vitamins' },
-  { key: 'brain', file: 'brain.gif', x: 251.39325, y: 32.89637, w: 195.72717, h: 172.23991, m: ID, system: 'hormones' },
+  { key: 'brain', file: 'brain.gif', x: 251.39325, y: 32.89637, w: 195.72717, h: 172.23991, m: ID },
   { key: 'lymph', file: 'lymph.gif', x: 272.29352, y: 300.58777, w: 181, h: 150, m: ID, system: 'infection' },
   { key: 'trachea', file: 'trachea.gif', x: 326.3172, y: 222.84143, w: 56, h: 201, m: ID },
   { key: 'larynx', file: 'larynx.gif', x: 306.93561, y: 337.98694, w: 78, h: 96, m: ID },
@@ -164,6 +172,7 @@ const FEMALE_LAYERS: Layer[] = [
   { key: 'thyroid', file: 'thyroid.gif', x: 302.48425, y: 349.77869, w: 102, h: 89, m: ID, system: 'thyroid' },
   { key: 'kidneys', file: 'kidneys.png', x: 220.89612, y: 710.82898, w: 263.96713, h: 263.93, m: ID, system: 'kidney' },
   { key: 'bladder', file: 'bladder.png', x: 220.89612, y: 974.75, w: 263.96713, h: 161.76, m: ID, system: 'urine' },
+  { key: 'pelvis', file: 'pelvis.png', x: 160.58313, y: 909.99231, w: 379.9935, h: 278.13498, m: ID, system: 'hormones' },
   { key: 'spleen', file: 'spleen.gif', x: 288.05093, y: 717.05664, w: 88.817978, h: 110.31346, m: [0.9856, -0.169, 0.1465, 0.9892, 0, 0], follows: 'infection' },
   { key: 'pancreas', file: 'pancreas.png', x: 173.74751, y: 757.065, w: 209.06493, h: 135.32544, m: [0.9889, -0.1484, 0.1286, 0.9917, 0, 0], system: 'diabetes' },
   { key: 'stomach', file: 'stomach.png', x: 153.53654, y: 689.26953, w: 214.8369, h: 196.27434, m: [0.9874, -0.1585, 0.1594, 0.9872, 0, 0] },
@@ -180,9 +189,9 @@ const FEMALE_POINTERS: Pointer[] = [
   { id: 'kidney', side: 'left', at: [268, 792], pic: 'kidneys', win: [221, 712, 264, 190] },
   { id: 'urine', side: 'left', at: [352, 1100], pic: 'bladder', win: [270, 1000, 166, 136] },
   { id: 'vitamins', side: 'left', at: [96, 690], pic: 'arm-bones', win: [27, 502, 155, 309] },
-  { id: 'hormones', side: 'right', at: [396, 122], pic: 'brain', win: [247, 29, 204, 180] },
-  { id: 'heart', side: 'right', at: [398, 552], pic: 'heart', win: [281, 387, 152, 284] },
   { id: 'infection', side: 'right', at: [436, 372], pic: 'lymph', win: [270, 299, 186, 154] },
+  { id: 'heart', side: 'right', at: [398, 552], pic: 'heart', win: [281, 387, 152, 284] },
+  { id: 'hormones', side: 'right', at: [498, 985], pic: 'pelvis', win: [160, 910, 380, 278] },
   { id: 'blood', side: 'right', at: [584, 760], pic: 'veins', win: [497, 466, 164, 596] },
   { id: 'diabetes', side: 'right', at: [410, 782], pic: 'pancreas', win: [269, 694, 224, 165] },
 ];

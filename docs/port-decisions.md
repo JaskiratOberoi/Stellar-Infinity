@@ -1138,3 +1138,25 @@ item, values generated from each row's own range, AMH set by hand since
 its range is prose, the blood smear written as generic lines, and eight
 readings pushed out of range so the booklet's high/low copy shows. The
 cleanup script removes them by SID.
+
+## Every Smart Report result points somewhere on the body map (2026-09-26)
+
+Jas noticed AMH pointing nowhere: on prod, which had no AMH entry yet, it
+fell to "Other Tests", which has no organ. An audit of all 133 analytes
+and parameters reachable from the supported tests, profiles and packages
+(scratchpad audit, resolved the way SmartMeta.Resolve does) found one
+more with no pointer — Serum Transferrin — and three that pointed
+somewhere unconnected: sodium, potassium and chloride at the arm bones
+(now the kidneys, where the KFT with electrolytes sends them) and the
+urine microalbumin lines at the liver via the Albumin matcher (now the
+kidneys, with their own entry). Free T3 and Free T4 had borrowed the
+Total T3/T4 copy and got their own. The hormone chapter is, in practice,
+AMH, LH, FSH, prolactin, testosterone and PSA, so it is retitled
+"Hormones & Fertility" and the map points it at the pelvis instead of
+the brain: the female drawing's own pelvis rendering, and the same
+rendering set into the male outline's hips at the male kidneys' scale,
+since neither drawing renders the ovaries or the testes and Häggström's
+pelvis is the closest thing that is still his. The brain stays as
+scenery. Twenty-four parameters (CBC section headings, the urine routine
+lines, the smear's Hemoparasites and Impression) still resolve by
+department only — pointed correctly, without booklet copy.

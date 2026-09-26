@@ -45,9 +45,9 @@
     },
     {
       "id": "hormones",
-      "title": "Hormones",
-      "tagline": "Chemical messengers that regulate growth, reproduction and mood.",
-      "about": "Hormones are your body’s chemical messengers — released by glands and carried in the blood to regulate growth, reproduction, stress, sleep and mood. They work in a finely tuned balance. These tests measure key hormones and how that balance sits."
+      "title": "Hormones & Fertility",
+      "tagline": "Fertility and sex hormones, and the glands in the brain that steer them.",
+      "about": "Hormones are your body’s chemical messengers — released by glands and carried in the blood to regulate growth, reproduction, stress, sleep and mood. The ones measured here mostly concern fertility and the reproductive organs in the pelvis: the ovaries and the testes, and the pituitary gland in the brain that directs them. They work in a finely tuned balance, and these tests show how that balance sits."
     },
     {
       "id": "infection",
@@ -955,6 +955,22 @@
       }
     },
     {
+      "pattern": "MICRO\\s*-?\\s*ALB|ALBUMIN.*(URINE|CREAT)|URINE.*ALBUMIN|\\bU?ACR\\b",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "name": "Urine Albumin (Microalbumin)",
+        "categoryId": "kidney",
+        "what": "A tiny amount of the blood protein albumin leaking into the urine. It is the earliest sign that the kidneys’ filters are under strain, most often from diabetes or high blood pressure.",
+        "high": "A raised urine albumin, or albumin-to-creatinine ratio, means the kidney filters are letting protein through. Caught early it is very treatable — good sugar and blood-pressure control protect the kidneys — so your doctor will usually repeat it and act on a confirmed result.",
+        "low": "A low result is the expected one: no albumin is leaking through.",
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null
+      }
+    },
+    {
       "pattern": "ALBUMIN",
       "flags": "i",
       "codes": null,
@@ -1035,6 +1051,22 @@
       }
     },
     {
+      "pattern": "FREE\\s*T3|\\bFT3\\b|T3\\s*[-–]?\\s*FREE|TRI-?IODOTHYRONINE\\s*[-–]?\\s*FREE",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "name": "Free T3 — Active Thyroid Hormone",
+        "categoryId": "thyroid",
+        "what": "The unbound, active form of T3, the thyroid hormone that sets how fast your cells burn energy. Free T3 is the part actually available to the body.",
+        "high": "A high free T3 points to an overactive thyroid (hyperthyroidism) — often with weight loss, a fast heartbeat, heat intolerance or anxiety. Your doctor reads it with TSH and free T4.",
+        "low": "A low free T3 can go with an underactive thyroid or with a general illness that lowers T3 without the thyroid being at fault; TSH and free T4 tell which.",
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null
+      }
+    },
+    {
       "pattern": "\\bT3\\b|TRIIODOTHYRONINE",
       "flags": "i",
       "codes": null,
@@ -1044,6 +1076,22 @@
         "what": "A thyroid hormone that helps set your metabolic rate and energy.",
         "high": "A high T3 can mean an overactive thyroid (hyperthyroidism), where the gland makes more hormone than the body needs.",
         "low": "A low T3 can reflect an underactive thyroid (hypothyroidism), or simply the body's response to another illness.",
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null
+      }
+    },
+    {
+      "pattern": "FREE\\s*T4|\\bFT4\\b|T4\\s*[-–]?\\s*FREE|THYROXINE\\s*[-–]?\\s*FREE",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "name": "Free T4 — Thyroid Hormone Reserve",
+        "categoryId": "thyroid",
+        "what": "The unbound form of T4, the main hormone the thyroid makes. The body converts it into active T3 as needed, so free T4 shows how much the gland is producing.",
+        "high": "A high free T4 with a low TSH points to an overactive thyroid; your doctor will look at symptoms and may ask for antibodies or a scan.",
+        "low": "A low free T4 with a raised TSH points to an underactive thyroid (hypothyroidism), which is common and simply treated with a daily tablet once confirmed.",
         "advice": null,
         "adviceHigh": null,
         "adviceLow": null,
@@ -1435,6 +1483,22 @@
       }
     },
     {
+      "pattern": "TRANSFERRIN",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "name": "Transferrin — Iron Carrier",
+        "categoryId": "vitamins",
+        "what": "The protein that carries iron around the blood. The liver makes more of it when iron is short, so it is read together with serum iron and ferritin.",
+        "high": "A high transferrin usually means the body is short of iron and has made more carrier protein to gather what it can — the pattern of iron-deficiency anaemia.",
+        "low": "A low transferrin can go with an iron overload, long-standing inflammation or illness, or poor nutrition; your doctor reads it with ferritin and the iron level.",
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null
+      }
+    },
+    {
       "pattern": "\\bIRON\\b|SERUM\\s*IRON",
       "flags": "i",
       "codes": null,
@@ -1504,7 +1568,7 @@
       "codes": null,
       "info": {
         "name": "Sodium",
-        "categoryId": "vitamins",
+        "categoryId": "kidney",
         "what": "A salt that balances body fluids and helps nerves and muscles work.",
         "high": "Usually reflects not enough water in the body (dehydration), for example from too little fluid, diarrhoea, or water pills.",
         "low": "Often reflects too much body water relative to sodium, from drinking large amounts, certain medicines, or heart, liver or kidney conditions.",
@@ -1520,7 +1584,7 @@
       "codes": null,
       "info": {
         "name": "Potassium",
-        "categoryId": "vitamins",
+        "categoryId": "kidney",
         "what": "Keeps your heartbeat steady and muscles working.",
         "high": "Often linked to kidney function or certain medicines; sometimes the blood sample itself breaks down and falsely raises the reading, so a repeat may be done.",
         "low": "Can result from losing potassium through vomiting, diarrhoea, or water pills; certain medicines and adrenal conditions can also lower it.",
@@ -1536,7 +1600,7 @@
       "codes": null,
       "info": {
         "name": "Chloride",
-        "categoryId": "vitamins",
+        "categoryId": "kidney",
         "what": "A salt that helps balance body fluids and acidity.",
         "high": "This electrolyte moves with sodium and fluid balance; a high result can reflect dehydration or an acid-base shift in the blood.",
         "low": "Can follow fluid loss from vomiting or diarrhoea, or an acid-base shift; sometimes linked to heart, lung or adrenal conditions.",
@@ -1805,6 +1869,7 @@
   ],
   "localAdditions": [
     "Rheumatoid Factor (RA Factor) — added in Infinity on 2026-09-25; carry into Telo smartMeta.ts before the next regeneration",
-    "AMH, Anti-CCP, ANA, Peripheral Blood Smear, TORCH (Toxoplasma/Rubella/CMV/HSV IgG and IgM) — added in Infinity on 2026-09-26; carry into Telo smartMeta.ts before the next regeneration"
+    "AMH, Anti-CCP, ANA, Peripheral Blood Smear, TORCH (Toxoplasma/Rubella/CMV/HSV IgG and IgM) — added in Infinity on 2026-09-26; carry into Telo smartMeta.ts before the next regeneration",
+    "2026-09-26 body-map audit: Hormones retitled \"Hormones & Fertility\" (pointed at the pelvis); sodium/potassium/chloride moved to kidney; Transferrin, Urine Albumin (microalbumin), Free T3 and Free T4 entries added — carry into Telo smartMeta.ts before the next regeneration"
   ]
 }
