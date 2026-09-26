@@ -172,6 +172,24 @@ export function directionOf(value: string | null, range: string | null): Directi
   const v = firstNumber(value);
   if (v === null) return null;
 
+  const iv = intervalOf(range);
+  if (!iv) return null;
+  if (iv.hi != null && v > iv.hi) return 'high';
+  if (iv.lo != null && v < iv.lo) return 'low';
+  return null;
+}
+
+/** The healthy interval a printed reference range names; either bound may be open. */
+export interface Interval { lo: number | null; hi: number | null }
+
+/**
+ * The band of a printed reference range that names the healthy state, as
+ * numbers — the yardstick directionOf measures against, shared with the
+ * thyroid figure so both read the range the same way. Null where the range
+ * is prose or has no number to read.
+ */
+export function intervalOf(range: string | null): Interval | null {
+  if (!range) return null;
   const lines = range.split('\n').map((l) => l.trim()).filter(Boolean);
   const exclude = /near|border|high|low|deficien|insufficien|toxic|undesirable|very|pregnan|newborn|p(a)?ediatric|child|infant|trimester/i;
   const band = lines.find((l) => /adult|normal|desirable|optimal|sufficien/i.test(l) && !exclude.test(l))
@@ -179,16 +197,11 @@ export function directionOf(value: string | null, range: string | null): Directi
   if (!band) return null;
 
   const pair = band.match(/(-?\d+(?:\.\d+)?)\s*(?:-|–|to)\s*(-?\d+(?:\.\d+)?)/);
-  if (pair) {
-    const lo = Number(pair[1]), hi = Number(pair[2]);
-    if (v > hi) return 'high';
-    if (v < lo) return 'low';
-    return null;
-  }
+  if (pair) return { lo: Number(pair[1]), hi: Number(pair[2]) };
   const lt = band.match(/[<≤]\s*=?\s*(-?\d+(?:\.\d+)?)/);
-  if (lt) return v > Number(lt[1]) ? 'high' : null;
+  if (lt) return { lo: null, hi: Number(lt[1]) };
   const gt = band.match(/[>≥]\s*=?\s*(-?\d+(?:\.\d+)?)/);
-  if (gt) return v < Number(gt[1]) ? 'low' : null;
+  if (gt) return { lo: Number(gt[1]), hi: null };
   return null;
 }
 

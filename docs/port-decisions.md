@@ -1171,3 +1171,25 @@ charged to centres and downloaded, and the centres and qualifying profiles
 behind them. Three more result sets on the same stats query, keyed on the
 bill date like everything else there; the throwaway centre stays excluded.
 A day with no sale says so in one line rather than showing empty boards.
+
+## The thyroid profile explains its own pattern (2026-09-27)
+
+Jas brought the classic teaching square — TSH along the bottom, T4 up the
+side, nine wedges named Hyperthyroidism, Subclinical hypothyroidism and so
+on — and asked for a modern, easier version under Thyroid Profile I. The
+square is a two-axis lookup, so Infinity draws it as one: a three-by-three
+grid (TSH low / normal / high across, T4 high / normal / low down) with
+each cell named in everyday words, the patient's cell picked out and their
+dot placed inside it by how far each value sits from its band; beside it
+each hormone on its own reference band with a marker; beneath, the pattern
+and two or three sentences on what it usually means, with T3 refining the
+T3-toxicosis corner. Data-driven from the printed rows and the reference
+bands printed with them (already narrowed to the patient's age), so it is
+right for every patient rather than a static picture; it needs a numeric
+TSH and T4 with two-sided bands, else it stays away — a dot placed by
+guesswork is worse than none. Any profile carrying both axes gets it
+(Thyroid Profile I and II, the free-hormone forms); a lone TSH does not.
+Pure SVG in the report's own type, capped at 690px, one unbreakable unit;
+the v2 cells' uppercase is reset inside it. Telo's profile text and the
+TSH notes print below it unchanged. Review orders ZZTHY01 (normal) and
+ZZTHY02 (subclinical hypothyroidism) on ZZTEST01.
