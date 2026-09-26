@@ -1201,3 +1201,10 @@ show red below and above the band and green within it, with a pointer;
 and since the figure is the interpretation, the profile's catalogue text
 and the constituents' own no longer print alongside it — the static TSH
 notes still do.
+
+Greyscale, same day: most reports leave the lab on a black-and-white
+printer, so nothing in the figure means anything by colour alone. Out of
+range is told by weight and the report's own ▲▼ glyph; the scales are
+hatched outside the band and clear within it; the chosen cell has a heavy
+border, a darker fill and a black "this result" tag; the Normal cell is
+dashed and bold. Every text tone clears 7:1 on white (#595959 the lightest).
