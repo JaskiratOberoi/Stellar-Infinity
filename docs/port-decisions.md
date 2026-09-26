@@ -1124,3 +1124,17 @@ AMH, anti-CCP, ANA, the blood smear or the TORCH analytes; twelve entries
 were added to smart-meta.json (localAdditions) — IgM before IgG for each
 TORCH organism, since the IgG pattern is the bare organism name — so this
 one needs an API build, unlike 165.
+
+## Standard Anti-CCP, and review orders for the Kashmir list (2026-09-26)
+
+Script 167 adds the general Anti-CCP (BI036) at the single-test tier beside
+the Kashmir CLIA variant. Eighteen review orders sit on ZZTEST01 (ZZKL01A to
+ZZKL18C, zztest01-smart-kashmir-fixtures-20260926.sql): one per new single
+test and small profile at SMART-MINI, and four combined visits at SMART-MULT
+(a fertility panel, KFT basic with lipid screen and platelets, TORCH IgM
+with IgG, and an autoimmune trio). Same recipe as the HCP fixtures: the
+result rows are cloned structure-only from one real released tube per
+item, values generated from each row's own range, AMH set by hand since
+its range is prose, the blood smear written as generic lines, and eight
+readings pushed out of range so the booklet's high/low copy shows. The
+cleanup script removes them by SID.
