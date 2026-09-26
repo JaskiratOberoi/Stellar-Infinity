@@ -1312,17 +1312,37 @@ function PanelBlock({
    * the same rule the Head groups of a multi-part test follow: a profile
    * whose members share one catalogue text is one note, not one per member.
    */
+  /*
+   * A thyroid profile — TSH and a T4 among the rows still printed — gets the
+   * reading figure under its rows: the TSH-against-T4 grid with T3 beside
+   * it, the scales, and the pattern in plain words. Any profile that
+   * carries the two axes qualifies (Thyroid Profile I, II, the free-hormone
+   * variants); a lone TSH does not, since the pattern needs both. The
+   * figure IS the interpretation: the profile's catalogue text and the
+   * constituents' own do not print alongside it — the static notes still
+   * do. See lib/thyroidPattern.
+   */
+  const printedRows: ReportRow[] = [];
+  for (const child of visible) {
+    if (child.kind === 'group' && child.group) {
+      for (const r of child.group.rows) if (!excluded.has(r.resultId)) printedRows.push(r);
+    } else if (child.row && !excluded.has(child.row.resultId)) {
+      printedRows.push(child.row);
+    }
+  }
+  const thyroid = thyroidPatternOf(printedRows);
+
   const childText = (c: ReportBlock): string | null =>
     c.kind === 'group' ? (c.group?.interpretation ?? null) : (c.interpretation ?? null);
   const lastCarrier = new Map<string, number>();
-  if (!interpretation) {
+  if (!interpretation && !thyroid) {
     visible.forEach((c, i) => {
       const t = childText(c);
       if (t) lastCarrier.set(t, i);
     });
   }
   const speaks = (c: ReportBlock, i: number): boolean => {
-    if (interpretation) return false;
+    if (interpretation || thyroid) return false;
     const t = childText(c);
     if (!t) return c.kind === 'group' ? !!c.group?.interpretationImage : !!c.interpretationImage;
     return lastCarrier.get(t) === i;
@@ -1351,24 +1371,6 @@ function PanelBlock({
    * members keep flowing and breaking where the browser sees fit. Print
    * only: on screen there are no pages to continue onto.
    */
-  /*
-   * A thyroid profile — TSH and a T4 among the rows still printed — gets the
-   * reading figure under its rows: the TSH-against-T4 grid with the
-   * patient's dot, the bands, and the pattern in plain words. Any profile
-   * that carries the two axes qualifies (Thyroid Profile I, II, the
-   * free-hormone variants); a lone TSH does not, since the pattern needs
-   * both. See lib/thyroidPattern.
-   */
-  const printedRows: ReportRow[] = [];
-  for (const child of visible) {
-    if (child.kind === 'group' && child.group) {
-      for (const r of child.group.rows) if (!excluded.has(r.resultId)) printedRows.push(r);
-    } else if (child.row && !excluded.has(child.row.resultId)) {
-      printedRows.push(child.row);
-    }
-  }
-  const thyroid = thyroidPatternOf(printedRows);
-
   const HEAVY = 650;
   const heavy = visible.map((c, i) => speaks(c, i) && (childText(c)?.length ?? 0) > HEAVY);
   const paginate = pdf && heavy.filter(Boolean).length >= 2;
@@ -1410,7 +1412,7 @@ function PanelBlock({
           <td colSpan={5} className="lr__fig-cell"><ThyroidFigure p={thyroid} /></td>
         </tr>
       )}
-      {interpretation && <InterpretationRow text={interpretation} dim={panelOff} />}
+      {interpretation && !thyroid && <InterpretationRow text={interpretation} dim={panelOff} />}
       <NoteRow notes={notesForCodes(codes)} dim={panelOff} />
     </>
   );

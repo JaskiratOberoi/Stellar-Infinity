@@ -1193,3 +1193,11 @@ Pure SVG in the report's own type, capped at 690px, one unbreakable unit;
 the v2 cells' uppercase is reset inside it. Telo's profile text and the
 TSH notes print below it unchanged. Review orders ZZTHY01 (normal) and
 ZZTHY02 (subclinical hypothyroidism) on ZZTEST01.
+
+Revised the same day on Jas's review: no dot — the cell itself is the
+answer, tagged "this result"; T3 sits on the right-hand side of the grid
+where the original drew it, its level marked on the same rows; the scales
+show red below and above the band and green within it, with a pointer;
+and since the figure is the interpretation, the profile's catalogue text
+and the constituents' own no longer print alongside it — the static TSH
+notes still do.
