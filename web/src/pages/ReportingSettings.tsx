@@ -56,13 +56,19 @@ export function ReportingSettingsPage() {
 
       {data && (
         <div className="card" style={{ marginTop: '1.2rem', maxWidth: 720 }}>
-          <label style={{ display: 'flex', gap: '.9rem', alignItems: 'flex-start', cursor: busy ? 'progress' : 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={data.thyroidFigure}
+          <div style={{ display: 'flex', gap: '.9rem', alignItems: 'flex-start' }}>
+            {/* The same switch the Jarvis rules use, so on/off reads the same
+                everywhere in Settings. */}
+            <button
+              type="button"
+              role="switch"
+              aria-checked={data.thyroidFigure}
+              aria-label="Reading this thyroid profile under thyroid profiles"
+              className={`toggle${data.thyroidFigure ? ' toggle--on' : ''}`}
               disabled={busy}
-              onChange={(e) => save({ ...data, thyroidFigure: e.target.checked })}
-              style={{ marginTop: '.25rem', width: 18, height: 18 }}
+              title={data.thyroidFigure ? 'On — thyroid profiles print the reading figure' : 'Off — thyroid profiles print as before'}
+              style={{ marginTop: '.15rem', flex: 'none' }}
+              onClick={() => void save({ ...data, thyroidFigure: !data.thyroidFigure })}
             />
             <span>
               <span style={{ fontWeight: 700 }}>“Reading this thyroid profile” under thyroid profiles</span>
@@ -73,10 +79,11 @@ export function ReportingSettingsPage() {
                 thyroid profile prints exactly as it did before the figure — no deploy needed.
               </span>
               <span className="muted" style={{ display: 'block', fontSize: '.78rem', marginTop: '.4rem' }}>
-                Currently <b>{data.thyroidFigure ? 'on' : 'off'}</b>. Each change is on the audit trail.
+                Currently <b>{data.thyroidFigure ? 'on' : 'off'}</b>. Each change is on the audit trail and clears the
+                report PDF cache.
               </span>
             </span>
-          </label>
+          </div>
         </div>
       )}
     </div>

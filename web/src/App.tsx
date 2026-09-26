@@ -242,7 +242,9 @@ const NAV: NavEntry[] = [
       { to: '/admin/invoice', label: 'Branding', icon: 'orders', cap: 'user:manage' },
       // Lab-wide switches for what the standard report prints; the super
       // admin's alone, and the API answers 404 to anyone else.
-      { to: '/settings/reporting', label: 'Reporting', icon: 'reporting', cap: 'user:manage', onlyForRole: 'super_admin' },
+      // "Reporting settings" in full: the Lab menu already has "Reporting",
+      // and the same word twice across two menus would read as one door.
+      { to: '/settings/reporting', label: 'Reporting settings', icon: 'reporting', cap: 'user:manage', onlyForRole: 'super_admin' },
       // Telo's Audit tab, over both platforms' trails. Same gate: the feed
       // names users, bills, amounts and IPs across every client.
       { to: '/admin/audit', label: 'Audit trail', icon: 'users', cap: 'user:manage' },
