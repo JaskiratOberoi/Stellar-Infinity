@@ -1107,3 +1107,20 @@ Vitamin B12 - Serum (BI235) at the single-test tier. Vitamin D, HbA1c,
 Lipid, CRP and RA factor were already single tests; LFT, KFT and the
 Vitamin profile already earned the package tier. "Vitamin" on JK0094's
 list was read as the Vitamin profile. No build: the tables are read live.
+
+## The Kashmir list: AMH to TORCH join the Smart Report (2026-09-26)
+
+A second list of seventeen items. Script 166 adds JK HS4 NEW (1332), JK
+HS4 EXTENDED PROFILE (226) and JK HEALTH SCREEN 2 (66) at the package
+tier; AMH, LH, FSH, Prolactin, Anti CCP CLIA for Kashmir (ACPCL1 — the
+variant named, not the general BI036), ANA CLIA, ANA ELISA, Peripheral
+Blood Smear and Platelet Count at the single-test tier; and KFT BASIC,
+LIPID SCREEN, TORCH IgG and TORCH IgM as profiles priced as single tests
+(as_single), like Lipid Profile and Thyroid Profile I before them — the
+package tier is for the full-day profiles (LFT, KFT with electrolytes,
+CBC+ESR, Iron, Vitamins, Anemia). KFT with electrolytes, LFT and Iron
+Profile were already supported. Telo's knowledge base has no copy for
+AMH, anti-CCP, ANA, the blood smear or the TORCH analytes; twelve entries
+were added to smart-meta.json (localAdditions) — IgM before IgG for each
+TORCH organism, since the IgG pattern is the bare organism name — so this
+one needs an API build, unlike 165.

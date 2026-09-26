@@ -363,6 +363,198 @@
       }
     },
     {
+      "pattern": "MULLERIAN|\\bAMH\\b",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "name": "AMH — Ovarian Reserve",
+        "categoryId": "hormones",
+        "what": "Anti-Müllerian hormone is made by the small follicles in the ovaries. It gives an estimate of how many eggs remain, which is why it is used in fertility planning.",
+        "high": "A high AMH usually means a generous egg reserve. Very high values are sometimes seen with polycystic ovaries; your doctor reads it with your cycle history and an ultrasound.",
+        "low": "A low AMH suggests a smaller egg reserve, which is normal with age. It does not by itself say whether you can conceive, so it is interpreted with your age, FSH and other findings.",
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null
+      }
+    },
+    {
+      "pattern": "ANTI[-\\s]*CCP|CITRULLINATED",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "name": "Anti-CCP Antibody",
+        "categoryId": "infection",
+        "what": "An antibody against citrullinated proteins. It is one of the most specific blood tests for rheumatoid arthritis and can appear years before joint symptoms.",
+        "high": "A positive anti-CCP strongly supports rheumatoid arthritis, especially together with a raised RA factor and joint symptoms. Your doctor will decide on further tests and treatment.",
+        "low": "A negative anti-CCP is the expected result and makes rheumatoid arthritis less likely, though it does not rule it out completely.",
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null
+      }
+    },
+    {
+      "pattern": "ANTI[-\\s]*NUCLEAR|\\bANA\\b",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "name": "ANA — Antinuclear Antibody",
+        "categoryId": "infection",
+        "what": "A screening test for antibodies that react against the body’s own cell nuclei. It is used when an autoimmune condition such as lupus is being considered.",
+        "high": "A positive ANA means such antibodies are present. Many healthy people have a weakly positive ANA, so on its own it is not a diagnosis — your doctor reads the pattern and level with your symptoms and may order more specific tests.",
+        "low": "A negative ANA is the expected result and makes lupus and several related conditions much less likely.",
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null
+      }
+    },
+    {
+      "pattern": "PERIPHERAL\\s*(BLOOD\\s*)?(SMEAR|FILM)|\\bPBS\\b|\\bPBF\\b",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "name": "Peripheral Blood Smear",
+        "categoryId": "blood",
+        "what": "A trained eye looks at a thin film of your blood under the microscope and describes the size, shape and appearance of the red cells, white cells and platelets.",
+        "high": "Anything the pathologist has noted about cell shape or size points to where to look next — a type of anaemia, an infection, or a platelet issue. Your doctor reads the description with your blood counts.",
+        "low": "A smear described as normal means the cells look as they should under the microscope.",
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null
+      }
+    },
+    {
+      "pattern": "TOXOPLASMA.*IGM",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "name": "Toxoplasma IgM",
+        "categoryId": "infection",
+        "what": "IgM antibodies to Toxoplasma, a parasite carried by cats and undercooked meat. IgM appears early, so it points to a recent or current infection — important in pregnancy.",
+        "high": "A positive IgM suggests a recent infection and your doctor will usually confirm it with a repeat sample and IgG testing before acting on it.",
+        "low": "A negative IgM means no sign of a recent Toxoplasma infection.",
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null
+      }
+    },
+    {
+      "pattern": "TOXOPLASMA",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "name": "Toxoplasma IgG",
+        "categoryId": "infection",
+        "what": "IgG antibodies to Toxoplasma. IgG appears weeks after an infection and stays for life, so it shows past exposure and immunity rather than a current infection.",
+        "high": "A positive IgG means you have met Toxoplasma before and are generally protected; in pregnancy it means a new infection is unlikely.",
+        "low": "A negative IgG means no past exposure — so no immunity, and in pregnancy your doctor may advise care with cats’ litter and undercooked meat.",
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null
+      }
+    },
+    {
+      "pattern": "RUBELLA.*IGM",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "name": "Rubella IgM",
+        "categoryId": "infection",
+        "what": "IgM antibodies to rubella (German measles). IgM rises with a recent infection, which matters most in early pregnancy.",
+        "high": "A positive IgM suggests a recent rubella infection or vaccination; your doctor will confirm with a repeat sample and the IgG result.",
+        "low": "A negative IgM means no sign of a recent rubella infection.",
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null
+      }
+    },
+    {
+      "pattern": "RUBELLA",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "name": "Rubella IgG",
+        "categoryId": "infection",
+        "what": "IgG antibodies to rubella, from past infection or the vaccine. Their presence means immunity.",
+        "high": "A positive IgG is the good result: you are immune to rubella, and a baby in pregnancy is protected.",
+        "low": "A negative IgG means no immunity to rubella; if you are planning a pregnancy your doctor may advise vaccination beforehand.",
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null
+      }
+    },
+    {
+      "pattern": "\\bCMV\\b.*IGM|CYTOMEGALO.*IGM",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "name": "CMV IgM",
+        "categoryId": "infection",
+        "what": "IgM antibodies to cytomegalovirus, a common virus that usually causes no illness but matters in pregnancy and for people with weak immunity.",
+        "high": "A positive IgM suggests a recent CMV infection; because IgM can linger or cross-react, your doctor will usually confirm with IgG and a repeat sample.",
+        "low": "A negative IgM means no sign of a recent CMV infection.",
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null
+      }
+    },
+    {
+      "pattern": "\\bCMV\\b|CYTOMEGALO",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "name": "CMV IgG",
+        "categoryId": "infection",
+        "what": "IgG antibodies to cytomegalovirus. Most adults carry them from a past, unnoticed infection.",
+        "high": "A positive IgG means past exposure to CMV, which is very common and usually harmless; it does not indicate a current infection.",
+        "low": "A negative IgG means no past exposure to CMV.",
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null
+      }
+    },
+    {
+      "pattern": "HERPES.*IGM|\\bHSV\\b.*IGM",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "name": "Herpes Simplex IgM",
+        "categoryId": "infection",
+        "what": "IgM antibodies to the herpes simplex viruses (types 1 and 2). IgM suggests a recent infection or a flare.",
+        "high": "A positive IgM suggests recent herpes simplex activity; your doctor reads it with any symptoms, since the test cannot tell the two types apart on its own.",
+        "low": "A negative IgM means no sign of a recent herpes simplex infection.",
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null
+      }
+    },
+    {
+      "pattern": "HERPES|\\bHSV\\b",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "name": "Herpes Simplex IgG",
+        "categoryId": "infection",
+        "what": "IgG antibodies to the herpes simplex viruses. Most adults carry them from past exposure, often without ever having had symptoms.",
+        "high": "A positive IgG means past exposure to herpes simplex, which is very common; it is not a sign of an active infection.",
+        "low": "A negative IgG means no past exposure to herpes simplex.",
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null
+      }
+    },
+    {
       "pattern": "RHEUMATOID\\s*(ARTHRITIS\\s*)?FACTOR|\\bRA\\s*FACTOR\\b|\\bRF\\b",
       "flags": "i",
       "codes": null,
@@ -1612,6 +1804,7 @@
     }
   ],
   "localAdditions": [
-    "Rheumatoid Factor (RA Factor) — added in Infinity on 2026-09-25; carry into Telo smartMeta.ts before the next regeneration"
+    "Rheumatoid Factor (RA Factor) — added in Infinity on 2026-09-25; carry into Telo smartMeta.ts before the next regeneration",
+    "AMH, Anti-CCP, ANA, Peripheral Blood Smear, TORCH (Toxoplasma/Rubella/CMV/HSV IgG and IgM) — added in Infinity on 2026-09-26; carry into Telo smartMeta.ts before the next regeneration"
   ]
 }
