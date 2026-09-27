@@ -70,6 +70,7 @@ const PAT = [
   ['Low TSH and low T4', 'pituitary · recent illness', 'a'], ['Low T4, normal TSH', 'pituitary · medicines', 'a'], ['Underactive thyroid', 'primary hypothyroidism', 'r'],
 ];
 
+const TICK = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg>';
 const html = R`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Thyroid Profile — Now explained on the report</title>
 <style>
@@ -101,7 +102,13 @@ h1{font-size:64px;line-height:.98;letter-spacing:-.02em;color:var(--navy);margin
 .lead{font-size:18.5px;line-height:1.45;color:var(--muted)}
 .lead b{color:var(--purple)}
 .ticks{list-style:none;margin-top:18px;display:flex;flex-direction:column;gap:9px}
-.ticks li{display:flex;gap:10px;align-items:center;font-size:16px;font-weight:700;color:var(--navy)}
+.ticks li{display:flex;gap:10px;align-items:center;font-size:15px;color:var(--muted);line-height:1.3}.ticks li b{color:var(--navy)}
+.price{margin-top:18px;display:grid;grid-template-columns:auto 1fr;column-gap:16px;align-items:center;background:#fff;border:1.5px solid rgba(91,43,181,.18);border-radius:18px;padding:12px 18px;box-shadow:0 12px 28px rgba(60,30,130,.10)}
+.price .amt{font-size:48px;font-weight:700;color:var(--purple);letter-spacing:-.03em;line-height:1;grid-row:1/3}
+.price .per{font-size:15px;font-weight:700;color:var(--navy);line-height:1.2;white-space:nowrap}
+.price .per br{display:none}
+.price .note{font-size:11.5px;color:var(--muted);line-height:1.3;margin-top:3px}
+.price .note br{display:none}
 .ticks li i{width:24px;height:24px;border-radius:50%;background:var(--teal);display:inline-grid;place-items:center;flex:none}
 .ticks li i svg{width:14px;height:14px}
 .mock{position:relative;padding-top:30px}
@@ -180,15 +187,16 @@ h1{font-size:64px;line-height:.98;letter-spacing:-.02em;color:var(--navy);margin
   <div class="wrap">
     <div class="hero">
       <div>
-        <span class="pill">New · on every Thyroid Profile</span>
+        <span class="pill">New · Thyroid Profile I</span>
         <h1>Your <span class="grad">Thyroid</span>, explained on the report</h1>
-        <p class="lead">Thyroid Profile I now prints a <b>reading guide</b> under the results: the pattern your TSH, T4 and T3 make, named in plain words. Same lab values, same doctors — <b>no extra cost</b>.</p>
+        <p class="lead">Every Thyroid Profile I now comes with a <b>reading guide</b> printed under the results. Patients finally see what their TSH, T4 and T3 mean together — and doctors get the pattern <b>named at a glance</b>, ready for the consultation.</p>
         <ul class="ticks">
-          <li><i><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg></i>The nine thyroid patterns as a simple grid</li>
-          <li><i><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg></i>Each hormone shown on its own reference band</li>
-          <li><i><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg></i>What the pattern usually means, in two lines</li>
-          <li><i><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg></i>Prints crisp in black and white</li>
+          <li><i>${TICK}</i><span><b>Patients understand</b> — the pattern in plain words, not just numbers</span></li>
+          <li><i>${TICK}</i><span><b>Doctors decide faster</b> — TSH × T4 grid with T3 alongside, nothing to work out</span></li>
+          <li><i>${TICK}</i><span><b>Fewer follow-up calls</b> — the usual next step is already on the report</span></li>
+          <li><i>${TICK}</i><span><b>Prints crisp</b> in black and white, on every paper</span></li>
         </ul>
+        <div class="price"><span class="amt">₹5</span><span class="per">additional<br>per Thyroid Profile I</span><span class="note">over the current profile price · billed with the order</span></div>
       </div>
       <div class="mock">
         <div class="sheet">
@@ -207,8 +215,8 @@ h1{font-size:64px;line-height:.98;letter-spacing:-.02em;color:var(--navy);margin
             <p class="note">Read from TSH and T4 against the reference bands printed above, with T3 alongside; medicines, pregnancy and recent illness all change the reading. Your doctor interprets it with the clinical picture.</p>
           </div>
         </div>
-        <div class="badge b1"><i class="i-p">${ico.words}</i>Pattern named in plain words</div>
-        <div class="badge b2"><i class="i-t">${ico.grid}</i>T3 right beside the grid</div>
+        <div class="badge b1"><i class="i-p">${ico.words}</i>Patients understand their result</div>
+        <div class="badge b2"><i class="i-t">${ico.grid}</i>Doctors see the pattern at a glance</div>
         <div class="badge b3"><i class="i-b">${ico.print}</i>Prints in black &amp; white</div>
       </div>
     </div>
@@ -231,21 +239,21 @@ h1{font-size:64px;line-height:.98;letter-spacing:-.02em;color:var(--navy);margin
     </div>
 
     <div class="card feat" style="margin-top:30px">
-      <div><i class="i-p">${ico.words}</i><div><b>Easy to Understand</b><small>Plain words, no jargon</small></div></div>
-      <div><i class="i-t">${ico.bands}</i><div><b>Same Lab Values</b><small>Nothing changes in the results</small></div></div>
-      <div><i class="i-b">${ico.doctor}</i><div><b>For the Consultation</b><small>Read with your doctor</small></div></div>
-      <div><i class="i-p">${ico.free}</i><div><b>No Extra Cost</b><small>On every thyroid profile</small></div></div>
+      <div><i class="i-p">${ico.words}</i><div><b>Patient-Friendly</b><small>Plain words, no jargon</small></div></div>
+      <div><i class="i-t">${ico.bands}</i><div><b>Same Lab Values</b><small>Only the reading is added</small></div></div>
+      <div><i class="i-b">${ico.doctor}</i><div><b>Doctor-Ready</b><small>Pattern named, next step noted</small></div></div>
+      <div><i class="i-p">${ico.free}</i><div><b>Just ₹5 More</b><small>Per Thyroid Profile I</small></div></div>
     </div>
 
     <div class="card cta" style="margin-top:18px">
-      <div class="l"><i>${ico.chat}</i><span>Want a reading guide for <b>another profile</b>?<br>Tell us which one.</span></div>
+      <div class="l"><i>${ico.chat}</i><span>Give your patients a report they <b>understand</b> —<br>and your doctors one they can <b>act on</b>.</span></div>
       <div class="btn">${ico.send}Please DM us</div>
     </div>
 
     <div class="card facts">
-      <div><i>${ico.tag}</i><span><b>Included</b> with every Thyroid Profile I — nothing to add to the order.</span></div>
+      <div><i>${ico.tag}</i><span><b>₹5 additional</b> per Thyroid Profile I, billed with the order.</span></div>
       <div><i>${ico.cal}</i><span>Live on <b>Infinity</b> reports from <b>27 September 2026</b>.</span></div>
-      <div><i>${ico.clock}</i><span>Also under any profile carrying <b>TSH and T4</b>.</span></div>
+      <div><i>${ico.clock}</i><span>Want it on <b>another profile</b>? Tell us which one.</span></div>
     </div>
   </div>
 
