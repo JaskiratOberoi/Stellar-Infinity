@@ -5511,3 +5511,22 @@ tbody tr.row-status--quiet > td:first-child {
 .introtip__ok:hover { filter: brightness(1.08); }
 @keyframes introtip-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .introtip__bubble { animation: none; } }
+
+/* ---------- bento grid ----------
+   Four columns; a card spans one, two or all four. Rows size to their
+   tallest card, so boards are capped at ten rows (the rest behind "View
+   all") and the chart stretches to fill beside one. Two columns under
+   900px, one under 560px, where the spans fold to full width. */
+.bento { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .9rem; align-items: stretch; }
+.bento__1 { grid-column: span 1; }
+.bento__2 { grid-column: span 2; }
+.bento__4 { grid-column: 1 / -1; }
+.bento > .card--chart { min-height: 260px; }
+@media (max-width: 900px) {
+  .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bento__2 { grid-column: span 2; }
+}
+@media (max-width: 560px) {
+  .bento { grid-template-columns: minmax(0, 1fr); }
+  .bento__1, .bento__2 { grid-column: span 1; }
+}
