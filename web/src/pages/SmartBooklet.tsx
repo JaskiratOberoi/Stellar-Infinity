@@ -1,7 +1,12 @@
 import type { ReportSigner, ProcessingUnit } from './ReportViewer';
 import { BodyMapPage, type BodySystem } from './SmartBodyMap';
-import { TrendMatrix, trendBlocks } from '../components/TrendMatrix';
+import { createContext, useContext, useMemo } from 'react';
+import { TrendStrip, trendIndex, trendKey } from '../components/TrendStrip';
+import type { TrendAnalyte } from '../lib/trendBands';
 import type { ResultTrendResponse } from '../api/client';
+
+/** The Trending report's history, keyed by panel code and LIS name, for each result card to draw its own strip. */
+const BookletTrend = createContext<Map<string, TrendAnalyte>>(new Map());
 import {
   caloriesForSex,
   calorieBandForAge,
@@ -155,6 +160,8 @@ const AMBER_LINE = '#e0a534';
 interface Analyte {
   categoryId: string;
   friendlyName: string;
+  /** The LIS panel code, with the LIS name the key a trend is matched on. */
+  testCode: string | null;
   row: {
     name: string | null;
     value: string | null;
@@ -325,6 +332,7 @@ function readSections(sections: ApiSection[]): { analytes: Analyte[]; categories
     for (const a of sec.analytes) {
       analytes.push({
         categoryId: sec.categoryId,
+        testCode: a.testCode,
         // NOT simply the API's friendly name: a differential count reports the
         // same analyte twice, once as a percentage and once as an absolute, and
         // both carry the same catalogue name. Telo separates them here and so
@@ -707,6 +715,8 @@ function CategoryIntro({ cat, list }: { cat: Category; list: Analyte[] }) {
 
 function ResultBlock({ a }: { a: Analyte }) {
   const lisName = a.row.name && a.row.name !== a.friendlyName ? a.row.name : null;
+  // The parameter's trend across the person's earlier visits, under the reading.
+  const trendFor = useContext(BookletTrend).get(trendKey(a.testCode, a.row.name));
   // Resolved by the API rather than looked up here — see the note at the top.
   // The advice field carries the action for a flagged result and the
   // keep-it-up note for a healthy one, so which it is depends on the flag.
@@ -764,6 +774,15 @@ function ResultBlock({ a }: { a: Analyte }) {
             )}
           </div>
         </div>
+
+        {trendFor && (
+          <div style={{ marginTop: '9px', padding: '6px 10px 4px', borderRadius: '9px', border: `1px solid ${HAIR}`, background: '#fbfdfc' }}>
+            <div style={{ fontSize: '9px', color: FAINT, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '2px' }}>
+              Your trend · earlier visits
+            </div>
+            <TrendStrip a={trendFor} />
+          </div>
+        )}
 
         {a.row.comments && (
           <div style={{ fontSize: '9.5px', color: FAINT, marginTop: '7px', fontStyle: 'italic' }}>
@@ -1667,6 +1686,7 @@ export function SmartBooklet({ data, format = 'v1', onMapReady, trend = null }: 
   trend?: ResultTrendResponse | null;
 }) {
   const { analytes, categories } = readSections(data.sections);
+  const trendMap = useMemo(() => trendIndex(trend), [trend]);
   const total = analytes.length;
   const alerts = analytes.filter((a) => a.alert);
   const alertCount = alerts.length;
@@ -1706,6 +1726,7 @@ export function SmartBooklet({ data, format = 'v1', onMapReady, trend = null }: 
           : `${normalCount} of ${total} results are in a healthy range, and ${closerLook}.`;
 
   return (
+    <BookletTrend.Provider value={trendMap}>
     <div
       style={{
         fontFamily: 'Inter, "Segoe UI", Arial, Helvetica, sans-serif',
@@ -1903,21 +1924,6 @@ export function SmartBooklet({ data, format = 'v1', onMapReady, trend = null }: 
           />
         )}
 
-        {/* ── Your trends: earlier visits beside today's, its own page, when the same person has a numeric history ── */}
-        {trend && trendBlocks(trend).length > 0 && (
-          <div style={{ breakBefore: 'page', pageBreakBefore: 'always', paddingTop: '2px' }}>
-            <SectionTitle>Your trends</SectionTitle>
-            <div style={{ fontSize: '12px', color: '#616779', lineHeight: 1.6, marginTop: '8px', maxWidth: '660px' }}>
-              {name}, you have been tested before. For each result that was measured on an earlier visit too, the bands
-              run down the side and each visit is a column — so you can see the number move from one band to another
-              over time. The white band is the healthy one.
-            </div>
-            <div style={{ marginTop: '10px' }}>
-              <TrendMatrix trend={trend} compact />
-            </div>
-          </div>
-        )}
-
         {/* ── Chapters ── */}
         <div style={{ marginTop: '22px' }}>
           {/* Keep the section heading glued to the first chapter so it never
@@ -2003,6 +2009,7 @@ export function SmartBooklet({ data, format = 'v1', onMapReady, trend = null }: 
         </div>
       </div>
     </div>
+    </BookletTrend.Provider>
   );
 }
 

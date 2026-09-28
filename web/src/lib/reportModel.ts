@@ -41,6 +41,8 @@ export interface ReportRow {
   comments: string | null;
   /** The result row's own id — the unit the tick boxes and ?exclude= use. */
   resultId: number;
+  /** The LIS's own name for the row, untouched — the key a trend is matched on. */
+  rawName: string | null;
   /** NABL medallion beside the name — set on a Delhi-processed sample's
    *  accredited standalone tests, never on Param analytes. */
   nabl: boolean;
@@ -435,6 +437,7 @@ export function buildSampleReport(results: readonly TestResult[]): SampleReport 
       : null,
     comments: clean(t.comments),
     resultId: t.resultId,
+    rawName: t.testName ?? null,
     nabl: t.nabl === true,
     valueRaw: t.value ?? null,
   });

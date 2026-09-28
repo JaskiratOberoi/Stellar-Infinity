@@ -1300,3 +1300,13 @@ nothing whatever the switch says, which is the "staging only" Jas asked
 for. Review person on ZZTEST01: Sunita Rawat, three visits over six
 months (ZZTRN1A–ZZTRN3C), lipids, Vitamin D and TSH improving visit by
 visit; the latest visit carries a booklet.
+
+Same day, on Jas's review: not a page of its own — the trend prints under
+the parameter it belongs to. Each result row on the standard report is
+followed by a quiet row with the parameter's strip (a small line chart, the
+healthy band shaded behind it, the value over each point, the date under
+it, and the change since the previous visit as a chip), and each result
+card in the Smart Report carries the same strip under the reading. Matched
+to the row by panel code and the LIS's own name, through a context so the
+row five components down can find its own history. The bands-by-visit
+matrix and the trailing page are gone.

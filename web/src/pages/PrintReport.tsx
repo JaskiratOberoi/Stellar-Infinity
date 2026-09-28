@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import nobleLogo from '../assets/noble-logo.png';
@@ -11,7 +11,8 @@ import { code128 } from '../lib/code128';
 import { notesForCodes } from '../lib/reportNotes';
 import { thyroidPatternOf } from '../lib/thyroidPattern';
 import { ThyroidFigure } from './ThyroidFigure';
-import { TrendMatrix, trendBlocks } from '../components/TrendMatrix';
+import { TrendStrip, trendIndex, trendKey } from '../components/TrendStrip';
+import type { TrendAnalyte } from '../lib/trendBands';
 import type { ResultTrendResponse } from '../api/client';
 import { IS_STAGING } from '../lib/env';
 import {
@@ -26,6 +27,13 @@ import type { FullRow } from './ReportViewer';
 import { isPaper, type Paper } from '../components/PaperSelect';
 import { isReportFormat, type ReportFormat } from '../components/ReportFormat';
 import '../report.css';
+
+/**
+ * The Trending report's history, keyed by panel code and LIS name, for the
+ * result rows to draw their own strip under themselves. A context rather
+ * than a prop: the row sits five components down from the page.
+ */
+const TrendContext = createContext<Map<string, TrendAnalyte>>(new Map());
 
 /**
  * The printed report — and the PDF, and the preview.
@@ -165,6 +173,7 @@ export function PrintReport() {
   const [thyroidOn, setThyroidOn] = useState(false);
   /** The Trending report's history, when the setting is on (staging builds only while under test). */
   const [trend, setTrend] = useState<ResultTrendResponse | null>(null);
+  const trendMap = useMemo(() => trendIndex(trend), [trend]);
   const [error, setError] = useState<string | null>(null);
 
   const pdfMode = params.get('pdf') === '1';
@@ -693,6 +702,7 @@ export function PrintReport() {
     : previewSheets ? `${rootBase} lr--sheets` : `${rootBase} lr--screen`;
 
   return (
+    <TrendContext.Provider value={trendMap}>
     <div ref={rootRef} className={shell} data-print-ready={ready ? 'true' : 'false'} data-print-fit={fit ?? undefined}>
       {/* The page box depends on the paper. A client's own stationery gets a
           full 40mm head and foot; Noble's letterhead — composited in, or
@@ -834,45 +844,6 @@ export function PrintReport() {
             </table>
           )}
 
-          {/* ── The Trending page: earlier visits beside today's results, its
-                 own sheet at the end, only where the same person has a
-                 numeric history. Same table shell as a section, so the
-                 patient block repeats on it. ── */}
-          {trend && sections.length > 0 && trendBlocks(trend).length > 0 && (
-            <div className="lr__section lr__section--trend">
-              <table className="lr__table">
-                <ReportColgroup />
-                <thead>
-                  <tr>
-                    <td colSpan={5} className="lr__head-cell">
-                      <PatientMetaBlock
-                        row={row!}
-                        specimens={report.specimens}
-                        printedAt={printedAt}
-                        interactive={false}
-                        totalLeaves={counts.total}
-                        excluded={excluded}
-                        onToggle={toggle}
-                        pdf={pdfMode}
-                      />
-                    </td>
-                  </tr>
-                </thead>
-                {tfoot}
-                <tbody>
-                  <tr>
-                    <td colSpan={5} className="lr__dept">YOUR TRENDS · EARLIER VISITS BESIDE TODAY'S RESULTS</td>
-                  </tr>
-                  <tr>
-                    <td colSpan={5} className="lr__trend-cell">
-                      <TrendMatrix trend={trend} />
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          )}
-
           {pdfMode && counts.total > 0 && counts.remaining === 0 && (
             <p className="lr__error">No tests were selected for this report.</p>
           )}
@@ -889,6 +860,7 @@ export function PrintReport() {
         </>
       )}
     </div>
+    </TrendContext.Provider>
   );
 }
 
@@ -1700,7 +1672,10 @@ function ResultRow({
       *  notes): no page break between the two. */
      keepWithNext?: boolean }) {
   const off = dim ? ' lr__off' : '';
-  const keep = keepWithNext ? ' lr__row--keep' : '';
+  // The parameter's own trend, when the same person has earlier results:
+  // printed as a quiet row under this one (the Trending report).
+  const trendFor = useContext(TrendContext).get(trendKey(row.code, row.rawName));
+  const keep = keepWithNext || trendFor ? ' lr__row--keep' : '';
   /*
    * A descriptive result — the Desc Report editor writes real HTML, and here
    * the presentation IS the result. It gets the page, not the 12% value
@@ -1799,6 +1774,13 @@ function ResultRow({
         <tr className={`lr__note-row lr__attach${off}${keep}`}>
           <td colSpan={5}>
             <b>Doctor&apos;s Note:</b> <b>{row.comments}</b>
+          </td>
+        </tr>
+      )}
+      {trendFor && !wide && !rich && (
+        <tr className={`lr__trend-row lr__attach${off}`}>
+          <td colSpan={5} className="lr__trend-cell">
+            <TrendStrip a={trendFor} compact />
           </td>
         </tr>
       )}
