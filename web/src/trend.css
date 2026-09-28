@@ -31,14 +31,18 @@
 .tm__val { display: inline-block; min-width: 26px; padding: 1px 5px; border-radius: 6px; font-weight: 800; color: #1b7a44; background: #fff; border: 1px solid #9fd3b6; font-variant-numeric: tabular-nums; }
 .tm__val--off { color: #b3232c; border-color: #efb3b8; }
 
-/* ── the one-line note on the standard report ────────────────────────── */
-.lr__trend-row td { padding: 0 0 3px 18px; break-before: avoid; }
-.pv { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 0 5px; font-size: 9.5px; color: #3f3f46; line-height: 1.3; border-left: 2px solid #c4c7cd; padding-left: 8px; }
-.pv__label { font-weight: 700; color: #595959; letter-spacing: .02em; }
+/* ── the one-line note on the standard report ────────────────────────
+   Inside the parameter's name cell, under the name: a quiet, smaller line
+   in the report's ink, indented by a hairline so it reads as a footnote to
+   the name above it and never to the row below. Explicitly upright, medium
+   and dark: the name above it may be bold red (flagged) and this must not
+   inherit that. */
+.lr__c-name-text .pv { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 4px; margin: 2px 0 0 1px; padding-left: 6px; border-left: 1.5px solid #c4c7cd; font-size: 8.5px; font-weight: 400; font-style: normal; color: #3f3f46; line-height: 1.35; letter-spacing: 0; text-transform: none; }
+.pv__label { font-weight: 700; color: #595959; }
 .pv__val { font-weight: 700; color: #111827; }
 .pv__when { color: #595959; }
 .pv__sep { color: #9ca3af; }
 .pv__change { font-weight: 700; color: #111827; }
 .pv__change--flat { font-weight: 500; }
 .pv__more { color: #595959; }
-.lr--v2 .lr__table td.lr__trend-cell, .lr--v2 .lr__table td.lr__trend-cell * { text-transform: none; letter-spacing: normal; }
+.lr--v2 .lr__c-name-text .pv, .lr--v2 .lr__c-name-text .pv * { text-transform: none; letter-spacing: normal; }

@@ -110,7 +110,7 @@ export function PreviousValue({ a }: { a: TrendAnalyte }) {
       <span className="pv__val">{prevOff ? (prevCell.bandIndex < healthyIdx ? '▲ ' : '▼ ') : ''}{prevCell.label}{a.unit ? ` ${a.unit}` : ''}</span>
       <span className="pv__when">on {fmtDay(prevCol.date)}</span>
       <span className="pv__sep">·</span>
-      <span className={`pv__change${ch.flat ? ' pv__change--flat' : ''}`}>{ch.arrow} {ch.text}{ch.pct && ` (${ch.pct})`}</span>
+      <span className={`pv__change${ch.flat ? ' pv__change--flat' : ''}`}>{ch.arrow} {ch.text.replace(a.unit ? ` ${a.unit}` : '', '')}{ch.pct && ` (${ch.pct})`}</span>
       {n > 2 && <span className="pv__more">· {n - 1} earlier visits</span>}
     </div>
   );

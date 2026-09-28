@@ -1329,3 +1329,8 @@ IgG, blood group and genetics, cultures and smear descriptions, urine
 physical findings, cycle-dependent hormones (LH, FSH, oestradiol, AMH),
 autoimmune screens. A slash inside parentheses is an alias ("ALT / SGPT"),
 not a ratio; "ultrasensitive" is not a sensitivity.
+
+Placement, same day: the "previously" line is inside the parameter's name
+cell, directly under the name, not a row of its own — a row drifted toward
+the next parameter whenever the reference column ran tall and read as
+belonging to it. Smaller, upright and dark whatever the name above it is.

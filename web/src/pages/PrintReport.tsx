@@ -1725,6 +1725,10 @@ function ResultRow({
                 without having to cross to the figure. */}
             <div className={`lr__c-name-text${wide ? ' lr__c-name-text--label' : ''}${row.abnormal ? ' lr__c-name-text--abnormal' : ''}`}>
               {wide ? labelText(row.name) : (row.name ?? '—')}
+              {/* The previous value sits INSIDE the name cell, under the name:
+                  a row of its own drifted toward the next parameter whenever
+                  the reference column ran tall, and read as belonging to it. */}
+              {trendFor && !wide && !rich && <PreviousValue a={trendFor} />}
             </div>
           </div>
         </td>
@@ -1774,13 +1778,6 @@ function ResultRow({
         <tr className={`lr__note-row lr__attach${off}${keep}`}>
           <td colSpan={5}>
             <b>Doctor&apos;s Note:</b> <b>{row.comments}</b>
-          </td>
-        </tr>
-      )}
-      {trendFor && !wide && !rich && (
-        <tr className={`lr__trend-row lr__attach${off}`}>
-          <td colSpan={5} className="lr__trend-cell">
-            <PreviousValue a={trendFor} />
           </td>
         </tr>
       )}
