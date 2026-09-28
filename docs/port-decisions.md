@@ -1310,3 +1310,22 @@ card in the Smart Report carries the same strip under the reading. Matched
 to the row by panel code and the LIS's own name, through a context so the
 row five components down can find its own history. The bands-by-visit
 matrix and the trailing page are gone.
+
+Third pass the same day, on Jas's review: the matrix stays — but only in
+the Smart Report, compact enough to sit under a result card (bands down,
+the last six visits across, the value in its band, healthy row tinted,
+the change since last visit as a chip). The standard report, which the
+lab prints and doctors scan, gets one line under the row instead: the
+previous value, its date, and how far this one moved. And not every
+parameter: lib/trendEligibility admits only what is followed over time —
+HbA1c, glucose, lipids, thyroid, creatinine and eGFR, urea, uric acid,
+urine albumin, electrolytes, liver enzymes and bilirubin, the blood counts
+and absolute differentials, ESR and CRP, iron studies, Vitamin D and B12,
+PSA, testosterone, prolactin, PTH, INR, tumour markers, cardiac and
+pancreatic enzymes — the analytes laboratories run delta checks on and
+guidelines set follow-up intervals for. Denied: ratios and calculated
+lines, red-cell indices, differential percentages, serology and lifelong
+IgG, blood group and genetics, cultures and smear descriptions, urine
+physical findings, cycle-dependent hormones (LH, FSH, oestradiol, AMH),
+autoimmune screens. A slash inside parentheses is an alias ("ALT / SGPT"),
+not a ratio; "ultrasensitive" is not a sensitivity.

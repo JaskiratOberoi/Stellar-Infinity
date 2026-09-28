@@ -1,7 +1,7 @@
 import type { ReportSigner, ProcessingUnit } from './ReportViewer';
 import { BodyMapPage, type BodySystem } from './SmartBodyMap';
 import { createContext, useContext, useMemo } from 'react';
-import { TrendStrip, trendIndex, trendKey } from '../components/TrendStrip';
+import { TrendMatrixCompact, trendIndex, trendKey } from '../components/TrendStrip';
 import type { TrendAnalyte } from '../lib/trendBands';
 import type { ResultTrendResponse } from '../api/client';
 
@@ -775,14 +775,7 @@ function ResultBlock({ a }: { a: Analyte }) {
           </div>
         </div>
 
-        {trendFor && (
-          <div style={{ marginTop: '9px', padding: '6px 10px 4px', borderRadius: '9px', border: `1px solid ${HAIR}`, background: '#fbfdfc' }}>
-            <div style={{ fontSize: '9px', color: FAINT, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '2px' }}>
-              Your trend · earlier visits
-            </div>
-            <TrendStrip a={trendFor} />
-          </div>
-        )}
+        {trendFor && <TrendMatrixCompact a={trendFor} />}
 
         {a.row.comments && (
           <div style={{ fontSize: '9.5px', color: FAINT, marginTop: '7px', fontStyle: 'italic' }}>

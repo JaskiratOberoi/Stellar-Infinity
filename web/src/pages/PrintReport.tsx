@@ -11,7 +11,7 @@ import { code128 } from '../lib/code128';
 import { notesForCodes } from '../lib/reportNotes';
 import { thyroidPatternOf } from '../lib/thyroidPattern';
 import { ThyroidFigure } from './ThyroidFigure';
-import { TrendStrip, trendIndex, trendKey } from '../components/TrendStrip';
+import { PreviousValue, trendIndex, trendKey } from '../components/TrendStrip';
 import type { TrendAnalyte } from '../lib/trendBands';
 import type { ResultTrendResponse } from '../api/client';
 import { IS_STAGING } from '../lib/env';
@@ -1780,7 +1780,7 @@ function ResultRow({
       {trendFor && !wide && !rich && (
         <tr className={`lr__trend-row lr__attach${off}`}>
           <td colSpan={5} className="lr__trend-cell">
-            <TrendStrip a={trendFor} compact />
+            <PreviousValue a={trendFor} />
           </td>
         </tr>
       )}
