@@ -59,39 +59,36 @@ export function TrendMatrixCompact({ a }: { a: TrendAnalyte }) {
           {ch.arrow} {ch.text}{ch.pct && <span className="tm__pct"> ({ch.pct})</span>}
         </span>
       </div>
-      <table className="tm__table">
-        <thead>
-          <tr>
-            <th className="tm__bandhead" />
-            {cols.map((c, i) => (
-              <th key={i} className={c.isCurrent ? 'tm__col tm__col--now' : 'tm__col'}>
-                {fmtDay(c.date, false)}<span className="tm__yr">{c.date ? new Date(c.date).getFullYear() : ''}</span>
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {a.bands.map((b, bi) => {
-            const above = healthyIdx >= 0 && bi < healthyIdx;
-            const below = healthyIdx >= 0 && bi > healthyIdx;
-            return (
-              <tr key={bi} className={`tm__row${b.healthy ? ' tm__row--ok' : above ? ' tm__row--above' : below ? ' tm__row--below' : ''}`}>
-                <td className="tm__band">
-                  <span className="tm__bandname">{b.label}</span>
-                  <span className="tm__limits">{limits(b)}</span>
-                </td>
-                {cells.map((cell, ci) => (
-                  <td key={ci} className={cols[ci].isCurrent ? 'tm__cell tm__cell--now' : 'tm__cell'}>
-                    {cell && cell.bandIndex === bi && (
-                      <span className={`tm__val${b.healthy ? '' : ' tm__val--off'}`}>{cell.label}</span>
-                    )}
-                  </td>
-                ))}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      {/* A grid of divs, deliberately not a <table>: Chromium starts a new
+          page before a break-inside:avoid block that holds a table, which put
+          every short chapter of the booklet on a page of its own. Measured in
+          the render sidecar, 2026-09-28. */}
+      <div className="tm__grid" style={{ gridTemplateColumns: `38% repeat(${cols.length}, 1fr)` }} role="table" aria-label={`${a.name} by visit`}>
+        <div className="tm__hd tm__bandhead" />
+        {cols.map((c, i) => (
+          <div key={`h${i}`} className={c.isCurrent ? 'tm__hd tm__col tm__col--now' : 'tm__hd tm__col'}>
+            {fmtDay(c.date, false)}<span className="tm__yr">{c.date ? new Date(c.date).getFullYear() : ''}</span>
+          </div>
+        ))}
+        {a.bands.map((b, bi) => {
+          const above = healthyIdx >= 0 && bi < healthyIdx;
+          const below = healthyIdx >= 0 && bi > healthyIdx;
+          const rowCls = `tm__td${b.healthy ? ' tm__td--ok' : above ? ' tm__td--above' : below ? ' tm__td--below' : ''}${bi === a.bands.length - 1 ? ' tm__td--last' : ''}`;
+          return [
+            <div key={`b${bi}`} className={`${rowCls} tm__band`}>
+              <span className="tm__bandname">{b.label}</span>
+              <span className="tm__limits">{limits(b)}</span>
+            </div>,
+            ...cells.map((cell, ci) => (
+              <div key={`c${bi}-${ci}`} className={`${rowCls} tm__cell${cols[ci].isCurrent ? ' tm__cell--now' : ''}`}>
+                {cell && cell.bandIndex === bi && (
+                  <span className={`tm__val${b.healthy ? '' : ' tm__val--off'}`}>{cell.label}</span>
+                )}
+              </div>
+            )),
+          ];
+        })}
+      </div>
     </div>
   );
 }

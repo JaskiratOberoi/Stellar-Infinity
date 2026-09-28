@@ -1334,3 +1334,12 @@ Placement, same day: the "previously" line is inside the parameter's name
 cell, directly under the name, not a row of its own — a row drifted toward
 the next parameter whenever the reference column ran tall and read as
 belonging to it. Smaller, upright and dark whatever the name above it is.
+
+The chapters-on-their-own-pages bug (2026-09-28): with the matrix in, the
+booklet put Thyroid on one page and Vitamins on the next with most of each
+page blank. Isolated in the render sidecar's own Chromium on a stripped
+page: a break-inside:avoid result block that CONTAINS A TABLE makes
+Chromium start a new page before it (four short chapters: 2 pages with a
+table, 1 without, whether the block is a grid or plain and whether the
+table is fixed or auto layout). The matrix is now a grid of divs — the
+same six-column look — and the chapters flow again.
