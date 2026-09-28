@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { api } from '../api/client';
+import { api, type ResultTrendResponse } from '../api/client';
+import { IS_STAGING } from '../lib/env';
 import { SmartBooklet, type SmartBookletData, type SmartFormat } from './SmartBooklet';
 
 /**
@@ -54,6 +55,7 @@ export function PrintSmartReport() {
   // the clinical report's v3 is a typeface and means nothing here.
   const format: SmartFormat = search.get('format') === 'v1' ? 'v1' : 'v2';
   const [data, setData] = useState<SmartBookletData | null>(null);
+  const [trend, setTrend] = useState<ResultTrendResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -70,7 +72,32 @@ export function PrintSmartReport() {
      * copy, the route comes first.
      */
     api.get<SmartBookletData>(`/api/reports/smart?sids=${encodeURIComponent(query)}`)
-      .then((d) => { if (live) setData(d); })
+      .then(async (d) => {
+        // The Trending chapter: the Reporting setting decides, and only a
+        // staging build shows it while it is under test. One history read
+        // per tube of the visit, merged by analyte; fetched before the data
+        // is set so the page never declares itself ready without it.
+        let t: ResultTrendResponse | null = null;
+        if (IS_STAGING) {
+          const s = await api.get<{ trending?: boolean }>('/api/public/reporting-settings').catch(() => ({ trending: false }));
+          if (s.trending) {
+            const sids = query.split(',').map((x) => x.trim()).filter(Boolean);
+            const parts = await Promise.all(sids.map((x) => api.get<ResultTrendResponse>(`/api/reports/${encodeURIComponent(x)}/trend`).catch(() => null)));
+            const seen = new Map<string, ResultTrendResponse['analytes'][number]>();
+            let match: ResultTrendResponse['match'] | null = null;
+            for (const p of parts) {
+              if (!p) continue;
+              if (!match || p.match.priorVisits > match.priorVisits) match = p.match;
+              for (const a of p.analytes) {
+                const have = seen.get(a.testKey);
+                if (!have || a.points.length > have.points.length) seen.set(a.testKey, a);
+              }
+            }
+            if (match) t = { match, analytes: [...seen.values()] };
+          }
+        }
+        if (live) { setTrend(t); setData(d); }
+      })
       .catch((e) => {
         if (live) {
           setError(e instanceof Error ? e.message : 'Could not load this summary.');
@@ -100,7 +127,7 @@ export function PrintSmartReport() {
       {error ? (
         <p style={{ padding: '2rem', fontSize: '10pt' }}>{error}</p>
       ) : !data ? null : (
-        <SmartBooklet data={data} format={format} onMapReady={() => setMapReady(true)} />
+        <SmartBooklet data={data} format={format} trend={trend} onMapReady={() => setMapReady(true)} />
       )}
     </div>
   );

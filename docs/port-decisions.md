@@ -1263,3 +1263,40 @@ LIS Signature Master, as a general primary row, and was left to the lab.
 Units with no release in the window (Gorakhpur, Jhansi, Medsky, Dehradun)
 were not sampled; they carry no unit signatories and fall to the
 department defaults in both systems. Both PDF caches were flushed.
+
+## Trending reports: earlier visits beside today's results (2026-09-28)
+
+Jas brought an external Crystal report (Medcis, 2018) whose standalone
+analytes carry a "Risk Level" matrix — named bands down the side, a column
+per sample date, the value printed in its band — and asked for the same in
+Infinity, on the standard report and in the Smart Report, staging only
+while it is tested. Three things joined: identity across visits, bands per
+analyte, and the date-by-band layout.
+
+Identity is the worksheet's delta trend of script 75, unchanged: name +
+mobile + sex with an age check, returning nothing when unsure, and the
+page says how it matched. Script 170 re-issues that procedure so each
+point also carries the reference text it was judged against and the
+lab's abnormal flag. Bands come from that text, parsed on the web
+(lib/trendBands): the LIS's named bands where it names them — Vitamin
+D's deficiency / insufficiency / sufficiency / toxicity, a lipid's
+desirable / borderline / high, one-line or one-per-line, label-first or
+value-first, "High = 240" read as ≥ — else below / within / above the
+interval directionOf already reads; age-banded text falls to the
+interval. No catalogue is consulted. A value in the gap the LIS leaves
+between bands goes to the nearest one, never to the bottom.
+
+Two routes: GET /api/reports/{sid}/trend (session, scope-checked through
+the report read) and /api/public/reports/{sid}/trend (the QR token, the
+same gate as the report). The standard report prints it as its own last
+sheet under YOUR TRENDS, with the patient block repeated; the booklet as
+a "Your trends" page after the body map, one history read per tube of
+the visit merged by analyte. Both fetch the history BEFORE declaring the
+page ready, so the renderer never photographs a report short of the page.
+Greyscale like the thyroid figure. Gated twice: the Reporting settings
+switch "Trending report" (inf_report_setting trending_report, in the PDF
+cache fingerprint) AND a staging build — a production build prints
+nothing whatever the switch says, which is the "staging only" Jas asked
+for. Review person on ZZTEST01: Sunita Rawat, three visits over six
+months (ZZTRN1A–ZZTRN3C), lipids, Vitamin D and TSH improving visit by
+visit; the latest visit carries a booklet.

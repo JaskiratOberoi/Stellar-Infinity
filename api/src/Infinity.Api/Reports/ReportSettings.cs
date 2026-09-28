@@ -24,10 +24,19 @@ public sealed class ReportSettings(NobleConnectionFactory db, SqlRetry retry, IL
     /// <summary>"Reading this thyroid profile" under a thyroid profile's rows.</summary>
     public bool ThyroidFigure { get; private set; } = true;
 
+    /// <summary>
+    /// The Trending report — each analyte's earlier visits as bands and
+    /// columns — on the standard report and in the Smart Report. Off by
+    /// default; the web additionally shows it only on a staging build while
+    /// it is under test.
+    /// </summary>
+    public bool Trending { get; private set; }
+
     /// <summary>What the PDF cache key carries for the switches; changes with every save.</summary>
-    public static string Fingerprint { get; private set; } = "t1";
+    public static string Fingerprint { get; private set; } = "t1r0";
 
     public const string ThyroidFigureKey = "thyroid_figure";
+    public const string TrendingKey = "trending_report";
 
     public Task StartAsync(CancellationToken ct) => EnsureLoadedAsync(ct);
     public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
@@ -70,7 +79,8 @@ public sealed class ReportSettings(NobleConnectionFactory db, SqlRetry retry, IL
     private void Apply(IReadOnlyDictionary<string, string> map)
     {
         ThyroidFigure = !map.TryGetValue(ThyroidFigureKey, out var v) || v.Trim() != "0";
-        Fingerprint = $"t{(ThyroidFigure ? 1 : 0)}";
+        Trending = map.TryGetValue(TrendingKey, out var tr) && tr.Trim() == "1";
+        Fingerprint = $"t{(ThyroidFigure ? 1 : 0)}r{(Trending ? 1 : 0)}";
     }
 
     /// <summary>Saves one switch and re-reads them all.</summary>

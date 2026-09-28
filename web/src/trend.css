@@ -1,0 +1,36 @@
+/* The Trending report, on the standard report and in the Smart Report. Imported by TrendMatrix. */
+/* ---------- the Trending report ----------
+   Its own page at the end of the standard report, and the booklet's chapter:
+   per analyte, the bands down the side and a column per visit. Greyscale by
+   design: the healthy band's row is white with a solid rule, the others are
+   lightly hatched, an out-of-band value is bold with the ▲▼ glyph, and the
+   current visit's column is tinted. */
+.lr__section--trend { break-before: page; }
+.lr__trend-cell { padding: 6px 0 4px; }
+.tr__basis { font-size: 10.5px; color: #3f3f46; line-height: 1.4; margin: 0 0 8px; }
+.tr__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+.tr--compact .tr__grid { gap: 8px 12px; }
+.tr__block { border: 1px solid #9ca3af; border-radius: 6px; padding: 6px 8px 5px; break-inside: avoid; }
+.tr__head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+.tr__name { font-size: 12px; font-weight: 700; color: #111827; }
+.tr__latest { font-size: 11px; color: #111827; white-space: nowrap; }
+.tr__latest b.tr__off { font-weight: 800; }
+.tr__unit { color: #3f3f46; }
+.tr__delta { color: #3f3f46; font-size: 9.5px; }
+.tr__table { width: 100%; border-collapse: collapse; font-size: 10px; }
+.tr__table th { font-weight: 600; color: #3f3f46; font-size: 9px; padding: 2px 4px; border-bottom: 1px solid #9ca3af; text-align: center; white-space: nowrap; }
+.tr__table th.tr__bandhead { text-align: left; }
+.tr__col--now { color: #111827; font-weight: 700; }
+.tr__now { display: block; font-size: 7.5px; font-weight: 400; color: #3f3f46; }
+.tr__row td { padding: 3px 4px; border-bottom: 0.6px solid #d4d4d8; vertical-align: middle; height: 20px; }
+.tr__row:not(.tr__row--ok) td.tr__cell { background: repeating-linear-gradient(45deg, #f4f4f5 0 3px, #ffffff 3px 6px); }
+.tr__row--ok td { border-top: 1px solid #111827; border-bottom: 1px solid #111827; background: #fff; }
+.tr__band { text-align: left; width: 34%; }
+.tr__bandname { display: block; font-weight: 600; color: #111827; font-size: 9.5px; }
+.tr__row--ok .tr__bandname { font-weight: 800; }
+.tr__limits { display: block; font-size: 8px; color: #595959; }
+.tr__cell { text-align: center; }
+.tr__cell--now { background: #e4e4e7 !important; }
+.tr__val { display: inline-block; padding: 1px 6px; border: 1px solid #111827; border-radius: 4px; font-weight: 700; color: #111827; background: #fff; white-space: nowrap; }
+.tr__val--off { font-weight: 800; }
+.lr--v2 .lr__table td.lr__trend-cell, .lr--v2 .lr__table td.lr__trend-cell * { text-transform: none; letter-spacing: normal; }

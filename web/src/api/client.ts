@@ -484,6 +484,10 @@ export interface TrendPoint {
   sid: string | null;
   drawnAt: string | null;
   isCurrent: boolean;
+  /** The reference text the value was judged against on that visit; null before procedure 170. */
+  range?: string | null;
+  /** The lab's own abnormal flag on that row. */
+  abnormal?: boolean;
 }
 
 export interface AnalyteTrend {

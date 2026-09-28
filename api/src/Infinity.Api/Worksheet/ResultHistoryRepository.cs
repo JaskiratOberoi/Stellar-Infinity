@@ -10,7 +10,11 @@ public sealed record HistoryPoint(
     string? Value,
     string? Sid,
     DateTimeOffset? DrawnAt,
-    bool IsCurrent);
+    bool IsCurrent,
+    /// <summary>The reference text the value was judged against on that visit (170).</summary>
+    string? Range = null,
+    /// <summary>The lab's own abnormal flag on that row (170).</summary>
+    bool Abnormal = false);
 
 /// <param name="TestKey">
 /// "testid:paramid". The only value here that identifies a single analyte —
@@ -88,7 +92,9 @@ public sealed class ResultHistoryRepository(NobleConnectionFactory db, SqlRetry 
                         r.GetOrdinalString("value"),
                         r.GetOrdinalString("vailid"),
                         NobleTime.ToIst(r.GetOrdinalDateTime("drawn_at")),
-                        r.GetOrdinalBool("is_current")));
+                        r.GetOrdinalBool("is_current"),
+                        HistoryReaderExtensions.HasColumn(r, "range_text") ? r.GetOrdinalString("range_text") : null,
+                        HistoryReaderExtensions.HasColumn(r, "abnormal") && r.GetOrdinalBool("abnormal")));
                 }
                 Flush();
 
@@ -113,6 +119,14 @@ public sealed class ResultHistoryRepository(NobleConnectionFactory db, SqlRetry 
 
 internal static class HistoryReaderExtensions
 {
+    /// <summary>Whether the result set carries a column — the 170 columns are read only where the procedure is 170.</summary>
+    public static bool HasColumn(SqlDataReader r, string column)
+    {
+        for (var i = 0; i < r.FieldCount; i++)
+            if (string.Equals(r.GetName(i), column, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
     public static DateTime? GetOrdinalDateTime(this SqlDataReader r, string column)
     {
         var i = r.GetOrdinal(column);

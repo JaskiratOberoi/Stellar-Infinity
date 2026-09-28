@@ -11,6 +11,9 @@ import { code128 } from '../lib/code128';
 import { notesForCodes } from '../lib/reportNotes';
 import { thyroidPatternOf } from '../lib/thyroidPattern';
 import { ThyroidFigure } from './ThyroidFigure';
+import { TrendMatrix, trendBlocks } from '../components/TrendMatrix';
+import type { ResultTrendResponse } from '../api/client';
+import { IS_STAGING } from '../lib/env';
 import {
   ageLabel, fmtDob, fmtStamp, formatRange, genderLabel, splitInterp,
 } from '../lib/reportFormat';
@@ -160,6 +163,8 @@ export function PrintReport() {
   const [row, setRow] = useState<FullRow | null>(null);
   /** Reporting settings: "Reading this thyroid profile" under thyroid profiles. */
   const [thyroidOn, setThyroidOn] = useState(false);
+  /** The Trending report's history, when the setting is on (staging builds only while under test). */
+  const [trend, setTrend] = useState<ResultTrendResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const pdfMode = params.get('pdf') === '1';
@@ -228,11 +233,22 @@ export function PrintReport() {
     // no session either). Read before the row is set, so the page is never
     // "ready" for the PDF with a switch still unknown; a failed read counts
     // as off — the failsafe fails safe.
+    // The Trending page needs the history too, and it is fetched BEFORE the
+    // row is set for the same reason: the renderer photographs the page when
+    // it says ready, and a page arriving late would be a page missing.
+    const trendUrl = token
+      ? `/api/public/reports/${encodeURIComponent(sid)}/trend?t=${encodeURIComponent(token)}`
+      : `/api/reports/${encodeURIComponent(sid)}/trend`;
     Promise.all([
       api.get<FullRow>(url),
-      api.get<{ thyroidFigure: boolean }>('/api/public/reporting-settings').catch(() => ({ thyroidFigure: false })),
+      api.get<{ thyroidFigure: boolean; trending?: boolean }>('/api/public/reporting-settings').catch(() => ({ thyroidFigure: false, trending: false })),
     ])
-      .then(([r, s]) => { if (live) { setThyroidOn(!!s.thyroidFigure); setRow(r); } })
+      .then(async ([r, s]) => {
+        const t = IS_STAGING && s.trending
+          ? await api.get<ResultTrendResponse>(trendUrl).catch(() => null)
+          : null;
+        if (live) { setThyroidOn(!!s.thyroidFigure); setTrend(t); setRow(r); }
+      })
       .catch((e) => { if (live) setError(e instanceof Error ? e.message : 'Could not load this report.'); });
     return () => { live = false; };
   }, [sid, token]);
@@ -816,6 +832,45 @@ export function PrintReport() {
                 </tbody>
               )}
             </table>
+          )}
+
+          {/* ── The Trending page: earlier visits beside today's results, its
+                 own sheet at the end, only where the same person has a
+                 numeric history. Same table shell as a section, so the
+                 patient block repeats on it. ── */}
+          {trend && sections.length > 0 && trendBlocks(trend).length > 0 && (
+            <div className="lr__section lr__section--trend">
+              <table className="lr__table">
+                <ReportColgroup />
+                <thead>
+                  <tr>
+                    <td colSpan={5} className="lr__head-cell">
+                      <PatientMetaBlock
+                        row={row!}
+                        specimens={report.specimens}
+                        printedAt={printedAt}
+                        interactive={false}
+                        totalLeaves={counts.total}
+                        excluded={excluded}
+                        onToggle={toggle}
+                        pdf={pdfMode}
+                      />
+                    </td>
+                  </tr>
+                </thead>
+                {tfoot}
+                <tbody>
+                  <tr>
+                    <td colSpan={5} className="lr__dept">YOUR TRENDS · EARLIER VISITS BESIDE TODAY'S RESULTS</td>
+                  </tr>
+                  <tr>
+                    <td colSpan={5} className="lr__trend-cell">
+                      <TrendMatrix trend={trend} />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           )}
 
           {pdfMode && counts.total > 0 && counts.remaining === 0 && (

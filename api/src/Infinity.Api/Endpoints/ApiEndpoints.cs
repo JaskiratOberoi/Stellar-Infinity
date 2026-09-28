@@ -1,6 +1,7 @@
 using Infinity.Api.Auth;
 using Infinity.Api.Data;
 using Infinity.Api.Reads;
+using Infinity.Api.Worksheet;
 
 namespace Infinity.Api.Endpoints;
 
@@ -116,6 +117,8 @@ public static class ApiEndpoints
         reports.MapGet("/clients/search", SearchFilterClients).WithName("SearchFilterClients");
         reports.MapGet("/tests/search", SearchFilterTests).WithName("SearchFilterTests");
         reports.MapGet("/{sid}", GetReport).WithName("GetReport");
+        // Earlier visits per analyte, for the Trending report.
+        reports.MapGet("/{sid}/trend", GetReportTrend).WithName("GetReportTrend");
         reports.MapGet("/{sid}/smart", GetSmartReport).WithName("GetSmartReport");
         // The patient's booklet: every sample of the visit in one document.
         // A literal segment, so it wins over /{sid}/... in routing. The
@@ -240,13 +243,14 @@ public static class ApiEndpoints
         return Results.Ok(result);
     }
 
-    public sealed record ReportingSettingsBody(bool ThyroidFigure);
+    /// <summary>A save carries only the switches it means to change.</summary>
+    public sealed record ReportingSettingsBody(bool? ThyroidFigure = null, bool? Trending = null);
 
     private static async Task<IResult> GetPublicReportingSettings(
         Reports.ReportSettings settings, CancellationToken ct)
     {
         await settings.EnsureLoadedAsync(ct).ConfigureAwait(false);
-        return Results.Ok(new { thyroidFigure = settings.ThyroidFigure });
+        return Results.Ok(new { thyroidFigure = settings.ThyroidFigure, trending = settings.Trending });
     }
 
     private static async Task<IResult> GetReportingSettings(
@@ -259,7 +263,7 @@ public static class ApiEndpoints
         if (!string.Equals(principal.Role(), InfinityRoles.SuperAdmin, StringComparison.Ordinal))
             return Results.NotFound();
         await settings.EnsureLoadedAsync(ct).ConfigureAwait(false);
-        return Results.Ok(new { thyroidFigure = settings.ThyroidFigure });
+        return Results.Ok(new { thyroidFigure = settings.ThyroidFigure, trending = settings.Trending });
     }
 
     private static async Task<IResult> PutReportingSettings(
@@ -274,16 +278,42 @@ public static class ApiEndpoints
         if (principal.UserId() is not int actor) return Results.Unauthorized();
         if (!string.Equals(principal.Role(), InfinityRoles.SuperAdmin, StringComparison.Ordinal))
             return Results.NotFound();
-        var before = settings.ThyroidFigure;
-        await settings.SetAsync(Reports.ReportSettings.ThyroidFigureKey, body.ThyroidFigure ? "1" : "0", actor, ct)
-            .ConfigureAwait(false);
-        // The key already carries the switch's fingerprint; the flush is belt
+        var before = new { thyroidFigure = settings.ThyroidFigure, trending = settings.Trending };
+        if (body.ThyroidFigure is bool thy)
+            await settings.SetAsync(Reports.ReportSettings.ThyroidFigureKey, thy ? "1" : "0", actor, ct).ConfigureAwait(false);
+        if (body.Trending is bool trend)
+            await settings.SetAsync(Reports.ReportSettings.TrendingKey, trend ? "1" : "0", actor, ct).ConfigureAwait(false);
+        // The key already carries the switches' fingerprint; the flush is belt
         // and braces, so a flip back within the cache's 45 minutes redraws
         // too, and nothing rendered under the other setting lingers.
         var flushed = await cache.RemoveByPrefixAsync("rptpdf:", ct).ConfigureAwait(false);
+        var after = new { thyroidFigure = settings.ThyroidFigure, trending = settings.Trending };
         audit.Log("settings.reporting", actor: actor, ip: Audit.AuditIp.From(http),
-            details: new { thyroidFigure = new { from = before, to = settings.ThyroidFigure }, pdfCacheFlushed = flushed });
-        return Results.Ok(new { thyroidFigure = settings.ThyroidFigure, pdfCacheFlushed = flushed });
+            details: new { from = before, to = after, pdfCacheFlushed = flushed });
+        return Results.Ok(new { after.thyroidFigure, after.trending, pdfCacheFlushed = flushed });
+    }
+
+    /// <summary>
+    /// Prior values per analyte for the same person, for the Trending report
+    /// on the standard report and in the Smart Report. Scope-checked through
+    /// the report read first, exactly as the worksheet's trend is.
+    /// </summary>
+    private static async Task<IResult> GetReportTrend(
+        string sid,
+        System.Security.Claims.ClaimsPrincipal principal,
+        ScopeRepository scopes,
+        ReportsRepository repo,
+        ResultHistoryRepository history,
+        CancellationToken ct,
+        int maxPoints = 12)
+    {
+        if (principal.UserId() is not int userId) return Results.Unauthorized();
+        if (string.IsNullOrWhiteSpace(sid) || sid.Length > 50) return Results.BadRequest(new { error = "A SID of 1-50 characters is required." });
+        var scope = await scopes.GetReportClientCodesAsync(userId, principal.Role(), ct).ConfigureAwait(false);
+        if (scope.IsDenied) return Results.NotFound();
+        var row = await repo.GetBySidAsync(scope.ClientCodes, sid, ct).ConfigureAwait(false);
+        if (row is null) return Results.NotFound();
+        return Results.Ok(await history.GetAsync(sid, maxPoints, ct).ConfigureAwait(false));
     }
 
     private static async Task<IResult> GetSmartReportStats(

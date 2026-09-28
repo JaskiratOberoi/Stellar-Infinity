@@ -1,5 +1,7 @@
 import type { ReportSigner, ProcessingUnit } from './ReportViewer';
 import { BodyMapPage, type BodySystem } from './SmartBodyMap';
+import { TrendMatrix, trendBlocks } from '../components/TrendMatrix';
+import type { ResultTrendResponse } from '../api/client';
 import {
   caloriesForSex,
   calorieBandForAge,
@@ -1656,11 +1658,13 @@ function Welcome({ data, format }: { data: SmartBookletData; format: SmartFormat
  */
 export type SmartFormat = 'v1' | 'v2';
 
-export function SmartBooklet({ data, format = 'v1', onMapReady }: {
+export function SmartBooklet({ data, format = 'v1', onMapReady, trend = null }: {
   data: SmartBookletData;
   format?: SmartFormat;
   /** v2 only: fires once the body map's illustrations have loaded, so the print route can declare itself ready. */
   onMapReady?: () => void;
+  /** The Trending chapter's history, when the Reporting setting is on and the person has earlier visits. */
+  trend?: ResultTrendResponse | null;
 }) {
   const { analytes, categories } = readSections(data.sections);
   const total = analytes.length;
@@ -1897,6 +1901,21 @@ export function SmartBooklet({ data, format = 'v1', onMapReady }: {
             title={(children) => <SectionTitle>{children}</SectionTitle>}
             onReady={onMapReady}
           />
+        )}
+
+        {/* ── Your trends: earlier visits beside today's, its own page, when the same person has a numeric history ── */}
+        {trend && trendBlocks(trend).length > 0 && (
+          <div style={{ breakBefore: 'page', pageBreakBefore: 'always', paddingTop: '2px' }}>
+            <SectionTitle>Your trends</SectionTitle>
+            <div style={{ fontSize: '12px', color: '#616779', lineHeight: 1.6, marginTop: '8px', maxWidth: '660px' }}>
+              {name}, you have been tested before. For each result that was measured on an earlier visit too, the bands
+              run down the side and each visit is a column — so you can see the number move from one band to another
+              over time. The white band is the healthy one.
+            </div>
+            <div style={{ marginTop: '10px' }}>
+              <TrendMatrix trend={trend} compact />
+            </div>
+          </div>
         )}
 
         {/* ── Chapters ── */}

@@ -56,6 +56,33 @@ public static class PublicReportEndpoints
         pub.MapGet("/{sid}", GetPublicReport)
            .WithName("GetPublicReport")
            .AllowAnonymous();
+
+        // The Trending report's history, for the print route drawing with the
+        // token: the same gate as the report itself (token, released, not
+        // locked), then the same procedure the worksheet's trend uses.
+        pub.MapGet("/{sid}/trend", GetPublicTrend)
+           .WithName("GetPublicReportTrend")
+           .AllowAnonymous();
+    }
+
+    private static async Task<IResult> GetPublicTrend(
+        string sid,
+        string? t,
+        ReportLink links,
+        ReportsRepository repo,
+        ReportLockRepository locks,
+        Worksheet.ResultHistoryRepository history,
+        CancellationToken ct,
+        int maxPoints = 12)
+    {
+        if (string.IsNullOrWhiteSpace(sid) || sid.Length > 50) return Results.NotFound();
+        if (!links.Verify(sid, t)) return Results.NotFound();
+        var row = await repo.GetBySidAsync([], sid, ct, publicCopy: true).ConfigureAwait(false);
+        if (row is null) return Results.NotFound();
+        if (row.StatusCode is not (6 or 7 or 8 or 9)) return Results.NotFound();
+        var lockState = await locks.GetAsync(sid, ct).ConfigureAwait(false);
+        if (lockState.Locked) return Results.NotFound();
+        return Results.Ok(await history.GetAsync(sid, maxPoints, ct).ConfigureAwait(false));
     }
 
     /// <summary>The report as JSON, on the strength of the token alone.</summary>
