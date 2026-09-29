@@ -99,6 +99,27 @@ public sealed class WhatsAppSettings(NobleConnectionFactory db, SqlRetry retry, 
         return config;
     }
 
+    private (DateTime At, string? Hash)? _gate;
+
+    /// <summary>
+    /// The WhatsApp tab's own password, as a PBKDF2 digest (Worksheet.PasswordHash
+    /// format) — one for every instance, stored under instance '*'. Null: no
+    /// password, the tab opens for any admin as before.
+    /// </summary>
+    public async Task<string?> TabPasswordHashAsync(CancellationToken ct = default)
+    {
+        if (_gate is { } g && DateTime.UtcNow - g.At < TimeSpan.FromMinutes(1)) return g.Hash;
+        var hash = await retry.ExecuteAsync("wa.gate.get", token =>
+            db.QueryAsync("wa.gate.get", async (conn, inner) =>
+            {
+                await using var cmd = NobleConnectionFactory.CreateCommand(conn,
+                    "SELECT value FROM dbo.inf_wa_setting WHERE instance = '*' AND [key] = N'tab_password'");
+                return await cmd.ExecuteScalarAsync(inner).ConfigureAwait(false) as string;
+            }, token), ct).ConfigureAwait(false);
+        _gate = (DateTime.UtcNow, string.IsNullOrWhiteSpace(hash) ? null : hash);
+        return _gate.Value.Hash;
+    }
+
     /// <summary>Only these numbers may be messaged — and off prod, nothing at all without the list.</summary>
     public bool MaySendTo(WhatsAppConfig c, string phone) =>
         c.Allowlist.Count > 0 ? c.Allowlist.Contains(phone) : options.IsProd;

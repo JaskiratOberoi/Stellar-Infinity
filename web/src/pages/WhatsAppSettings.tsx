@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  ApiError,
   whatsappApi,
   type WaConfig,
   type WaMessageRow,
@@ -33,27 +34,36 @@ const STATUS_CLASS: Record<WaStatus, string> = {
 
 const lines = (s: string) => s.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
 
+/** The tab's own password lock (423 WA_LOCKED from the API). */
+const isLocked = (e: unknown) => e instanceof ApiError && e.status === 423;
+
 export function WhatsAppSettingsPage() {
   const [data, setData] = useState<WaOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // null until the first answer: locked or not is the API's to say.
+  const [locked, setLocked] = useState<boolean | null>(null);
 
   const load = useCallback(async () => {
     try {
       setData(await whatsappApi.overview());
+      setLocked(false);
     } catch (e) {
+      if (isLocked(e)) { setLocked(true); setData(null); return; }
       setError(e instanceof Error ? e.message : 'Could not load WhatsApp settings.');
     }
   }, []);
 
-  // Poll: fast while linking (the QR rotates, the code expires), slow once linked.
+  // Poll: fast while linking (the QR rotates, the code expires), slow once
+  // linked; not at all while locked.
   const state = data?.status?.state;
   useEffect(() => {
     void load();
+    if (locked) return;
     const t = window.setInterval(() => void load(), state === 'ready' ? 15000 : 3000);
     return () => window.clearInterval(t);
-  }, [load, state]);
+  }, [load, state, locked]);
 
   const run = async (what: () => Promise<string | void>) => {
     setBusy(true); setError(null); setNotice(null);
@@ -62,11 +72,16 @@ export function WhatsAppSettingsPage() {
       if (said) setNotice(said);
       await load();
     } catch (e) {
+      if (isLocked(e)) { setLocked(true); return; }
       setError(e instanceof Error ? e.message : 'Something went wrong.');
     } finally {
       setBusy(false);
     }
   };
+
+  if (locked) {
+    return <LockScreen onUnlocked={() => { setError(null); setLocked(null); void load(); }} />;
+  }
 
   if (data && !data.configured) {
     return (
@@ -81,9 +96,15 @@ export function WhatsAppSettingsPage() {
 
   return (
     <div className="page">
-      <h1 className="page__title">
-        WhatsApp {data?.instance && data.instance !== 'prod' && <span className="wa-badge wa-badge--warn" style={{ verticalAlign: 'middle' }}>{data.instance}</span>}
-      </h1>
+      <div className="wa__row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+        <h1 className="page__title">
+          WhatsApp {data?.instance && data.instance !== 'prod' && <span className="wa-badge wa-badge--warn" style={{ verticalAlign: 'middle' }}>{data.instance}</span>}
+        </h1>
+        <button type="button" className="btn btn--ghost btn--sm" title="Lock this tab again now"
+                onClick={() => void whatsappApi.lock().then(() => { setData(null); setLocked(true); })}>
+          Lock
+        </button>
+      </div>
       <p className="muted" style={{ marginTop: '.2rem', maxWidth: 860 }}>
         Patient reports on WhatsApp from a linked number. Each message carries the patient’s copy of the report as a PDF —
         released samples only, never one on balance hold — on the centre’s own letterhead when it has one.
@@ -107,6 +128,45 @@ export function WhatsAppSettingsPage() {
 }
 
 type Run = (what: () => Promise<string | void>) => Promise<void>;
+
+/* ---- the tab's password --------------------------------------------------- */
+
+function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    if (!password) return;
+    setBusy(true); setError(null);
+    try {
+      await whatsappApi.unlock(password);
+      setPassword('');
+      onUnlocked();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not unlock.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="page">
+      <h1 className="page__title">WhatsApp</h1>
+      <section className="card wa__card wa__lock">
+        <h2 className="wa__h">Locked</h2>
+        <p className="muted" style={{ marginTop: 0 }}>
+          This tab links the lab’s WhatsApp number and sends patients’ reports, so it has its own password.
+          It stays open for 30 minutes on this account.
+        </p>
+        <form className="wa__row" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+          <input className="input input--sm" type="password" autoComplete="off" autoFocus aria-label="WhatsApp tab password"
+                 placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ maxWidth: 240 }} />
+          <button type="submit" className="btn btn--primary btn--sm" disabled={busy || !password}>Unlock</button>
+        </form>
+        {error && <div className="alert alert--error" style={{ marginTop: '.8rem' }}>{error}</div>}
+      </section>
+    </div>
+  );
+}
 
 /* ---- linking the number -------------------------------------------------- */
 

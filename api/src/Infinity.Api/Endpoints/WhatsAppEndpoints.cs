@@ -22,7 +22,22 @@ public static class WhatsAppEndpoints
 {
     public static void MapWhatsAppEndpoints(this WebApplication app)
     {
+        // The tab's own password (Jas, 2026-09-30): an admin unlocks it for
+        // half an hour. Outside the gated group so a locked tab can open.
+        app.MapPost("/api/settings/whatsapp/unlock", Unlock).RequireAuthorization().WithName("UnlockWhatsApp");
+        app.MapPost("/api/settings/whatsapp/lock", Lock).RequireAuthorization().WithName("LockWhatsApp");
+
         var admin = app.MapGroup("/api/settings/whatsapp").RequireAuthorization();
+        admin.AddEndpointFilter(async (ctx, next) =>
+        {
+            var http = ctx.HttpContext;
+            // Non-admins get the handlers' own 404; the gate is for the tab's users.
+            if (!IsEditor(http.User)) return await next(ctx);
+            if (await IsUnlockedAsync(http).ConfigureAwait(false)) return await next(ctx);
+            return Results.Problem("The WhatsApp tab is locked. Enter its password to open it.",
+                statusCode: StatusCodes.Status423Locked,
+                extensions: new Dictionary<string, object?> { ["code"] = "WA_LOCKED" });
+        });
         admin.MapGet("/", Get).WithName("GetWhatsApp");
         admin.MapPut("/", Put).WithName("PutWhatsApp");
         admin.MapPost("/pair", Pair).WithName("PairWhatsApp");
@@ -40,6 +55,58 @@ public static class WhatsAppEndpoints
 
     private static bool IsEditor(System.Security.Claims.ClaimsPrincipal p) =>
         p.Role() is InfinityRoles.SuperAdmin or InfinityRoles.Admin;
+
+    private static readonly TimeSpan UnlockFor = TimeSpan.FromMinutes(30);
+    private const int MaxWrongTries = 5;
+    private static readonly TimeSpan WrongTriesWindow = TimeSpan.FromMinutes(15);
+
+    private static string UnlockKey(int userId) => $"wa:unlock:{userId.ToString(CultureInfo.InvariantCulture)}";
+
+    /// <summary>No password set, or this admin unlocked it within the last half hour.</summary>
+    private static async Task<bool> IsUnlockedAsync(HttpContext http)
+    {
+        var settings = http.RequestServices.GetRequiredService<WhatsAppSettings>();
+        if (await settings.TabPasswordHashAsync(http.RequestAborted).ConfigureAwait(false) is null) return true;
+        if (http.User.UserId() is not int userId) return false;
+        var cache = http.RequestServices.GetRequiredService<Caching.InfinityCache>();
+        return await cache.GetAsync(UnlockKey(userId), http.RequestAborted).ConfigureAwait(false) == "1";
+    }
+
+    public sealed record UnlockBody(string? Password);
+
+    private static async Task<IResult> Unlock(
+        UnlockBody body, System.Security.Claims.ClaimsPrincipal principal, HttpContext http,
+        WhatsAppSettings settings, Caching.InfinityCache cache, Audit.AuditLog audit, CancellationToken ct)
+    {
+        if (!IsEditor(principal) || principal.UserId() is not int actor) return Results.NotFound();
+        var hash = await settings.TabPasswordHashAsync(ct).ConfigureAwait(false);
+        if (hash is null) return Results.Ok(new { unlocked = true });
+
+        // Counted before the check, so a burst cannot outrun the limit.
+        var failKey = $"wa:unlockfail:{actor.ToString(CultureInfo.InvariantCulture)}";
+        var tries = await cache.GetAsync(failKey, ct).ConfigureAwait(false);
+        if (int.TryParse(tries, NumberStyles.None, CultureInfo.InvariantCulture, out var n) && n >= MaxWrongTries)
+            return Results.Problem("Too many wrong passwords. Try again in 15 minutes.", statusCode: StatusCodes.Status429TooManyRequests);
+
+        if (!Worksheet.PasswordHash.Verify(body.Password ?? string.Empty, hash))
+        {
+            await cache.IncrementAsync(failKey, WrongTriesWindow, ct).ConfigureAwait(false);
+            audit.Log("settings.whatsapp_unlock", actor: actor, ip: Audit.AuditIp.From(http), details: new { ok = false });
+            return Results.Problem("That password is not right.", statusCode: StatusCodes.Status403Forbidden);
+        }
+        await cache.RemoveAsync(failKey, ct).ConfigureAwait(false);
+        await cache.SetAsync(UnlockKey(actor), "1", UnlockFor, ct).ConfigureAwait(false);
+        audit.Log("settings.whatsapp_unlock", actor: actor, ip: Audit.AuditIp.From(http), details: new { ok = true });
+        return Results.Ok(new { unlocked = true, minutes = (int)UnlockFor.TotalMinutes });
+    }
+
+    private static async Task<IResult> Lock(
+        System.Security.Claims.ClaimsPrincipal principal, Caching.InfinityCache cache, CancellationToken ct)
+    {
+        if (!IsEditor(principal) || principal.UserId() is not int actor) return Results.NotFound();
+        await cache.RemoveAsync(UnlockKey(actor), ct).ConfigureAwait(false);
+        return Results.Ok(new { locked = true });
+    }
 
     private static object MessageView(WaMessage m) => new
     {

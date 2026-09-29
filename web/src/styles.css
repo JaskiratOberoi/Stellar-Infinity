@@ -5613,3 +5613,4 @@ tbody tr.row-status--quiet > td:first-child {
 .wa-badge--read { color: #0b63b6; border-color: rgba(11, 99, 182, .45); background: rgba(11, 99, 182, .08); }
 .wa-badge--bad { color: var(--danger); border-color: var(--danger-line); }
 .wa-badge--warn { color: var(--warn); border-color: var(--warn-line); background: var(--warn-soft); }
+.wa__lock { max-width: 520px; margin-top: 1.2rem; }
