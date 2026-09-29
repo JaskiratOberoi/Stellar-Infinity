@@ -1358,3 +1358,14 @@ UP103 — have no such order to model on and were left out rather than
 invented from the catalogue. MDCARE itself ordered only JK HS1, JK HS2 and
 JK HS4 New in the last 90 days; of its other recent packages only CBC with
 PBS and KFT with eGFR are not yet booklet-supported.
+
+Same day, on Jas's instruction, the eight left out are built from their
+definitions (zztest01-smart-mdcare-packages-defs-20260929.sql,
+ZZMDP01A–ZZMDP08Q): every member test and profile of the package, IsActive
+ignored as the LIS's own expansion ignores it (JK HS4 Extended still
+carries the retired Thyroid Profile II), each cloned structure-only from a
+real released tube carrying that member, one tube per member, values from
+the ranges. The reference text is the template patient's, an adult of
+25–60, not this patient's exact band — a review of layout and copy, not of
+ranges. With these the 24 booklet packages all have a review order on
+ZZTEST01: ZZHCP1–4, ZZMDC01–12, ZZMDP01–08.
