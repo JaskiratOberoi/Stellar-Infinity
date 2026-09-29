@@ -1403,3 +1403,12 @@ Admin → Letterheads is the editor: A4 at scale with draggable guides, mm
 inputs, artwork upload (pdf.js draws PDF artwork in the browser), clients,
 calibration sheet, and preview with a real report. A demo profile, "ZZ Test
 Diagnostics (demo)", is assigned to ZZTEST01 for review.
+
+Same day, on Jas's instruction: a client's letterhead appears only for that
+client's reports ("I do not want to see MDCARE letterhead as an option for
+HR0121's reports"). The picker asks for options per set of report clients
+and offers a letterhead only when every report in the download is booked
+under a code assigned to it; the PDF routes enforce the same rule and print
+on Noble's letterhead otherwise. The editor's "Preview with a report" is
+exempt for super admin and admin (lhPreview). Client codes can be pasted
+many at a time.
