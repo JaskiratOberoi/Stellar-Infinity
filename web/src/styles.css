@@ -5566,7 +5566,7 @@ tbody tr.row-status--quiet > td:first-child {
 .lhd__guide--v::after { top: 0; bottom: 0; left: 5px; width: 1px; }
 .lhd__guide:hover::after { background: #0a58a0; box-shadow: 0 0 0 1px rgba(13, 110, 190, .35); }
 .lhd__guide span { position: absolute; right: 6px; top: -14px; font: 600 10px/1 system-ui, sans-serif; color: #fff;
-  background: #0d6ebe; padding: 2px 5px; border-radius: 4px; pointer-events: none; }
+  background: #0d6ebe; padding: 2px 5px; border-radius: 4px; pointer-events: none; white-space: nowrap; }
 .lhd__guide span.is-below { top: 10px; }
 .lhd__guide--v span { top: 6px; left: 8px; right: auto; }
 .lhd__side { display: flex; flex-direction: column; gap: .8rem; min-width: 0; }
