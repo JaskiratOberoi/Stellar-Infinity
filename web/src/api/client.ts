@@ -1546,3 +1546,79 @@ export const salesApi = {
     api.put<{ userId: number; year: number; month: number; target: number }>(
       `/api/sales-dashboard/team/${userId}/target`, { year, month, target }),
 };
+
+/* ---- letterheads (per-client report paper; api LetterheadEndpoints) ---- */
+
+export type LetterheadKind = 'digital' | 'stationery';
+
+export interface LetterheadProfile {
+  id: number;
+  name: string;
+  kind: LetterheadKind;
+  firstTopMm: number;
+  topMm: number;
+  bottomMm: number;
+  sideMm: number;
+  nudgeXMm: number;
+  nudgeYMm: number;
+  hasArtwork: boolean;
+  artworkMime: string | null;
+  version: number;
+  isActive: boolean;
+  updatedAt: string;
+  clients: string[];
+}
+
+export interface LetterheadMargins {
+  id: number;
+  firstTopMm: number;
+  topMm: number;
+  bottomMm: number;
+  sideMm: number;
+  version: number;
+}
+
+export interface PaperOptionsResponse {
+  options: { value: string; label: string; group: 'noble' | 'client' }[];
+  defaultPaper: string | null;
+}
+
+export type LetterheadEdit = Partial<Pick<LetterheadProfile,
+  'name' | 'kind' | 'firstTopMm' | 'topMm' | 'bottomMm' | 'sideMm' | 'nudgeXMm' | 'nudgeYMm'>>;
+
+export const letterheadApi = {
+  options: () => api.get<PaperOptionsResponse>('/api/letterheads/options'),
+  margins: (id: number) => api.get<LetterheadMargins>(`/api/public/letterheads/${id}`),
+  list: () => api.get<LetterheadProfile[]>('/api/settings/letterheads'),
+  create: (name: string, kind: LetterheadKind) =>
+    api.post<LetterheadProfile>('/api/settings/letterheads', { name, kind }),
+  update: (id: number, edit: LetterheadEdit) =>
+    api.put<LetterheadProfile>(`/api/settings/letterheads/${id}`, edit),
+  setActive: (id: number, active: boolean) =>
+    api.put<LetterheadProfile>(`/api/settings/letterheads/${id}/active`, { active }),
+  setClients: (id: number, clients: string[]) =>
+    api.put<{ letterhead: LetterheadProfile; unknown: string[] }>(`/api/settings/letterheads/${id}/clients`, { clients }),
+  removeArtwork: (id: number) =>
+    api.delete<LetterheadProfile>(`/api/settings/letterheads/${id}/artwork`),
+  artworkUrl: (p: Pick<LetterheadProfile, 'id' | 'version'>) =>
+    `/api/settings/letterheads/${p.id}/artwork?v=${p.version}`,
+  calibrationUrl: (p: Pick<LetterheadProfile, 'id' | 'version'>) =>
+    `/api/settings/letterheads/${p.id}/calibration?v=${p.version}`,
+  /** Multipart, as the attachment upload is; see attachmentApi.upload. */
+  uploadArtwork: async (id: number, file: File) => {
+    const body = new FormData();
+    body.append('file', file);
+    const headers = new Headers();
+    const csrf = readCookie(CSRF_COOKIE);
+    if (csrf) headers.set(CSRF_HEADER, csrf);
+    const res = await fetch(`/api/settings/letterheads/${id}/artwork`, {
+      method: 'POST', body, headers, credentials: 'include',
+    });
+    if (!res.ok) {
+      const problem = await res.json().catch(() => null) as { error?: string; detail?: string } | null;
+      const fallback = res.status === 413 ? 'That file is too large (8 MB limit).' : `Upload failed (${res.status})`;
+      throw new ApiError(res.status, problem?.error ?? problem?.detail ?? fallback);
+    }
+    return (await res.json()) as LetterheadProfile;
+  },
+};

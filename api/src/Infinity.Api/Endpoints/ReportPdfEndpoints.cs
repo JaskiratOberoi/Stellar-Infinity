@@ -464,6 +464,7 @@ public static class ReportPdfEndpoints
         Caching.InfinityCache cache,
         Audit.AuditLog audit,
         ReportPrintRepository prints,
+        LetterheadPapers papers,
         CancellationToken ct)
     {
         var (ok, fail, row, overrode) = await GateAsync(sid, principal, scopes, repo, locks, extras, loggers, ct,
@@ -483,7 +484,7 @@ public static class ReportPdfEndpoints
 
         // Everything that changes the bytes is in the key; the exclude list is
         // already digits-and-commas by the time PrintQuery is done with it.
-        var sheet = ReportPaper.Resolve(paper, headless);
+        var sheet = await papers.ResolveAsync(paper, headless, principal, ct).ConfigureAwait(false);
         var query = PrintQuery(split, exclude, sheet, overrideLock: overrode is not null,
                                format: ReportFormat.Normalise(format));
         var graphFp = await GraphFingerprintAsync(graphs, sid, withGraph == true, ct).ConfigureAwait(false);
@@ -514,7 +515,7 @@ public static class ReportPdfEndpoints
                     PageNumberY: sheet.PageNumberY,
                     PageNumberRight: sheet.PageNumberRight)],
                 http.Request.Headers.Cookie.ToString(),
-                ct).ConfigureAwait(false);
+                ct, ink: sheet.Ink).ConfigureAwait(false);
 
             await cache.SetBytesAsync(key, pdf, PdfCacheTtl, ct).ConfigureAwait(false);
             http.Response.Headers["X-Report-Cache"] = "miss";
@@ -622,6 +623,7 @@ public static class ReportPdfEndpoints
         Caching.InfinityCache cache,
         Audit.AuditLog audit,
         ReportPrintRepository prints,
+        LetterheadPapers papers,
         CancellationToken ct)
     {
         var sids = (body?.Sids ?? [])
@@ -664,7 +666,7 @@ public static class ReportPdfEndpoints
         Reads.WorksheetRow? firstRow = null;
         var onePatient = true;
         // One paper for the whole bundle: it is one print run into one tray.
-        var sheet = ReportPaper.Resolve(body.Paper, body.Headless);
+        var sheet = await papers.ResolveAsync(body.Paper, body.Headless, principal, ct).ConfigureAwait(false);
         if (!deptMajor)
         {
             sids = (await repo.OrderAsLisAsync(sids, ct).ConfigureAwait(false)).ToList();
@@ -892,7 +894,7 @@ public static class ReportPdfEndpoints
                 var patientPdf = await render.RenderAsync(
                     deptDocs, cookie, ct, numberPages: true,
                     numberPagesY: sheet.PageNumberY, numberPagesRight: sheet.PageNumberRight,
-                    headless: sheet.Headless).ConfigureAwait(false);
+                    headless: sheet.Headless, ink: sheet.Ink).ConfigureAwait(false);
 
                 if (skipped.Count > 0)
                     http.Response.Headers["X-Reports-Skipped"] = System.Text.Json.JsonSerializer.Serialize(skipped);
@@ -957,7 +959,7 @@ public static class ReportPdfEndpoints
             // in hand — graph sheets counted like any other sheet.
             var pdf = await render.RenderAsync(included, cookieHeader, ct, numberPages: true,
                 numberPagesY: sheet.PageNumberY, numberPagesRight: sheet.PageNumberRight,
-                headless: sheet.Headless).ConfigureAwait(false);
+                headless: sheet.Headless, ink: sheet.Ink).ConfigureAwait(false);
 
             // The skip list rides on a header: the body has to be the PDF, and a
             // silent short delivery ("I asked for 20, I got 19") is exactly the

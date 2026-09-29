@@ -174,6 +174,7 @@ public static class PublicReportEndpoints
         RenderClient render,
         ILoggerFactory logs,
         Audit.AuditLog audit,
+        Reports.LetterheadPapers papers,
         CancellationToken ct)
     {
         var log = logs.CreateLogger("Infinity.Api.PublicReport");
@@ -209,20 +210,25 @@ public static class PublicReportEndpoints
         {
             var attachments = await CollectGraphsAsync(graphs, sid, ct).ConfigureAwait(false);
 
+            // The patient's copy carries a letterhead, because it is not being
+            // printed onto anyone's pre-printed paper: the centre's own digital
+            // letterhead when it has one, Noble's otherwise.
+            var sheet = await papers.PublicCopyAsync(row.ClientCode, ct).ConfigureAwait(false);
+
             var pdf = await render.RenderAsync(
                 [new RenderClient.ReportRequest(
-                    // Headless: false — the patient's copy is the one that has
-                    // to carry the letterhead, because it is not being printed
-                    // onto Noble's pre-printed paper.
                     // The token travels into the print route: with no cookie,
                     // it is the only thing that will open the data behind it.
-                    Url: $"/print/report/{Uri.EscapeDataString(sid)}?pdf=1&split=1&t={Uri.EscapeDataString(links.Token(sid))}",
+                    Url: $"/print/report/{Uri.EscapeDataString(sid)}?pdf=1&split=1&t={Uri.EscapeDataString(links.Token(sid))}"
+                         + (sheet.LetterheadId is null ? "" : sheet.Query),
                     Attachments: attachments,
-                    Headless: false)],
+                    Headless: false,
+                    PageNumberY: sheet.PageNumberY,
+                    PageNumberRight: sheet.PageNumberRight)],
                 // No cookie. The print route must serve this render on the
                 // strength of the token alone — see PrintReport's token path.
                 cookieHeader: null,
-                ct).ConfigureAwait(false);
+                ct, ink: sheet.Ink).ConfigureAwait(false);
 
             log.LogInformation("publicreport.served sid={Sid}", sid);
             // On the audit trail as well as the log stream: the report left,

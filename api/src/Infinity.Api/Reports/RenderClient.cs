@@ -71,7 +71,13 @@ public sealed class RenderClient(HttpClient http, ILogger<RenderClient> log)
         [property: JsonPropertyName("contentOnly")] bool ContentOnly = false,
         // The paper for the final pass over a batch, whose items are cache
         // hits carrying no mode of their own.
-        [property: JsonPropertyName("headless")] bool? Headless = null);
+        [property: JsonPropertyName("headless")] bool? Headless = null,
+        // A client's own letterhead, for the final pass: its artwork in place of
+        // Noble's, and the printer's drift in points. See ReportPaper.Ink.
+        [property: JsonPropertyName("letterheadB64")] string? LetterheadB64 = null,
+        [property: JsonPropertyName("letterheadMime")] string? LetterheadMime = null,
+        [property: JsonPropertyName("nudgeX")] double? NudgeX = null,
+        [property: JsonPropertyName("nudgeY")] double? NudgeY = null);
 
     /// <summary>
     /// Render one or more reports into a single PDF. A batch goes in one call
@@ -88,13 +94,17 @@ public sealed class RenderClient(HttpClient http, ILogger<RenderClient> log)
         double? numberPagesY = null,
         double? numberPagesRight = null,
         bool contentOnly = false,
-        bool? headless = null)
+        bool? headless = null,
+        PaperInk? ink = null)
     {
         if (reports.Count == 0) throw new ArgumentException("No reports to render.", nameof(reports));
 
         using var content = new StringContent(
             JsonSerializer.Serialize(
-                new Envelope(cookieHeader, reports, numberPages, numberPagesY, numberPagesRight, contentOnly, headless), Json),
+                new Envelope(cookieHeader, reports, numberPages, numberPagesY, numberPagesRight, contentOnly, headless,
+                             ink?.ArtworkB64, ink?.ArtworkMime,
+                             ink is { NudgeX: not 0 } ? ink.NudgeX : null,
+                             ink is { NudgeY: not 0 } ? ink.NudgeY : null), Json),
             System.Text.Encoding.UTF8,
             "application/json");
 
@@ -112,6 +122,37 @@ public sealed class RenderClient(HttpClient http, ILogger<RenderClient> log)
 
         return await res.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
     }
+
+    /// <summary>A letterhead profile's calibration sheet; see the sidecar's calibrationSheet.</summary>
+    public async Task<byte[]> CalibrationAsync(LetterheadProfile p, LetterheadArtwork? art, CancellationToken ct = default)
+    {
+        using var content = new StringContent(JsonSerializer.Serialize(new
+        {
+            name = p.Name,
+            firstTopMm = p.FirstTopMm,
+            topMm = p.TopMm,
+            bottomMm = p.BottomMm,
+            sideMm = p.SideMm,
+            nudgeXMm = p.NudgeXMm,
+            nudgeYMm = p.NudgeYMm,
+            artworkB64 = art is null ? null : Convert.ToBase64String(art.Bytes),
+            artworkMime = art?.Mime,
+        }, Json), System.Text.Encoding.UTF8, "application/json");
+        using var res = await http.PostAsync("/calibration", content, ct).ConfigureAwait(false);
+        if (!res.IsSuccessStatusCode)
+        {
+            log.LogError("calibration failed: HTTP {Status}", (int)res.StatusCode);
+            throw new RenderFailedException($"The render service returned HTTP {(int)res.StatusCode}.");
+        }
+        return await res.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+    }
 }
+
+/// <summary>
+/// What a client letterhead adds to the final compositing pass: its artwork
+/// (null for stationery, where nothing is composited) and the printer's drift,
+/// in points, applied to the content.
+/// </summary>
+public sealed record PaperInk(string? ArtworkB64, string? ArtworkMime, double NudgeX, double NudgeY);
 
 public sealed class RenderFailedException(string message) : Exception(message);

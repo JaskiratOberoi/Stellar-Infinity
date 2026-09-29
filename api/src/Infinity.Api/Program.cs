@@ -39,6 +39,8 @@ builder.Services.AddSingleton<UserTipRepository>();
 // The report switches: one instance, loaded at start-up (it is also the
 // hosted service), re-read on every save.
 builder.Services.AddSingleton<Infinity.Api.Reports.ReportSettings>();
+builder.Services.AddSingleton<Infinity.Api.Reports.LetterheadRepository>();
+builder.Services.AddSingleton<Infinity.Api.Reports.LetterheadPapers>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<Infinity.Api.Reports.ReportSettings>());
 builder.Services.AddSingleton<RevenueRepository>();
 builder.Services.AddSingleton<SalesRepository>();
@@ -292,5 +294,6 @@ app.MapRateListEndpoints();
 app.MapInvoiceEndpoints();
 app.MapReportPdfEndpoints();
 app.MapPublicReportEndpoints();
+app.MapLetterheadEndpoints();
 
 app.Run();

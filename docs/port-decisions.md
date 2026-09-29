@@ -1369,3 +1369,37 @@ the ranges. The reference text is the template patient's, an adult of
 25–60, not this patient's exact band — a review of layout and copy, not of
 ranges. With these the 24 booklet packages all have a review order on
 ZZTEST01: ZZHCP1–4, ZZMDC01–12, ZZMDP01–08.
+
+## Per-client letterheads (2026-09-29)
+
+Jas asked for letterhead support per client, with a way to mark each
+paper's real print area. Decided with him: admins only (super admin and
+admin), the Smart Report keeps its own design, a client's letterhead is its
+default and Noble's papers stay in the same drop-down.
+
+Script 171 adds two Infinity-only tables — nothing in the LIS reads them:
+inf_letterhead (a profile: digital or pre-printed stationery; first-sheet
+top, later-sheet top, bottom and side bands in mm; a printer nudge; the
+artwork as PDF/PNG/JPEG; a version bumped on every write) and
+inf_client_letterhead (client code → profile, one each). The paper value is
+`lh:{id}` beside letterhead / noble / plain. The API resolves it
+(LetterheadPapers): the lab may print any active profile, a client account
+only one assigned to a code in its own scope; anything else prints on
+Noble's letterhead rather than failing. The cache key carries
+`lh{id}v{version}`, so an edited profile never serves an old layout. The
+print route reads the profile's margins from an anonymous, millimetres-only
+route, lays out with `@page` (and `@page :first` when the first sheet's
+header is taller), and draws the same layout smaller when the box is
+shorter than Noble's 246 mm, as the 40 mm sheet already did. The sidecar
+composites the client's artwork instead of Noble's for a digital profile
+(page 1 on each report's first sheet, page 2 on the rest; an image is laid
+full-bleed), shifts content and page number by the nudge, and draws a
+calibration sheet (rulers, the dashed print box, the artwork faint) to print
+at 100% on the client's stationery. The patient's copy (QR/public link) goes
+out on the centre's digital letterhead when it has one; pre-printed profiles
+never apply there.
+
+Admin → Letterheads is the editor: A4 at scale with draggable guides, mm
+inputs, artwork upload (pdf.js draws PDF artwork in the browser), clients,
+calibration sheet, and preview with a real report. A demo profile, "ZZ Test
+Diagnostics (demo)", is assigned to ZZTEST01 for review.

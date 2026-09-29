@@ -24,7 +24,8 @@ import {
   type ReportGroup, type ReportItem, type ReportPanel, type ReportRow,
 } from '../lib/reportModel';
 import type { FullRow } from './ReportViewer';
-import { isPaper, type Paper } from '../components/PaperSelect';
+import { isPaper, letterheadIdOf, type Paper } from '../components/PaperSelect';
+import { letterheadApi, type LetterheadMargins } from '../api/client';
 import { isReportFormat, type ReportFormat } from '../components/ReportFormat';
 import '../report.css';
 
@@ -155,6 +156,25 @@ function paperFromParams(params: URLSearchParams): Paper {
   return params.get('headless') === '1' ? 'plain' : 'letterhead';
 }
 
+/**
+ * The page box a paper lays out for, in millimetres. Noble's two papers and
+ * the generic 40mm sheet are fixed; a client letterhead profile brings its own
+ * measured bands (and a first sheet that may carry a taller header). zoom
+ * draws the same layout smaller when the box is shorter than Noble's 246mm, so
+ * a report breaks its pages the same way on every paper — see the 40mm case
+ * below, which set the rule.
+ */
+interface PageGeom { firstTop: number; top: number; bottom: number; side: number; zoom: number }
+const NOBLE_BOX = 297 - 23 - 28;
+function geomOf(paper: Paper, lh: LetterheadMargins | null): PageGeom | null {
+  if (paper === 'plain') return { firstTop: 40, top: 40, bottom: 40, side: 14, zoom: 0.882 };
+  if (letterheadIdOf(paper) == null) return { firstTop: 23, top: 23, bottom: 28, side: 10, zoom: 1 };
+  if (!lh) return null;
+  const box = 297 - lh.topMm - lh.bottomMm;
+  const zoom = Math.max(0.75, Math.min(1, box / NOBLE_BOX));
+  return { firstTop: lh.firstTopMm, top: lh.topMm, bottom: lh.bottomMm, side: lh.sideMm, zoom: Math.round(zoom * 1000) / 1000 };
+}
+
 function parseExcluded(raw: string | null): Set<number> {
   if (!raw) return new Set();
   return new Set(
@@ -204,6 +224,23 @@ export function PrintReport() {
   const deptFilter = params.get('dept');
   const showEnd = params.get('end') !== '0';
   const [paper, setPaper] = useState<Paper>(() => paperFromParams(params));
+  /* A client letterhead's margins, read before the page says ready: the
+     renderer photographs it then, and a page laid out for the wrong box is a
+     report printed over someone's header. A public read (millimetres only),
+     because the renderer has no session on the token path. */
+  const lhId = letterheadIdOf(paper);
+  const [lhMargins, setLhMargins] = useState<LetterheadMargins | null>(null);
+  useEffect(() => {
+    if (lhId == null) { setLhMargins(null); return; }
+    let live = true;
+    letterheadApi.margins(lhId)
+      .then((m) => { if (live) setLhMargins(m); })
+      // An unknown profile lays out as Noble's letterhead — the API has
+      // already resolved it that way for the PDF.
+      .catch(() => { if (live) setPaper('letterhead'); });
+    return () => { live = false; };
+  }, [lhId]);
+  const geom = geomOf(paper, lhMargins && lhMargins.id === lhId ? lhMargins : null);
   // "Headless" to the layout: no artwork band drawn. Two of the three papers
   // are headless; only the margins tell them apart, and that is @page's job.
   const headless = paper !== 'letterhead';
@@ -357,7 +394,8 @@ export function PrintReport() {
     void document.fonts.ready.then(() => {
       if (cancelled || !rootRef.current) return;
       const root = rootRef.current;
-      const pageH = (paper === 'plain' ? 297 - 40 - 40 : 297 - 23 - 28) * 96 / 25.4;
+      if (!geom) return;
+      const pageH = (297 - geom.top - geom.bottom) * 96 / 25.4;
       /*
        * Two things are worth tightening for, and only these two:
        *   • the marker alone on the last page (the original case);
@@ -388,9 +426,9 @@ export function PrintReport() {
       setFit(chosen);
     });
     return () => { cancelled = true; };
-  }, [pdfMode, row, signed, paper, rootBase]);
+  }, [pdfMode, row, signed, geom?.top, geom?.bottom, rootBase]);
 
-  const ready = row !== null && signed && fit !== null;
+  const ready = row !== null && signed && fit !== null && geom !== null;
 
   /* ---- the preview conversation ------------------------------------------
      Same-origin only, both ways. A report is patient data and the frame must
@@ -721,9 +759,14 @@ export function PrintReport() {
              bottom. 23/28mm puts the report 2mm under the rule and 2.6mm
              above the band; the 26/34 it replaced left a hand's width of
              white at both ends. ReportPaper.PageNumberY tracks the foot. */
-          paper === 'plain'
-            ? '@page{size:A4 portrait;margin:40mm 14mm 40mm 14mm}'
-            : '@page{size:A4 portrait;margin:23mm 10mm 28mm 10mm}',
+          /* A client letterhead profile brings its own four figures, and a
+             first sheet whose header runs taller than the rest gets :first.
+             The sidecar composites that profile's first artwork page on the
+             same sheet — the one it tags as a report's first. */
+          geom
+            ? `@page{size:A4 portrait;margin:${geom.top}mm ${geom.side}mm ${geom.bottom}mm ${geom.side}mm}`
+              + (geom.firstTop !== geom.top ? `@page:first{margin-top:${geom.firstTop}mm}` : '')
+            : '',
           /* A client's 40mm stationery leaves 217mm for content where Noble's
              leaves 246mm, and a full CBC with ESR is built to fill the latter.
              Rather than a second, tighter layout for the smaller box, the SAME
@@ -733,7 +776,7 @@ export function PrintReport() {
              goes to. Type lands around 9.7px on that paper. `zoom`, not
              transform: zoom takes part in layout, so the table still spans
              the full page width. */
-          paper === 'plain' ? '.lr{zoom:.882}' : '',
+          geom && geom.zoom < 1 ? `.lr{zoom:${geom.zoom}}` : '',
         ].join('')}</style>
       )}
       {error ? <p className="lr__error">{error}</p> : !row ? null : !signed ? (
@@ -748,7 +791,7 @@ export function PrintReport() {
               each sheet instead, so the once-at-top copy is skipped. */}
           {!pdfMode && !previewSheets && (
             headless
-              ? <LetterheadZone tall={paper === 'plain'} />
+              ? <LetterheadZone mm={geom?.firstTop ?? 23} />
               : (
                 <div className="lr__brand">
                   <img src={nobleLogo} alt="Noble Diagnostic Centre" />
@@ -786,7 +829,7 @@ export function PrintReport() {
                 <div key={si} className="lr__sheet">
                   <span className="lr__sheet-no">Page {si + 1} of {sections.length}</span>
                   {headless
-                    ? <LetterheadZone sheet tall={paper === 'plain'} />
+                    ? <LetterheadZone sheet mm={si === 0 ? geom?.firstTop ?? 23 : geom?.top ?? 23} />
                     : (
                       <div className="lr__brand lr__brand--sheet">
                         <img src={nobleLogo} alt="Noble Diagnostic Centre" />
@@ -871,11 +914,15 @@ export function PrintReport() {
  *  the preview mirrors the headless PDF. On a client's 40mm stationery the
  *  band is the true 17mm taller than Noble's 23mm, so the preview shows the
  *  report starting where it really will. */
-function LetterheadZone({ sheet, tall }: { sheet?: boolean; tall?: boolean }) {
-  const cls = ['lr__zone', sheet && 'lr__zone--sheet', tall && 'lr__zone--tall'].filter(Boolean).join(' ');
+function LetterheadZone({ sheet, mm }: { sheet?: boolean; mm: number }) {
+  const cls = ['lr__zone', sheet && 'lr__zone--sheet'].filter(Boolean).join(' ');
+  // Noble's 23mm band is the zone's base height (56px, 40 on a sheet); any
+  // other paper is taller or shorter by its real difference, so the preview
+  // starts the report where the printer will.
+  const px = Math.max(24, Math.round((sheet ? 40 : 56) + (mm - 23) * 96 / 25.4));
   return (
-    <div className={cls} aria-hidden>
-      <span>{tall ? 'Pre-printed letterhead area · 40 mm' : 'Pre-printed letterhead area'}</span>
+    <div className={cls} style={{ height: px }} aria-hidden>
+      <span>{mm === 23 ? 'Pre-printed letterhead area' : `Letterhead area · ${Math.round(mm * 10) / 10} mm`}</span>
     </div>
   );
 }

@@ -22,6 +22,7 @@
  * anything itself, because the page it loads does. Publishing this port would
  * hand anyone a way to render any URL with someone else's session.
  */
+import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -52,7 +53,13 @@ let letterheadBytes = null;
  */
 async function letterhead() {
   if (letterheadBytes) return letterheadBytes;
-  const doc = await PDFDocument.load(await readFile(LETTERHEAD_PATH), { ignoreEncryption: true });
+  letterheadBytes = await stripIcc(await readFile(LETTERHEAD_PATH));
+  return letterheadBytes;
+}
+
+/** The ICC replacement above, for any letterhead PDF. */
+async function stripIcc(bytes) {
+  const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
   const ctx = doc.context;
   for (const [ref, obj] of ctx.enumerateIndirectObjects()) {
     if (!(obj instanceof PDFArray) || obj.size() < 2 || obj.get(0) !== PDFName.of('ICCBased')) continue;
@@ -64,8 +71,35 @@ async function letterhead() {
     ctx.assign(ref, alternate);
     ctx.delete(obj.get(1));
   }
-  letterheadBytes = await doc.save({ useObjectStreams: true });
-  return letterheadBytes;
+  return doc.save({ useObjectStreams: true });
+}
+
+/*
+ * A client's own letterhead (inf_letterhead, kind 'digital'), handed in by the
+ * API with the request. A PDF is used as Noble's is — page 0 the first sheet,
+ * page 1 (when present) every later one. A PNG or JPEG is laid full-bleed on
+ * one A4 page, used for every sheet. Kept by content hash: the API sends the
+ * same bytes for every report on that letterhead, and preparing them is the
+ * slow part.
+ */
+const artworkCache = new Map();
+async function clientLetterhead(b64, mime) {
+  const hash = createHash('sha1').update(b64).digest('hex');
+  if (artworkCache.has(hash)) return artworkCache.get(hash);
+  const raw = Buffer.from(b64, 'base64');
+  let bytes;
+  if (mime === 'application/pdf') {
+    bytes = await stripIcc(raw);
+  } else {
+    const doc = await PDFDocument.create();
+    const img = mime === 'image/png' ? await doc.embedPng(raw) : await doc.embedJpg(raw);
+    const page = doc.addPage([A4_W, A4_H]);
+    page.drawImage(img, { x: 0, y: 0, width: A4_W, height: A4_H });
+    bytes = await doc.save({ useObjectStreams: true });
+  }
+  if (artworkCache.size >= 24) artworkCache.delete(artworkCache.keys().next().value);
+  artworkCache.set(hash, bytes);
+  return bytes;
 }
 
 /* Page tags that survive stapling, so the one compositing pass at the end
@@ -230,6 +264,8 @@ async function renderContent(url, cookieHeader) {
  */
 /** Millimetres to PDF points. */
 const mm = (v) => (v / 25.4) * 72;
+const A4_W = mm(210);
+const A4_H = mm(297);
 
 async function compositeOntoLetterhead(contentPdf, opts = {}) {
   const headless = opts.headless === true;
@@ -249,6 +285,10 @@ async function compositeOntoLetterhead(contentPdf, opts = {}) {
   // composited letterhead.
   const pageNumberRight = opts.pageNumberRight ?? mm(headless ? 14 : 10);
   const pageNumbers = opts.pageNumbers !== false;
+  // A printer's own drift (inf_letterhead.nudge_*), in points: the content and
+  // its page number move together, the artwork stays where the sheet has it.
+  const nudgeX = Number(opts.nudgeX) || 0;
+  const nudgeY = Number(opts.nudgeY) || 0;
 
   const out = await PDFDocument.create();
   const content = await PDFDocument.load(contentPdf, { ignoreEncryption: true });
@@ -260,7 +300,10 @@ async function compositeOntoLetterhead(contentPdf, opts = {}) {
   // its own content plus 120KB.
   let embeddedLetterhead = [];
   if (!headless) {
-    const lh = await PDFDocument.load(await letterhead(), { ignoreEncryption: true });
+    const art = opts.artworkB64
+      ? await clientLetterhead(opts.artworkB64, opts.artworkMime)
+      : await letterhead();
+    const lh = await PDFDocument.load(art, { ignoreEncryption: true });
     embeddedLetterhead = await Promise.all(lh.getPages().map((p) => out.embedPage(p)));
   }
 
@@ -283,7 +326,7 @@ async function compositeOntoLetterhead(contentPdf, opts = {}) {
       page.drawPage(bg, { x: 0, y: 0, width, height });
     }
 
-    page.drawPage(await out.embedPage(src), { x: 0, y: 0, width, height });
+    page.drawPage(await out.embedPage(src), { x: nudgeX, y: -nudgeY, width, height });
 
     // NABL wants every page numbered. Right-aligned to the content margin,
     // on the footer's own baseline rather than a line of its own.
@@ -291,8 +334,8 @@ async function compositeOntoLetterhead(contentPdf, opts = {}) {
     const label = `Page ${i + 1} of ${pages.length}`;
     const size = 8;
     page.drawText(label, {
-      x: width - pageNumberRight - font.widthOfTextAtSize(label, size),
-      y: pageNumberY,
+      x: width - pageNumberRight - font.widthOfTextAtSize(label, size) + nudgeX,
+      y: pageNumberY - nudgeY,
       size,
       font,
       color: rgb(0.35, 0.35, 0.35),
@@ -367,6 +410,86 @@ async function concat(docs) {
   for (const bytes of docs) {
     const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
     for (const p of await out.copyPages(doc, doc.getPageIndices())) out.addPage(p);
+  }
+  return out.save();
+}
+
+/*
+ * The calibration sheet for a letterhead profile: two A4 pages (first sheet,
+ * continuation sheet) that show where the report will put ink. Printed at
+ * actual size onto the client's own stationery, the dashed box has to sit
+ * inside the paper's clear area; if the whole box sits shifted, that shift is
+ * the printer's drift and goes into the profile's nudge. The rulers on every
+ * edge are there to measure it with.
+ *
+ * Body: { name, firstTopMm, topMm, bottomMm, sideMm, nudgeXMm, nudgeYMm,
+ *         artworkB64?, artworkMime? } — the artwork, when given, is drawn
+ * faintly behind, so the same sheet also checks a digital letterhead on
+ * screen.
+ */
+async function calibrationSheet(b) {
+  const out = await PDFDocument.create();
+  const font = await out.embedFont(StandardFonts.Helvetica);
+  const bold = await out.embedFont(StandardFonts.HelveticaBold);
+  const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+  const side = num(b.sideMm, 14), bottom = num(b.bottomMm, 40);
+  const nx = mm(num(b.nudgeXMm)), ny = mm(num(b.nudgeYMm));
+  let art = [];
+  if (b.artworkB64) {
+    const lh = await PDFDocument.load(await clientLetterhead(b.artworkB64, b.artworkMime), { ignoreEncryption: true });
+    art = await Promise.all(lh.getPages().map((p) => out.embedPage(p)));
+  }
+  const ink = rgb(0.1, 0.1, 0.1), soft = rgb(0.55, 0.55, 0.55), accent = rgb(0.05, 0.35, 0.75);
+
+  for (const [i, label] of [[0, 'First sheet'], [1, 'Continuation sheet']]) {
+    const top = i === 0 ? num(b.firstTopMm, 40) : num(b.topMm, 40);
+    const page = out.addPage([A4_W, A4_H]);
+    if (art.length) page.drawPage(art[Math.min(i, art.length - 1)], { x: 0, y: 0, width: A4_W, height: A4_H, opacity: 0.35 });
+
+    // Rulers on all four edges: a tick every millimetre-5, a longer one and a
+    // number every 10. Drawn with no nudge — they measure the paper itself.
+    for (let v = 0; v <= 297; v += 5) {
+      const long = v % 10 === 0, len = mm(long ? 4 : 2);
+      const y = A4_H - mm(v);
+      page.drawLine({ start: { x: 0, y }, end: { x: len, y }, thickness: 0.4, color: soft });
+      page.drawLine({ start: { x: A4_W - len, y }, end: { x: A4_W, y }, thickness: 0.4, color: soft });
+      if (long && v > 0 && v < 297) page.drawText(String(v), { x: mm(4.6), y: y - 2, size: 5, font, color: soft });
+    }
+    for (let v = 0; v <= 210; v += 5) {
+      const long = v % 10 === 0, len = mm(long ? 4 : 2);
+      const x = mm(v);
+      page.drawLine({ start: { x, y: A4_H }, end: { x, y: A4_H - len }, thickness: 0.4, color: soft });
+      page.drawLine({ start: { x, y: 0 }, end: { x, y: len }, thickness: 0.4, color: soft });
+      if (long && v > 0 && v < 210) page.drawText(String(v), { x: x - 3, y: A4_H - mm(7), size: 5, font, color: soft });
+    }
+
+    // The content box: where the report's text may go, nudge applied.
+    const x0 = mm(side) + nx, x1 = A4_W - mm(side) + nx;
+    const yTop = A4_H - mm(top) - ny, yBot = mm(bottom) - ny;
+    const dash = { thickness: 1, color: accent, dashArray: [4, 3] };
+    page.drawLine({ start: { x: x0, y: yTop }, end: { x: x1, y: yTop }, ...dash });
+    page.drawLine({ start: { x: x0, y: yBot }, end: { x: x1, y: yBot }, ...dash });
+    page.drawLine({ start: { x: x0, y: yTop }, end: { x: x0, y: yBot }, ...dash });
+    page.drawLine({ start: { x: x1, y: yTop }, end: { x: x1, y: yBot }, ...dash });
+    // Corner crosses, easy to find on a busy sheet.
+    for (const [cx, cy] of [[x0, yTop], [x1, yTop], [x0, yBot], [x1, yBot]]) {
+      page.drawLine({ start: { x: cx - 8, y: cy }, end: { x: cx + 8, y: cy }, thickness: 1.2, color: accent });
+      page.drawLine({ start: { x: cx, y: cy - 8 }, end: { x: cx, y: cy + 8 }, thickness: 1.2, color: accent });
+    }
+
+    const lines = [
+      [bold, 13, `${b.name || 'Letterhead'} — ${label}`],
+      [font, 9, `Report text is laid inside the dashed box: top ${top} mm, bottom ${bottom} mm, sides ${side} mm.`],
+      [font, 9, `Printer nudge applied: ${num(b.nudgeXMm)} mm across, ${num(b.nudgeYMm)} mm down.`],
+      [font, 9, 'Print at 100% / Actual size (no "fit to page") on the client\'s own stationery.'],
+      [font, 9, 'The box must clear the printed header and footer. If it is shifted as a whole, measure the'],
+      [font, 9, 'shift against the rulers and enter it as the nudge; if it is too tall, adjust the margins.'],
+    ];
+    let y = (yTop + yBot) / 2 + 40;
+    for (const [f, size, text] of lines) {
+      page.drawText(text, { x: x0 + mm(6), y, size, font: f, color: ink, maxWidth: x1 - x0 - mm(12) });
+      y -= size + 7;
+    }
   }
   return out.save();
 }
@@ -455,6 +578,10 @@ const server = createServer(async (req, res) => {
           // plain / 28mm letterhead); a single render carries its own.
           pageNumberY: body.numberPagesY ?? lead.pageNumberY,
           pageNumberRight: body.numberPagesRight ?? lead.pageNumberRight,
+          artworkB64: body.letterheadB64 ?? lead.letterheadB64 ?? null,
+          artworkMime: body.letterheadMime ?? lead.letterheadMime ?? null,
+          nudgeX: body.nudgeX ?? lead.nudgeX ?? 0,
+          nudgeY: body.nudgeY ?? lead.nudgeY ?? 0,
         }));
       }
       console.log(`render ok reports=${reports.length} pages_in=${rendered.length} bytes=${pdf.length} ms=${Date.now() - started}`);
@@ -462,6 +589,18 @@ const server = createServer(async (req, res) => {
       return res.end(pdf);
     } catch (e) {
       console.error(`render failed ms=${Date.now() - started}:`, e);
+      res.writeHead(500, { 'content-type': 'application/json' });
+      return res.end(JSON.stringify({ error: String(e && e.message ? e.message : e) }));
+    }
+  }
+
+  if (req.method === 'POST' && url.pathname === '/calibration') {
+    try {
+      const pdf = Buffer.from(await calibrationSheet(await readJson(req)));
+      res.writeHead(200, { 'content-type': 'application/pdf', 'content-length': pdf.length });
+      return res.end(pdf);
+    } catch (e) {
+      console.error('calibration failed:', e);
       res.writeHead(500, { 'content-type': 'application/json' });
       return res.end(JSON.stringify({ error: String(e && e.message ? e.message : e) }));
     }

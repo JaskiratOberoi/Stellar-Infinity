@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { PAPER_OPTIONS, type Paper } from './PaperSelect';
+import { usePaperOptions, type Paper } from './PaperSelect';
 
 /**
  * The PID download control: the number, the download glyph, and — on click —
@@ -84,6 +84,7 @@ export function PidReportButton({ pid, busy, disabled, title, count, onDownload,
     };
   }, [at]);
 
+  const { options: paperOptions } = usePaperOptions();
   const pick = (paper: Paper) => { close(); onDownload(paper, !!override && includeHeld); };
 
   return (
@@ -140,7 +141,7 @@ export function PidReportButton({ pid, busy, disabled, title, count, onDownload,
               the sheet looks like: a filled band for artwork in the PDF, a
               dashed band for Noble's pre-printed header, a taller dashed band
               for the client's own 40mm stationery. */}
-          {PAPER_OPTIONS.map((o) => (
+          {paperOptions.map((o) => (
             <button key={o.value} type="button" role="menuitem" onClick={() => pick(o.value)}
                     title={`Download now. ${o.hint}`}>
               <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -151,6 +152,13 @@ export function PidReportButton({ pid, busy, disabled, title, count, onDownload,
                 )}
                 {o.value === 'noble' && (
                   <path d="M3.7 4.6h8.6" stroke="currentColor" strokeWidth="1.1"
+                        strokeDasharray="1.4 1.1" />
+                )}
+                {o.kind === 'digital' && (
+                  <path d="M3.7 5.4h8.6" stroke="currentColor" strokeWidth="2.6" />
+                )}
+                {o.kind === 'stationery' && (
+                  <path d="M3.7 5.4h8.6" stroke="currentColor" strokeWidth="2.6"
                         strokeDasharray="1.4 1.1" />
                 )}
                 {o.value === 'plain' && (
