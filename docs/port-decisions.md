@@ -1412,3 +1412,20 @@ under a code assigned to it; the PDF routes enforce the same rule and print
 on Noble's letterhead otherwise. The editor's "Preview with a report" is
 exempt for super admin and admin (lhPreview). Client codes can be pasted
 many at a time.
+
+## WhatsApp report delivery from a linked WhatsApp Web number (2026-09-30)
+
+Jas chose a linked WhatsApp Web number over the WhatsApp Business API, on the
+pattern of the lab's Listec automation bots (whatsapp-web.js, LocalAuth, QR or
+phone-number pairing). A `whatsapp` sidecar holds the session; script 172 adds
+the queue/log, auto-send clients, STOP opt-outs and per-instance settings.
+Staging and prod share Noble, so queue rows and switches are keyed by
+WhatsApp__Instance; only prod auto-queues, and staging sends only to its
+allowlist. The worker paces sends (random 40–120 s, daily cap, quiet hours for
+automatic sends) and sends the patient's copy — released, not held, signed,
+on the centre's digital letterhead — with a greeting and the report's public
+link. whatsapp-web.js 1.34.7 with two build patches: the Listec pairing fix
+and deleting the media model's __x_id (WhatsApp Web builds from 2026-09-17
+broke every media send). Admin → WhatsApp has its own password (PBKDF2 digest
+in inf_wa_setting '*'; 30-minute unlock). Everything ships switched off; prod
+went live on 2026-09-30 awaiting its own QR link.
