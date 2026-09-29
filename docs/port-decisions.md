@@ -1343,3 +1343,18 @@ Chromium start a new page before it (four short chapters: 2 pages with a
 table, 1 without, whether the block is a grid or plain and whether the
 table is fixed or auto layout). The matrix is now a grid of divs — the
 same six-column look — and the chapters flow again.
+
+## Review booklets for every MDCARE-list package the booklet is sold with (2026-09-29)
+
+MDCARE's rate list (139) carries all 507 master packages; the booklet is
+sold with 24 of them. Twelve review orders on ZZTEST01 (ZZMDC01A–ZZMDC12D),
+one per package with a fully released single-package order to model on in
+the last 400 days, built the HCP way — structure cloned, values generated
+from the ranges, a Smart Report line at ₹49: Health Package 1 and 2, HR0203
+Extended, HR202A, HR204A, JK Health Screen 1 and 2, JK HS4 and JK HS4 New,
+Rohtak HR201A and HR203A, UP101. P035A–P038A stand as ZZHCP1–4 already.
+Eight — HPK003, HS2, HR0201EX, HR202A EX, HR204AEX, JKHS401, UP0102,
+UP103 — have no such order to model on and were left out rather than
+invented from the catalogue. MDCARE itself ordered only JK HS1, JK HS2 and
+JK HS4 New in the last 90 days; of its other recent packages only CBC with
+PBS and KFT with eGFR are not yet booklet-supported.
