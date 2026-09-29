@@ -101,6 +101,12 @@ services:
       # NOT a secret. The secret is Reports__TokenSecret in api/.env, and with
       # it unset no QR is drawn and the public route rejects everything.
       Reports__PublicBaseUrl: "https://infinity.genomicslab.in"
+      # WhatsApp report delivery (Admin → WhatsApp). Instance keys the queue
+      # and the settings apart from staging's in the shared database; only
+      # prod looks for newly released visits to send automatically.
+      WhatsApp__Instance: "prod"
+      WhatsApp__AutoEnqueue: "true"
+      WhatsApp__BaseUrl: "http://whatsapp:8095"
 
       # ---- session cookie ----
       # The JWT is delivered as an httpOnly cookie, so script cannot read it
@@ -160,3 +166,20 @@ services:
     depends_on:
       - api
     restart: unless-stopped
+
+  # -------------------------------------------------------------- whatsapp --
+  # Reports to patients through a linked WhatsApp Web number (see
+  # whatsapp/server.mjs). Never published: only the API talks to it. The
+  # session lives in the wa-data volume — lose it and the number has to be
+  # linked again from Admin → WhatsApp.
+  whatsapp:
+    build: ./whatsapp
+    image: infinity-whatsapp
+    volumes:
+      - wa-data:/data
+    expose:
+      - "8095"
+    restart: unless-stopped
+
+volumes:
+  wa-data:

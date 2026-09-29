@@ -19,7 +19,7 @@ import { usePaperOptions, type Paper } from './PaperSelect';
  * of opening, and any scroll closes the menu rather than letting it drift
  * away from its row.
  */
-export function PidReportButton({ pid, busy, disabled, title, count, onDownload, onPreview, override, clients }: {
+export function PidReportButton({ pid, busy, disabled, title, count, onDownload, onPreview, override, clients, onWhatsApp }: {
   pid: number;
   /** THIS patient's download is being prepared. */
   busy: boolean;
@@ -33,6 +33,8 @@ export function PidReportButton({ pid, busy, disabled, title, count, onDownload,
   onDownload: (paper: Paper, includeHeld: boolean) => void;
   /** Open the complete report to review and untick tests before downloading. */
   onPreview?: () => void;
+  /** Queue this patient's released reports to their WhatsApp (the lab's desks only). */
+  onWhatsApp?: () => void;
   /**
    * The Super Admin's balance-hold override. Given, the menu carries a tick
    * to include the patient's held reports in the download; the count names
@@ -138,6 +140,18 @@ export function PidReportButton({ pid, busy, disabled, title, count, onDownload,
                 <circle cx="8" cy="8" r="1.9" fill="none" stroke="currentColor" strokeWidth="1.3" />
               </svg>
               Review &amp; edit…
+            </button>
+          )}
+          {onWhatsApp && (
+            <button type="button" role="menuitem" onClick={() => { close(); onWhatsApp(); }}
+                    title="Send this patient's released reports to their WhatsApp as a PDF, from the lab's linked number.">
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M8 1.8a6.2 6.2 0 0 0-5.3 9.4L1.9 14.2l3.1-.8A6.2 6.2 0 1 0 8 1.8Z"
+                      fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                <path d="M5.9 5.4c.2-.4.5-.4.7-.4.2 0 .4.4.6.9.1.3-.2.6-.4.8.3.7 1 1.4 1.8 1.8.2-.2.5-.5.8-.4.5.2.9.4.9.6 0 .3-.1.6-.5.8-.9.5-2.5-.2-3.6-1.3S5.4 6.3 5.9 5.4Z"
+                      fill="currentColor" />
+              </svg>
+              Send on WhatsApp
             </button>
           )}
           {/* One row per paper, in PaperSelect's order. The glyph says what

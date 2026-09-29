@@ -70,6 +70,10 @@ services:
       # is Reports__TokenSecret in api/.env, and with it unset no QR is drawn
       # and the public route rejects everything.
       Reports__PublicBaseUrl: "https://infinity-staging.genomicslab.in"
+      # WhatsApp: staging's own queue and settings, never auto-queues, and
+      # sends only to the allowlist set in Admin → WhatsApp.
+      WhatsApp__Instance: "staging"
+      WhatsApp__BaseUrl: "http://whatsapp:8095"
     # Synapse OTA artifacts (latest.yml + installer + blockmap), served by
     # /api/updates/synapse behind the fleet key. Publishing a release is copying
     # files into ./updates/synapse on the host — no rebuild, no restart.
@@ -111,3 +115,18 @@ services:
     depends_on:
       - api
     restart: unless-stopped
+
+  # -------------------------------------------------------------- whatsapp --
+  # Staging's own linked session (its own volume), and staging's API sends
+  # only to the numbers on its allowlist — this stack reads real patients.
+  whatsapp:
+    build: ./whatsapp
+    image: infinity-staging-whatsapp
+    volumes:
+      - wa-data:/data
+    expose:
+      - "8095"
+    restart: unless-stopped
+
+volumes:
+  wa-data:

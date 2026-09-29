@@ -1623,3 +1623,72 @@ export const letterheadApi = {
     return (await res.json()) as LetterheadProfile;
   },
 };
+
+/* ---- WhatsApp report delivery (api WhatsAppEndpoints) ---- */
+
+export type WaState = 'starting' | 'qr' | 'ready' | 'disconnected' | 'unreachable';
+export type WaStatus = 'queued' | 'sending' | 'sent' | 'delivered' | 'read' | 'failed' | 'skipped';
+
+export interface WaConfig {
+  enabled: boolean;
+  auto: boolean;
+  allClients: boolean;
+  allowlist: string[];
+  caption: string;
+  minGapSeconds: number;
+  maxGapSeconds: number;
+  dailyCap: number;
+  quietFrom: string;
+  quietTo: string;
+  autoSince: string | null;
+}
+
+export interface WaOverview {
+  configured: boolean;
+  instance?: string;
+  autoCapable?: boolean;
+  requiresAllowlist?: boolean;
+  settings?: WaConfig;
+  status?: { state: WaState; qr: string | null; pairingCode: string | null; me: { number: string | null; name: string | null } | null; since: string | null; error: string | null };
+  counts?: Record<string, number>;
+  sentToday?: number;
+  clients?: string[];
+}
+
+export interface WaMessageRow {
+  id: number;
+  pid: number | null;
+  sids: string[];
+  clientCode: string | null;
+  patientName: string | null;
+  phone: string;
+  kind: 'report' | 'test';
+  trigger: 'auto' | 'manual' | 'test';
+  status: WaStatus;
+  attempts: number;
+  error: string | null;
+  createdAt: string;
+  sentAt: string | null;
+  updatedAt: string;
+}
+
+export const whatsappApi = {
+  overview: () => api.get<WaOverview>('/api/settings/whatsapp'),
+  save: (patch: Partial<Omit<WaConfig, 'autoSince'>>) => api.put<WaConfig>('/api/settings/whatsapp', patch),
+  pair: (phone: string) => api.post<{ ok: boolean }>('/api/settings/whatsapp/pair', { phone }),
+  logout: () => api.post<{ ok: boolean }>('/api/settings/whatsapp/logout'),
+  setClients: (clients: string[]) => api.put<{ clients: string[]; unknown: string[] }>('/api/settings/whatsapp/clients', { clients }),
+  test: (phone: string, sid?: string) => api.post<{ id: number; phone: string }>('/api/settings/whatsapp/test', { phone, sid: sid || undefined }),
+  messages: (params: { status?: string; q?: string; page?: number }) => {
+    const q = new URLSearchParams();
+    if (params.status) q.set('status', params.status);
+    if (params.q) q.set('q', params.q);
+    if (params.page) q.set('page', String(params.page));
+    return api.get<{ rows: WaMessageRow[]; total: number; page: number; size: number }>(`/api/settings/whatsapp/messages?${q}`);
+  },
+  retry: (id: number) => api.post<{ ok: boolean }>(`/api/settings/whatsapp/messages/${id}/retry`),
+  sendReport: (pid: number, sids?: string[], phone?: string) =>
+    api.post<{ id: number; phone: string; samples: number }>('/api/reports/whatsapp', { pid, sids, phone: phone || undefined }),
+  status: (pids: number[]) =>
+    api.get<Record<string, { status: WaStatus; at: string; phone: string; error: string | null }>>(`/api/reports/whatsapp/status?pids=${pids.join(',')}`),
+};

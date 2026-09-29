@@ -5583,3 +5583,33 @@ tbody tr.row-status--quiet > td:first-child {
   border: 1px solid var(--line); font-size: .78rem; font-weight: 600; }
 .lhd__code button { border: 0; background: transparent; color: var(--ink-dim); cursor: pointer; font-size: .95rem; line-height: 1; padding: 0 .25rem; }
 .lhd__code button:hover { color: var(--danger); }
+
+/* ---------- Admin → WhatsApp (pages/WhatsAppSettings.tsx) ---------- */
+.wa { display: flex; flex-direction: column; gap: 1rem; margin-top: 1.2rem; max-width: 1100px; }
+.wa__card { padding: 1rem 1.1rem; min-width: 0; }
+.wa__h { font-size: .72rem; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-dim); margin: 0 0 .8rem; font-weight: 600; }
+.wa__row { display: flex; align-items: center; gap: .6rem; }
+.wa__link { display: flex; gap: 1.4rem; align-items: flex-start; flex-wrap: wrap; }
+.wa__qr { width: 240px; height: 240px; background: #fff; padding: 8px; border-radius: 10px; border: 1px solid var(--line); }
+.wa__steps { flex: 1 1 260px; min-width: 0; }
+.wa__steps ol { padding-left: 1.2rem; line-height: 1.8; margin: .3rem 0 .8rem; }
+.wa__code { font: 700 2rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .12em; margin: .6rem 0; }
+.wa__dot { width: 10px; height: 10px; border-radius: 50%; background: var(--danger); flex: none; }
+.wa__dot--on { background: #22a06b; }
+.wa__dot--wait { background: #d9a400; }
+.wa__stats { font-size: .78rem; margin: .8rem 0 0; }
+.wa__switch { display: flex; gap: .9rem; align-items: flex-start; padding: .7rem 0; border-top: 1px solid var(--line); }
+.wa__switch:first-of-type { border-top: 0; padding-top: 0; }
+.wa__note { display: block; font-size: .8rem; margin-top: .2rem; line-height: 1.55; }
+.wa__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: .9rem 1.2rem; margin-top: .9rem; }
+.wa__field { display: flex; flex-direction: column; gap: .3rem; min-width: 0; }
+.wa__field > span:first-child { font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-dim); }
+.wa__field--wide { grid-column: 1 / -1; }
+.wa__field input[type="number"], .wa__field input[type="time"] { max-width: 110px; }
+.wa__table { overflow-x: auto; }
+.wa-badge { display: inline-block; font-size: .7rem; font-weight: 700; padding: .12rem .5rem; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--ink-dim); white-space: nowrap; }
+.wa-badge--ok { color: #1f7a4d; border-color: rgba(34, 160, 107, .45); background: rgba(34, 160, 107, .08); }
+.wa-badge--read { color: #0b63b6; border-color: rgba(11, 99, 182, .45); background: rgba(11, 99, 182, .08); }
+.wa-badge--bad { color: var(--danger); border-color: var(--danger-line); }
+.wa-badge--warn { color: var(--warn); border-color: var(--warn-line); background: var(--warn-soft); }

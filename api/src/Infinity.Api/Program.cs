@@ -97,6 +97,22 @@ builder.Services.AddHttpClient<Infinity.Api.Reports.RenderClient>(c =>
 });
 
 builder.Services.AddSingleton<ScopeRepository>();
+
+// WhatsApp report delivery: the sidecar that holds the linked number, the
+// queue, and the worker that paces it. See Messaging/WhatsAppWorker.
+// The worker asks the sidecar for its state every ten seconds; at Information
+// the HttpClient pipeline would write four lines a tick into the API log.
+builder.Logging.AddFilter("System.Net.Http.HttpClient.WhatsAppClient", LogLevel.Warning);
+builder.Services.AddHttpClient<Infinity.Api.Messaging.WhatsAppClient>(c =>
+{
+    c.BaseAddress = new Uri(builder.Configuration["WhatsApp:BaseUrl"] ?? "http://whatsapp:8095");
+    // A PDF to a patient on a slow link, plus the sidecar's "typing…" beat.
+    c.Timeout = TimeSpan.FromMinutes(2);
+});
+builder.Services.AddSingleton<Infinity.Api.Messaging.WhatsAppOptions>();
+builder.Services.AddSingleton<Infinity.Api.Messaging.WhatsAppSettings>();
+builder.Services.AddSingleton<Infinity.Api.Messaging.WhatsAppRepository>();
+builder.Services.AddHostedService<Infinity.Api.Messaging.WhatsAppWorker>();
 builder.Services.AddSingleton<Infinity.Api.Audit.AuditRepository>();
 builder.Services.AddSingleton<Infinity.Api.Audit.AuditLog>();
 builder.Services.AddSingleton<Infinity.Api.Audit.AuditTrailRepository>();
@@ -295,5 +311,6 @@ app.MapInvoiceEndpoints();
 app.MapReportPdfEndpoints();
 app.MapPublicReportEndpoints();
 app.MapLetterheadEndpoints();
+app.MapWhatsAppEndpoints();
 
 app.Run();

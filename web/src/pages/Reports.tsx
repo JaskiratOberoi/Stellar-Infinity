@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { api, csrfHeader } from '../api/client';
+import { api, ApiError, csrfHeader, whatsappApi } from '../api/client';
 import { downloadFile, fmtDateTime } from '../lib/format';
 import { COLLECTED_AT_KEY } from '../lib/reportModel';
 import { ReportViewer } from './ReportViewer';
@@ -351,6 +351,26 @@ export function Reports() {
    * Every such download is written to the audit trail with what was owed.
    */
   const superAdmin = user?.role === 'super_admin';
+  // The lab's own desks send reports on WhatsApp; a client account never does
+  // (the API refuses it too). The same roles that read every centre's reports.
+  const labDesk = ['super_admin', 'admin', 'sales', 'lab_manager', 'entry', 'reporting'].includes(user?.role ?? '');
+  /* Queued, not sent: the lab's number sends one message at a time, paced,
+     so the toast says it is on its way. No mobile on the visit → ask for one;
+     the number typed goes with this send only and is not saved on the patient. */
+  const sendWhatsApp = async (pid: number, sids: string[], typed?: string) => {
+    try {
+      const r = await whatsappApi.sendReport(pid, sids, typed);
+      showToast(`WhatsApp queued to ${r.phone} — ${r.samples} report${r.samples === 1 ? '' : 's'} as one PDF.`);
+    } catch (e) {
+      const code = e instanceof ApiError && e.body && typeof e.body === 'object' ? (e.body as { code?: string }).code : undefined;
+      if (code === 'NO_MOBILE' && typed === undefined) {
+        const n = window.prompt(`No mobile number on PID ${pid}. Send to which WhatsApp number?`);
+        if (n && n.trim()) await sendWhatsApp(pid, sids, n.trim());
+        return;
+      }
+      showToast(e instanceof Error ? e.message : 'Could not queue the WhatsApp message.');
+    }
+  };
   const [overrideBusy, setOverrideBusy] = useState<string | null>(null);
   const downloadOverride = async (sid: string, l: RowLock) => {
     setOverrideBusy(sid);
@@ -658,6 +678,16 @@ export function Reports() {
                             }
                             void downloadPatient(r.pid, eligible, lh, includeHeld);
                           }}
+                          onWhatsApp={labDesk ? () => {
+                            const ready = (grouped.find((g) => g.rows.some((x) => x.sid === r.sid))?.rows ?? [r])
+                              .filter((x) => REPORTABLE_STATUSES.includes(x.statusCode ?? -1) && !locks[x.sid])
+                              .map((x) => x.sid);
+                            if (ready.length === 0) {
+                              showToast('None of this patient’s reports are ready to send yet.');
+                              return;
+                            }
+                            void sendWhatsApp(r.pid, ready);
+                          } : undefined}
                           onPreview={() => {
                             const all = grouped.find((g) => g.rows.some((x) => x.sid === r.sid))?.rows ?? [r];
                             // Only samples a report exists for and that are not
