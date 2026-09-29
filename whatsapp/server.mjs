@@ -235,9 +235,9 @@ const server = createServer(async (req, res) => {
 
     if (req.method === 'POST' && url.pathname === '/pair') {
       const b = await readJson(req);
-      let d = String(b.phone ?? '').replace(/D/g, '');
+      let d = String(b.phone ?? '').replace(/\D/g, '');
       if (d.length === 10) d = '91' + d;
-      if (!/^d{11,15}$/.test(d)) return reply(res, 400, { error: 'bad_number' });
+      if (!/^\d{11,15}$/.test(d)) return reply(res, 400, { error: 'bad_number' });
       if (state.state === 'ready') return reply(res, 409, { error: 'already_linked' });
       pairPhone = d;
       await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {});
