@@ -78,18 +78,21 @@ public sealed class WhatsAppRepository(NobleConnectionFactory db, SqlRetry retry
 
     /// <summary>Take the oldest queued message of this instance and mark it sending.</summary>
     /// <param name="testsOnly">Sending is switched off: only an admin's test message may go.</param>
-    public Task<WaMessage?> ClaimNextAsync(bool testsOnly, CancellationToken ct = default) =>
+    /// <param name="noAuto">Quiet hours: automatic messages wait; one a person sent goes.</param>
+    public Task<WaMessage?> ClaimNextAsync(bool testsOnly, bool noAuto, CancellationToken ct = default) =>
         db.QueryAsync("wa.claim", async (conn, inner) =>
         {
             await using var cmd = NobleConnectionFactory.CreateCommand(conn, $"""
                 WITH q AS (
                     SELECT TOP (1) * FROM dbo.inf_wa_message WITH (UPDLOCK, READPAST, ROWLOCK)
-                    WHERE instance = @i AND status = 'queued' AND (@tests = 0 OR kind = 'test') ORDER BY id)
+                    WHERE instance = @i AND status = 'queued' AND (@tests = 0 OR kind = 'test')
+                      AND (@noauto = 0 OR [trigger] <> 'auto') ORDER BY id)
                 UPDATE q SET status = 'sending', attempts = attempts + 1, updated_at = SYSUTCDATETIME()
                 OUTPUT {string.Join(", ", Cols.Split(',').Select(c => "inserted." + c.Trim()))};
                 """);
             cmd.Parameters.Add("@i", SqlDbType.VarChar, 12).Value = Instance;
             cmd.Parameters.Add("@tests", SqlDbType.Bit).Value = testsOnly;
+            cmd.Parameters.Add("@noauto", SqlDbType.Bit).Value = noAuto;
             await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);
             return await r.ReadAsync(inner).ConfigureAwait(false) ? Read(r) : null;
         }, ct);

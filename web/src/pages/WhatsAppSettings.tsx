@@ -261,7 +261,9 @@ function Sending({ data, busy, run }: { data: WaOverview; busy: boolean; run: Ru
           <span>Message with the report</span>
           <textarea className="input input--sm" rows={4} value={draft.caption} maxLength={1000}
                     onChange={(e) => set({ caption: e.target.value })} />
-          <small className="muted">{'{name}'} and {'{pid}'} are filled in.</small>
+          <small className="muted">
+            {'{name}'}, {'{pid}'} and {'{link}'} (the report’s own page, as its QR opens) are filled in. *bold* and _italic_ work as in WhatsApp.
+          </small>
         </label>
         <label className="wa__field">
           <span>Gap between messages (seconds)</span>
@@ -279,7 +281,7 @@ function Sending({ data, busy, run }: { data: WaOverview; busy: boolean; run: Ru
                  onChange={(e) => set({ dailyCap: Number(e.target.value) })} />
         </label>
         <label className="wa__field">
-          <span>Quiet hours (nothing sent)</span>
+          <span>Quiet hours (no automatic sends)</span>
           <span className="wa__row">
             <input className="input input--sm" type="time" value={draft.quietFrom} onChange={(e) => set({ quietFrom: e.target.value })} aria-label="Quiet from" />
             <span className="muted">to</span>

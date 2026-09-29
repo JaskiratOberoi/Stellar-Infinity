@@ -82,8 +82,11 @@ public sealed class WhatsAppClient(HttpClient http, ILogger<WhatsAppClient> log)
             }, ct).ConfigureAwait(false);
             if (res.IsSuccessStatusCode)
             {
-                var ok = await res.Content.ReadFromJsonAsync<Dictionary<string, string>>(ct).ConfigureAwait(false);
-                return new SendResult(SendOutcome.Sent, ok?.GetValueOrDefault("id"), null);
+                // {id, unconfirmed}: id null when WhatsApp Web sent without
+                // handing back the message — sent, but no ticks will follow.
+                var ok = await res.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>(ct).ConfigureAwait(false);
+                var id = ok.TryGetProperty("id", out var i) && i.ValueKind == System.Text.Json.JsonValueKind.String ? i.GetString() : null;
+                return new SendResult(SendOutcome.Sent, id, id is null ? "Sent, but WhatsApp Web gave no message ID, so no delivery ticks." : null);
             }
             var body = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             return res.StatusCode switch

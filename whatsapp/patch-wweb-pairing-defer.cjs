@@ -11,7 +11,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const INJECT = `                this.requestPairingCode(pairWithPhoneNumber.phoneNumber, pairWithPhoneNumber.showNotification, pairWithPhoneNumber.intervalMs);`;
+// 1.34.6 has the call on one line, 1.34.7 over several; either matches.
+const INJECT = /[ \t]*this\.requestPairingCode\(\s*pairWithPhoneNumber\.phoneNumber,\s*pairWithPhoneNumber\.showNotification,\s*pairWithPhoneNumber\.intervalMs,?\s*\);/;
 const INJECT_PAT = `                await new Promise((r) => setTimeout(r, 2000));
                 try {
                     await this.requestPairingCode(
@@ -26,6 +27,6 @@ const INJECT_PAT = `                await new Promise((r) => setTimeout(r, 2000)
 const clientPath = process.argv[2] || path.join(__dirname, 'node_modules', 'whatsapp-web.js', 'src', 'Client.js');
 const raw = fs.readFileSync(clientPath, 'utf8');
 if (raw.includes('listecPairingErr')) { console.log('[patch-wweb] Already applied'); process.exit(0); }
-if (!raw.includes(INJECT)) { console.error('[patch-wweb] Expected snippet not found; whatsapp-web.js changed.'); process.exit(1); }
-fs.writeFileSync(clientPath, raw.replace(INJECT, INJECT_PAT), 'utf8');
+if (!INJECT.test(raw)) { console.error('[patch-wweb] Expected snippet not found; whatsapp-web.js changed.'); process.exit(1); }
+fs.writeFileSync(clientPath, raw.replace(INJECT, () => INJECT_PAT), 'utf8');
 console.log('[patch-wweb] Patched', clientPath);

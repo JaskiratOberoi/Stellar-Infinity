@@ -93,12 +93,13 @@ public sealed class WhatsAppWorker(
 
         if (!status.Ready || now < _nextSendUtc) return;
         var lab = NobleTime.NowForNoble();
-        if (cfg.IsQuiet(lab)) return;
         var labMidnightUtc = now - lab.TimeOfDay;
         if (await queue.SentSinceAsync(labMidnightUtc, ct).ConfigureAwait(false) >= cfg.DailyCap) return;
 
-        // Switched off: only an admin's test message goes.
-        var msg = await queue.ClaimNextAsync(testsOnly: !cfg.Enabled, ct).ConfigureAwait(false);
+        // Switched off: only an admin's test message goes. Quiet hours hold the
+        // automatic ones only — a manual send or a test is a person deciding
+        // it should go now, and they are still paced like everything else.
+        var msg = await queue.ClaimNextAsync(testsOnly: !cfg.Enabled, noAuto: cfg.IsQuiet(lab), ct).ConfigureAwait(false);
         if (msg is null) return;
 
         var sent = await ProcessAsync(scope, wa, cfg, msg, ct).ConfigureAwait(false);
@@ -192,16 +193,15 @@ public sealed class WhatsAppWorker(
             }
             pdf = built.Pdf;
             filename = built.FileName;
-            text = msg.Kind == "test"
-                ? "Test message from Noble Diagnostic Centre (Infinity) — a sample report."
-                : Caption(cfg.Caption, msg);
+            // A test with a sample goes out exactly as a patient's would.
+            text = Caption(cfg.Caption, built.Name ?? msg.PatientName, built.Pid ?? msg.Pid, built.Links);
         }
 
         var result = await wa.SendAsync(msg.Phone, text, pdf, filename, ct).ConfigureAwait(false);
         switch (result.Outcome)
         {
             case WhatsAppClient.SendOutcome.Sent:
-                await queue.MarkAsync(msg.Id, "sent", waId: result.WaId, sent: true, ct: ct).ConfigureAwait(false);
+                await queue.MarkAsync(msg.Id, "sent", result.Error, waId: result.WaId, sent: true, ct: ct).ConfigureAwait(false);
                 if (msg.Kind == "report")
                 {
                     // On the trail as a report that left, like the QR copy.
@@ -228,15 +228,31 @@ public sealed class WhatsAppWorker(
     private Task FailOrRetryAsync(WaMessage msg, string error, CancellationToken ct) =>
         queue.MarkAsync(msg.Id, msg.Attempts >= MaxAttempts ? "failed" : "queued", error, ct: ct);
 
-    private static string Caption(string template, WaMessage msg)
+    /// <summary>
+    /// The message: {name} in title case, {pid}, and {link} — the report's
+    /// own public page, the one its QR opens; a visit of several samples gets
+    /// one line per sample.
+    /// </summary>
+    private static string Caption(string template, string? patientName, int? pid, IReadOnlyList<(string Sid, string Url)> links)
     {
         var name = System.Globalization.CultureInfo.GetCultureInfo("en-IN").TextInfo
-            .ToTitleCase((msg.PatientName ?? "Patient").Trim().ToLowerInvariant());
+            .ToTitleCase((string.IsNullOrWhiteSpace(patientName) ? "Patient" : patientName).Trim().ToLowerInvariant());
+        var link = links.Count switch
+        {
+            0 => "",
+            1 => links[0].Url,
+            _ => string.Join("\n", links.Select(l => $"{l.Sid}: {l.Url}")),
+        };
         return template.Replace("{name}", name, StringComparison.OrdinalIgnoreCase)
-                       .Replace("{pid}", msg.Pid?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "", StringComparison.OrdinalIgnoreCase);
+                       .Replace("{pid}", pid?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "", StringComparison.OrdinalIgnoreCase)
+                       .Replace("{link}", link, StringComparison.OrdinalIgnoreCase);
     }
 
-    private sealed record Built(byte[]? Pdf, string? FileName, string? Skip);
+    private sealed record Built(byte[]? Pdf, string? FileName, string? Skip,
+                                string? Name = null, int? Pid = null, IReadOnlyList<(string Sid, string Url)>? LinksOrNull = null)
+    {
+        public IReadOnlyList<(string Sid, string Url)> Links => LinksOrNull ?? [];
+    }
 
     /// <summary>The patient's copy of these samples, as one PDF — or why not.</summary>
     private async Task<Built> BuildReportAsync(IServiceScope scope, WaMessage msg, IReadOnlyList<string> sids, CancellationToken ct)
@@ -282,8 +298,10 @@ public sealed class WhatsAppWorker(
                 numberPagesY: sheet.PageNumberY, numberPagesRight: sheet.PageNumberRight,
                 headless: sheet.Headless, ink: sheet.Ink).ConfigureAwait(false);
             var first = ready.First(r => r.Sid == ordered[0]);
-            var id = ordered.Count == 1 ? ordered[0] : $"PID{msg.Pid}";
-            return new Built(pdf, ReportFileName.For(first, id), null);
+            var id = ordered.Count == 1 ? ordered[0] : $"PID{first.Pid}";
+            var urls = ordered.Select(s => (Sid: s, Url: links.PublicUrl(s)))
+                              .Where(x => x.Url is not null).Select(x => (x.Sid, x.Url!)).ToList();
+            return new Built(pdf, ReportFileName.For(first, id), null, first.PatientName, first.Pid, urls);
         }
         catch (RenderFailedException e)
         {

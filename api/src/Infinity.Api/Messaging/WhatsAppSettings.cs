@@ -19,7 +19,7 @@ public sealed record WhatsAppConfig(
     bool AllClients,
     /// <summary>Only these numbers (91XXXXXXXXXX) receive anything. Required off prod.</summary>
     IReadOnlyList<string> Allowlist,
-    /// <summary>The message that goes with the PDF. {name} and {pid} are filled in.</summary>
+    /// <summary>The message that goes with the PDF. {name}, {pid} and {link} are filled in.</summary>
     string Caption,
     int MinGapSeconds,
     int MaxGapSeconds,
@@ -32,8 +32,13 @@ public sealed record WhatsAppConfig(
     DateTime? AutoSince)
 {
     public const string DefaultCaption =
-        "Dear {name}, your laboratory report from Noble Diagnostic Centre is attached (PID {pid}).\n\n"
-        + "Please consult your doctor to interpret these results. Reply STOP to stop receiving reports on WhatsApp.";
+        "Hello {name} 👋\n\n"
+        + "Greetings from *Noble Diagnostic Centre*! Your lab report is ready (PID {pid}). "
+        + "The PDF is attached, and you can also view or download it anytime here:\n"
+        + "{link}\n\n"
+        + "Please share it with your doctor, who can interpret the results for you. Wishing you good health! 🌿\n\n"
+        + "— Team Noble Diagnostics\n"
+        + "_Reply STOP to stop receiving reports on WhatsApp._";
 
     public static readonly WhatsAppConfig Defaults = new(
         Enabled: false, Auto: false, AllClients: false, Allowlist: [], Caption: DefaultCaption,

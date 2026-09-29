@@ -117,7 +117,22 @@ async function start() {
       if (pairPhone) return;
       setState('qr', { qr: await QRCode.toDataURL(qr, { margin: 1, width: 320 }), pairingCode: null, me: null });
     });
-    client.on('authenticated', () => setState('starting', { qr: null }));
+    client.on('authenticated', () => {
+      console.log('wa authenticated');
+      setState('starting', { qr: null, pairingCode: null });
+      // Linked, but WhatsApp Web can hang on its first sync without ever
+      // saying ready. Give it three minutes, then start again from the saved
+      // session, which normally comes straight up.
+      clearTimeout(readyTimer);
+      readyTimer = setTimeout(() => {
+        if (state.state !== 'ready') {
+          console.warn('wa authenticated but not ready; restarting from the saved session');
+          void restart(0);
+        }
+      }, 180_000);
+    });
+    client.on('loading_screen', (percent, message) => console.log(`wa loading ${percent}% ${message ?? ''}`));
+    client.on('change_state', (s) => console.log(`wa state ${s}`));
     client.on('auth_failure', (m) => {
       setState('disconnected', { error: `auth failure: ${m}` });
       void restart(RETRY_COOLDOWN_MS);
@@ -199,6 +214,34 @@ const server = createServer(async (req, res) => {
       return reply(res, 200, { events: events.filter((e) => e.seq > after), last: seq });
     }
 
+    // Where a send to this number would get stuck — sends nothing. For
+    // diagnosing WhatsApp Web changes like the September 2026 ones.
+    if (req.method === 'GET' && url.pathname === '/diag') {
+      if (state.state !== 'ready' || !client) return reply(res, 503, { error: 'not_ready' });
+      const to = String(url.searchParams.get('to') ?? '').replace(/\D/g, '');
+      const id = await client.getNumberId(to);
+      const chatId = id?._serialized ?? null;
+      const probe = chatId ? await client.pupPage.evaluate(async (cid) => {
+        const out = {};
+        try {
+          const wid = window.require('WAWebWidFactory').createWid(cid);
+          out.wid = String(wid);
+          out.inCollection = !!window.require('WAWebCollections').Chat.get(wid);
+          const r = await window.require('WAWebFindChatAction').findOrCreateLatestChat(wid);
+          out.findOrCreate = r ? Object.keys(r) : null;
+          out.chat = r?.chat ? String(r.chat.id?._serialized ?? r.chat.id) : null;
+          const viaLib = await window.WWebJS.getChat(cid, { getAsModel: false });
+          out.getChat = !!viaLib;
+          // What this account has sent there recently: type and ack (1 sent, 2 delivered, 3 read).
+          const msgs = r?.chat?.msgs?.getModelsArray?.() ?? [];
+          out.sentByUs = msgs.filter((m) => m.id?.fromMe).slice(-10)
+            .map((m) => ({ type: m.type, ack: m.ack, at: m.t, file: m.filename ?? null }));
+        } catch (e) { out.error = String(e?.message ?? e); }
+        return out;
+      }, chatId) : null;
+      return reply(res, 200, { to, chatId, probe });
+    }
+
     if (req.method === 'POST' && url.pathname === '/send') {
       if (state.state !== 'ready' || !client) return reply(res, 503, { error: 'not_ready', state: state.state });
       const b = await readJson(req);
@@ -214,15 +257,25 @@ const server = createServer(async (req, res) => {
         await sleep(1500 + Math.random() * 2500);
         await chat.clearState();
       } catch { /* a new chat may not exist yet; sending creates it */ }
+      // sendSeen off: marking the chat read before sending is a step current
+      // WhatsApp Web breaks ("Data passed to getter must include an id
+      // property"), and a report sender has nothing to mark read anyway.
+      // waitUntilMsgSent: without it the library looks the message up before
+      // WhatsApp Web has finished uploading the PDF, finds nothing, and
+      // returns nothing — for a message that may well have gone.
+      const opts = { sendSeen: false, waitUntilMsgSent: true };
       let msg;
       if (b.pdfB64) {
         const media = new MessageMedia('application/pdf', b.pdfB64, b.filename || 'Report.pdf');
-        msg = await client.sendMessage(chatId, media, { caption: b.text || undefined, sendMediaAsDocument: true });
+        msg = await client.sendMessage(chatId, media, { ...opts, caption: b.text || undefined, sendMediaAsDocument: true });
       } else {
-        msg = await client.sendMessage(chatId, String(b.text ?? ''));
+        msg = await client.sendMessage(chatId, String(b.text ?? ''), opts);
       }
-      console.log(`wa sent to ${to.slice(0, 4)}…${to.slice(-2)} pdf=${b.pdfB64 ? 'yes' : 'no'}`);
-      return reply(res, 200, { id: msg.id._serialized });
+      const msgId = msg?.id?._serialized ?? null;
+      console.log(`wa sent to ${to.slice(0, 4)}…${to.slice(-2)} pdf=${b.pdfB64 ? 'yes' : 'no'} confirmed=${msgId ? 'yes' : 'no'}`);
+      // Unconfirmed is still "sent" to the caller: the send ran without an
+      // error, and retrying could deliver the report twice.
+      return reply(res, 200, { id: msgId, unconfirmed: !msgId });
     }
 
     if (req.method === 'POST' && url.pathname === '/logout') {

@@ -20,9 +20,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev --no-audit --no-fund
 
-COPY patch-wweb-pairing-defer.cjs server.mjs ./
-# Phone-number pairing needs the same fix the lab's bots carry (see the file).
-RUN node patch-wweb-pairing-defer.cjs
+COPY patch-wweb-pairing-defer.cjs patch-wweb-media-id.cjs server.mjs ./
+# Phone-number pairing needs the same fix the lab's bots carry, and media
+# (the report PDF) needs the fix for WhatsApp Web's September 2026 builds.
+# See each file.
+RUN node patch-wweb-pairing-defer.cjs && node patch-wweb-media-id.cjs
 
 # /data holds the linked session (LocalAuth). It is a named volume in compose:
 # lose it and the number has to be linked again by scanning the QR.
