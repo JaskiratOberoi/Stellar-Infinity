@@ -5,7 +5,7 @@ import {
   type LetterheadKind,
   type LetterheadProfile,
 } from '../api/client';
-import { ClientPicker } from '../components/ClientPicker';
+import { ClientPicker, loadClients } from '../components/ClientPicker';
 
 /**
  * Letterheads — a client's own report paper (Admin → Letterheads).
@@ -396,9 +396,17 @@ function Editor({ profile, onSaved, onError, onNotice }: {
         </div>
         <div className="lhd__row" style={{ alignItems: 'center' }}>
           <div style={{ flex: '1 1 280px', maxWidth: 380 }}>
+            {/* Held at null: the picker is an "add" box, not a selection. Its
+                onClient only fires when its value changes, so the chosen id is
+                resolved to its code here instead. */}
             <ClientPicker value={null} allowNone={false} placeholder="Add a client code or name…"
-                          onChange={() => { /* the code comes through onClient */ }}
-                          onClient={(c) => { if (c) setClients((l) => (l.includes(c.code.trim()) ? l : [...l, c.code.trim()])); }} />
+                          onChange={(id) => {
+                            if (id == null) return;
+                            void loadClients().then((all) => {
+                              const code = all.find((c) => c.id === id)?.code.trim();
+                              if (code) setClients((l) => (l.includes(code) ? l : [...l, code]));
+                            });
+                          }} />
           </div>
           <button type="button" className="btn btn--primary btn--sm" disabled={!clientsDirty || saving} onClick={() => void saveClients()}>
             Save clients
