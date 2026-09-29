@@ -1587,7 +1587,8 @@ export type LetterheadEdit = Partial<Pick<LetterheadProfile,
   'name' | 'kind' | 'firstTopMm' | 'topMm' | 'bottomMm' | 'sideMm' | 'nudgeXMm' | 'nudgeYMm'>>;
 
 export const letterheadApi = {
-  options: () => api.get<PaperOptionsResponse>('/api/letterheads/options'),
+  options: (clients: string) =>
+    api.get<PaperOptionsResponse>(`/api/letterheads/options${clients ? `?clients=${encodeURIComponent(clients)}` : ''}`),
   margins: (id: number) => api.get<LetterheadMargins>(`/api/public/letterheads/${id}`),
   list: () => api.get<LetterheadProfile[]>('/api/settings/letterheads'),
   create: (name: string, kind: LetterheadKind) =>

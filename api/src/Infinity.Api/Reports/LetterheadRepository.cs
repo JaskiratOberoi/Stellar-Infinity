@@ -127,6 +127,30 @@ public sealed class LetterheadRepository(NobleConnectionFactory db, SqlRetry ret
     }
 
     /// <summary>The active profile each of these client codes defaults to.</summary>
+    /// <summary>The client code (LIS unit code, trimmed) each of these samples was booked under.</summary>
+    public Task<IReadOnlyList<string>> ClientCodesOfSidsAsync(IReadOnlyCollection<string> sids, CancellationToken ct = default)
+    {
+        if (sids.Count == 0) return Task.FromResult((IReadOnlyList<string>)[]);
+        return retry.ExecuteAsync("letterhead.sid_clients", token =>
+            db.QueryAsync("letterhead.sid_clients", async (conn, inner) =>
+            {
+                var names = sids.Select((_, i) => "@s" + i.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+                await using var cmd = NobleConnectionFactory.CreateCommand(conn, $"""
+                    SELECT DISTINCT LTRIM(RTRIM(u.MCCUnitCode)) AS code
+                    FROM dbo.tbl_med_mcc_patient_samples s
+                    JOIN dbo.tbl_med_mcc_patient_master p ON p.id = s.patient_id
+                    JOIN dbo.tbl_med_mcc_unit_master u ON u.id = p.mcc_code
+                    WHERE s.vailid IN ({string.Join(",", names)})
+                    """);
+                var i = 0;
+                foreach (var s in sids) cmd.Parameters.Add(names[i++], SqlDbType.NVarChar, 50).Value = s;
+                var list = new List<string>();
+                await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);
+                while (await r.ReadAsync(inner).ConfigureAwait(false)) list.Add(r.Str("code") ?? string.Empty);
+                return (IReadOnlyList<string>)list;
+            }, token), ct);
+    }
+
     public Task<IReadOnlyDictionary<string, int>> ForClientsAsync(IReadOnlyCollection<string> codes, CancellationToken ct = default)
     {
         if (codes.Count == 0) return Task.FromResult((IReadOnlyDictionary<string, int>)new Dictionary<string, int>());

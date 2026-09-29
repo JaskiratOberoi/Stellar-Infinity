@@ -60,17 +60,38 @@ public static class LetterheadEndpoints
         p.HasArtwork, p.ArtworkMime, p.Version, p.IsActive, p.UpdatedAt, p.Clients,
     };
 
+    /// <param name="clients">
+    /// The client codes of the report(s) the picker is for, comma-separated. A
+    /// letterhead is offered only when every one of them is assigned to it —
+    /// MDCARE's letterhead on MDCARE's reports, never on HR0121's. None given,
+    /// none offered: a picker that does not know whose report it is offers
+    /// Noble's papers only.
+    /// </param>
     private static async Task<IResult> GetOptions(
+        string? clients,
         System.Security.Claims.ClaimsPrincipal principal,
         LetterheadRepository letterheads,
         LetterheadPapers papers,
         CancellationToken ct)
     {
         var lab = InfinityRoles.IsUnrestrictedReporter(principal.Role());
+        var codes = (clients ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(c => c.Length <= 50)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(200)
+            .ToList();
         var all = await letterheads.ListAsync(activeOnly: true, ct).ConfigureAwait(false);
+        // Whether this account has a letterhead of its own anywhere: a client
+        // that does has no use for the generic 40mm sheet.
+        var ownsOne = false;
         var mine = new List<LetterheadProfile>();
         foreach (var p in all)
-            if (lab || await papers.MayUseAsync(p, principal, ct).ConfigureAwait(false)) mine.Add(p);
+        {
+            if (!lab && !await papers.MayUseAsync(p, principal, ct).ConfigureAwait(false)) continue;
+            ownsOne = true;
+            if (LetterheadPapers.Covers(p, codes)) mine.Add(p);
+        }
 
         var options = new List<object>
         {
@@ -79,7 +100,7 @@ public static class LetterheadEndpoints
         };
         // A client with its own letterhead has no use for the generic 40mm
         // sheet: its own profile IS its stationery, with the right margins.
-        if (lab || mine.Count == 0)
+        if (lab || !ownsOne)
             options.Add(new { value = "plain", label = "Client letterhead 40mm", group = "noble" });
         foreach (var p in mine)
             options.Add(new

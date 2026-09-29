@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../api/client';
 import { downloadFile } from '../lib/format';
@@ -158,7 +158,9 @@ export function ReportViewer({
    * the taller clear band; an emailed copy needs the artwork in the file. One
    * answer per desk, kept until it changes — see PaperSelect.
    */
-  const [paper, setPaper] = usePaper();
+  // A client's letterhead is offered on that client's reports only.
+  const paperClients = useMemo(() => [clientCode], [clientCode]);
+  const [paper, setPaper] = usePaper(paperClients);
   // The format — v1 or the serif-and-capitals v2 under test. Remembered per
   // desk like the paper, pushed into the frame the same way, and carried on
   // the download so the PDF is the sheet on screen.
@@ -299,7 +301,7 @@ export function ReportViewer({
                 behind blanks or draws the band to match, so what is on screen
                 paginates like the download. */}
             <PaperSelect className="input input--sm preview__paper" value={paper} onChange={setPaper}
-                         disabled={busy !== null} ariaLabel="Paper to print on" />
+                         disabled={busy !== null} ariaLabel="Paper to print on" clients={paperClients} />
             {/* The format picker — v1, v2 (the default) or v3 — remembered per
                 browser, carried on the preview and the download alike. See
                 FORMAT_PICKER. */}

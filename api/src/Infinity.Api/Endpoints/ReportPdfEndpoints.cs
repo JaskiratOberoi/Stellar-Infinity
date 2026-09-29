@@ -452,6 +452,7 @@ public static class ReportPdfEndpoints
         string? exclude,
         bool? overrideLock,
         string? format,
+        bool? lhPreview,
         System.Security.Claims.ClaimsPrincipal principal,
         HttpContext http,
         ScopeRepository scopes,
@@ -484,7 +485,9 @@ public static class ReportPdfEndpoints
 
         // Everything that changes the bytes is in the key; the exclude list is
         // already digits-and-commas by the time PrintQuery is done with it.
-        var sheet = await papers.ResolveAsync(paper, headless, principal, ct).ConfigureAwait(false);
+        // A client's letterhead goes on that client's reports only; see LetterheadPapers.
+        var sheet = await papers.ResolveAsync(paper, headless, principal, [row!.ClientCode], ct,
+                                              editorPreview: lhPreview == true).ConfigureAwait(false);
         var query = PrintQuery(split, exclude, sheet, overrideLock: overrode is not null,
                                format: ReportFormat.Normalise(format));
         var graphFp = await GraphFingerprintAsync(graphs, sid, withGraph == true, ct).ConfigureAwait(false);
@@ -624,6 +627,7 @@ public static class ReportPdfEndpoints
         Audit.AuditLog audit,
         ReportPrintRepository prints,
         LetterheadPapers papers,
+        LetterheadRepository letterheadRepo,
         CancellationToken ct)
     {
         var sids = (body?.Sids ?? [])
@@ -666,7 +670,13 @@ public static class ReportPdfEndpoints
         Reads.WorksheetRow? firstRow = null;
         var onePatient = true;
         // One paper for the whole bundle: it is one print run into one tray.
-        var sheet = await papers.ResolveAsync(body.Paper, body.Headless, principal, ct).ConfigureAwait(false);
+        // A client's letterhead only when every report in the bundle is that
+        // client's (or its fellow assignees'); see LetterheadPapers.
+        var sheet = await papers.ResolveAsync(body.Paper, body.Headless, principal,
+            ReportPaper.LetterheadIdOf(body.Paper) is null
+                ? []
+                : await letterheadRepo.ClientCodesOfSidsAsync(sids, ct).ConfigureAwait(false),
+            ct).ConfigureAwait(false);
         if (!deptMajor)
         {
             sids = (await repo.OrderAsLisAsync(sids, ct).ConfigureAwait(false)).ToList();

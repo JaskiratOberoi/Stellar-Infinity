@@ -210,6 +210,16 @@ function Editor({ profile, onSaved, onError, onNotice }: {
   const [saving, setSaving] = useState(false);
   const [clients, setClients] = useState<string[]>(profile.clients);
   const [sid, setSid] = useState('ZZTRN3A');
+  const [paste, setPaste] = useState('');
+  /* Many codes at once — a chain's twenty centres pasted from a sheet.
+     Commas, spaces, semicolons or new lines all separate. Codes are checked
+     against the LIS on Save; any that are not client codes are named then. */
+  const addPasted = () => {
+    const codes = paste.split(/[\s,;]+/).map((c) => c.trim().toUpperCase()).filter((c) => c.length > 0 && c.length <= 50);
+    if (codes.length === 0) return;
+    setClients((l) => [...l, ...codes.filter((c, i) => !l.includes(c) && codes.indexOf(c) === i)]);
+    setPaste('');
+  };
   const fileRef = useRef<HTMLInputElement>(null);
   const art = useArtwork(profile, sheet);
 
@@ -373,7 +383,7 @@ function Editor({ profile, onSaved, onError, onNotice }: {
                      aria-label="Sample ID to preview" />
               <a className={`btn btn--ghost btn--sm${!sid || dirty ? ' is-disabled' : ''}`}
                  aria-disabled={!sid || dirty}
-                 href={sid && !dirty ? `/api/reports/${encodeURIComponent(sid)}/pdf?paper=lh:${profile.id}&v=${profile.version}` : undefined}
+                 href={sid && !dirty ? `/api/reports/${encodeURIComponent(sid)}/pdf?paper=lh:${profile.id}&lhPreview=true&v=${profile.version}` : undefined}
                  target="_blank" rel="noreferrer"
                  title={dirty ? 'Save first — the preview uses the saved letterhead.' : 'Download this report on this letterhead.'}>
                 Preview with a report
@@ -412,7 +422,23 @@ function Editor({ profile, onSaved, onError, onNotice }: {
             Save clients
           </button>
         </div>
+        <div className="lhd__row" style={{ alignItems: 'flex-start', marginTop: '.6rem' }}>
+          <textarea className="input input--sm" rows={2} style={{ flex: '1 1 280px', maxWidth: 380, resize: 'vertical' }}
+                    placeholder="Or paste several codes — MDCARE, MDCARE01 MDCARE02 …"
+                    aria-label="Paste client codes" value={paste}
+                    onChange={(e) => setPaste(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addPasted(); } }} />
+          <button type="button" className="btn btn--ghost btn--sm" disabled={!paste.trim()} onClick={addPasted}>
+            Add codes
+          </button>
+          {clients.length > 1 && (
+            <button type="button" className="btn btn--ghost btn--sm" onClick={() => setClients([])}>
+              Clear list
+            </button>
+          )}
+        </div>
         <p className="muted lhd__hint">
+          {clients.length > 0 && `${clients.length} client${clients.length === 1 ? '' : 's'} listed${clientsDirty ? ' — not saved yet' : ''}. `}
           A client is on one letterhead at a time — adding it here moves it from any other. Its users start on this
           paper and can still choose Noble’s.
         </p>

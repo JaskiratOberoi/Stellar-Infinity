@@ -19,7 +19,7 @@ import { usePaperOptions, type Paper } from './PaperSelect';
  * of opening, and any scroll closes the menu rather than letting it drift
  * away from its row.
  */
-export function PidReportButton({ pid, busy, disabled, title, count, onDownload, onPreview, override }: {
+export function PidReportButton({ pid, busy, disabled, title, count, onDownload, onPreview, override, clients }: {
   pid: number;
   /** THIS patient's download is being prepared. */
   busy: boolean;
@@ -40,6 +40,9 @@ export function PidReportButton({ pid, busy, disabled, title, count, onDownload,
    * decides — and honoured by the server for that role only.
    */
   override?: { count?: number };
+  /** The client codes of the samples this downloads — a client's letterhead
+   *  is offered only when they are all that client's. See PaperSelect. */
+  clients?: ReadonlyArray<string | null | undefined>;
 }) {
   const [at, setAt] = useState<{ x: number; y: number; up: boolean } | null>(null);
   // Off on every opening: releasing a held report is a decision taken each
@@ -84,7 +87,7 @@ export function PidReportButton({ pid, busy, disabled, title, count, onDownload,
     };
   }, [at]);
 
-  const { options: paperOptions } = usePaperOptions();
+  const { options: paperOptions } = usePaperOptions(clients);
   const pick = (paper: Paper) => { close(); onDownload(paper, !!override && includeHeld); };
 
   return (

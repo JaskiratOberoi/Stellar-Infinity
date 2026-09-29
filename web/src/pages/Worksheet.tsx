@@ -472,6 +472,7 @@ export function Worksheet() {
                              same here on a phone. One control, one look. */
                           <PidReportButton
                             pid={r.pid}
+                            clients={(grouped.find((g) => g.rows.some((x) => x.sid === r.sid))?.rows ?? [r]).map((x) => x.clientCode)}
                             busy={pidBusy === r.pid}
                             disabled={pidBusy !== null}
                             title={groupSize > 1

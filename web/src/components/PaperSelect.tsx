@@ -65,12 +65,26 @@ export function letterheadIdOf(p: string | null | undefined): number | null {
   return p && LH_RE.test(p) ? Number(p.slice(3)) : null;
 }
 
-/* ---- the options, fetched once per page load ---------------------------- */
+/* ---- the options, per set of clients, fetched once per page load ----------
+   A client's letterhead is offered only on that client's reports, so the
+   options depend on WHOSE reports the picker is for: MDCARE's letterhead on
+   an MDCARE report, never on HR0121's. The API applies the same rule to the
+   download itself (LetterheadPapers), so this is what the operator sees, not
+   the only guard. */
 
-let optionsPromise: Promise<PaperOptionsResponse | null> | null = null;
-function loadOptions(): Promise<PaperOptionsResponse | null> {
-  optionsPromise ??= letterheadApi.options().catch(() => null);
-  return optionsPromise;
+/** The clients a picker is for, as the API and the cache key want them. */
+export function clientKey(clients?: ReadonlyArray<string | null | undefined>): string {
+  return [...new Set((clients ?? []).map((c) => (c ?? '').trim().toUpperCase()).filter(Boolean))].sort().join(',');
+}
+
+const optionsCache = new Map<string, Promise<PaperOptionsResponse | null>>();
+function loadOptions(key: string): Promise<PaperOptionsResponse | null> {
+  let p = optionsCache.get(key);
+  if (!p) {
+    p = letterheadApi.options(key).catch(() => { optionsCache.delete(key); return null; });
+    optionsCache.set(key, p);
+  }
+  return p;
 }
 
 function toOptions(r: PaperOptionsResponse | null): PaperOption[] {
@@ -94,17 +108,22 @@ function toOptions(r: PaperOptionsResponse | null): PaperOption[] {
   return out.length ? out : [...PAPER_OPTIONS];
 }
 
-/** Every paper this user may choose: Noble's, then any client letterheads. */
-export function usePaperOptions(): { options: PaperOption[]; defaultPaper: Paper | null; loaded: boolean } {
-  const [state, setState] = useState<{ r: PaperOptionsResponse | null; loaded: boolean }>({ r: null, loaded: false });
+/** Every paper this user may choose for these clients' reports: Noble's, then
+ *  the letterhead those clients are assigned to, if they share one. */
+export function usePaperOptions(clients?: ReadonlyArray<string | null | undefined>): {
+  options: PaperOption[]; defaultPaper: Paper | null; loaded: boolean;
+} {
+  const key = clientKey(clients);
+  const [state, setState] = useState<{ key: string; r: PaperOptionsResponse | null } | null>(null);
   useEffect(() => {
     let live = true;
-    void loadOptions().then((r) => { if (live) setState({ r, loaded: true }); });
+    void loadOptions(key).then((r) => { if (live) setState({ key, r }); });
     return () => { live = false; };
-  }, []);
-  const options = useMemo(() => toOptions(state.r), [state.r]);
-  const d = state.r?.defaultPaper;
-  return { options, defaultPaper: isPaper(d) ? d : null, loaded: state.loaded };
+  }, [key]);
+  const current = state && state.key === key ? state : null;
+  const options = useMemo(() => toOptions(current?.r ?? null), [current]);
+  const d = current?.r?.defaultPaper;
+  return { options, defaultPaper: isPaper(d) ? d : null, loaded: current !== null };
 }
 
 /* Same key the Letterhead toggle used, so nobody's remembered choice is lost:
@@ -127,27 +146,32 @@ function readStored(): { paper: Paper; chosen: boolean } {
   }
 }
 
-export function usePaper(): [Paper, (v: Paper) => void] {
+/**
+ * The paper for these clients' reports. The remembered preference is kept as
+ * chosen, and what comes back is what it means HERE: a client letterhead
+ * chosen on an MDCARE report reads as Noble's letterhead on HR0121's, and
+ * comes back when the next MDCARE report opens.
+ */
+export function usePaper(clients?: ReadonlyArray<string | null | undefined>): [Paper, (v: Paper) => void] {
   const [stored] = useState(readStored);
-  const [paper, setPaperState] = useState<Paper>(stored.paper);
+  const [pref, setPref] = useState<Paper>(stored.paper);
   const chosen = useRef(stored.chosen);
-  const { options, defaultPaper, loaded } = usePaperOptions();
+  const { options, defaultPaper, loaded } = usePaperOptions(clients);
 
-  // Once the options are in: a client that has never picked starts on its own
-  // letterhead, and a remembered paper this user can no longer use (a profile
-  // retired, or a different account on this browser) falls back.
-  useEffect(() => {
-    if (!loaded) return;
-    setPaperState((cur) => {
-      if (!chosen.current && defaultPaper) return defaultPaper;
-      if (options.some((o) => o.value === cur)) return cur;
-      return defaultPaper ?? 'letterhead';
-    });
-  }, [loaded, defaultPaper, options]);
+  // A client account that has never picked starts on its own letterhead; a
+  // preference this report cannot take (another client's letterhead, a
+  // retired one) falls back to that default, else Noble's letterhead.
+  const paper: Paper = !loaded
+    ? (letterheadIdOf(pref) == null ? pref : 'letterhead')
+    : !chosen.current && defaultPaper
+      ? defaultPaper
+      : options.some((o) => o.value === pref)
+        ? pref
+        : defaultPaper ?? 'letterhead';
 
   const setPaper = (v: Paper) => {
     chosen.current = true;
-    setPaperState(v);
+    setPref(v);
     try {
       localStorage.setItem(KEY, v);
       localStorage.setItem(CHOSEN, '1');
@@ -156,16 +180,18 @@ export function usePaper(): [Paper, (v: Paper) => void] {
   return [paper, setPaper];
 }
 
-export function PaperSelect({ value, onChange, disabled, className, ariaLabel }: {
+export function PaperSelect({ value, onChange, disabled, className, ariaLabel, clients }: {
   value: Paper;
   onChange: (v: Paper) => void;
   disabled?: boolean;
   className?: string;
   ariaLabel?: string;
+  /** Whose reports this is for — the same list given to usePaper. */
+  clients?: ReadonlyArray<string | null | undefined>;
 }) {
-  const { options } = usePaperOptions();
+  const { options } = usePaperOptions(clients);
   const noble = options.filter((o) => !letterheadIdOf(o.value));
-  const clients = options.filter((o) => letterheadIdOf(o.value));
+  const clientRows = options.filter((o) => letterheadIdOf(o.value));
   const current = options.find((o) => o.value === value) ?? options[0];
   const row = (o: PaperOption) => <option key={o.value} value={o.value} title={o.hint}>{o.label}</option>;
   return (
@@ -177,9 +203,9 @@ export function PaperSelect({ value, onChange, disabled, className, ariaLabel }:
       title={current?.hint}
       onChange={(e) => { if (isPaper(e.target.value)) onChange(e.target.value); }}
     >
-      {clients.length === 0 ? noble.map(row) : (
+      {clientRows.length === 0 ? noble.map(row) : (
         <>
-          <optgroup label="Client letterhead">{clients.map(row)}</optgroup>
+          <optgroup label="Client letterhead">{clientRows.map(row)}</optgroup>
           <optgroup label="Noble">{noble.map(row)}</optgroup>
         </>
       )}

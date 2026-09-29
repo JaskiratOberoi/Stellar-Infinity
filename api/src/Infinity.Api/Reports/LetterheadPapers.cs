@@ -5,26 +5,48 @@ namespace Infinity.Api.Reports;
 
 /// <summary>
 /// Turns the <c>paper</c> a download asks for into a <see cref="ReportPaper"/>,
-/// including a client's own letterhead (<c>lh:{id}</c>), and decides who may
-/// use which.
+/// including a client's own letterhead (<c>lh:{id}</c>), and decides where a
+/// letterhead may go.
 /// </summary>
 /// <remarks>
-/// The lab (every unrestricted reporter) may print any active profile — a desk
-/// prints for every centre. A client account may print only the profiles
-/// assigned to a code in its own scope: a letterhead is the client's branding,
-/// and another centre's must not be a thing one can put on a report. A paper
-/// the caller may not use resolves to Noble's letterhead rather than failing
-/// the download: the report still leaves, on the lab's own paper.
+/// A letterhead is the client's branding, so it goes on that client's reports
+/// and on nobody else's: <c>lh:{id}</c> resolves only when EVERY report in the
+/// document was booked under a client code assigned to that profile (a
+/// bundle is one paper, one print run). Anything else — another centre's
+/// report, a bundle mixing centres, a retired profile, a client account asking
+/// for a profile outside its scope — prints on Noble's letterhead rather than
+/// failing the download: the report still leaves, on the lab's own paper. The
+/// paper picker offers the same rule (/api/letterheads/options?clients=), so
+/// this is the backstop, not the usual path.
 /// </remarks>
 public sealed class LetterheadPapers(LetterheadRepository letterheads, ScopeRepository scopes)
 {
-    public async Task<ReportPaper> ResolveAsync(string? paper, bool? headless, ClaimsPrincipal principal, CancellationToken ct = default)
+    /// <param name="reportClients">The client code of every report in the document.</param>
+    /// <param name="editorPreview">
+    /// Admin → Letterheads' "Preview with a report": an editor (super admin,
+    /// admin) may see any letterhead on a test report before assigning it. For
+    /// anyone else the flag changes nothing.
+    /// </param>
+    public async Task<ReportPaper> ResolveAsync(string? paper, bool? headless, ClaimsPrincipal principal,
+                                                IReadOnlyCollection<string?> reportClients, CancellationToken ct = default,
+                                                bool editorPreview = false)
     {
         if (ReportPaper.LetterheadIdOf(paper) is not int id) return ReportPaper.Resolve(paper, headless);
         var p = await letterheads.GetAsync(id, ct).ConfigureAwait(false);
-        if (p is null || !p.IsActive || !await MayUseAsync(p, principal, ct).ConfigureAwait(false))
+        var preview = editorPreview && principal.Role() is InfinityRoles.SuperAdmin or InfinityRoles.Admin;
+        if (p is null || (!preview && !p.IsActive) || (!preview && !Covers(p, reportClients))
+            || !await MayUseAsync(p, principal, ct).ConfigureAwait(false))
             return ReportPaper.Letterhead;
         return await PaperOfAsync(p, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>True when every one of these client codes is assigned to the profile (and there is at least one).</summary>
+    public static bool Covers(LetterheadProfile p, IReadOnlyCollection<string?> clients)
+    {
+        var codes = clients.Select(c => c?.Trim() ?? string.Empty).ToList();
+        if (codes.Count == 0 || codes.Any(c => c.Length == 0)) return false;
+        var mine = new HashSet<string>(p.Clients, StringComparer.OrdinalIgnoreCase);
+        return codes.All(mine.Contains);
     }
 
     /// <summary>

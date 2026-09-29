@@ -178,7 +178,13 @@ export function Reports() {
   const [total, setTotal] = useState(0);
   const [patients, setPatients] = useState(0);
   const [withGraphs, setWithGraphs] = useState(true);
-  const [paper, setPaper] = usePaper();
+  // The merged batch's paper is for the ticked rows' clients: a client's
+  // letterhead is offered only when every ticked report is that client's.
+  const selectedClients = useMemo(
+    () => rows.filter((r) => selected.has(r.sid)).map((r) => r.clientCode),
+    [rows, selected],
+  );
+  const [paper, setPaper] = usePaper(selectedClients);
   const [merging, setMerging] = useState(false);
   const [mergeError, setMergeError] = useState<string | null>(null);
 
@@ -527,7 +533,7 @@ export function Reports() {
               {/* Merged batches keep the remembered preference — a batch is
                   one print run on one kind of paper. PID downloads ask per
                   click instead: see PidReportButton. */}
-              <PaperSelect value={paper} onChange={setPaper} disabled={merging} />
+              <PaperSelect value={paper} onChange={setPaper} disabled={merging} clients={selectedClients} />
 
               <button className="btn btn--ghost btn--sm" disabled={merging}
                       onClick={() => setSelected(new Set())}>
@@ -617,6 +623,7 @@ export function Reports() {
                            rather than a badge fighting for the same line. */
                         <PidReportButton
                           pid={r.pid}
+                          clients={(grouped.find((g) => g.rows.some((x) => x.sid === r.sid))?.rows ?? [r]).map((x) => x.clientCode)}
                           busy={pidBusy === r.pid}
                           disabled={pidBusy !== null}
                           count={groupSize}
@@ -946,7 +953,10 @@ function PatientReportViewer({ pid, patientName, rows, onClose, overrideLock, on
 }) {
   const sids = useMemo(() => rows.map((r) => r.sid), [rows]);
   const [activeSid, setActiveSid] = useState(sids[0]);
-  const [paper, setPaper] = usePaper();
+  // One bundle, one paper: a client's letterhead only when every sample in
+  // it is that client's.
+  const clients = useMemo(() => rows.map((r) => r.clientCode), [rows]);
+  const [paper, setPaper] = usePaper(clients);
   const [withGraph, setWithGraph] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1094,7 +1104,7 @@ function PatientReportViewer({ pid, patientName, rows, onClose, overrideLock, on
 
           <div className="preview__tools">
             <PaperSelect className="input input--sm preview__paper" value={paper} onChange={setPaper}
-                         disabled={busy} ariaLabel="Paper to print on" />
+                         disabled={busy} ariaLabel="Paper to print on" clients={clients} />
 
             {/* The Smart Report is per SAMPLE — its route takes a SID — so
                 this opens it for the tab on screen. Gated on the purchase
