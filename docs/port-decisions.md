@@ -1442,3 +1442,21 @@ the medallion needs the sample stamped Delhi AND authorised by a Delhi-unit
 user (a sample with no recorded authoriser keeps the stamped-unit rule). A
 deliberate departure from legacy parity; the LIS's own print is untouched.
 Fixing LUCKNOWACC's unit in the LIS user master was left for later.
+
+## UP0801's own rate list from a codeless workbook (2026-09-30)
+
+"NOBEL PRICE LIST 2026-27.xlsx" for UP0801 (unit 6040, NOBLE MBD CC) is
+Noble's public product list: 709 rows of name, sample, method, MRP and the
+rate to tag, with no test codes, plus twelve coded tail rows (HCP packages
+P034–P042; biopsies HP001/002/005/006, which the catalogue does not have).
+UPMB1000's sheet three weeks earlier carried codes; this one cannot be
+applied blind. Name matching with the sample and method columns as
+tie-breaks was certain for 164 rows; on Jas's instruction those (163 items:
+157 tests, 6 packages) went into list 145 "UP0801 RATE LIST", a private
+copy of list 82 built exactly as 143 was, with five of the centre's own
+special rates revised too, since a special outranks the list
+(up0801-rate-list-20260930.sql). The other 557 rows stay at list 82's
+prices until their codes are settled; Jas has a review sheet with a "Your
+code" column. Deltas are reported against the centre's current B2B rate
+(special, else list price), never against MRP — his rule. A rate-list change
+is live for the LIS, Telo and Infinity the moment the script runs.
