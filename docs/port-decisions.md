@@ -1429,3 +1429,16 @@ and deleting the media model's __x_id (WhatsApp Web builds from 2026-09-17
 broke every media send). Admin → WhatsApp has its own password (PBKDF2 digest
 in inf_wa_setting '*'; 30-minute unlock). Everything ships switched off; prod
 went live on 2026-09-30 awaiting its own QR link.
+
+## NABL mark needs a Delhi authoriser too (2026-09-30)
+
+Mrs Devki's CBC (SID 23664594, LKR0229) printed the NABL medallion though
+Lucknow ran and signed it: the LIS stamps a sample with the accessioning or
+inwarding login's business unit, and LUCKNOWACC's user record says unit 1
+(Delhi). 28 of ~675 Lucknow CBCs in 30 days carried unit 1 the same way. On
+Jas's instruction the sample was corrected to unit 15
+(sample-23664594-unit-20260930.sql) and script 173 tightens Infinity's rule:
+the medallion needs the sample stamped Delhi AND authorised by a Delhi-unit
+user (a sample with no recorded authoriser keeps the stamped-unit rule). A
+deliberate departure from legacy parity; the LIS's own print is untouched.
+Fixing LUCKNOWACC's unit in the LIS user master was left for later.
