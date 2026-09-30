@@ -37,12 +37,13 @@ public sealed record MonthStats(
     /// screen would conclude the business had collapsed. This figure is the
     /// same one the LIS shows, so the two screens reconcile.
     ///
-    /// Keyed on the patient's REGISTRATION date, where the LIS keys on the test
-    /// row's last-edit stamp. That difference is worth about 4% — on the month
-    /// measured, ₹234,625 of the LIS's ₹5,972,411 was older work merely edited
-    /// inside the window. Counting revenue on the day somebody corrected a
-    /// typo is not a behaviour worth reproducing, so this reads slightly below
-    /// the LIS tile by design, and the dashboard says so.
+    /// Keyed exactly as the LIS keys it, on the test row's updateddate (the
+    /// day the lab received and charged it), since 2026-09-30. It was keyed on
+    /// the patient's registration date, which avoided booking revenue on the
+    /// day of a typo correction (about ₹160 a month) but put ₹2–3 lakh a day —
+    /// the tubes booked one evening and charged after midnight — on a
+    /// different day from the LIS home screen, so the two never agreed. Jas
+    /// chose agreement.
     /// </remarks>
     decimal LabSalesMonth,
     decimal Collected,
@@ -168,34 +169,37 @@ public sealed class MonthStatsRepository(NobleConnectionFactory db, SqlRetry ret
                     -- only Telo/Infinity orders and is a few percent of this; see
                     -- the note on LabSalesMonth.
                     --
-                    -- Keyed on the patient's registration date, not the test row's
-                    -- last-edit stamp the LIS uses, so a corrected typo does not
-                    -- book revenue on the day of the correction.
+                    -- Keyed as the LIS home screen keys it (classDashBoard.Sales):
+                    -- the test row's updateddate — in practice the day the lab
+                    -- received and charged the tube — so the two screens agree
+                    -- to the rupee at any moment. It used to key on the patient's
+                    -- registration date; ₹2–3 lakh a day is booked one day and
+                    -- charged the next, so the two never matched (2026-09-30).
                     SELECT a.sales_day + b.extras_day     AS sales_day,
                            a.sales_month + b.extras_month AS sales_month
                     FROM (
                       SELECT
-                        ISNULL(SUM(CASE WHEN CAST(sp.sample_date AS DATE) = @day
+                        ISNULL(SUM(CASE WHEN CAST(t.updateddate AS DATE) = @day
                                         THEN t.test_rate END),0) AS sales_day,
                         ISNULL(SUM(t.test_rate),0)               AS sales_month
                       FROM dbo.tbl_med_mcc_patient_tests t
                       JOIN dbo.tbl_med_mcc_patient_master sp ON sp.id = t.patient_id
-                      WHERE CAST(sp.sample_date AS DATE) BETWEEN @from AND @to
+                      WHERE CAST(t.updateddate AS DATE) BETWEEN @from AND @to
                         AND t.amount_checked = 1
                         AND {sales.Predicate}
                     ) a
                     CROSS JOIN (
                       -- The charged extras (the Smart Report), sold like a
-                      -- test and keyed the same way; an uncharged one is not
-                      -- yet a sale.
+                      -- test and keyed the same way — on the day they were
+                      -- charged; an uncharged one is not yet a sale.
                       SELECT
-                        ISNULL(SUM(CASE WHEN CAST(sp.sample_date AS DATE) = @day
+                        ISNULL(SUM(CASE WHEN CAST(l.charged_at AS DATE) = @day
                                         THEN c.unit_amount * c.qty END),0) AS extras_day,
                         ISNULL(SUM(c.unit_amount * c.qty),0)               AS extras_month
                       FROM dbo.telo_custom_test_order c
                       JOIN dbo.telo_custom_line_charge l ON l.bill_id = c.bill_id AND l.custom_test_id = c.custom_test_id
                       JOIN dbo.tbl_med_mcc_patient_master sp ON sp.id = c.patient_id
-                      WHERE CAST(sp.sample_date AS DATE) BETWEEN @from AND @to
+                      WHERE CAST(l.charged_at AS DATE) BETWEEN @from AND @to
                         AND {sales.Predicate}
                     ) b;
 

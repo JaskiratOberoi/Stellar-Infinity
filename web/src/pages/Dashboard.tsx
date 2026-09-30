@@ -278,9 +278,9 @@ export function Dashboard() {
           {user.role === 'super_admin' && <SmartReportPanel date={date} />}
 
           <p className="muted" style={{ fontSize: '.72rem', marginTop: '1rem', lineHeight: 1.6 }}>
-            <b>Lab sales</b> covers everything the lab sold, LIS included, keyed to the patient's registration date.
-            It reads a few percent below the LIS home screen's Sales tile, which counts a test on the day its row was
-            last edited — so work corrected this month is booked to this month there, and to its own month here.
+            <b>Lab sales</b> covers everything the lab sold, LIS included, counted exactly as the LIS home screen's
+            Sales tile counts it: a test on the day the lab charged it, so tubes booked one evening and received after
+            midnight belong to the next day, and the two screens agree.
             <br />
             <b>Order billing, collected and outstanding</b> cover only orders raised in Telo or Infinity, which is a
             small fraction of lab sales. Billing is keyed to the bill date; collections and refunds to the{' '}
