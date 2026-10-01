@@ -3,8 +3,10 @@ import {
   ApiError,
   whatsappApi,
   type WaConfig,
+  type WaLinkStatus,
   type WaMessageRow,
   type WaOverview,
+  type WaSender,
   type WaStatus,
 } from '../api/client';
 
@@ -116,10 +118,11 @@ export function WhatsAppSettingsPage() {
       {!data ? <p className="muted" style={{ marginTop: '1rem' }}>Loading…</p> : (
         <div className="wa">
           <Connection data={data} busy={busy} run={run} />
+          <Senders data={data} busy={busy} run={run} />
           {data.settings && (
             <Sending key={JSON.stringify(data.settings) + (data.clients ?? []).join(',')} data={data} busy={busy} run={run} />
           )}
-          <TestSend busy={busy} run={run} />
+          <TestSend busy={busy} run={run} senders={data.senders ?? []} />
           <Log />
         </div>
       )}
@@ -171,12 +174,26 @@ function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
 /* ---- linking the number -------------------------------------------------- */
 
 function Connection({ data, busy, run }: { data: WaOverview; busy: boolean; run: Run }) {
-  const s = data.status;
-  const [pairPhone, setPairPhone] = useState('');
-  if (!s) return null;
+  if (!data.status) return null;
   return (
     <section className="card wa__card">
-      <h2 className="wa__h">Linked number</h2>
+      <h2 className="wa__h">Universal number</h2>
+      <p className="muted" style={{ marginTop: 0, fontSize: '.82rem' }}>
+        Every client's reports go from this number unless the client is assigned one of its own below.
+      </p>
+      <LinkPanel sender="default" s={data.status} busy={busy} run={run} />
+      <p className="muted wa__stats">
+        Today <b>{data.sentToday ?? 0}</b> sent · last 24 h: {Object.entries(data.counts ?? {}).map(([k, v]) => `${v} ${STATUS_LABEL[k as WaStatus]?.toLowerCase() ?? k}`).join(' · ') || 'nothing yet'}
+      </p>
+    </section>
+  );
+}
+
+/** One number's link state: linked, a QR / pairing code to link it, or starting. */
+function LinkPanel({ sender, s, busy, run }: { sender: string; s: WaLinkStatus; busy: boolean; run: Run }) {
+  const [pairPhone, setPairPhone] = useState('');
+  return (
+    <>
       {s.state === 'ready' ? (
         <div className="wa__row">
           <span className="wa__dot wa__dot--on" aria-hidden />
@@ -187,7 +204,7 @@ function Connection({ data, busy, run }: { data: WaOverview; busy: boolean; run:
             </span>
           </span>
           <button type="button" className="btn btn--danger btn--sm" disabled={busy} style={{ marginLeft: 'auto' }}
-                  onClick={() => { if (window.confirm('Unlink this WhatsApp number? Sending stops until a number is linked again.')) void run(async () => { await whatsappApi.logout(); return 'Unlinked. Link a number again to resume.'; }); }}>
+                  onClick={() => { if (window.confirm('Unlink this WhatsApp number? Sending from it stops until a number is linked again.')) void run(async () => { await whatsappApi.logout(sender); return 'Unlinked. Link a number again to resume.'; }); }}>
             Unlink
           </button>
         </div>
@@ -213,7 +230,7 @@ function Connection({ data, busy, run }: { data: WaOverview; busy: boolean; run:
               <input className="input input--sm" style={{ maxWidth: 180 }} placeholder="98xxxxxxxx" inputMode="tel"
                      value={pairPhone} onChange={(e) => setPairPhone(e.target.value)} aria-label="Number to link" />
               <button type="button" className="btn btn--ghost btn--sm" disabled={busy || !pairPhone.trim()}
-                      onClick={() => void run(async () => { await whatsappApi.pair(pairPhone); return 'Asking WhatsApp for a pairing code — it appears here in a few seconds.'; })}>
+                      onClick={() => void run(async () => { await whatsappApi.pair(pairPhone, sender); return 'Asking WhatsApp for a pairing code — it appears here in a few seconds.'; })}>
                 Get pairing code
               </button>
             </div>
@@ -223,15 +240,71 @@ function Connection({ data, busy, run }: { data: WaOverview; busy: boolean; run:
         <div className="wa__row">
           <span className={`wa__dot${s.state === 'starting' ? ' wa__dot--wait' : ''}`} aria-hidden />
           <span>
-            {s.state === 'starting' ? 'Starting WhatsApp Web…' : s.state === 'unreachable' ? 'The WhatsApp service is not running.' : 'Disconnected — reconnecting.'}
+            {s.state === 'starting' ? 'Starting WhatsApp Web…' : s.state === 'unreachable' ? 'The WhatsApp service is not running.'
+              : s.state === 'missing' ? 'Not on the WhatsApp service yet — it is being added.' : 'Disconnected — reconnecting.'}
             {s.error && <span className="muted" style={{ display: 'block', fontSize: '.78rem' }}>{s.error}</span>}
           </span>
         </div>
       )}
-      <p className="muted wa__stats">
-        Today <b>{data.sentToday ?? 0}</b> sent · last 24 h: {Object.entries(data.counts ?? {}).map(([k, v]) => `${v} ${STATUS_LABEL[k as WaStatus]?.toLowerCase() ?? k}`).join(' · ') || 'nothing yet'}
+    </>
+  );
+}
+
+/* ---- the extra numbers: one per client group ------------------------------ */
+
+function Senders({ data, busy, run }: { data: WaOverview; busy: boolean; run: Run }) {
+  const [name, setName] = useState('');
+  const senders = data.senders ?? [];
+  return (
+    <section className="card wa__card">
+      <h2 className="wa__h">Client-specific numbers</h2>
+      <p className="muted" style={{ marginTop: 0, fontSize: '.82rem' }}>
+        A second (or third) WhatsApp number for particular clients: their patients' reports go from it instead of the
+        universal number. Each is linked on its own and paced on its own. A client is on one number at a time.
       </p>
+      {senders.map((snd) => <SenderCard key={snd.id} sender={snd} busy={busy} run={run} />)}
+      <div className="wa__row" style={{ marginTop: senders.length ? '.9rem' : 0 }}>
+        <input className="input input--sm" style={{ maxWidth: 260 }} placeholder="Name for the new number, e.g. MDCARE desk"
+               value={name} maxLength={80} onChange={(e) => setName(e.target.value)}
+               onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) void run(async () => { const r = await whatsappApi.addSender(name.trim()); setName(''); return `Added "${r.name}". Link its number by scanning the QR on its card.`; }); }} />
+        <button type="button" className="btn btn--primary btn--sm" disabled={busy || !name.trim()}
+                onClick={() => void run(async () => { const r = await whatsappApi.addSender(name.trim()); setName(''); return `Added "${r.name}". Link its number by scanning the QR on its card.`; })}>
+          Add a number
+        </button>
+      </div>
     </section>
+  );
+}
+
+function SenderCard({ sender, busy, run }: { sender: WaSender; busy: boolean; run: Run }) {
+  const [clients, setClients] = useState(sender.clients.join(', '));
+  const dirty = lines(clients).map((c) => c.toUpperCase()).sort().join(',') !== [...sender.clients].sort().join(',');
+  return (
+    <div className="wa__sender">
+      <div className="wa__row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+        <b>{sender.name} <span className="muted mono" style={{ fontWeight: 400, fontSize: '.75rem' }}>· {sender.id}</span></b>
+        <span className="muted" style={{ fontSize: '.78rem' }}>Today {sender.sentToday} sent</span>
+      </div>
+      <LinkPanel sender={sender.id} s={sender.status} busy={busy} run={run} />
+      <label className="wa__field" style={{ marginTop: '.7rem' }}>
+        <span>Clients on this number</span>
+        <textarea className="input input--sm" rows={2} value={clients} placeholder="MDCARE, HR0121 …"
+                  onChange={(e) => setClients(e.target.value)} />
+      </label>
+      <div className="wa__row" style={{ marginTop: '.5rem' }}>
+        <button type="button" className="btn btn--primary btn--sm" disabled={busy || !dirty}
+                onClick={() => void run(async () => {
+                  const r = await whatsappApi.setSenderClients(sender.id, lines(clients).map((c) => c.toUpperCase()));
+                  return r.unknown.length ? `Saved. Not client codes, so left out: ${r.unknown.join(', ')}.` : 'Saved. Those clients now send from this number.';
+                })}>
+          Save clients
+        </button>
+        <button type="button" className="btn btn--danger btn--sm" disabled={busy} style={{ marginLeft: 'auto' }}
+                onClick={() => { if (window.confirm(`Remove "${sender.name}"? Its number is unlinked and its clients go back to the universal number.`)) void run(async () => { await whatsappApi.removeSender(sender.id); return 'Removed.'; }); }}>
+          Remove
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -358,9 +431,10 @@ function Sending({ data, busy, run }: { data: WaOverview; busy: boolean; run: Ru
 
 /* ---- a test message ---------------------------------------------------------- */
 
-function TestSend({ busy, run }: { busy: boolean; run: Run }) {
+function TestSend({ busy, run, senders }: { busy: boolean; run: Run; senders: WaSender[] }) {
   const [phone, setPhone] = useState('');
   const [sid, setSid] = useState('');
+  const [sender, setSender] = useState('default');
   return (
     <section className="card wa__card">
       <h2 className="wa__h">Send a test</h2>
@@ -373,8 +447,14 @@ function TestSend({ busy, run }: { busy: boolean; run: Run }) {
                value={phone} onChange={(e) => setPhone(e.target.value)} aria-label="Test number" />
         <input className="input input--sm" style={{ maxWidth: 150 }} placeholder="Sample ID (optional)"
                value={sid} onChange={(e) => setSid(e.target.value.trim())} aria-label="Sample ID" />
+        {senders.length > 0 && (
+          <select className="input input--sm" style={{ maxWidth: 200 }} value={sender} onChange={(e) => setSender(e.target.value)} aria-label="From which number">
+            <option value="default">From: universal number</option>
+            {senders.map((s) => <option key={s.id} value={s.id}>From: {s.name}</option>)}
+          </select>
+        )}
         <button type="button" className="btn btn--ghost btn--sm" disabled={busy || !phone.trim()}
-                onClick={() => void run(async () => { const r = await whatsappApi.test(phone, sid); return `Test queued to ${r.phone}. Watch the log below.`; })}>
+                onClick={() => void run(async () => { const r = await whatsappApi.test(phone, sid, sender); return `Test queued to ${r.phone}. Watch the log below.`; })}>
           Send test
         </button>
       </div>
@@ -419,10 +499,10 @@ function Log() {
       <div className="table-wrap">
         <table>
           <thead>
-            <tr><th>When</th><th>Patient</th><th>PID / samples</th><th>Number</th><th>How</th><th>Status</th><th /></tr>
+            <tr><th>When</th><th>Patient</th><th>PID / samples</th><th>To</th><th>From</th><th>How</th><th>Status</th><th /></tr>
           </thead>
           <tbody>
-            {data?.rows.length === 0 && <tr><td colSpan={7} className="muted">Nothing yet.</td></tr>}
+            {data?.rows.length === 0 && <tr><td colSpan={8} className="muted">Nothing yet.</td></tr>}
             {data?.rows.map((m) => (
               <tr key={m.id}>
                 <td className="mono" style={{ whiteSpace: 'nowrap', fontSize: '.78rem' }}>
@@ -431,6 +511,7 @@ function Log() {
                 <td>{m.kind === 'test' ? <span className="muted">Test</span> : m.patientName}<span className="muted" style={{ display: 'block', fontSize: '.72rem' }}>{m.clientCode}</span></td>
                 <td className="mono" style={{ fontSize: '.78rem' }}>{m.pid ?? '—'}<span className="muted" style={{ display: 'block' }}>{m.sids.join(', ')}</span></td>
                 <td className="mono" style={{ fontSize: '.78rem' }}>{m.phone}</td>
+                <td style={{ fontSize: '.78rem' }}>{m.sender === 'default' ? <span className="muted">universal</span> : m.sender}</td>
                 <td style={{ fontSize: '.78rem' }}>{m.trigger === 'auto' ? 'Automatic' : m.trigger === 'manual' ? 'Manual' : 'Test'}</td>
                 <td>
                   <span className={STATUS_CLASS[m.status]}>{STATUS_LABEL[m.status]}</span>

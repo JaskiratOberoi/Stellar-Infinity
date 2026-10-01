@@ -5614,3 +5614,4 @@ tbody tr.row-status--quiet > td:first-child {
 .wa-badge--bad { color: var(--danger); border-color: var(--danger-line); }
 .wa-badge--warn { color: var(--warn); border-color: var(--warn-line); background: var(--warn-soft); }
 .wa__lock { max-width: 520px; margin-top: 1.2rem; }
+.wa__sender { border: 1px solid var(--line); border-radius: 10px; padding: .8rem .9rem; margin-top: .7rem; }

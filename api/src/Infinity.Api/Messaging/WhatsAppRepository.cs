@@ -8,7 +8,7 @@ namespace Infinity.Api.Messaging;
 public sealed record WaMessage(
     long Id, int? Pid, string? Sids, string? ClientCode, string? PatientName, string Phone,
     string Kind, string Trigger, string Status, int Attempts, string? Error, string? WaId,
-    int? CreatedBy, DateTime CreatedAt, DateTime? SentAt, DateTime UpdatedAt)
+    int? CreatedBy, DateTime CreatedAt, DateTime? SentAt, DateTime UpdatedAt, string Sender)
 {
     public IReadOnlyList<string> SidList =>
         (Sids ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -20,6 +20,9 @@ public sealed record WaCandidate(int Pid, string ClientCode, string? PatientName
 /// <summary>A visit's patient, for a manual send.</summary>
 public sealed record WaPatient(int Pid, string? ClientCode, string? PatientName, string? Phone, IReadOnlyList<string> ReleasedSids);
 
+/// <summary>A linked number beyond the default (inf_wa_sender, script 174).</summary>
+public sealed record WaSender(string Id, string Name, DateTime CreatedAt, IReadOnlyList<string> Clients);
+
 /// <summary>The WhatsApp queue and log (inf_wa_message and friends, script 172).</summary>
 public sealed class WhatsAppRepository(NobleConnectionFactory db, SqlRetry retry, WhatsAppOptions options)
 {
@@ -27,7 +30,7 @@ public sealed class WhatsAppRepository(NobleConnectionFactory db, SqlRetry retry
 
     private const string Cols = """
         id, pid, sids, client_code, patient_name, phone, kind, [trigger], status, attempts, error, wa_id,
-        created_by, created_at, sent_at, updated_at
+        created_by, created_at, sent_at, updated_at, sender
         """;
 
     private static WaMessage Read(SqlDataReader r) => new(
@@ -39,7 +42,8 @@ public sealed class WhatsAppRepository(NobleConnectionFactory db, SqlRetry retry
         r["created_by"] is DBNull ? null : Convert.ToInt32(r["created_by"]),
         Convert.ToDateTime(r["created_at"]),
         r["sent_at"] is DBNull ? null : Convert.ToDateTime(r["sent_at"]),
-        Convert.ToDateTime(r["updated_at"]));
+        Convert.ToDateTime(r["updated_at"]),
+        r.Str("sender") ?? WhatsAppClient.DefaultSender);
 
     /// <summary>
     /// Queue one message. An automatic one is unique per visit: if the visit
@@ -47,15 +51,15 @@ public sealed class WhatsAppRepository(NobleConnectionFactory db, SqlRetry retry
     /// Not retried — a replayed insert would be a second message.
     /// </summary>
     public async Task<long?> EnqueueAsync(int? pid, IReadOnlyList<string> sids, string? clientCode, string? name,
-                                          string phone, string kind, string trigger, int? actor, CancellationToken ct = default)
+                                          string phone, string kind, string trigger, int? actor, string sender, CancellationToken ct = default)
     {
         try
         {
             return await db.QueryAsync("wa.enqueue", async (conn, inner) =>
             {
                 await using var cmd = NobleConnectionFactory.CreateCommand(conn, """
-                    INSERT INTO dbo.inf_wa_message (instance, pid, sids, client_code, patient_name, phone, kind, [trigger], created_by)
-                    VALUES (@i, @pid, @sids, @cc, @name, @phone, @kind, @trigger, @by);
+                    INSERT INTO dbo.inf_wa_message (instance, pid, sids, client_code, patient_name, phone, kind, [trigger], created_by, sender)
+                    VALUES (@i, @pid, @sids, @cc, @name, @phone, @kind, @trigger, @by, @sender);
                     SELECT CAST(SCOPE_IDENTITY() AS BIGINT);
                     """);
                 cmd.Parameters.Add("@i", SqlDbType.VarChar, 12).Value = Instance;
@@ -67,6 +71,7 @@ public sealed class WhatsAppRepository(NobleConnectionFactory db, SqlRetry retry
                 cmd.Parameters.Add("@kind", SqlDbType.VarChar, 12).Value = kind;
                 cmd.Parameters.Add("@trigger", SqlDbType.VarChar, 8).Value = trigger;
                 cmd.Parameters.Add("@by", SqlDbType.Int).Value = (object?)actor ?? DBNull.Value;
+                cmd.Parameters.Add("@sender", SqlDbType.VarChar, 32).Value = sender;
                 return (long?)Convert.ToInt64(await cmd.ExecuteScalarAsync(inner).ConfigureAwait(false));
             }, ct).ConfigureAwait(false);
         }
@@ -76,21 +81,22 @@ public sealed class WhatsAppRepository(NobleConnectionFactory db, SqlRetry retry
         }
     }
 
-    /// <summary>Take the oldest queued message of this instance and mark it sending.</summary>
+    /// <summary>Take the oldest queued message of this instance FOR THIS SENDER and mark it sending.</summary>
     /// <param name="testsOnly">Sending is switched off: only an admin's test message may go.</param>
     /// <param name="noAuto">Quiet hours: automatic messages wait; one a person sent goes.</param>
-    public Task<WaMessage?> ClaimNextAsync(bool testsOnly, bool noAuto, CancellationToken ct = default) =>
+    public Task<WaMessage?> ClaimNextAsync(string sender, bool testsOnly, bool noAuto, CancellationToken ct = default) =>
         db.QueryAsync("wa.claim", async (conn, inner) =>
         {
             await using var cmd = NobleConnectionFactory.CreateCommand(conn, $"""
                 WITH q AS (
                     SELECT TOP (1) * FROM dbo.inf_wa_message WITH (UPDLOCK, READPAST, ROWLOCK)
-                    WHERE instance = @i AND status = 'queued' AND (@tests = 0 OR kind = 'test')
+                    WHERE instance = @i AND sender = @sender AND status = 'queued' AND (@tests = 0 OR kind = 'test')
                       AND (@noauto = 0 OR [trigger] <> 'auto') ORDER BY id)
                 UPDATE q SET status = 'sending', attempts = attempts + 1, updated_at = SYSUTCDATETIME()
                 OUTPUT {string.Join(", ", Cols.Split(',').Select(c => "inserted." + c.Trim()))};
                 """);
             cmd.Parameters.Add("@i", SqlDbType.VarChar, 12).Value = Instance;
+            cmd.Parameters.Add("@sender", SqlDbType.VarChar, 32).Value = sender;
             cmd.Parameters.Add("@tests", SqlDbType.Bit).Value = testsOnly;
             cmd.Parameters.Add("@noauto", SqlDbType.Bit).Value = noAuto;
             await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);
@@ -169,15 +175,17 @@ public sealed class WhatsAppRepository(NobleConnectionFactory db, SqlRetry retry
             return await cmd.ExecuteNonQueryAsync(inner).ConfigureAwait(false);
         }, token), ct);
 
-    /// <summary>Messages sent by this instance since midnight, lab time.</summary>
-    public Task<int> SentSinceAsync(DateTime sinceUtc, CancellationToken ct = default) =>
+    /// <summary>Messages sent by this instance since midnight, lab time — by one sender, or all.</summary>
+    public Task<int> SentSinceAsync(DateTime sinceUtc, string? sender = null, CancellationToken ct = default) =>
         retry.ExecuteAsync("wa.sentToday", token => db.QueryAsync("wa.sentToday", async (conn, inner) =>
         {
             await using var cmd = NobleConnectionFactory.CreateCommand(conn, """
-                SELECT COUNT(*) FROM dbo.inf_wa_message WHERE instance = @i AND sent_at >= @since;
+                SELECT COUNT(*) FROM dbo.inf_wa_message
+                WHERE instance = @i AND sent_at >= @since AND (@sender IS NULL OR sender = @sender);
                 """);
             cmd.Parameters.Add("@i", SqlDbType.VarChar, 12).Value = Instance;
             cmd.Parameters.Add("@since", SqlDbType.DateTime2).Value = sinceUtc;
+            cmd.Parameters.Add("@sender", SqlDbType.VarChar, 32).Value = (object?)sender ?? DBNull.Value;
             return Convert.ToInt32(await cmd.ExecuteScalarAsync(inner).ConfigureAwait(false));
         }, token), ct);
 
@@ -205,7 +213,7 @@ public sealed class WhatsAppRepository(NobleConnectionFactory db, SqlRetry retry
             const string where = """
                 WHERE instance = @i AND (@s IS NULL OR status = @s)
                   AND (@q IS NULL OR phone LIKE @ql OR patient_name LIKE @ql OR client_code LIKE @ql
-                       OR sids LIKE @ql OR CAST(pid AS VARCHAR(12)) = @q)
+                       OR sids LIKE @ql OR CAST(pid AS VARCHAR(12)) = @q OR sender = @q)
                 """;
             await using var cmd = NobleConnectionFactory.CreateCommand(conn, $"""
                 SELECT COUNT(*) FROM dbo.inf_wa_message {where};
@@ -326,6 +334,121 @@ public sealed class WhatsAppRepository(NobleConnectionFactory db, SqlRetry retry
             await tx.CommitAsync(inner).ConfigureAwait(false);
             return (IReadOnlyList<string>)codes.Where(c => !known.Contains(c)).ToList();
         }, ct);
+
+    /* ---- senders: the numbers beyond the default ------------------------- */
+
+    public Task<IReadOnlyList<WaSender>> SendersAsync(CancellationToken ct = default) =>
+        retry.ExecuteAsync("wa.senders", token => db.QueryAsync("wa.senders", async (conn, inner) =>
+        {
+            await using var cmd = NobleConnectionFactory.CreateCommand(conn, """
+                SELECT s.id, s.name, s.created_at,
+                       clients = (SELECT STRING_AGG(c.client_code, ',') WITHIN GROUP (ORDER BY c.client_code)
+                                  FROM dbo.inf_wa_sender_client c WHERE c.instance = s.instance AND c.sender_id = s.id)
+                FROM dbo.inf_wa_sender s WHERE s.instance = @i ORDER BY s.created_at, s.id;
+                """);
+            cmd.Parameters.Add("@i", SqlDbType.VarChar, 12).Value = Instance;
+            var list = new List<WaSender>();
+            await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);
+            while (await r.ReadAsync(inner).ConfigureAwait(false))
+                list.Add(new WaSender(r.Str("id") ?? "", r.Str("name") ?? "", Convert.ToDateTime(r["created_at"]),
+                    (r.Str("clients") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries)));
+            return (IReadOnlyList<WaSender>)list;
+        }, token), ct);
+
+    /// <summary>Not retried: a replayed insert on an existing id is a duplicate-key error either way.</summary>
+    public Task<bool> AddSenderAsync(string id, string name, int actor, CancellationToken ct = default) =>
+        db.QueryAsync("wa.sender.add", async (conn, inner) =>
+        {
+            await using var cmd = NobleConnectionFactory.CreateCommand(conn, """
+                IF NOT EXISTS (SELECT 1 FROM dbo.inf_wa_sender WHERE instance = @i AND id = @id)
+                    INSERT INTO dbo.inf_wa_sender (instance, id, name, created_by) VALUES (@i, @id, @n, @by);
+                """);
+            cmd.Parameters.Add("@i", SqlDbType.VarChar, 12).Value = Instance;
+            cmd.Parameters.Add("@id", SqlDbType.VarChar, 32).Value = id;
+            cmd.Parameters.Add("@n", SqlDbType.NVarChar, 80).Value = name;
+            cmd.Parameters.Add("@by", SqlDbType.Int).Value = actor;
+            return await cmd.ExecuteNonQueryAsync(inner).ConfigureAwait(false) > 0;
+        }, ct);
+
+    /// <summary>Forget a sender; its clients fall back to the default. Queued messages on it go too.</summary>
+    public Task<int> RemoveSenderAsync(string id, CancellationToken ct = default) =>
+        db.QueryAsync("wa.sender.remove", async (conn, inner) =>
+        {
+            await using var cmd = NobleConnectionFactory.CreateCommand(conn, """
+                DELETE FROM dbo.inf_wa_sender_client WHERE instance = @i AND sender_id = @id;
+                UPDATE dbo.inf_wa_message SET status = 'skipped', error = N'Sender removed.', updated_at = SYSUTCDATETIME()
+                WHERE instance = @i AND sender = @id AND status = 'queued';
+                DELETE FROM dbo.inf_wa_sender WHERE instance = @i AND id = @id;
+                """);
+            cmd.Parameters.Add("@i", SqlDbType.VarChar, 12).Value = Instance;
+            cmd.Parameters.Add("@id", SqlDbType.VarChar, 32).Value = id;
+            return await cmd.ExecuteNonQueryAsync(inner).ConfigureAwait(false);
+        }, ct);
+
+    /// <summary>
+    /// Which sender these client codes use: exactly these on the sender, a
+    /// code moved from another sender if it was there. Unknown codes come
+    /// back unwritten.
+    /// </summary>
+    public Task<IReadOnlyList<string>> SetSenderClientsAsync(string sender, IReadOnlyCollection<string> codes, int actor, CancellationToken ct = default) =>
+        db.QueryAsync("wa.sender.clients", async (conn, inner) =>
+        {
+            await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(inner).ConfigureAwait(false);
+            var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (codes.Count > 0)
+            {
+                var names = codes.Select((_, i) => "@c" + i.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+                await using var q = NobleConnectionFactory.CreateCommand(conn,
+                    $"SELECT LTRIM(RTRIM(MCCUnitCode)) AS code FROM dbo.tbl_med_mcc_unit_master WHERE LTRIM(RTRIM(MCCUnitCode)) IN ({string.Join(",", names)})");
+                q.Transaction = tx;
+                var i = 0;
+                foreach (var c in codes) q.Parameters.Add(names[i++], SqlDbType.NVarChar, 50).Value = c;
+                await using (var r = await q.ExecuteReaderAsync(inner).ConfigureAwait(false))
+                    while (await r.ReadAsync(inner).ConfigureAwait(false)) known.Add(r.Str("code") ?? "");
+            }
+            await using (var del = NobleConnectionFactory.CreateCommand(conn, "DELETE FROM dbo.inf_wa_sender_client WHERE instance = @i AND sender_id = @s"))
+            {
+                del.Transaction = tx;
+                del.Parameters.Add("@i", SqlDbType.VarChar, 12).Value = Instance;
+                del.Parameters.Add("@s", SqlDbType.VarChar, 32).Value = sender;
+                await del.ExecuteNonQueryAsync(inner).ConfigureAwait(false);
+            }
+            foreach (var c in known)
+            {
+                await using var up = NobleConnectionFactory.CreateCommand(conn, """
+                    MERGE dbo.inf_wa_sender_client AS t USING (SELECT @i AS instance, @c AS client_code) AS s
+                        ON t.instance = s.instance AND t.client_code = s.client_code
+                    WHEN MATCHED THEN UPDATE SET sender_id = @s, updated_by = @by, updated_at = SYSUTCDATETIME()
+                    WHEN NOT MATCHED THEN INSERT (instance, client_code, sender_id, updated_by) VALUES (@i, @c, @s, @by);
+                    """);
+                up.Transaction = tx;
+                up.Parameters.Add("@i", SqlDbType.VarChar, 12).Value = Instance;
+                up.Parameters.Add("@c", SqlDbType.NVarChar, 50).Value = c;
+                up.Parameters.Add("@s", SqlDbType.VarChar, 32).Value = sender;
+                up.Parameters.Add("@by", SqlDbType.Int).Value = actor;
+                await up.ExecuteNonQueryAsync(inner).ConfigureAwait(false);
+            }
+            await tx.CommitAsync(inner).ConfigureAwait(false);
+            return (IReadOnlyList<string>)codes.Where(c => !known.Contains(c)).ToList();
+        }, ct);
+
+    /// <summary>The sender a client's messages go from: its own, else the default.</summary>
+    public async Task<string> SenderForAsync(string? clientCode, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(clientCode)) return WhatsAppClient.DefaultSender;
+        var s = await retry.ExecuteAsync("wa.sender.for", token => db.QueryAsync("wa.sender.for", async (conn, inner) =>
+        {
+            await using var cmd = NobleConnectionFactory.CreateCommand(conn, """
+                SELECT c.sender_id FROM dbo.inf_wa_sender_client c
+                JOIN dbo.inf_wa_sender s ON s.instance = c.instance AND s.id = c.sender_id
+                WHERE c.instance = @i AND c.client_code = @c;
+                """);
+            cmd.Parameters.Add("@i", SqlDbType.VarChar, 12).Value = Instance;
+            cmd.Parameters.Add("@c", SqlDbType.NVarChar, 50).Value = clientCode.Trim();
+            return await cmd.ExecuteScalarAsync(inner).ConfigureAwait(false) as string;
+        }, token), ct).ConfigureAwait(false);
+        return string.IsNullOrEmpty(s) ? WhatsAppClient.DefaultSender : s;
+    }
 
     /* ---- the patients ---------------------------------------------------- */
 

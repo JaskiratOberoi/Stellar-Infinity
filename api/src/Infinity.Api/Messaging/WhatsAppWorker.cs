@@ -5,7 +5,9 @@ using Infinity.Api.Reports;
 namespace Infinity.Api.Messaging;
 
 /// <summary>
-/// Sends patient reports on WhatsApp through the linked number.
+/// Sends patient reports on WhatsApp through the linked numbers: the
+/// 'default' universal number, and any sender a client has been assigned
+/// (script 174). Each number is paced on its own.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -48,7 +50,8 @@ public sealed class WhatsAppWorker(
     private const int MaxAttempts = 3;
 
     private long _eventCursor;
-    private DateTime _nextSendUtc = DateTime.MinValue;
+    /** Pacing per sender: each number waits its own gap after its own send. */
+    private readonly Dictionary<string, DateTime> _nextSendUtc = new(StringComparer.Ordinal);
     private DateTime _nextScanUtc = DateTime.MinValue;
 
     protected override async Task ExecuteAsync(CancellationToken stop)
@@ -75,10 +78,11 @@ public sealed class WhatsAppWorker(
     {
         using var scope = scopes.CreateScope();
         var wa = scope.ServiceProvider.GetRequiredService<WhatsAppClient>();
-        var status = await wa.StatusAsync(ct).ConfigureAwait(false);
+        var statuses = await wa.StatusesAsync(ct).ConfigureAwait(false);
+        var anyReady = statuses is not null && statuses.Values.Any(s => s.Ready);
 
         // Delivery ticks and STOP replies, whatever the switches say.
-        if (status.Ready) await CollectEventsAsync(wa, ct).ConfigureAwait(false);
+        if (anyReady) await CollectEventsAsync(wa, ct).ConfigureAwait(false);
 
         var cfg = await settings.GetAsync(ct).ConfigureAwait(false);
         var now = DateTime.UtcNow;
@@ -91,22 +95,31 @@ public sealed class WhatsAppWorker(
                 await EnqueueReleasedAsync(cfg, since, ct).ConfigureAwait(false);
         }
 
-        if (!status.Ready || now < _nextSendUtc) return;
+        if (statuses is null) return;
         var lab = NobleTime.NowForNoble();
         var labMidnightUtc = now - lab.TimeOfDay;
-        if (await queue.SentSinceAsync(labMidnightUtc, ct).ConfigureAwait(false) >= cfg.DailyCap) return;
 
-        // Switched off: only an admin's test message goes. Quiet hours hold the
-        // automatic ones only — a manual send or a test is a person deciding
-        // it should go now, and they are still paced like everything else.
-        var msg = await queue.ClaimNextAsync(testsOnly: !cfg.Enabled, noAuto: cfg.IsQuiet(lab), ct).ConfigureAwait(false);
-        if (msg is null) return;
-
-        var sent = await ProcessAsync(scope, wa, cfg, msg, ct).ConfigureAwait(false);
-        if (sent)
+        // One message per ready sender per tick; each number keeps its own
+        // pacing gap and its own daily cap, because the ban risk is per number.
+        foreach (var (sender, status) in statuses)
         {
-            var gap = Math.Max(5, cfg.MinGapSeconds) + Random.Shared.Next(Math.Max(1, cfg.MaxGapSeconds - cfg.MinGapSeconds + 1));
-            _nextSendUtc = DateTime.UtcNow.AddSeconds(gap);
+            if (!status.Ready) continue;
+            if (_nextSendUtc.TryGetValue(sender, out var next) && now < next) continue;
+            if (await queue.SentSinceAsync(labMidnightUtc, sender, ct).ConfigureAwait(false) >= cfg.DailyCap) continue;
+
+            // Switched off: only an admin's test message goes. Quiet hours hold
+            // the automatic ones only — a manual send or a test is a person
+            // deciding it should go now, and they are still paced like
+            // everything else.
+            var msg = await queue.ClaimNextAsync(sender, testsOnly: !cfg.Enabled, noAuto: cfg.IsQuiet(lab), ct).ConfigureAwait(false);
+            if (msg is null) continue;
+
+            var sent = await ProcessAsync(scope, wa, cfg, msg, ct).ConfigureAwait(false);
+            if (sent)
+            {
+                var gap = Math.Max(5, cfg.MinGapSeconds) + Random.Shared.Next(Math.Max(1, cfg.MaxGapSeconds - cfg.MinGapSeconds + 1));
+                _nextSendUtc[sender] = DateTime.UtcNow.AddSeconds(gap);
+            }
         }
     }
 
@@ -148,7 +161,8 @@ public sealed class WhatsAppWorker(
             foreach (var sid in c.Sids)
                 if ((await locks.GetAsync(sid, ct).ConfigureAwait(false)).Locked) { held = true; break; }
             if (held) continue;
-            if (await queue.EnqueueAsync(c.Pid, c.Sids, c.ClientCode, c.PatientName, c.Phone, "report", "auto", null, ct)
+            var sender = await queue.SenderForAsync(c.ClientCode, ct).ConfigureAwait(false);
+            if (await queue.EnqueueAsync(c.Pid, c.Sids, c.ClientCode, c.PatientName, c.Phone, "report", "auto", null, sender, ct)
                     .ConfigureAwait(false) is not null) queued++;
         }
         if (queued > 0) log.LogInformation("wa.auto queued={Queued}", queued);
@@ -197,7 +211,7 @@ public sealed class WhatsAppWorker(
             text = Caption(cfg.Caption, built.Name ?? msg.PatientName, built.Pid ?? msg.Pid, built.Links);
         }
 
-        var result = await wa.SendAsync(msg.Phone, text, pdf, filename, ct).ConfigureAwait(false);
+        var result = await wa.SendAsync(msg.Sender, msg.Phone, text, pdf, filename, ct).ConfigureAwait(false);
         switch (result.Outcome)
         {
             case WhatsAppClient.SendOutcome.Sent:
@@ -207,7 +221,7 @@ public sealed class WhatsAppWorker(
                     // On the trail as a report that left, like the QR copy.
                     audit.Log("report.whatsapp", actor: msg.CreatedBy, username: msg.CreatedBy is null ? "whatsapp" : null,
                         sid: sids.FirstOrDefault(),
-                        details: new { msg.Pid, sids, phone = Phone.Mask(msg.Phone), msg.Trigger, messageId = msg.Id });
+                        details: new { msg.Pid, sids, phone = Phone.Mask(msg.Phone), msg.Trigger, msg.Sender, messageId = msg.Id });
                 }
                 return true;
             case WhatsAppClient.SendOutcome.NotOnWhatsApp:

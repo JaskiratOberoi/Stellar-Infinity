@@ -1626,7 +1626,15 @@ export const letterheadApi = {
 
 /* ---- WhatsApp report delivery (api WhatsAppEndpoints) ---- */
 
-export type WaState = 'starting' | 'qr' | 'ready' | 'disconnected' | 'unreachable';
+export type WaState = 'starting' | 'qr' | 'ready' | 'disconnected' | 'unreachable' | 'missing';
+
+export interface WaLinkStatus {
+  state: WaState; qr: string | null; pairingCode: string | null;
+  me: { number: string | null; name: string | null } | null; since: string | null; error: string | null;
+}
+
+/** A linked number beyond the default, for the clients assigned to it. */
+export interface WaSender { id: string; name: string; clients: string[]; createdAt: string; status: WaLinkStatus; sentToday: number }
 export type WaStatus = 'queued' | 'sending' | 'sent' | 'delivered' | 'read' | 'failed' | 'skipped';
 
 export interface WaConfig {
@@ -1649,7 +1657,8 @@ export interface WaOverview {
   autoCapable?: boolean;
   requiresAllowlist?: boolean;
   settings?: WaConfig;
-  status?: { state: WaState; qr: string | null; pairingCode: string | null; me: { number: string | null; name: string | null } | null; since: string | null; error: string | null };
+  status?: WaLinkStatus;
+  senders?: WaSender[];
   counts?: Record<string, number>;
   sentToday?: number;
   clients?: string[];
@@ -1657,6 +1666,7 @@ export interface WaOverview {
 
 export interface WaMessageRow {
   id: number;
+  sender: string;
   pid: number | null;
   sids: string[];
   clientCode: string | null;
@@ -1675,12 +1685,17 @@ export interface WaMessageRow {
 export const whatsappApi = {
   overview: () => api.get<WaOverview>('/api/settings/whatsapp'),
   save: (patch: Partial<Omit<WaConfig, 'autoSince'>>) => api.put<WaConfig>('/api/settings/whatsapp', patch),
-  pair: (phone: string) => api.post<{ ok: boolean }>('/api/settings/whatsapp/pair', { phone }),
-  logout: () => api.post<{ ok: boolean }>('/api/settings/whatsapp/logout'),
+  pair: (phone: string, sender = 'default') => api.post<{ ok: boolean }>('/api/settings/whatsapp/pair', { phone, sender }),
+  logout: (sender = 'default') => api.post<{ ok: boolean }>('/api/settings/whatsapp/logout', { sender }),
+  addSender: (name: string, id?: string) => api.post<{ id: string; name: string }>('/api/settings/whatsapp/senders', { name, id: id || undefined }),
+  removeSender: (id: string) => api.delete<{ ok: boolean }>(`/api/settings/whatsapp/senders/${encodeURIComponent(id)}`),
+  setSenderClients: (id: string, clients: string[]) =>
+    api.put<{ unknown: string[] }>(`/api/settings/whatsapp/senders/${encodeURIComponent(id)}/clients`, { clients }),
   unlock: (password: string) => api.post<{ unlocked: boolean }>('/api/settings/whatsapp/unlock', { password }),
   lock: () => api.post<{ locked: boolean }>('/api/settings/whatsapp/lock'),
   setClients: (clients: string[]) => api.put<{ clients: string[]; unknown: string[] }>('/api/settings/whatsapp/clients', { clients }),
-  test: (phone: string, sid?: string) => api.post<{ id: number; phone: string }>('/api/settings/whatsapp/test', { phone, sid: sid || undefined }),
+  test: (phone: string, sid?: string, sender = 'default') =>
+    api.post<{ id: number; phone: string }>('/api/settings/whatsapp/test', { phone, sid: sid || undefined, sender }),
   messages: (params: { status?: string; q?: string; page?: number }) => {
     const q = new URLSearchParams();
     if (params.status) q.set('status', params.status);

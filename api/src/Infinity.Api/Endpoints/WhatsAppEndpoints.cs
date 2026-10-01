@@ -42,6 +42,10 @@ public static class WhatsAppEndpoints
         admin.MapPut("/", Put).WithName("PutWhatsApp");
         admin.MapPost("/pair", Pair).WithName("PairWhatsApp");
         admin.MapPost("/logout", Logout).WithName("LogoutWhatsApp");
+        // Numbers beyond the default, each for the clients assigned to it.
+        admin.MapPost("/senders", AddSender).WithName("AddWhatsAppSender");
+        admin.MapDelete("/senders/{id}", RemoveSender).WithName("RemoveWhatsAppSender");
+        admin.MapPut("/senders/{id}/clients", PutSenderClients).WithName("PutWhatsAppSenderClients");
         admin.MapPut("/clients", PutClients).WithName("PutWhatsAppClients");
         admin.MapPost("/test", Test).WithName("TestWhatsApp");
         admin.MapGet("/messages", Messages).WithName("ListWhatsAppMessages");
@@ -111,8 +115,21 @@ public static class WhatsAppEndpoints
     private static object MessageView(WaMessage m) => new
     {
         m.Id, m.Pid, sids = m.SidList, m.ClientCode, m.PatientName, phone = Phone.Mask(m.Phone),
-        m.Kind, m.Trigger, m.Status, m.Attempts, m.Error, m.CreatedAt, m.SentAt, m.UpdatedAt,
+        m.Kind, m.Trigger, m.Status, m.Attempts, m.Error, m.CreatedAt, m.SentAt, m.UpdatedAt, m.Sender,
     };
+
+    private static readonly System.Text.RegularExpressions.Regex SenderId = new("^[a-z0-9][a-z0-9-]{0,30}$");
+
+    /// <summary>A sender id the sidecar accepts, or null; 'default' always resolves.</summary>
+    private static string? SenderOf(string? raw)
+    {
+        var id = (raw ?? WhatsAppClient.DefaultSender).Trim().ToLowerInvariant();
+        if (id.Length == 0) id = WhatsAppClient.DefaultSender;
+        return SenderId.IsMatch(id) ? id : null;
+    }
+
+    private static object StatusView(WhatsAppClient.Status s) =>
+        new { s.State, s.Qr, pairingCode = s.PairingCode, s.Me, s.Since, s.Error };
 
     private static object ConfigView(WhatsAppConfig c) => new
     {
@@ -123,9 +140,11 @@ public static class WhatsAppEndpoints
     public sealed record SettingsBody(bool? Enabled, bool? Auto, bool? AllClients, IReadOnlyList<string>? Allowlist,
                                       string? Caption, int? MinGapSeconds, int? MaxGapSeconds, int? DailyCap,
                                       string? QuietFrom, string? QuietTo);
-    public sealed record PairBody(string? Phone);
+    public sealed record PairBody(string? Phone, string? Sender);
+    public sealed record SenderBody(string? Sender);
+    public sealed record NewSenderBody(string? Id, string? Name);
     public sealed record ClientsBody(IReadOnlyList<string>? Clients);
-    public sealed record TestBody(string? Phone, string? Sid);
+    public sealed record TestBody(string? Phone, string? Sid, string? Sender);
     public sealed record SendBody(int Pid, IReadOnlyList<string>? Sids, string? Phone);
 
     private static async Task<IResult> Get(
@@ -135,11 +154,33 @@ public static class WhatsAppEndpoints
         if (!IsEditor(principal)) return Results.NotFound();
         if (options.Instance is null) return Results.Ok(new { configured = false });
         var cfg = await settings.GetAsync(ct).ConfigureAwait(false);
-        var status = await wa.StatusAsync(ct).ConfigureAwait(false);
+        var statuses = await wa.StatusesAsync(ct).ConfigureAwait(false);
         var counts = await queue.CountsAsync(DateTime.UtcNow.AddHours(-24), ct).ConfigureAwait(false);
         var clients = await queue.ClientsAsync(ct).ConfigureAwait(false);
         var lab = Domain.NobleTime.NowForNoble();
-        var sentToday = await queue.SentSinceAsync(DateTime.UtcNow - lab.TimeOfDay, ct).ConfigureAwait(false);
+        var midnightUtc = DateTime.UtcNow - lab.TimeOfDay;
+        var sentToday = await queue.SentSinceAsync(midnightUtc, null, ct).ConfigureAwait(false);
+
+        // The extra numbers, each with its live state. A sender the database
+        // knows but the sidecar does not (its volume was lost) is started
+        // again here, so it shows a QR instead of nothing.
+        var extra = new List<object>();
+        foreach (var s in await queue.SendersAsync(ct).ConfigureAwait(false))
+        {
+            var st = statuses?.GetValueOrDefault(s.Id);
+            if (st is null && statuses is not null)
+            {
+                try { await wa.AddSenderAsync(s.Id, ct).ConfigureAwait(false); st = await wa.StatusAsync(s.Id, ct).ConfigureAwait(false); }
+                catch (HttpRequestException) { /* shown as missing */ }
+            }
+            extra.Add(new
+            {
+                s.Id, s.Name, s.Clients, s.CreatedAt,
+                status = StatusView(st ?? (statuses is null ? WhatsAppClient.Status.Unreachable : WhatsAppClient.Status.Missing)),
+                sentToday = await queue.SentSinceAsync(midnightUtc, s.Id, ct).ConfigureAwait(false),
+            });
+        }
+        var dflt = statuses?.GetValueOrDefault(WhatsAppClient.DefaultSender) ?? WhatsAppClient.Status.Unreachable;
         return Results.Ok(new
         {
             configured = true,
@@ -148,7 +189,8 @@ public static class WhatsAppEndpoints
             autoCapable = options.AutoEnqueue,
             requiresAllowlist = !options.IsProd,
             settings = ConfigView(cfg),
-            status = new { status.State, status.Qr, pairingCode = status.PairingCode, status.Me, status.Since, status.Error },
+            status = StatusView(dflt),
+            senders = extra,
             counts,
             sentToday,
             clients,
@@ -224,19 +266,76 @@ public static class WhatsAppEndpoints
     {
         if (!IsEditor(principal) || principal.UserId() is not int actor) return Results.NotFound();
         if (Phone.Normalise(body.Phone) is not { } phone) return Results.BadRequest(new { error = "Enter the WhatsApp number to link." });
-        var r = await wa.PairAsync(phone, ct).ConfigureAwait(false);
+        if (SenderOf(body.Sender) is not { } sender) return Results.BadRequest(new { error = "Not a sender." });
+        var r = await wa.PairAsync(sender, phone, ct).ConfigureAwait(false);
         if (r is not null) return Results.BadRequest(new { error = r });
-        audit.Log("settings.whatsapp", actor: actor, ip: Audit.AuditIp.From(http), details: new { op = "pair", phone = Phone.Mask(phone) });
+        audit.Log("settings.whatsapp", actor: actor, ip: Audit.AuditIp.From(http), details: new { op = "pair", sender, phone = Phone.Mask(phone) });
         return Results.Ok(new { ok = true });
     }
 
     private static async Task<IResult> Logout(
-        System.Security.Claims.ClaimsPrincipal principal, HttpContext http, WhatsAppClient wa, Audit.AuditLog audit, CancellationToken ct)
+        SenderBody body, System.Security.Claims.ClaimsPrincipal principal, HttpContext http, WhatsAppClient wa, Audit.AuditLog audit, CancellationToken ct)
     {
         if (!IsEditor(principal) || principal.UserId() is not int actor) return Results.NotFound();
-        await wa.LogoutAsync(ct).ConfigureAwait(false);
-        audit.Log("settings.whatsapp", actor: actor, ip: Audit.AuditIp.From(http), details: new { op = "unlink" });
+        if (SenderOf(body.Sender) is not { } sender) return Results.BadRequest(new { error = "Not a sender." });
+        await wa.LogoutAsync(sender, ct).ConfigureAwait(false);
+        audit.Log("settings.whatsapp", actor: actor, ip: Audit.AuditIp.From(http), details: new { op = "unlink", sender });
         return Results.Ok(new { ok = true });
+    }
+
+    private static async Task<IResult> AddSender(
+        NewSenderBody body, System.Security.Claims.ClaimsPrincipal principal, HttpContext http, WhatsAppOptions options,
+        WhatsAppRepository queue, WhatsAppClient wa, Audit.AuditLog audit, CancellationToken ct)
+    {
+        if (!IsEditor(principal) || principal.UserId() is not int actor) return Results.NotFound();
+        if (options.Instance is null) return Results.Problem("WhatsApp is not configured on this server.", statusCode: 409);
+        var name = body.Name?.Trim() ?? "";
+        if (name.Length is 0 or > 80) return Results.BadRequest(new { error = "Give the number a name, up to 80 characters." });
+        // The id is the name made safe, or whatever was typed if it already is.
+        var id = SenderOf(string.IsNullOrWhiteSpace(body.Id)
+            ? System.Text.RegularExpressions.Regex.Replace(name.ToLowerInvariant(), "[^a-z0-9]+", "-").Trim('-')
+            : body.Id);
+        if (id is null || id == WhatsAppClient.DefaultSender)
+            return Results.BadRequest(new { error = "The id must be letters, digits and hyphens, and not 'default'." });
+        if (!await queue.AddSenderAsync(id, name, actor, ct).ConfigureAwait(false))
+            return Results.BadRequest(new { error = $"A sender '{id}' already exists." });
+        try { await wa.AddSenderAsync(id, ct).ConfigureAwait(false); }
+        catch (HttpRequestException) { /* the overview re-adds it when the sidecar is back */ }
+        audit.Log("settings.whatsapp", actor: actor, ip: Audit.AuditIp.From(http), details: new { op = "sender_add", id, name });
+        return Results.Ok(new { id, name });
+    }
+
+    private static async Task<IResult> RemoveSender(
+        string id, System.Security.Claims.ClaimsPrincipal principal, HttpContext http, WhatsAppRepository queue,
+        WhatsAppClient wa, Audit.AuditLog audit, CancellationToken ct)
+    {
+        if (!IsEditor(principal) || principal.UserId() is not int actor) return Results.NotFound();
+        if (SenderOf(id) is not { } sender || sender == WhatsAppClient.DefaultSender)
+            return Results.BadRequest(new { error = "The default number cannot be removed." });
+        try { await wa.RemoveSenderAsync(sender, ct).ConfigureAwait(false); }
+        catch (HttpRequestException) { /* its directory goes when the sidecar next sees no row for it */ }
+        await queue.RemoveSenderAsync(sender, ct).ConfigureAwait(false);
+        audit.Log("settings.whatsapp", actor: actor, ip: Audit.AuditIp.From(http), details: new { op = "sender_remove", sender });
+        return Results.Ok(new { ok = true });
+    }
+
+    private static async Task<IResult> PutSenderClients(
+        string id, ClientsBody body, System.Security.Claims.ClaimsPrincipal principal, HttpContext http,
+        WhatsAppRepository queue, Audit.AuditLog audit, CancellationToken ct)
+    {
+        if (!IsEditor(principal) || principal.UserId() is not int actor) return Results.NotFound();
+        if (SenderOf(id) is not { } sender || sender == WhatsAppClient.DefaultSender)
+            return Results.BadRequest(new { error = "Clients are assigned to the extra numbers; everyone else uses the default." });
+        if (!(await queue.SendersAsync(ct).ConfigureAwait(false)).Any(s => s.Id == sender)) return Results.NotFound();
+        var codes = (body.Clients ?? [])
+            .Select(c => c?.Trim().ToUpperInvariant() ?? "")
+            .Where(c => c.Length is > 0 and <= 50)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (codes.Count > 2000) return Results.BadRequest(new { error = "Up to 2000 client codes." });
+        var unknown = await queue.SetSenderClientsAsync(sender, codes, actor, ct).ConfigureAwait(false);
+        audit.Log("settings.whatsapp", actor: actor, ip: Audit.AuditIp.From(http), details: new { op = "sender_clients", sender, codes, unknown });
+        return Results.Ok(new { unknown });
     }
 
     private static async Task<IResult> PutClients(
@@ -267,9 +366,10 @@ public static class WhatsAppEndpoints
         if (Phone.Normalise(body.Phone) is not { } phone) return Results.BadRequest(new { error = "Enter a 10-digit mobile number." });
         var sid = string.IsNullOrWhiteSpace(body.Sid) ? null : body.Sid.Trim();
         if (sid is { Length: > 50 }) return Results.BadRequest(new { error = "A sample ID is at most 50 characters." });
-        var id = await queue.EnqueueAsync(null, sid is null ? [] : [sid], null, "Test", phone, "test", "test", actor, ct).ConfigureAwait(false);
+        if (SenderOf(body.Sender) is not { } sender) return Results.BadRequest(new { error = "Not a sender." });
+        var id = await queue.EnqueueAsync(null, sid is null ? [] : [sid], null, "Test", phone, "test", "test", actor, sender, ct).ConfigureAwait(false);
         audit.Log("settings.whatsapp", actor: actor, ip: Audit.AuditIp.From(http),
-            details: new { op = "test", phone = Phone.Mask(phone), sid, messageId = id });
+            details: new { op = "test", sender, phone = Phone.Mask(phone), sid, messageId = id });
         return Results.Ok(new { id, phone = Phone.Mask(phone) });
     }
 
@@ -342,11 +442,13 @@ public static class WhatsAppEndpoints
         if (await queue.IsOptedOutAsync(phone, ct).ConfigureAwait(false))
             return Results.Problem("This number replied STOP to our reports; nothing more is sent to it.", statusCode: 409);
 
-        var id = await queue.EnqueueAsync(patient.Pid, sids, patient.ClientCode, patient.PatientName, phone, "report", "manual", actor, ct)
+        // The client's own number if it has one, else the lab's.
+        var sender = await queue.SenderForAsync(patient.ClientCode, ct).ConfigureAwait(false);
+        var id = await queue.EnqueueAsync(patient.Pid, sids, patient.ClientCode, patient.PatientName, phone, "report", "manual", actor, sender, ct)
             .ConfigureAwait(false);
         audit.Log("report.whatsapp_queued", actor: actor, sid: sids[0], ip: Audit.AuditIp.From(http),
-            details: new { pid = patient.Pid, sids, phone = Phone.Mask(phone), typed = typed is not null, messageId = id });
-        return Results.Ok(new { id, phone = Phone.Mask(phone), samples = sids.Count });
+            details: new { pid = patient.Pid, sids, phone = Phone.Mask(phone), typed = typed is not null, sender, messageId = id });
+        return Results.Ok(new { id, phone = Phone.Mask(phone), samples = sids.Count, sender });
     }
 
     private static async Task<IResult> ReportStatus(
