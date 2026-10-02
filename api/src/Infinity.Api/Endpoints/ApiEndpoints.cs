@@ -114,8 +114,18 @@ public static class ApiEndpoints
         // Typeahead for the two lists that used to travel inside /filters.
         // Same scope rule as everything else: they read the caller's own
         // cached filter payload, so a client can only ever search its own.
-        reports.MapGet("/clients/search", SearchFilterClients).WithName("SearchFilterClients");
         reports.MapGet("/tests/search", SearchFilterTests).WithName("SearchFilterTests");
+        // The centre list also feeds the order form's ClientPicker, and an
+        // account granted order:create alone (a technician allowed to
+        // register B2B orders) holds no report:view: under the report:view
+        // group the picker came back 403 and the form showed "0 clients".
+        // Outside the group for the same reason as the clinical-history
+        // routes below — a group filter cannot be relaxed per route. The
+        // scope rule is unchanged: the payload is still the caller's own.
+        app.MapGroup("/api/reports")
+           .RequireAuthorization()
+           .RequireAnyCapability(Capabilities.ReportView, Capabilities.OrderCreate)
+           .MapGet("/clients/search", SearchFilterClients).WithName("SearchFilterClients");
         reports.MapGet("/{sid}", GetReport).WithName("GetReport");
         // Earlier visits per analyte, for the Trending report.
         reports.MapGet("/{sid}/trend", GetReportTrend).WithName("GetReportTrend");
