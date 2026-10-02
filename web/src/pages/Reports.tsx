@@ -282,13 +282,34 @@ export function Reports() {
    * The same eligibility as the PID download, because it is the same
    * document's worth of results. The server re-checks every one.
    */
+  /*
+   * Why a patient-wide action found nothing to act on. "Not ready" and "on
+   * hold" are different answers: a printed report under a balance hold is
+   * finished, and telling the operator it is not ready sent them looking at
+   * the wrong thing (PID 3631336, two printed reports, both held). A super
+   * admin is pointed at the tick in the PID menu that lets them through.
+   */
+  const nothingTo = (group: WorksheetRow[], verb: string) => {
+    const ready = group.filter((x) => REPORTABLE_STATUSES.includes(x.statusCode ?? -1));
+    const held = ready.filter((x) => locks[x.sid]).length;
+    if (ready.length === 0) return `None of this patient's reports are ready to ${verb} yet.`;
+    if (held === ready.length) {
+      const n = held === 1 ? 'The only report' : `All ${held} of this patient's reports are`;
+      const is = held === 1 ? ' is' : '';
+      return superAdmin
+        ? `${n}${is} on hold for an outstanding balance. Tick "Include held reports" in the PID menu to ${verb} anyway.`
+        : `${n}${is} on hold for an outstanding balance. Clear the balance to release ${held === 1 ? 'it' : 'them'}.`;
+    }
+    return `None of this patient's reports are ready to ${verb} yet.`;
+  };
+
   const openSmart = (row: WorksheetRow) => {
     const group = grouped.find((g) => g.rows.some((x) => x.sid === row.sid))?.rows ?? [row];
     const eligible = group
       .filter((x) => REPORTABLE_STATUSES.includes(x.statusCode ?? -1) && !locks[x.sid])
       .map((x) => x.sid);
     if (eligible.length === 0) {
-      showToast('None of this patient’s reports are ready for a Smart Report yet.');
+      showToast(nothingTo(group, 'open as a Smart Report'));
       return;
     }
     setSmartSids(eligible);
@@ -673,7 +694,7 @@ export function Reports() {
                               .filter((x) => REPORTABLE_STATUSES.includes(x.statusCode ?? -1) && (includeHeld || !locks[x.sid]))
                               .map((x) => x.sid);
                             if (eligible.length === 0) {
-                              showToast('None of this patient’s reports are ready to download yet.');
+                              showToast(nothingTo(grouped.find((g) => g.rows.some((x) => x.sid === r.sid))?.rows ?? [r], 'download'));
                               return;
                             }
                             void downloadPatient(r.pid, eligible, lh, includeHeld);
@@ -683,7 +704,7 @@ export function Reports() {
                               .filter((x) => REPORTABLE_STATUSES.includes(x.statusCode ?? -1) && !locks[x.sid])
                               .map((x) => x.sid);
                             if (ready.length === 0) {
-                              showToast('None of this patient’s reports are ready to send yet.');
+                              showToast(nothingTo(grouped.find((g) => g.rows.some((x) => x.sid === r.sid))?.rows ?? [r], 'send'));
                               return;
                             }
                             void sendWhatsApp(r.pid, ready);
@@ -699,7 +720,7 @@ export function Reports() {
                             const held = ready.some((x) => locks[x.sid]);
                             const eligible = superAdmin ? ready : ready.filter((x) => !locks[x.sid]);
                             if (eligible.length === 0) {
-                              showToast('None of this patient’s reports can be opened yet.');
+                              showToast(nothingTo(all, 'open'));
                               return;
                             }
                             if (superAdmin && held) showToast('Opened including held reports — recorded in the audit trail.');
