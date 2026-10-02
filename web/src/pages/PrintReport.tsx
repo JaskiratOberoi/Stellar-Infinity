@@ -1238,7 +1238,17 @@ function PatientMetaBlock({
               <span className="lr__cc-name">{cc.name ?? cc.code}</span>
               {/* The address and contact can go while the name stays. In the
                   PDF they are simply absent; in the preview they dim, with
-                  their own tick after the name. */}
+                  their own tick right after the name — inline with the text,
+                  not floated after a wrapped contact line. */}
+              {interactive && hasAddr && (
+                <IncludeToggle
+                  label="the centre's address and contact"
+                  excluded={ccAddrOff}
+                  disabled={ccOff}
+                  onToggle={() => onToggle(COLLECTED_ADDRESS_KEY)}
+                  inline
+                />
+              )}
               {hasAddr && !(pdf && ccAddrOff) && (
                 <span className={ccAddrOff ? 'lr__off' : undefined}>
                   {ccAddress && <>, {ccAddress}</>}
@@ -1251,14 +1261,6 @@ function PatientMetaBlock({
                     </span>
                   )}
                 </span>
-              )}
-              {interactive && hasAddr && (
-                <IncludeToggle
-                  label="the centre's address and contact"
-                  excluded={ccAddrOff}
-                  disabled={ccOff}
-                  onToggle={() => onToggle(COLLECTED_ADDRESS_KEY)}
-                />
               )}
             </span>
           </div>
@@ -1349,12 +1351,12 @@ function ReportFooterBlock({ row, printedAt }: { row: FullRow; printedAt: string
  *  `?pdf=1`, so there is no chance of one reaching paper. When a parent is
  *  unticked its children are forced off and disabled. */
 function IncludeToggle({
-  label, excluded, onToggle, disabled,
-}: { label: string; excluded: boolean; onToggle: () => void; disabled?: boolean }) {
+  label, excluded, onToggle, disabled, inline,
+}: { label: string; excluded: boolean; onToggle: () => void; disabled?: boolean; inline?: boolean }) {
   return (
     <input
       type="checkbox"
-      className="lr__tick"
+      className={inline ? 'lr__tick lr__tick--inline' : 'lr__tick'}
       checked={!excluded}
       disabled={disabled}
       onChange={onToggle}

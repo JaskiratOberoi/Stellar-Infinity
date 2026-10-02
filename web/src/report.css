@@ -875,3 +875,7 @@
   text-transform: none; letter-spacing: normal; font-variant: normal;
 }
 
+
+/* The address tick sits in the running text right after the centre name,
+   on the text baseline, so it never floats between wrapped lines. */
+.lr__tick--inline { vertical-align: -1px; margin: 0 5px 0 6px; }
