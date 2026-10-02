@@ -45,7 +45,8 @@ BEGIN
         CONSTRAINT UQ_inf_user_capability_grant UNIQUE (user_id, capability),
         -- THE guard. See the remarks above before adding to this list.
         CONSTRAINT CK_inf_user_capability_grant_cap
-            CHECK (capability IN ('order:b2c', 'rate:hidden'))
+            CHECK (capability IN ('order:b2c', 'rate:hidden', 'report:view',
+                                  'order:create', 'order:b2b'))
     );
 
     -- The read is always "everything this user holds", on every token mint.
@@ -71,5 +72,44 @@ BEGIN
         ADD CONSTRAINT CK_inf_user_capability_grant_cap
             CHECK (capability IN ('order:b2c', 'rate:hidden'));
     PRINT 'Widened CK_inf_user_capability_grant_cap to include rate:hidden.';
+END
+GO
+
+/* report:view joins the set: a field salesperson (sales_exec) the lab picks
+   may read and download reports - for the centres ALLOTTED to them and no
+   others. Safe to hand to one account because the report scope still comes
+   from that user's own tbl_med_user_sales_mcc_mapping rows
+   (ScopeRepository.GetReportScopeAsync): the grant opens the door, the
+   mapping decides which reports are behind it. Guarded so a re-run is a
+   no-op. */
+IF EXISTS (SELECT 1 FROM sys.check_constraints
+           WHERE name = 'CK_inf_user_capability_grant_cap'
+             AND OBJECT_NAME(parent_object_id) = 'inf_user_capability_grant'
+             AND definition NOT LIKE '%report:view%')
+BEGIN
+    ALTER TABLE dbo.inf_user_capability_grant DROP CONSTRAINT CK_inf_user_capability_grant_cap;
+    ALTER TABLE dbo.inf_user_capability_grant
+        ADD CONSTRAINT CK_inf_user_capability_grant_cap
+            CHECK (capability IN ('order:b2c', 'rate:hidden', 'report:view'));
+    PRINT 'Widened CK_inf_user_capability_grant_cap to include report:view.';
+END
+GO
+
+/* order:create + order:b2b join the set: a lab-side account (e.g. an
+   accessioning technician) the lab picks may register client-billed orders.
+   Both are needed - order:create opens New Order, order:b2b the B2B channel.
+   Neither reads anything beyond the user's existing operational scope, and
+   neither is administrative. Guarded so a re-run is a no-op. */
+IF EXISTS (SELECT 1 FROM sys.check_constraints
+           WHERE name = 'CK_inf_user_capability_grant_cap'
+             AND OBJECT_NAME(parent_object_id) = 'inf_user_capability_grant'
+             AND definition NOT LIKE '%order:b2b%')
+BEGIN
+    ALTER TABLE dbo.inf_user_capability_grant DROP CONSTRAINT CK_inf_user_capability_grant_cap;
+    ALTER TABLE dbo.inf_user_capability_grant
+        ADD CONSTRAINT CK_inf_user_capability_grant_cap
+            CHECK (capability IN ('order:b2c', 'rate:hidden', 'report:view',
+                                  'order:create', 'order:b2b'));
+    PRINT 'Widened CK_inf_user_capability_grant_cap to include order:create, order:b2b.';
 END
 GO

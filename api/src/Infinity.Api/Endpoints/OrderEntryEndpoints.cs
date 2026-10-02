@@ -370,9 +370,11 @@ public static class OrderEntryEndpoints
     /// around the clock. The fallback grants nothing new: every order:create
     /// holder could already place exactly these orders at exactly these prices.
     ///
-    /// Remove the fallback once tokens have rotated. Until then the Client
-    /// role's confinement to B2B is expressed in the role table but not yet
-    /// enforced, which is the honest cost of not forcing a mass re-login.
+    /// The fallback applies only to a token WITHOUT <c>order:b2b</c>. A token
+    /// carrying order:b2b was minted under the two-channel model, so its lack
+    /// of order:b2c is deliberate, not stale: a client login, or a lab account
+    /// granted B2B registration alone (inf_user_capability_grant), stays
+    /// confined to B2B. Remove the fallback once old tokens have rotated.
     /// </remarks>
     private static (string Channel, IResult? Error) ResolveChannel(
         System.Security.Claims.ClaimsPrincipal principal, string? requested)
@@ -394,7 +396,8 @@ public static class OrderEntryEndpoints
         }
         if (channel == B2c
             && !principal.HasCapability(Capabilities.OrderB2c)
-            && !principal.HasCapability(Capabilities.OrderCreate))
+            && !(principal.HasCapability(Capabilities.OrderCreate)
+                 && !principal.HasCapability(Capabilities.OrderB2b)))
         {
             return (B2c, Results.Problem(
                 title: "Forbidden",
