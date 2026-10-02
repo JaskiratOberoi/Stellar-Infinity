@@ -171,9 +171,17 @@ interface Analyte {
   };
   gauge: GaugeModel | null;
   alert: boolean;
+  /** A sentence, not a figure: an impression or advice line. Shown as text,
+   *  never counted as a test or offered as a "to look at" chip. */
+  prose: boolean;
   what: string | null;
   meaning: string | null;
   advice: string | null;
+}
+
+/** The analytes that are measurements: what the counts and risk meters read. */
+function measured(list: Analyte[]): Analyte[] {
+  return list.filter((a) => !a.prose);
 }
 
 /** A body system, as the API grouped it. Stands in for Telo's SMART_CATEGORIES. */
@@ -353,6 +361,7 @@ function readSections(sections: ApiSection[]): { analytes: Analyte[]; categories
         },
         gauge: a.gauge,
         alert: a.abnormal,
+        prose: textValue(a.value),
         what: a.what,
         meaning: a.meaning,
         advice: a.advice,
@@ -364,7 +373,33 @@ function readSections(sections: ApiSection[]): { analytes: Analyte[]; categories
 
 // ── Building blocks ───────────────────────────────────────────────────────
 
-function Badge({ alert }: { alert: boolean }) {
+function Badge({ alert, note = false }: { alert: boolean; note?: boolean }) {
+  if (note) {
+    // A lab's note: a quiet marker, neither a tick nor a warning.
+    return (
+      <div style={{ textAlign: 'center', width: '60px' }}>
+        <div
+          style={{
+            width: '46px',
+            height: '46px',
+            borderRadius: '999px',
+            background: '#eceaf6',
+            color: BRAND,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto',
+            fontSize: '20px',
+            fontWeight: 900,
+            lineHeight: 1,
+          }}
+        >
+          ≡
+        </div>
+        <div style={{ fontSize: '9.5px', fontWeight: 800, color: MUTED, marginTop: '4px' }}>Lab note</div>
+      </div>
+    );
+  }
   const color = alert ? RED : GREEN;
   return (
     <div style={{ textAlign: 'center', width: '60px' }}>
@@ -659,9 +694,10 @@ function RiskMeter({ level }: { level: RiskLevel }) {
  *  meter with a verdict — a richer lead-in before the individual results. */
 function CategoryIntro({ cat, list }: { cat: Category; list: Analyte[] }) {
   const vis = categoryVis(cat.id);
-  const { level, alerts } = categoryRisk(list);
+  const figures = measured(list);
+  const { level, alerts } = categoryRisk(figures);
   const rm = RISK_META[level];
-  const tests = list.length;
+  const tests = figures.length;
   return (
     <div style={{ border: `1px solid ${HAIR}`, borderRadius: '13px', overflow: 'hidden', breakInside: 'avoid', pageBreakInside: 'avoid' }}>
       {/* Gradient header: organ glyph · title/tagline · status pill */}
@@ -744,7 +780,10 @@ function ResultBlock({ a }: { a: Analyte }) {
   // keep-it-up note for a healthy one, so which it is depends on the flag.
   const meaning = a.alert ? a.meaning : null;
   const advice = a.alert ? a.advice : null;
-  const okNote = !a.alert ? a.advice : null;
+  // An unflagged advice or impression line is a note from the lab, not a
+  // healthy result: no "Healthy" badge, no keep-it-up line under it.
+  const note = a.prose && !a.alert;
+  const okNote = !a.alert && !note ? a.advice : null;
 
   return (
     <div
@@ -759,7 +798,7 @@ function ResultBlock({ a }: { a: Analyte }) {
       }}
     >
       <div style={{ paddingTop: '2px' }}>
-        <Badge alert={a.alert} />
+        <Badge alert={a.alert} note={note} />
       </div>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: '14px', fontWeight: 800, color: BRAND }}>{a.friendlyName}</div>
@@ -773,16 +812,24 @@ function ResultBlock({ a }: { a: Analyte }) {
         )}
 
         <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap', marginTop: '11px' }}>
-          <div style={{ flex: '0 0 auto' }}>
+          {/* A figure reads large beside its gauge; a sentence (an impression,
+              an advice line) reads as text, the width of the card. */}
+          <div style={{ flex: textValue(a.row.value) ? '1 1 100%' : '0 0 auto', minWidth: 0 }}>
             <div style={{ fontSize: '9px', color: FAINT, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
               Your reading
             </div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '5px', marginTop: '2px' }}>
-              <span style={{ fontSize: '22px', fontWeight: 800, color: a.alert ? RED : INK, fontVariantNumeric: 'tabular-nums' }}>
-                {a.row.value ?? '—'}
-              </span>
-              {a.row.unit && <span style={{ fontSize: '10px', color: MUTED }}>{a.row.unit}</span>}
-            </div>
+            {textValue(a.row.value) ? (
+              <div style={{ fontSize: '11.5px', fontWeight: 700, color: a.alert ? RED : INK, lineHeight: 1.5, marginTop: '3px', whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>
+                {a.row.value}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '5px', marginTop: '2px' }}>
+                <span style={{ fontSize: '22px', fontWeight: 800, color: a.alert ? RED : INK, fontVariantNumeric: 'tabular-nums' }}>
+                  {a.row.value ?? '—'}
+                </span>
+                {a.row.unit && <span style={{ fontSize: '10px', color: MUTED }}>{a.row.unit}</span>}
+              </div>
+            )}
           </div>
           <div style={{ flex: '1 1 300px', minWidth: '260px' }}>
             {a.gauge ? (
@@ -1088,7 +1135,7 @@ function Wellness({ data, alerts, total }: { data: SmartBookletData; alerts: Ana
                       <div style={{ fontSize: '12px', fontWeight: 800, color: INK }}>
                         {a.friendlyName.replace(/ —.*$/, '')}{' '}
                         <span style={{ fontWeight: 700, color: RED, fontSize: '11px' }}>
-                          · {a.row.value} {a.row.unit ?? ''}
+                          {textValue(a.row.value) ? null : <>· {a.row.value} {a.row.unit ?? ''}</>}
                         </span>
                       </div>
                       {advice && (
@@ -1180,6 +1227,16 @@ function Wellness({ data, alerts, total }: { data: SmartBookletData; alerts: Ana
   );
 }
 
+/**
+ * A value that is prose rather than a figure: an impression, an advice line,
+ * an interpretation. These wrap under their label; a figure sits beside it.
+ * A short coded word ("NEGATIVE", "1:988", "12 WEEKS 02 DAYS") stays a figure.
+ */
+function textValue(v: string | null | undefined): boolean {
+  const s = (v ?? '').trim();
+  return s.length > 28 || /\n/.test(s) || /[.;]\s+\S/.test(s);
+}
+
 // ── Report summary for the doctor ─────────────────────────────────────────
 
 function ReportSummary({
@@ -1193,24 +1250,21 @@ function ReportSummary({
         title="Summary for your doctor"
         tagline="A compact list of every result on this report, with its reference range. Print or share this page at your next appointment."
       />
-      <div style={{ marginTop: '14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 26px' }}>
+      {/* minmax(0, 1fr), not 1fr: a grid track's default minimum is its
+          content, so one sentence-long value set not to wrap stretched its
+          column across the page and squeezed the other to a sliver (the HPLC
+          demo's impression beside the blood counts). Capped at half, and a
+          value that is prose rather than a figure drops under its label and
+          wraps - see textValue. */}
+      <div style={{ marginTop: '14px', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '0 26px' }}>
         {categories.map((cat) => (
-          <div key={cat.title} style={{ breakInside: 'avoid', marginBottom: '12px' }}>
+          <div key={cat.title} style={{ breakInside: 'avoid', marginBottom: '12px', minWidth: 0 }}>
             <div style={{ fontSize: '11px', fontWeight: 800, color: BRAND, borderBottom: `2px solid ${BRAND_SOFT}`, paddingBottom: '3px', marginBottom: '2px' }}>
               {cat.title}
             </div>
-            {cat.analytes.map((a, i) => (
-              <div
-                key={i}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr auto',
-                  gap: '8px',
-                  alignItems: 'baseline',
-                  padding: '4px 0',
-                  borderTop: i === 0 ? 'none' : `1px solid ${HAIR}`,
-                }}
-              >
+            {cat.analytes.map((a, i) => {
+              const prose = textValue(a.row.value);
+              const label = (
                 <div style={{ minWidth: 0 }}>
                   <span style={{ fontSize: '10px', fontWeight: 700, color: a.alert ? RED : INK }}>
                     {a.alert && (
@@ -1222,12 +1276,34 @@ function ReportSummary({
                     <span style={{ fontSize: '8.5px', color: FAINT }}> · Ref {a.row.range.replace(/\s*\n\s*/g, ', ')}</span>
                   )}
                 </div>
-                <div style={{ fontSize: '10px', fontWeight: 800, color: a.alert ? RED : INK, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                  {a.row.value ?? '—'}
-                  {a.row.unit ? <span style={{ fontWeight: 500, color: MUTED }}> {a.row.unit}</span> : null}
+              );
+              return prose ? (
+                <div key={i} style={{ padding: '4px 0', borderTop: i === 0 ? 'none' : `1px solid ${HAIR}` }}>
+                  {label}
+                  <div style={{ fontSize: '9.5px', fontWeight: 600, color: a.alert ? RED : INK, whiteSpace: 'pre-line', overflowWrap: 'anywhere', marginTop: '2px' }}>
+                    {a.row.value}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ) : (
+                <div
+                  key={i}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(0, 1fr) auto',
+                    gap: '8px',
+                    alignItems: 'baseline',
+                    padding: '4px 0',
+                    borderTop: i === 0 ? 'none' : `1px solid ${HAIR}`,
+                  }}
+                >
+                  {label}
+                  <div style={{ fontSize: '10px', fontWeight: 800, color: a.alert ? RED : INK, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', maxWidth: '55%', overflowWrap: 'anywhere' }}>
+                    {a.row.value ?? '—'}
+                    {a.row.unit ? <span style={{ fontWeight: 500, color: MUTED }}> {a.row.unit}</span> : null}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ))}
       </div>
@@ -1702,8 +1778,10 @@ export function SmartBooklet({ data, format = 'v1', onMapReady, trend = null }: 
 }) {
   const { analytes, categories } = readSections(data.sections);
   const trendMap = useMemo(() => trendIndex(trend), [trend]);
-  const total = analytes.length;
-  const alerts = analytes.filter((a) => a.alert);
+  // Counts read measurements only: an impression line is neither a test
+  // done nor a figure to put on a chip, though its card still prints.
+  const total = measured(analytes).length;
+  const alerts = measured(analytes).filter((a) => a.alert);
   const alertCount = alerts.length;
   const normalCount = total - alertCount;
   const pctHealthy = total > 0 ? Math.round((normalCount / total) * 100) : 100;
@@ -1825,7 +1903,7 @@ export function SmartBooklet({ data, format = 'v1', onMapReady, trend = null }: 
           <SectionTitle>Your health areas at a glance</SectionTitle>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '9px', marginTop: '11px' }}>
             {orderedCategories.map((cat) => {
-              const list = byCategory.get(cat.id)!;
+              const list = measured(byCategory.get(cat.id)!);
               const vis = categoryVis(cat.id);
               const { level } = categoryRisk(list);
               const rm = RISK_META[level];
@@ -1906,7 +1984,7 @@ export function SmartBooklet({ data, format = 'v1', onMapReady, trend = null }: 
                       padding: '4px 11px',
                     }}
                   >
-                    {a.friendlyName.replace(/ —.*$/, '')} · {a.row.value} {a.row.unit ?? ''}
+                    {a.friendlyName.replace(/ —.*$/, '')} {textValue(a.row.value) ? null : <>· {a.row.value} {a.row.unit ?? ''}</>}
                   </span>
                 ))}
               </div>
@@ -1920,7 +1998,7 @@ export function SmartBooklet({ data, format = 'v1', onMapReady, trend = null }: 
             name={name}
             sex={data.sex}
             systems={orderedCategories.map((cat): BodySystem => {
-              const list = byCategory.get(cat.id)!;
+              const list = measured(byCategory.get(cat.id)!);
               const flagged = list.filter((a) => a.alert);
               return {
                 id: cat.id,

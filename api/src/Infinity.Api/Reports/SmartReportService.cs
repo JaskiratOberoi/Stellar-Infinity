@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Infinity.Api.Reads;
 
 namespace Infinity.Api.Reports;
@@ -143,6 +144,8 @@ public sealed class SmartReportService(SmartMeta meta)
         {
             // A header/title row with no value is structural, not a result.
             if (string.IsNullOrWhiteSpace(r.Value) && string.IsNullOrWhiteSpace(r.Unit)) continue;
+            // So is the lab's own reference number for a run ("HPLC NO.").
+            if (IsReferenceNumber(r)) continue;
 
             var resolved = meta.Resolve(r.TestCode, r.TestName, r.DepartmentName);
             var gauge = SmartRange.Build(r.Value, r.NormalRange, first.Sex);
@@ -229,6 +232,14 @@ public sealed class SmartReportService(SmartMeta meta)
             Sids: sids,
             Pid: first.Pid);
     }
+
+    private static readonly Regex ReferenceNumberName = new(
+        @"^\s*(HPLC|RUN|ACCESSION|SAMPLE|LAB|REF(ERENCE)?)\s*(NO|NUMBER|ID|#)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>The run's reference number ("HPLC NO."): bookkeeping, not a result.</summary>
+    private static bool IsReferenceNumber(TestResult r) =>
+        ReferenceNumberName.IsMatch(r.TestName ?? string.Empty);
 
     /// <summary>A Head or Profile row: a heading over results, never a result.</summary>
     private static bool IsHeading(TestResult r)
