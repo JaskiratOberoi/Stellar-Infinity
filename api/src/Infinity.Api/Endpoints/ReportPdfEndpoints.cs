@@ -36,6 +36,14 @@ public static class ReportPdfEndpoints
     /// </summary>
     private const int CollectedAtKey = -1;
 
+    /// <summary>
+    /// The line's second tick: the centre's address and contact go, its name
+    /// stays. COLLECTED_ADDRESS_KEY in reportModel.ts.
+    /// </summary>
+    private const int CollectedAddressKey = -2;
+
+    private static bool IsExcludable(int n) => n > 0 || n == CollectedAtKey || n == CollectedAddressKey;
+
     public static void MapReportPdfEndpoints(this WebApplication app)
     {
         var reports = app.MapGroup("/api/reports")
@@ -215,7 +223,7 @@ public static class ReportPdfEndpoints
     {
         var ids = (exclude ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(s => int.TryParse(s, out var n) && (n > 0 || n == CollectedAtKey) ? n : 0)
+            .Select(s => int.TryParse(s, out var n) && IsExcludable(n) ? n : 0)
             .Where(n => n != 0)
             // A duplicate changes nothing but lengthens a URL that a very wide
             // report can already make long.
@@ -813,7 +821,7 @@ public static class ReportPdfEndpoints
             var excludesBySid = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var (k, v) in body!.Excludes ?? new Dictionary<string, IReadOnlyList<int>>())
             {
-                var ids = (v ?? []).Where(i => i > 0 || i == CollectedAtKey).Distinct().Take(500).ToList();
+                var ids = (v ?? []).Where(IsExcludable).Distinct().Take(500).ToList();
                 if (ids.Count > 0 && !string.IsNullOrWhiteSpace(k))
                     excludesBySid[k.Trim()] = string.Join(",", ids);
             }

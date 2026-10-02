@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, ApiError, csrfHeader, whatsappApi } from '../api/client';
 import { downloadFile, fmtDateTime } from '../lib/format';
-import { COLLECTED_AT_KEY } from '../lib/reportModel';
+import { COLLECTED_AT_KEY, COLLECTED_ADDRESS_KEY } from '../lib/reportModel';
 import { ReportViewer } from './ReportViewer';
 import { SmartReportModal } from './SmartReport';
 import { InfinityLoader } from '../components/InfinityLoader';
@@ -1038,13 +1038,17 @@ function PatientReportViewer({ pid, patientName, rows, onClose, overrideLock, on
            other sample of the patient — untick here, unticked everywhere;
            tick it back, back everywhere. The analyte ticks stay per sample:
            those really are decisions about that sample's results. */
-        const ccOff = ex.includes(COLLECTED_AT_KEY);
-        for (const other of sids) {
-          if (other === d.sid) continue;
-          const cur = excludesRef.current[other] ?? [];
-          const has = cur.includes(COLLECTED_AT_KEY);
-          if (ccOff && !has) excludesRef.current[other] = [...cur, COLLECTED_AT_KEY];
-          else if (!ccOff && has) excludesRef.current[other] = cur.filter((n) => n !== COLLECTED_AT_KEY);
+        // Both ticks on that line — the whole line, and its address — are
+        // document-wide the same way.
+        for (const key of [COLLECTED_AT_KEY, COLLECTED_ADDRESS_KEY]) {
+          const off = ex.includes(key);
+          for (const other of sids) {
+            if (other === d.sid) continue;
+            const cur = excludesRef.current[other] ?? [];
+            const has = cur.includes(key);
+            if (off && !has) excludesRef.current[other] = [...cur, key];
+            else if (!off && has) excludesRef.current[other] = cur.filter((n) => n !== key);
+          }
         }
       }
       if (typeof d.total === 'number' && typeof d.remaining === 'number') {

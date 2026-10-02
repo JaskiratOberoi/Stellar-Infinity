@@ -19,7 +19,7 @@ import {
   ageLabel, fmtDob, fmtStamp, formatRange, genderLabel, splitInterp,
 } from '../lib/reportFormat';
 import {
-  buildSampleReport, isTitleHead, isDescriptive, descriptiveMethod, COLLECTED_AT_KEY,
+  buildSampleReport, isTitleHead, isDescriptive, descriptiveMethod, COLLECTED_AT_KEY, COLLECTED_ADDRESS_KEY,
   type CultureReport, type ReportBlock,
   type ReportGroup, type ReportItem, type ReportPanel, type ReportRow,
 } from '../lib/reportModel';
@@ -179,7 +179,7 @@ function parseExcluded(raw: string | null): Set<number> {
   if (!raw) return new Set();
   return new Set(
     raw.split(',').map((s) => Number(s.trim()))
-      .filter((n) => Number.isInteger(n) && (n > 0 || n === COLLECTED_AT_KEY)),
+      .filter((n) => Number.isInteger(n) && (n > 0 || n === COLLECTED_AT_KEY || n === COLLECTED_ADDRESS_KEY)),
   );
 }
 
@@ -1154,6 +1154,9 @@ function PatientMetaBlock({
   // not always want the collecting centre's name and phone on the sheet.
   // Unticked it dims in the preview and is gone from the PDF.
   const ccOff = excluded.has(COLLECTED_AT_KEY);
+  // The finer tick: the centre's name stays, its address and contact go.
+  const ccAddrOff = excluded.has(COLLECTED_ADDRESS_KEY);
+  const hasAddr = !!(ccAddress || cc?.email || cc?.phone);
 
   return (
     <>
@@ -1233,14 +1236,29 @@ function PatientMetaBlock({
             <span className="lr__f-sep">:</span>
             <span>
               <span className="lr__cc-name">{cc.name ?? cc.code}</span>
-              {ccAddress && <>, {ccAddress}</>}
-              {(cc.email || cc.phone) && (
-                <span className="lr__cc-contact">
-                  {' — '}
-                  {cc.email ? `Email: ${cc.email}` : ''}
-                  {cc.email && cc.phone ? ' · ' : ''}
-                  {cc.phone ? `Ph: ${cc.phone}` : ''}
+              {/* The address and contact can go while the name stays. In the
+                  PDF they are simply absent; in the preview they dim, with
+                  their own tick after the name. */}
+              {hasAddr && !(pdf && ccAddrOff) && (
+                <span className={ccAddrOff ? 'lr__off' : undefined}>
+                  {ccAddress && <>, {ccAddress}</>}
+                  {(cc.email || cc.phone) && (
+                    <span className="lr__cc-contact">
+                      {' — '}
+                      {cc.email ? `Email: ${cc.email}` : ''}
+                      {cc.email && cc.phone ? ' · ' : ''}
+                      {cc.phone ? `Ph: ${cc.phone}` : ''}
+                    </span>
+                  )}
                 </span>
+              )}
+              {interactive && hasAddr && (
+                <IncludeToggle
+                  label="the centre's address and contact"
+                  excluded={ccAddrOff}
+                  disabled={ccOff}
+                  onToggle={() => onToggle(COLLECTED_ADDRESS_KEY)}
+                />
               )}
             </span>
           </div>

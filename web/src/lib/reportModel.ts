@@ -338,6 +338,14 @@ function dedupeAntibiogram(c: CultureReport): void {
 export const COLLECTED_AT_KEY = -1;
 
 /**
+ * The second tick on that line: drop the centre's ADDRESS and contact while
+ * keeping its name — a client that wants its own name on the sheet but not
+ * its street and phone. Same channel, the next negative value (the API lets
+ * exactly these two non-positive values through).
+ */
+export const COLLECTED_ADDRESS_KEY = -2;
+
+/**
  * A Head with no parameters of its own — the "report name" heading a
  * multi-part test prints above its sub-groups (COMPLETE BLOOD COUNT over
  * Automated 5 Part Analyzer / Differential Counts). It has nothing to tick and
