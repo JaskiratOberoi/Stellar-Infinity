@@ -878,4 +878,4 @@
 
 /* The address tick sits in the running text right after the centre name,
    on the text baseline, so it never floats between wrapped lines. */
-.lr__tick--inline { vertical-align: -1px; margin: 0 5px 0 6px; }
+.lr__tick--inline { width: 10px; height: 10px; vertical-align: -1px; margin: 0 4px 0 5px; }
