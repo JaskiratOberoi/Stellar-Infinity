@@ -5273,7 +5273,7 @@ tbody tr.row-status--quiet > td:first-child {
 .slegend {
   display: flex; flex-wrap: wrap; gap: .3rem .85rem;
   margin: .1rem 0 .55rem;
-  font-size: .7rem; letter-spacing: .02em; color: var(--ink-dim);
+  font-size: .78rem; letter-spacing: .02em; color: var(--ink-dim);
 }
 .slegend__item { display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap; }
 .slegend__swatch {
