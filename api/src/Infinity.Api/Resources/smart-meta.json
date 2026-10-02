@@ -5,37 +5,37 @@
       "id": "heart",
       "title": "Heart & Cholesterol",
       "tagline": "Fats (lipids) in your blood that influence long-term heart and blood-vessel health.",
-      "about": "Your heart pumps blood through a vast network of vessels, and cholesterol and other fats ride along in that blood. In the right balance they’re essential; in excess they can slowly build up in artery walls over years. These tests show that balance — a picture of your longer-term heart and blood-vessel health."
+      "about": "Your heart pumps blood through a vast network of vessels, and cholesterol and other fats ride along in that blood. In the right balance they\u2019re essential; in excess they can slowly build up in artery walls over years. These tests show that balance \u2014 a picture of your longer-term heart and blood-vessel health."
     },
     {
       "id": "diabetes",
       "title": "Blood Sugar",
-      "tagline": "How your body regulates glucose — the key screen for diabetes and pre-diabetes.",
-      "about": "Your pancreas releases insulin, the hormone that lets your body turn the sugar (glucose) from food into energy. When that system is under strain, sugar starts to build up in the blood. These tests show how well your body is keeping glucose in a healthy range — the key screen for pre-diabetes and diabetes."
+      "tagline": "How your body regulates glucose \u2014 the key screen for diabetes and pre-diabetes.",
+      "about": "Your pancreas releases insulin, the hormone that lets your body turn the sugar (glucose) from food into energy. When that system is under strain, sugar starts to build up in the blood. These tests show how well your body is keeping glucose in a healthy range \u2014 the key screen for pre-diabetes and diabetes."
     },
     {
       "id": "kidney",
       "title": "Kidney Health",
-      "tagline": "Waste products and salts your kidneys filter out of the blood — a picture of how well they are working.",
-      "about": "Your kidneys are two fist-sized filters that clean your blood around the clock, removing waste and excess water as urine while balancing the body’s salts and minerals. They also help control blood pressure and prompt the making of red blood cells. These tests show how well they’re filtering."
+      "tagline": "Waste products and salts your kidneys filter out of the blood \u2014 a picture of how well they are working.",
+      "about": "Your kidneys are two fist-sized filters that clean your blood around the clock, removing waste and excess water as urine while balancing the body\u2019s salts and minerals. They also help control blood pressure and prompt the making of red blood cells. These tests show how well they\u2019re filtering."
     },
     {
       "id": "liver",
       "title": "Liver Health",
       "tagline": "Enzymes and proteins made by the liver that show how well it is processing, storing and cleaning.",
-      "about": "Your liver is the body’s processing plant — it breaks down food, filters out toxins, stores energy and makes proteins that help your blood clot. When liver cells are irritated they release enzymes into the blood. These tests measure those enzymes and proteins to show how well it’s working."
+      "about": "Your liver is the body\u2019s processing plant \u2014 it breaks down food, filters out toxins, stores energy and makes proteins that help your blood clot. When liver cells are irritated they release enzymes into the blood. These tests measure those enzymes and proteins to show how well it\u2019s working."
     },
     {
       "id": "thyroid",
       "title": "Thyroid",
       "tagline": "Hormones from the thyroid gland in your neck that set the pace of your metabolism, energy and weight.",
-      "about": "Your thyroid is a small butterfly-shaped gland in your neck that sets the pace of your metabolism — how your body uses energy. Its hormones quietly influence your weight, energy, mood, heart rate and temperature. These tests show whether it’s running at the right pace."
+      "about": "Your thyroid is a small butterfly-shaped gland in your neck that sets the pace of your metabolism \u2014 how your body uses energy. Its hormones quietly influence your weight, energy, mood, heart rate and temperature. These tests show whether it\u2019s running at the right pace."
     },
     {
       "id": "blood",
       "title": "Blood Counts & Anaemia",
-      "tagline": "The cells in your blood — red cells that carry oxygen, white cells that fight infection, platelets that clot.",
-      "about": "Your blood is a living tissue: red cells carry oxygen to every part of you, white cells fight infection, and platelets clump together to stop bleeding. A complete blood count checks the numbers, size and balance of these cells — a broad view of your overall health and a screen for anaemia."
+      "tagline": "The cells in your blood \u2014 red cells that carry oxygen, white cells that fight infection, platelets that clot.",
+      "about": "Your blood is a living tissue: red cells carry oxygen to every part of you, white cells fight infection, and platelets clump together to stop bleeding. A complete blood count checks the numbers, size and balance of these cells \u2014 a broad view of your overall health and a screen for anaemia."
     },
     {
       "id": "vitamins",
@@ -47,19 +47,31 @@
       "id": "hormones",
       "title": "Hormones & Fertility",
       "tagline": "Fertility and sex hormones, and the glands in the brain that steer them.",
-      "about": "Hormones are your body’s chemical messengers — released by glands and carried in the blood to regulate growth, reproduction, stress, sleep and mood. The ones measured here mostly concern fertility and the reproductive organs in the pelvis: the ovaries and the testes, and the pituitary gland in the brain that directs them. They work in a finely tuned balance, and these tests show how that balance sits."
+      "about": "Hormones are your body\u2019s chemical messengers \u2014 released by glands and carried in the blood to regulate growth, reproduction, stress, sleep and mood. The ones measured here mostly concern fertility and the reproductive organs in the pelvis: the ovaries and the testes, and the pituitary gland in the brain that directs them. They work in a finely tuned balance, and these tests show how that balance sits."
     },
     {
       "id": "infection",
       "title": "Infection & Immunity",
       "tagline": "Markers of inflammation and screens for common infections.",
-      "about": "Your immune system defends you against infection, and certain markers in the blood rise when it’s active or when inflammation is present anywhere in the body. These tests screen for that inflammation and for specific infections, so anything flagged can be followed up."
+      "about": "Your immune system defends you against infection, and certain markers in the blood rise when it\u2019s active or when inflammation is present anywhere in the body. These tests screen for that inflammation and for specific infections, so anything flagged can be followed up."
     },
     {
       "id": "urine",
       "title": "Urine Analysis",
-      "tagline": "A physical and chemical check of your urine — a window on kidneys, sugar control and infection.",
-      "about": "Urine carries away the waste and excess water your kidneys filter out of your blood. A quick physical and chemical check of it — colour, concentration, protein, sugar and signs of infection — offers a useful window on your kidneys, sugar control and urinary health."
+      "tagline": "A physical and chemical check of your urine \u2014 a window on kidneys, sugar control and infection.",
+      "about": "Urine carries away the waste and excess water your kidneys filter out of your blood. A quick physical and chemical check of it \u2014 colour, concentration, protein, sugar and signs of infection \u2014 offers a useful window on your kidneys, sugar control and urinary health."
+    },
+    {
+      "id": "pregnancy",
+      "title": "Pregnancy Screening",
+      "tagline": "Blood markers from the placenta and baby, combined with your age and scan, to estimate the chance of certain chromosomal conditions.",
+      "about": "During pregnancy the placenta and the baby release proteins and hormones into your blood. The double, triple and quadruple marker tests measure a few of these and compare them with what is usual for your stage of pregnancy (shown as a MoM \u2014 a multiple of the median). Your age, weight, the scan date and findings are combined with them to give a RISK \u2014 a chance such as 1 in 1,000 \u2014 for Down syndrome (trisomy 21) and for trisomies 18 and 13. This is a screening test: a low risk is reassuring but not a guarantee, and a high risk means a closer look is advised (a NIPT blood test or a diagnostic test), not that the baby is affected."
+    },
+    {
+      "id": "haemoglobin",
+      "title": "Haemoglobin Type (Thalassaemia Screen)",
+      "tagline": "The kinds of haemoglobin in your red cells, separated by HPLC \u2014 the screen for thalassaemia trait and sickle haemoglobin.",
+      "about": "Haemoglobin is the protein in red cells that carries oxygen. Nearly all of an adult\u2019s haemoglobin is HbA, with a little HbA2 and a trace of HbF (the baby form). An HPLC machine separates these fractions and shows each as a percentage. A raised HbA2 usually means beta-thalassaemia TRAIT \u2014 a carrier state, harmless to you, that matters when planning a family if your partner is also a carrier. HbS is sickle haemoglobin. The red-cell indices alongside (MCV, MCH) help tell a thalassaemia trait from simple iron deficiency, which looks similar on a blood count."
     },
     {
       "id": "other",
@@ -70,16 +82,18 @@
   ],
   "categoryAdvice": {
     "heart": "Small, steady habits help most: more fibre and healthy fats (nuts, oats, olive oil), regular brisk walks, less fried and processed food, and not smoking. Your doctor will advise if anything more is needed.",
-    "diabetes": "Cutting back on sugar and refined carbs, staying active, and keeping a healthy weight can move these numbers a lot — often before any medicine is needed. Your doctor can guide the next step.",
+    "diabetes": "Cutting back on sugar and refined carbs, staying active, and keeping a healthy weight can move these numbers a lot \u2014 often before any medicine is needed. Your doctor can guide the next step.",
     "kidney": "Staying well hydrated, keeping blood pressure and sugar in check, and not overusing painkillers all support your kidneys. Your doctor will decide if this needs a closer look.",
     "liver": "Limiting alcohol, eating lighter, staying active, and reaching a healthy weight often bring liver numbers back down. Your doctor may suggest a repeat test.",
     "thyroid": "Thyroid results are best interpreted by your doctor, who may repeat the test or start a simple, effective treatment if needed.",
     "blood": "Iron-rich foods (leafy greens, beans, lean meat), or B12 and folate where advised, often help. Your doctor can find the cause and suggest the right fix.",
     "vitamins": "These usually respond well to diet, safe sun exposure, or a short course of supplements. Your doctor can advise the right dose.",
-    "hormones": "Hormone results are read in the context of your symptoms — your doctor will guide any next steps.",
+    "hormones": "Hormone results are read in the context of your symptoms \u2014 your doctor will guide any next steps.",
     "infection": "A screening result like this is followed up by your doctor with a confirmatory test before any conclusion is drawn.",
     "urine": "Staying hydrated and following up with your doctor on anything flagged is the best next step.",
-    "other": "Please review this result with your doctor, who can put it in the context of your overall health."
+    "other": "Please review this result with your doctor, who can put it in the context of your overall health.",
+    "pregnancy": "Screening results are best discussed with your obstetrician, who will read them with your scan and history and advise whether any further test is needed.",
+    "haemoglobin": "An unusual haemoglobin pattern is usually a carrier state and needs no treatment, but your doctor may suggest testing your partner before planning a pregnancy, and iron studies to check whether iron deficiency is adding to it."
   },
   "categoryAdviceDirectional": {
     "heart": {
@@ -99,32 +113,44 @@
       "low": "Lower liver enzymes are generally not a worry and need no special action. Keep up balanced eating and limited alcohol, and your doctor will review if needed."
     },
     "thyroid": {
-      "high": "Thyroid results are mainly managed with your doctor’s guidance rather than diet alone. Meanwhile, eat balanced meals, use iodised salt, avoid heavy supplement doses, and rest well.",
+      "high": "Thyroid results are mainly managed with your doctor\u2019s guidance rather than diet alone. Meanwhile, eat balanced meals, use iodised salt, avoid heavy supplement doses, and rest well.",
       "low": "Thyroid levels are best guided by your doctor rather than food alone. In the meantime, eat balanced meals with enough iodine, stay active, sleep well, and avoid extreme supplements."
     },
     "blood": {
-      "high": "Raised red-cell counts can sometimes reflect dehydration or smoking, so drink enough water and avoid tobacco. Your doctor will check what’s behind it and advise next steps.",
+      "high": "Raised red-cell counts can sometimes reflect dehydration or smoking, so drink enough water and avoid tobacco. Your doctor will check what\u2019s behind it and advise next steps.",
       "low": "To support healthy blood, include iron-rich foods like leafy greens, beans and lean meat, paired with vitamin-C foods to boost absorption. Your doctor will find the cause."
     },
     "vitamins": {
-      "high": "High vitamin levels often come from supplements. It’s worth reviewing what you take with your doctor and easing off high doses, since more isn’t always better.",
+      "high": "High vitamin levels often come from supplements. It\u2019s worth reviewing what you take with your doctor and easing off high doses, since more isn\u2019t always better.",
       "low": "A varied diet rich in fruits, vegetables, whole grains and lean proteins helps top up most vitamins. Ask your doctor whether a supplement would suit you."
     }
   },
   "categoryAdviceOk": {
-    "heart": "Your heart and cholesterol numbers look good — keep up the fibre, healthy fats and regular activity that protect them.",
-    "diabetes": "Your blood-sugar control looks healthy — keep up balanced meals, regular movement and a steady weight.",
-    "kidney": "Your kidney markers look healthy — keep well hydrated and stay on top of blood pressure and sugar.",
-    "liver": "Your liver numbers look healthy — balanced eating and going easy on alcohol keep them that way.",
-    "thyroid": "Your thyroid balance looks healthy — a balanced diet with enough iodine and good sleep help keep it steady.",
-    "blood": "Your blood counts look healthy — a varied diet with iron, B12 and folate keeps them in good shape.",
-    "vitamins": "This is in a healthy range — a varied, balanced diet and sensible sunlight help keep it there.",
-    "hormones": "This looks healthy — balanced habits, good sleep and managing stress help keep your hormones steady.",
-    "infection": "No sign of a problem here — routine hygiene and keeping up with your doctor’s advice keep it that way.",
-    "urine": "This looks healthy — staying well hydrated helps keep it that way.",
-    "other": "This result looks healthy — keep up the balanced habits that support it."
+    "heart": "Your heart and cholesterol numbers look good \u2014 keep up the fibre, healthy fats and regular activity that protect them.",
+    "diabetes": "Your blood-sugar control looks healthy \u2014 keep up balanced meals, regular movement and a steady weight.",
+    "kidney": "Your kidney markers look healthy \u2014 keep well hydrated and stay on top of blood pressure and sugar.",
+    "liver": "Your liver numbers look healthy \u2014 balanced eating and going easy on alcohol keep them that way.",
+    "thyroid": "Your thyroid balance looks healthy \u2014 a balanced diet with enough iodine and good sleep help keep it steady.",
+    "blood": "Your blood counts look healthy \u2014 a varied diet with iron, B12 and folate keeps them in good shape.",
+    "vitamins": "This is in a healthy range \u2014 a varied, balanced diet and sensible sunlight help keep it there.",
+    "hormones": "This looks healthy \u2014 balanced habits, good sleep and managing stress help keep your hormones steady.",
+    "infection": "No sign of a problem here \u2014 routine hygiene and keeping up with your doctor\u2019s advice keep it that way.",
+    "urine": "This looks healthy \u2014 staying well hydrated helps keep it that way.",
+    "other": "This result looks healthy \u2014 keep up the balanced habits that support it.",
+    "pregnancy": "A low-risk screen is reassuring. Keep your antenatal appointments and scans as scheduled.",
+    "haemoglobin": "A normal haemoglobin pattern means no thalassaemia trait or sickle haemoglobin was found."
   },
   "departmentFallback": [
+    {
+      "pattern": "hplc",
+      "flags": "i",
+      "categoryId": "haemoglobin"
+    },
+    {
+      "pattern": "pre\\s*natal|prenatal|antenatal",
+      "flags": "i",
+      "categoryId": "pregnancy"
+    },
     {
       "pattern": "haemat|hemat",
       "flags": "i",
@@ -153,13 +179,477 @@
   ],
   "matchers": [
     {
+      "pattern": "DOWN.{0,8}SYNDROME.{0,12}T\\W{0,3}21.{0,10}RISK\\W{0,3}PER\\W{0,3}MATERNAL|RISK\\s*PER\\s*MATERNAL\\s*AGE",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "Down syndrome risk from age alone",
+        "categoryId": "pregnancy",
+        "what": "The background chance of Down syndrome (trisomy 21) for a mother of your age, before the blood markers and scan are taken into account. This is the starting point the screen refines.",
+        "high": null,
+        "low": null
+      }
+    },
+    {
+      "pattern": "DOWN.{0,8}SYNDROME.{0,12}T\\W{0,3}21.{0,10}(COMBINED\\W{0,3})?RISK\\W{0,3}RATIO|T\\W{0,3}21.{0,20}COMBINED",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "Down syndrome (T21) risk \u2014 combined screen",
+        "categoryId": "pregnancy",
+        "what": "Your personal chance of Down syndrome once the blood markers and scan are combined with your age. Written as 1 in N: the larger N is, the lower the chance. Below about 1 in 250 is called screen-positive and a further test is offered.",
+        "high": "A higher-than-cut-off risk does not mean the baby is affected; most screen-positive pregnancies are unaffected. Your obstetrician will discuss a NIPT blood test or a diagnostic test.",
+        "low": null
+      }
+    },
+    {
+      "pattern": "T\\W{0,3}1[38]\\W{0,4}(\\/|&|AND)\\W{0,4}(T\\W{0,3})?1[38].{0,12}RISK|TRISOMY\\s*1[38]\\s*\\/\\s*1[38]",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "Trisomy 18 and 13 risk \u2014 combined screen",
+        "categoryId": "pregnancy",
+        "what": "Your chance of two rarer chromosomal conditions, Edwards (trisomy 18) and Patau (trisomy 13) syndromes, from the same combined screen. Written as 1 in N.",
+        "high": "A higher-than-cut-off risk means a closer look is advised. Your obstetrician will guide the next step.",
+        "low": null
+      }
+    },
+    {
+      "pattern": "EARLY\\s*PRE\\s*-?\\s*ECLAMPSIA",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "Early pre-eclampsia risk",
+        "categoryId": "pregnancy",
+        "what": "Your chance of developing pre-eclampsia (high blood pressure of pregnancy) before 34 weeks, from PlGF, PAPP-A and your history.",
+        "high": "A raised risk is worth knowing early: low-dose aspirin from before 16 weeks, on your doctor\u2019s advice, lowers it considerably.",
+        "low": null
+      }
+    },
+    {
+      "pattern": "LATE\\s*PRE\\s*-?\\s*ECLAMPSIA",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "Late pre-eclampsia risk",
+        "categoryId": "pregnancy",
+        "what": "Your chance of pre-eclampsia at or after 34 weeks.",
+        "high": "Your obstetrician will watch your blood pressure and urine more closely in the third trimester.",
+        "low": null
+      }
+    },
+    {
+      "pattern": "PAPP\\s*-?\\s*A\\s*MOM|MOM\\s*(FOR\\s*)?PAPP",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "PAPP-A \u2014 multiple of the median",
+        "categoryId": "pregnancy",
+        "what": "Your PAPP-A compared with the typical level for your stage of pregnancy; 1.0 is average. Low values (below about 0.4) nudge the Down syndrome risk up and are linked with a smaller placenta.",
+        "high": null,
+        "low": null
+      }
+    },
+    {
+      "pattern": "FREE\\s*B\\s*-?\\s*HCG\\s*MOM|MOM\\s*(FOR\\s*)?(FREE\\s*)?B\\s*-?\\s*HCG|B-?HCG\\s*MOM",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "Free \u03b2-hCG \u2014 multiple of the median",
+        "categoryId": "pregnancy",
+        "what": "Your free \u03b2-hCG compared with the typical level for your stage; 1.0 is average. High values nudge the Down syndrome risk up, low values the trisomy 18 risk.",
+        "high": null,
+        "low": null
+      }
+    },
+    {
+      "pattern": "MOM\\s*(FOR\\s*)?AFP|AFP\\s*MOM",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "AFP \u2014 multiple of the median",
+        "categoryId": "pregnancy",
+        "what": "Your AFP compared with the typical level for your stage; 1.0 is average. A high AFP MoM (above about 2.5) prompts a careful scan of the baby\u2019s spine and abdomen.",
+        "high": null,
+        "low": null
+      }
+    },
+    {
+      "pattern": "MOM\\s*(FOR\\s*)?U\\s*E\\s*3|UE3\\s*MOM",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "uE3 \u2014 multiple of the median",
+        "categoryId": "pregnancy",
+        "what": "Your unconjugated estriol compared with the typical level for your stage; 1.0 is average. Low values nudge the Down syndrome risk up.",
+        "high": null,
+        "low": null
+      }
+    },
+    {
+      "pattern": "MOM\\s*(FOR\\s*)?INHIBIN|INHIBIN.{0,4}A?\\s*MOM",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "Inhibin A \u2014 multiple of the median",
+        "categoryId": "pregnancy",
+        "what": "Your inhibin A compared with the typical level for your stage; 1.0 is average. High values nudge the Down syndrome risk up.",
+        "high": null,
+        "low": null
+      }
+    },
+    {
+      "pattern": "PAPP\\s*-?\\s*A",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "PAPP-A",
+        "categoryId": "pregnancy",
+        "what": "Pregnancy-associated plasma protein A, made by the placenta. Measured in the first trimester (11 to 14 weeks) as part of the double marker test.",
+        "high": null,
+        "low": null
+      }
+    },
+    {
+      "pattern": "FREE\\s*B\\s*-?\\s*HCG|FREE\\s*BETA|HCG.{0,6}MATERNAL\\s*SCREEN|\\bHCG\\b.{0,10}SCREEN",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "hCG (pregnancy hormone)",
+        "categoryId": "pregnancy",
+        "what": "The hormone of pregnancy, made by the placenta. Its free beta form is measured in the first-trimester screen; total hCG in the second.",
+        "high": null,
+        "low": null
+      }
+    },
+    {
+      "pattern": "ALPHA\\s*-?\\s*FETO|\\bAFP\\b",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "AFP (alpha-fetoprotein)",
+        "categoryId": "pregnancy",
+        "what": "A protein made by the baby\u2019s liver that crosses into your blood. Part of the second-trimester screen; also a marker for open neural-tube defects when raised.",
+        "high": null,
+        "low": null
+      }
+    },
+    {
+      "pattern": "ESTRIOL|\\bU\\s*E\\s*3\\b",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "uE3 (unconjugated estriol)",
+        "categoryId": "pregnancy",
+        "what": "An oestrogen made by the placenta and the baby together. Part of the second-trimester screen.",
+        "high": null,
+        "low": null
+      }
+    },
+    {
+      "pattern": "INHIBIN",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "Inhibin A",
+        "categoryId": "pregnancy",
+        "what": "A hormone from the placenta, measured in the quadruple marker test to sharpen the Down syndrome estimate.",
+        "high": null,
+        "low": null
+      }
+    },
+    {
+      "pattern": "\\bPLGF\\b|PLACENTAL\\s*GROWTH",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "PlGF (placental growth factor)",
+        "categoryId": "pregnancy",
+        "what": "A protein from the placenta used to estimate your risk of pre-eclampsia. Lower levels go with a higher risk.",
+        "high": null,
+        "low": null
+      }
+    },
+    {
+      "pattern": "NUCHAL\\s*TRANSLUCENCY|\\bNT\\b",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "Nuchal translucency",
+        "categoryId": "pregnancy",
+        "what": "The thickness of the fluid at the back of the baby\u2019s neck on the 11-to-14-week scan, in millimetres. Entered from your ultrasound report and combined with the blood markers.",
+        "high": null,
+        "low": null
+      }
+    },
+    {
+      "pattern": "GESTATIONAL\\s*AGE",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "Stage of pregnancy",
+        "categoryId": "pregnancy",
+        "what": "How far along the pregnancy was on the scan date, which sets what the \u201cusual\u201d marker levels are.",
+        "high": null,
+        "low": null
+      }
+    },
+    {
+      "pattern": "MATERNAL\\s*AGE",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "Your age at delivery",
+        "categoryId": "pregnancy",
+        "what": "Used for the background risk the screen starts from.",
+        "high": null,
+        "low": null
+      }
+    },
+    {
+      "pattern": "TYPE\\s*OF\\s*PREGNANCY",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "Type of pregnancy",
+        "categoryId": "pregnancy",
+        "what": "Single or twin: twin pregnancies have different usual marker levels.",
+        "high": null,
+        "low": null
+      }
+    },
+    {
+      "pattern": "DATE\\s*OF\\s*ULTRASOUND|ULTRASOUND\\s*DATE",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "Scan date",
+        "categoryId": "pregnancy",
+        "what": "The ultrasound the stage of pregnancy was taken from.",
+        "high": null,
+        "low": null
+      }
+    },
+    {
+      "pattern": "H\\s*\\/\\s*O\\s*(SMOKING|INSULIN|IVF|DIABETES)|CHRONIC\\s*HYPERTENSION|ETHNIC\\s*ORIGIN|^\\s*WEIGHT\\s*$",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "Your details, as recorded",
+        "categoryId": "pregnancy",
+        "what": "Weight, ethnic origin, smoking, diabetes and IVF each shift the usual marker levels slightly, so they are part of the calculation.",
+        "high": null,
+        "low": null
+      }
+    },
+    {
+      "pattern": "H(A)?EMOGLOBIN\\s*A\\s*2\\b|\\bHB\\s*A\\s*2\\b|\\bHBA2\\b",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "HbA2",
+        "categoryId": "haemoglobin",
+        "what": "The minor adult haemoglobin, normally 2 to 3.5%. The key figure in the thalassaemia screen.",
+        "high": "A raised HbA2 (above about 3.5%) usually means beta-thalassaemia trait \u2014 a carrier state. It needs no treatment, but matters when planning a family: if both partners are carriers, each pregnancy carries a one-in-four chance of thalassaemia major.",
+        "low": "A low HbA2 can go with iron deficiency or alpha-thalassaemia trait; your doctor may check iron studies."
+      }
+    },
+    {
+      "pattern": "H(A)?EMOGLOBIN\\s*F\\b|\\bHB\\s*F\\b|\\bHBF\\b|F(O)?ETAL\\s*H(A)?EMOGLOBIN",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "HbF (fetal haemoglobin)",
+        "categoryId": "haemoglobin",
+        "what": "The haemoglobin babies are born with. In adults it is normally under 1 to 2%.",
+        "high": "A raised HbF is seen in some thalassaemia traits, in hereditary persistence of fetal haemoglobin (harmless), and in a few other blood conditions. Read with HbA2 and the blood count.",
+        "low": null
+      }
+    },
+    {
+      "pattern": "H(A)?EMOGLOBIN\\s*A\\s*0?\\b|\\bHB\\s*A\\s*0?\\b|\\bHBA0?\\b",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "HbA (adult haemoglobin)",
+        "categoryId": "haemoglobin",
+        "what": "The main adult haemoglobin, normally 95% or more of the total.",
+        "high": null,
+        "low": "A lower HbA share means more of another fraction is present; see the lines beside it."
+      }
+    },
+    {
+      "pattern": "H(A)?EMOGLOBIN\\s*S\\b|\\bHB\\s*S\\b|\\bHBS\\b|SICKLE",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "HbS (sickle haemoglobin)",
+        "categoryId": "haemoglobin",
+        "what": "The haemoglobin of sickle-cell disease. Normally absent.",
+        "high": "Any HbS means a sickle gene is present: with HbA alongside, a carrier (sickle trait), which is usually harmless; without it, sickle-cell disease. Your doctor will explain which, and what it means for family planning.",
+        "low": null
+      }
+    },
+    {
+      "pattern": "H(A)?EMOGLOBIN\\s*[CDE]\\b|\\bHB\\s*[CDE]\\b|UNKNOWN\\s*\\/?\\s*OTHERS?|OTHER\\s*VARIANTS?|\\bP\\s*2\\b|\\bP\\s*3\\b",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "Other haemoglobin variants",
+        "categoryId": "haemoglobin",
+        "what": "Any haemoglobin fraction that is not HbA, HbA2, HbF or HbS \u2014 HbD, HbE and others, or an unidentified peak.",
+        "high": "A variant peak needs identifying; the laboratory may suggest a confirmatory test. Most variants are carrier states.",
+        "low": null
+      }
+    },
+    {
+      "pattern": "HPLC\\s*NO",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "HPLC run number",
+        "categoryId": "haemoglobin",
+        "what": "The laboratory\u2019s reference for this analysis.",
+        "high": null,
+        "low": null
+      }
+    },
+    {
+      "pattern": "^\\s*INTERPRETATION\\s*:?\\s*$",
+      "flags": "i",
+      "codes": null,
+      "info": {
+        "advice": null,
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": null,
+        "name": "What the screen concludes",
+        "categoryId": "pregnancy",
+        "what": "The laboratory\u2019s one-line reading of the risks above.",
+        "high": null,
+        "low": null
+      }
+    },
+    {
       "pattern": "CHOL\\s*\\/\\s*HDL|CHOLESTEROL\\s*\\/\\s*HDL|CHO\\s*:\\s*HDL|TC\\s*[:/]\\s*HDL|RISK\\s*RATIO",
       "flags": "i",
       "codes": null,
       "info": {
         "name": "Total Cholesterol : HDL Ratio",
         "categoryId": "heart",
-        "what": "Compares total cholesterol to protective HDL — a compact indicator of overall lipid balance.",
+        "what": "Compares total cholesterol to protective HDL \u2014 a compact indicator of overall lipid balance.",
         "high": "A high ratio means the balance is tilted away from protective HDL; the fix is the same as for high LDL/low HDL.",
         "low": "A low ratio is reassuring: it means your protective HDL is handling the cholesterol load well, and generally reflects a lower risk of heart disease.",
         "advice": null,
@@ -175,7 +665,7 @@
       "info": {
         "name": "LDL : HDL Ratio",
         "categoryId": "heart",
-        "what": "Compares “bad” to “good” cholesterol; lower ratios are better for the heart.",
+        "what": "Compares \u201cbad\u201d to \u201cgood\u201d cholesterol; lower ratios are better for the heart.",
         "high": "A high ratio suggests the lipid balance favours artery deposits.",
         "low": "A low ratio is a favourable sign: it means less 'bad' LDL relative to your protective HDL, and generally reflects a lower cardiovascular risk.",
         "advice": null,
@@ -191,8 +681,8 @@
       "info": {
         "name": "HDL : LDL Ratio",
         "categoryId": "heart",
-        "what": "Compares protective HDL to artery-depositing LDL — here a HIGHER ratio is the healthy direction.",
-        "high": "A higher HDL:LDL ratio is favourable — more protective cholesterol relative to the harmful kind, generally reflecting a lower heart risk.",
+        "what": "Compares protective HDL to artery-depositing LDL \u2014 here a HIGHER ratio is the healthy direction.",
+        "high": "A higher HDL:LDL ratio is favourable \u2014 more protective cholesterol relative to the harmful kind, generally reflecting a lower heart risk.",
         "low": "A lower ratio means less protective HDL relative to LDL; the same steps that raise HDL and lower LDL help.",
         "advice": null,
         "adviceHigh": null,
@@ -207,8 +697,8 @@
       "info": {
         "name": "Non-HDL Cholesterol",
         "categoryId": "heart",
-        "what": "All the cholesterol that is not HDL — every particle type that can deposit in arteries, in one number.",
-        "high": "Treated much like high LDL: diet, activity, weight and — when advised — medication.",
+        "what": "All the cholesterol that is not HDL \u2014 every particle type that can deposit in arteries, in one number.",
+        "high": "Treated much like high LDL: diet, activity, weight and \u2014 when advised \u2014 medication.",
         "low": "A low non-HDL is generally good for heart health and rarely causes symptoms. Only very low levels occasionally reflect nutrition, thyroid or liver issues worth checking.",
         "advice": null,
         "adviceHigh": null,
@@ -221,13 +711,13 @@
       "flags": "i",
       "codes": null,
       "info": {
-        "name": "HDL — “Good” Cholesterol",
+        "name": "HDL \u2014 \u201cGood\u201d Cholesterol",
         "categoryId": "heart",
         "what": "HDL carries excess cholesterol away from your arteries back to the liver. Higher values are protective for the heart.",
         "high": "A high HDL is generally a good sign and usually needs no action.",
         "low": "Low HDL reduces this protection and is linked with higher heart risk. Regular exercise, healthy fats and not smoking help raise it.",
         "advice": null,
-        "adviceHigh": "Good news: a higher “good” cholesterol is generally protective for your heart and needs no action. Keep up the active habits and healthy fats that support it.",
+        "adviceHigh": "Good news: a higher \u201cgood\u201d cholesterol is generally protective for your heart and needs no action. Keep up the active habits and healthy fats that support it.",
         "adviceLow": "Regular activity, not smoking, and healthy fats like olive oil, nuts and oily fish can gently lift your good cholesterol. Your doctor will guide the bigger picture.",
         "adviceOk": null
       }
@@ -237,10 +727,10 @@
       "flags": "i",
       "codes": null,
       "info": {
-        "name": "LDL — “Bad” Cholesterol",
+        "name": "LDL \u2014 \u201cBad\u201d Cholesterol",
         "categoryId": "heart",
         "what": "LDL deposits cholesterol in artery walls. It is the main lipid target for lowering heart-attack and stroke risk.",
-        "high": "High LDL builds up in arteries over years. Diet changes, exercise and — when advised — medication bring it down effectively.",
+        "high": "High LDL builds up in arteries over years. Diet changes, exercise and \u2014 when advised \u2014 medication bring it down effectively.",
         "low": "Low LDL is generally desirable.",
         "advice": null,
         "adviceHigh": null,
@@ -271,7 +761,7 @@
       "info": {
         "name": "Triglycerides",
         "categoryId": "heart",
-        "what": "The most common fat in blood — extra calories, especially from sugar, refined carbs and alcohol, are stored as triglycerides.",
+        "what": "The most common fat in blood \u2014 extra calories, especially from sugar, refined carbs and alcohol, are stored as triglycerides.",
         "high": "Often related to diet, weight, alcohol or uncontrolled blood sugar. Very high levels can also affect the pancreas. Usually improves well with lifestyle changes.",
         "low": "Low triglycerides are rarely a concern.",
         "advice": null,
@@ -289,7 +779,7 @@
       "info": {
         "name": "Total Cholesterol",
         "categoryId": "heart",
-        "what": "The overall amount of cholesterol in your blood — a waxy substance your body needs, but too much of it silently narrows arteries.",
+        "what": "The overall amount of cholesterol in your blood \u2014 a waxy substance your body needs, but too much of it silently narrows arteries.",
         "high": "Raised cholesterol usually causes no symptoms; it is picked up only on testing. Diet, exercise and sometimes medication bring it down.",
         "low": "Low cholesterol is rarely a problem in adults.",
         "advice": null,
@@ -305,7 +795,7 @@
       "info": {
         "name": "Apolipoprotein B",
         "categoryId": "heart",
-        "what": "Counts the number of artery-depositing cholesterol particles — a precise marker of heart risk.",
+        "what": "Counts the number of artery-depositing cholesterol particles \u2014 a precise marker of heart risk.",
         "high": "More particles available to enter artery walls; managed like high LDL.",
         "low": "A low ApoB usually means fewer cholesterol-carrying particles and a lower heart-disease risk. Very low levels are only occasionally linked to nutrition, liver or genetic factors.",
         "advice": null,
@@ -323,10 +813,10 @@
         "categoryId": "heart",
         "what": "The main protein of protective HDL particles.",
         "high": "A high ApoA1 is a good thing: it's the main protein in protective 'good' HDL cholesterol and often reflects a lower cardiovascular risk.",
-        "low": "Low values track with low HDL — less protective clearance of cholesterol.",
+        "low": "Low values track with low HDL \u2014 less protective clearance of cholesterol.",
         "advice": null,
-        "adviceHigh": "A higher level of this “good-cholesterol” protein is reassuring and linked to lower heart risk. No action needed; simply keep up your active, heart-healthy habits.",
-        "adviceLow": "This protein carries your “good” cholesterol, so a low level mirrors low HDL. Regular activity, not smoking, and healthy fats can help lift it, with your doctor’s guidance.",
+        "adviceHigh": "A higher level of this \u201cgood-cholesterol\u201d protein is reassuring and linked to lower heart risk. No action needed; simply keep up your active, heart-healthy habits.",
+        "adviceLow": "This protein carries your \u201cgood\u201d cholesterol, so a low level mirrors low HDL. Regular activity, not smoking, and healthy fats can help lift it, with your doctor\u2019s guidance.",
         "adviceOk": null
       }
     },
@@ -338,7 +828,7 @@
         "name": "Lipoprotein(a)",
         "categoryId": "heart",
         "what": "An inherited cholesterol particle. Levels are set mostly by your genes and stay fairly constant through life.",
-        "high": "A raised Lp(a) adds to lifetime heart risk. It doesn’t respond much to diet — knowing it helps your doctor manage the other, controllable risks more actively.",
+        "high": "A raised Lp(a) adds to lifetime heart risk. It doesn\u2019t respond much to diet \u2014 knowing it helps your doctor manage the other, controllable risks more actively.",
         "low": "A low Lp(a) is reassuring. This largely inherited particle raises heart risk only when high, so a low level simply means one less risk factor.",
         "advice": null,
         "adviceHigh": null,
@@ -354,7 +844,7 @@
         "name": "Homocysteine",
         "categoryId": "heart",
         "what": "An amino acid; high levels can irritate blood-vessel lining and are linked with B-vitamin deficiency.",
-        "high": "Often improves with vitamin B12 / folate supplementation — your doctor may check those levels.",
+        "high": "Often improves with vitamin B12 / folate supplementation \u2014 your doctor may check those levels.",
         "low": "A low homocysteine is generally harmless and often simply reflects good B-vitamin and folate levels. It is not typically a cause for concern.",
         "advice": null,
         "adviceHigh": null,
@@ -367,9 +857,9 @@
       "flags": "i",
       "codes": null,
       "info": {
-        "name": "AMH — Ovarian Reserve",
+        "name": "AMH \u2014 Ovarian Reserve",
         "categoryId": "hormones",
-        "what": "Anti-Müllerian hormone is made by the small follicles in the ovaries. It gives an estimate of how many eggs remain, which is why it is used in fertility planning.",
+        "what": "Anti-M\u00fcllerian hormone is made by the small follicles in the ovaries. It gives an estimate of how many eggs remain, which is why it is used in fertility planning.",
         "high": "A high AMH usually means a generous egg reserve. Very high values are sometimes seen with polycystic ovaries; your doctor reads it with your cycle history and an ultrasound.",
         "low": "A low AMH suggests a smaller egg reserve, which is normal with age. It does not by itself say whether you can conceive, so it is interpreted with your age, FSH and other findings.",
         "advice": null,
@@ -399,10 +889,10 @@
       "flags": "i",
       "codes": null,
       "info": {
-        "name": "ANA — Antinuclear Antibody",
+        "name": "ANA \u2014 Antinuclear Antibody",
         "categoryId": "infection",
-        "what": "A screening test for antibodies that react against the body’s own cell nuclei. It is used when an autoimmune condition such as lupus is being considered.",
-        "high": "A positive ANA means such antibodies are present. Many healthy people have a weakly positive ANA, so on its own it is not a diagnosis — your doctor reads the pattern and level with your symptoms and may order more specific tests.",
+        "what": "A screening test for antibodies that react against the body\u2019s own cell nuclei. It is used when an autoimmune condition such as lupus is being considered.",
+        "high": "A positive ANA means such antibodies are present. Many healthy people have a weakly positive ANA, so on its own it is not a diagnosis \u2014 your doctor reads the pattern and level with your symptoms and may order more specific tests.",
         "low": "A negative ANA is the expected result and makes lupus and several related conditions much less likely.",
         "advice": null,
         "adviceHigh": null,
@@ -418,7 +908,7 @@
         "name": "Peripheral Blood Smear",
         "categoryId": "blood",
         "what": "A trained eye looks at a thin film of your blood under the microscope and describes the size, shape and appearance of the red cells, white cells and platelets.",
-        "high": "Anything the pathologist has noted about cell shape or size points to where to look next — a type of anaemia, an infection, or a platelet issue. Your doctor reads the description with your blood counts.",
+        "high": "Anything the pathologist has noted about cell shape or size points to where to look next \u2014 a type of anaemia, an infection, or a platelet issue. Your doctor reads the description with your blood counts.",
         "low": "A smear described as normal means the cells look as they should under the microscope.",
         "advice": null,
         "adviceHigh": null,
@@ -433,7 +923,7 @@
       "info": {
         "name": "Toxoplasma IgM",
         "categoryId": "infection",
-        "what": "IgM antibodies to Toxoplasma, a parasite carried by cats and undercooked meat. IgM appears early, so it points to a recent or current infection — important in pregnancy.",
+        "what": "IgM antibodies to Toxoplasma, a parasite carried by cats and undercooked meat. IgM appears early, so it points to a recent or current infection \u2014 important in pregnancy.",
         "high": "A positive IgM suggests a recent infection and your doctor will usually confirm it with a repeat sample and IgG testing before acting on it.",
         "low": "A negative IgM means no sign of a recent Toxoplasma infection.",
         "advice": null,
@@ -451,7 +941,7 @@
         "categoryId": "infection",
         "what": "IgG antibodies to Toxoplasma. IgG appears weeks after an infection and stays for life, so it shows past exposure and immunity rather than a current infection.",
         "high": "A positive IgG means you have met Toxoplasma before and are generally protected; in pregnancy it means a new infection is unlikely.",
-        "low": "A negative IgG means no past exposure — so no immunity, and in pregnancy your doctor may advise care with cats’ litter and undercooked meat.",
+        "low": "A negative IgG means no past exposure \u2014 so no immunity, and in pregnancy your doctor may advise care with cats\u2019 litter and undercooked meat.",
         "advice": null,
         "adviceHigh": null,
         "adviceLow": null,
@@ -562,7 +1052,7 @@
         "name": "Rheumatoid Factor (RA Factor)",
         "categoryId": "infection",
         "what": "An antibody the immune system can make against its own tissues. It is mainly used to help diagnose rheumatoid arthritis, an inflammatory joint condition.",
-        "high": "A raised RA factor supports, but does not prove, rheumatoid arthritis — it can also rise with other autoimmune conditions, some infections and with age. Your doctor reads it alongside your joint symptoms and other tests.",
+        "high": "A raised RA factor supports, but does not prove, rheumatoid arthritis \u2014 it can also rise with other autoimmune conditions, some infections and with age. Your doctor reads it alongside your joint symptoms and other tests.",
         "low": "A low or negative RA factor is the expected result. It makes rheumatoid arthritis less likely, though a small number of people with the condition test negative.",
         "advice": null,
         "adviceHigh": null,
@@ -594,7 +1084,7 @@
         "name": "Creatine Kinase (CK)",
         "categoryId": "heart",
         "what": "An enzyme from muscle, including heart muscle, released when muscle is stressed or injured.",
-        "high": "Can follow intense exercise, injections, muscle injury, or heart-muscle strain — interpreted with your symptoms.",
+        "high": "Can follow intense exercise, injections, muscle injury, or heart-muscle strain \u2014 interpreted with your symptoms.",
         "low": "A low CK is almost always harmless. It usually just reflects lower muscle mass from age or being less active, rather than any medical problem.",
         "advice": null,
         "adviceHigh": null,
@@ -609,7 +1099,7 @@
       "info": {
         "name": "Troponin",
         "categoryId": "heart",
-        "what": "A protein released only from injured heart muscle — the key blood test in suspected heart attack.",
+        "what": "A protein released only from injured heart muscle \u2014 the key blood test in suspected heart attack.",
         "high": "Any raised troponin deserves prompt medical review.",
         "low": "Low or undetectable troponin is exactly what you want: it means no sign of recent heart-muscle damage. Healthy people normally have very low levels.",
         "advice": null,
@@ -623,11 +1113,11 @@
       "flags": "i",
       "codes": null,
       "info": {
-        "name": "HbA1c — 3-Month Average Sugar",
+        "name": "HbA1c \u2014 3-Month Average Sugar",
         "categoryId": "diabetes",
         "what": "Shows your average blood sugar over the past ~3 months by measuring sugar attached to red blood cells. It cannot be skewed by one good or bad day.",
-        "high": "Values 5.7–6.4% suggest pre-diabetes; 6.5% or more suggests diabetes. Small, steady changes in diet and activity move this number.",
-        "low": "A low HbA1c on treatment may mean sugars are dipping too low at times — discuss with your doctor.",
+        "high": "Values 5.7\u20136.4% suggest pre-diabetes; 6.5% or more suggests diabetes. Small, steady changes in diet and activity move this number.",
+        "low": "A low HbA1c on treatment may mean sugars are dipping too low at times \u2014 discuss with your doctor.",
         "advice": null,
         "adviceHigh": null,
         "adviceLow": null,
@@ -641,8 +1131,8 @@
       "info": {
         "name": "Fasting Blood Sugar",
         "categoryId": "diabetes",
-        "what": "Your blood glucose after an overnight fast — the standard first screen for diabetes.",
-        "high": "100–125 mg/dL suggests pre-diabetes and 126+ suggests diabetes (confirmed on repeat testing). Lifestyle change at this stage is very effective.",
+        "what": "Your blood glucose after an overnight fast \u2014 the standard first screen for diabetes.",
+        "high": "100\u2013125 mg/dL suggests pre-diabetes and 126+ suggests diabetes (confirmed on repeat testing). Lifestyle change at this stage is very effective.",
         "low": "Low fasting sugar can cause shakiness, sweating or dizziness; mention any such episodes to your doctor.",
         "advice": null,
         "adviceHigh": null,
@@ -657,8 +1147,8 @@
       "info": {
         "name": "Post-meal Blood Sugar",
         "categoryId": "diabetes",
-        "what": "Blood glucose about two hours after a meal — shows how well your body clears sugar after eating.",
-        "high": "Values of 200+ mg/dL suggest diabetes; 140–199 suggests reduced glucose tolerance.",
+        "what": "Blood glucose about two hours after a meal \u2014 shows how well your body clears sugar after eating.",
+        "high": "Values of 200+ mg/dL suggest diabetes; 140\u2013199 suggests reduced glucose tolerance.",
         "low": "A low post-meal reading is usually harmless. Occasionally blood sugar dips a few hours after eating (reactive hypoglycaemia), which can cause hunger or shakiness.",
         "advice": null,
         "adviceHigh": null,
@@ -689,7 +1179,7 @@
       "info": {
         "name": "Blood Glucose",
         "categoryId": "diabetes",
-        "what": "The sugar circulating in your blood — your body’s main fuel.",
+        "what": "The sugar circulating in your blood \u2014 your body\u2019s main fuel.",
         "high": "Persistently high glucose points towards pre-diabetes or diabetes.",
         "low": "Low glucose can cause weakness, sweating and confusion.",
         "advice": null,
@@ -706,7 +1196,7 @@
         "name": "Insulin",
         "categoryId": "diabetes",
         "what": "The hormone that moves sugar from blood into cells.",
-        "high": "High fasting insulin often means the body is resisting insulin’s action (insulin resistance) — an early, reversible stage on the path to diabetes.",
+        "high": "High fasting insulin often means the body is resisting insulin\u2019s action (insulin resistance) \u2014 an early, reversible stage on the path to diabetes.",
         "low": "When blood sugar is normal, low fasting insulin is often a good sign of efficient insulin use. Its meaning depends on your glucose readings alongside it.",
         "advice": null,
         "adviceHigh": null,
@@ -719,9 +1209,9 @@
       "flags": "i",
       "codes": null,
       "info": {
-        "name": "eGFR — Kidney Filtration Rate",
+        "name": "eGFR \u2014 Kidney Filtration Rate",
         "categoryId": "kidney",
-        "what": "An estimate of how much blood your kidneys clean each minute — the single best number for overall kidney function.",
+        "what": "An estimate of how much blood your kidneys clean each minute \u2014 the single best number for overall kidney function.",
         "high": "A high or normal eGFR is reassuring: it means your kidneys are filtering waste efficiently. Labs often simply report anything above 90 as 'normal'.",
         "low": "A lower eGFR means the kidneys are filtering more slowly. It is followed over time, and your doctor looks for treatable causes.",
         "advice": null,
@@ -753,7 +1243,7 @@
       "info": {
         "name": "Blood Urea Nitrogen (BUN)",
         "categoryId": "kidney",
-        "what": "The nitrogen part of urea — a protein-breakdown waste the kidneys clear. It measures the same thing as Urea, reported in a different unit.",
+        "what": "The nitrogen part of urea \u2014 a protein-breakdown waste the kidneys clear. It measures the same thing as Urea, reported in a different unit.",
         "high": "Can rise with reduced kidney function, dehydration or a high-protein diet.",
         "low": "Often of little concern; can follow a low-protein diet or liver conditions.",
         "advice": null,
@@ -790,7 +1280,7 @@
         "low": "Low uric acid is rarely a problem.",
         "advice": null,
         "adviceHigh": "Easing back on red meat, organ meats, shellfish, beer and sugary drinks, while staying hydrated and at a healthy weight, can lower uric acid. Your doctor will advise further.",
-        "adviceLow": "Low uric acid usually causes no symptoms and rarely needs action. There’s nothing special to change; your doctor will follow up if it points to anything worth exploring.",
+        "adviceLow": "Low uric acid usually causes no symptoms and rarely needs action. There\u2019s nothing special to change; your doctor will follow up if it points to anything worth exploring.",
         "adviceOk": null
       }
     },
@@ -818,7 +1308,7 @@
         "name": "ALT (SGPT)",
         "categoryId": "liver",
         "what": "An enzyme found mainly in liver cells; it leaks into the blood when the liver is irritated.",
-        "high": "Raised ALT is a sensitive sign of liver stress — from fatty liver, alcohol, some medicines or infections. Often reversible once the cause is addressed.",
+        "high": "Raised ALT is a sensitive sign of liver stress \u2014 from fatty liver, alcohol, some medicines or infections. Often reversible once the cause is addressed.",
         "low": "A low ALT is usually not a concern and generally just reflects healthy liver cells with little sign of inflammation.",
         "advice": null,
         "adviceHigh": null,
@@ -849,7 +1339,7 @@
       "info": {
         "name": "Alkaline Phosphatase (ALP)",
         "categoryId": "liver",
-        "what": "An enzyme from the liver’s bile ducts and from bone.",
+        "what": "An enzyme from the liver\u2019s bile ducts and from bone.",
         "high": "Can point to a bile-flow problem in the liver, or to active bone turnover (normal in growing children and after fractures).",
         "low": "A low ALP is uncommon and usually harmless; it can sometimes reflect low zinc, magnesium, or reduced protein intake.",
         "advice": null,
@@ -879,7 +1369,7 @@
       "flags": "i",
       "codes": null,
       "info": {
-        "name": "Bilirubin — Direct (Conjugated)",
+        "name": "Bilirubin \u2014 Direct (Conjugated)",
         "categoryId": "liver",
         "what": "The processed form of bilirubin the liver has readied for removal in bile.",
         "high": "A raised direct bilirubin points more towards a bile-flow or liver-cell problem; your doctor reads it with the total and your other liver tests.",
@@ -895,10 +1385,10 @@
       "flags": "i",
       "codes": null,
       "info": {
-        "name": "Bilirubin — Indirect (Unconjugated)",
+        "name": "Bilirubin \u2014 Indirect (Unconjugated)",
         "categoryId": "liver",
         "what": "The unprocessed form of bilirubin, before the liver has readied it for removal.",
-        "high": "A raised indirect bilirubin can follow faster red-cell breakdown or a common, harmless inherited variant (Gilbert’s); read with the total.",
+        "high": "A raised indirect bilirubin can follow faster red-cell breakdown or a common, harmless inherited variant (Gilbert\u2019s); read with the total.",
         "low": "A low indirect bilirubin is not a concern.",
         "advice": null,
         "adviceHigh": null,
@@ -929,7 +1419,7 @@
       "info": {
         "name": "Albumin : Globulin (A/G) Ratio",
         "categoryId": "liver",
-        "what": "Compares albumin to the other blood proteins (globulins) — a simple check on the protein balance your liver and immune system keep.",
+        "what": "Compares albumin to the other blood proteins (globulins) \u2014 a simple check on the protein balance your liver and immune system keep.",
         "high": "A high A/G ratio is usually harmless and can reflect lower globulins.",
         "low": "A low A/G ratio can accompany low albumin or raised globulins, seen with some liver, kidney or inflammatory conditions.",
         "advice": "Blood-protein ratios reflect nutrition, hydration and how your liver and kidneys are working. Your doctor can pinpoint the cause and the right next step.",
@@ -945,7 +1435,7 @@
       "info": {
         "name": "Total Protein",
         "categoryId": "liver",
-        "what": "All the protein in your blood (mainly albumin and globulin) — a broad marker of nutrition and liver/immune health.",
+        "what": "All the protein in your blood (mainly albumin and globulin) \u2014 a broad marker of nutrition and liver/immune health.",
         "high": "A high total protein often just reflects dehydration concentrating the blood; sometimes it accompanies ongoing inflammation or infection.",
         "low": "A low total protein can mean the body is not absorbing or making enough protein, or is losing it, as with liver, kidney, or digestive issues.",
         "advice": "Blood-protein levels reflect nutrition, hydration and how your liver and kidneys are working. Your doctor can pinpoint the cause and the right next step.",
@@ -961,8 +1451,8 @@
       "info": {
         "name": "Urine Albumin (Microalbumin)",
         "categoryId": "kidney",
-        "what": "A tiny amount of the blood protein albumin leaking into the urine. It is the earliest sign that the kidneys’ filters are under strain, most often from diabetes or high blood pressure.",
-        "high": "A raised urine albumin, or albumin-to-creatinine ratio, means the kidney filters are letting protein through. Caught early it is very treatable — good sugar and blood-pressure control protect the kidneys — so your doctor will usually repeat it and act on a confirmed result.",
+        "what": "A tiny amount of the blood protein albumin leaking into the urine. It is the earliest sign that the kidneys\u2019 filters are under strain, most often from diabetes or high blood pressure.",
+        "high": "A raised urine albumin, or albumin-to-creatinine ratio, means the kidney filters are letting protein through. Caught early it is very treatable \u2014 good sugar and blood-pressure control protect the kidneys \u2014 so your doctor will usually repeat it and act on a confirmed result.",
         "low": "A low result is the expected one: no albumin is leaking through.",
         "advice": null,
         "adviceHigh": null,
@@ -1007,10 +1497,10 @@
       "flags": "i",
       "codes": null,
       "info": {
-        "name": "TSH — Thyroid Control Hormone",
+        "name": "TSH \u2014 Thyroid Control Hormone",
         "categoryId": "thyroid",
         "what": "A hormone from the brain that tells the thyroid how hard to work. It is the most sensitive first check for thyroid problems.",
-        "high": "A high TSH usually means an underactive thyroid (hypothyroidism) — the gland needs more prompting. Can cause tiredness, weight gain and feeling cold.",
+        "high": "A high TSH usually means an underactive thyroid (hypothyroidism) \u2014 the gland needs more prompting. Can cause tiredness, weight gain and feeling cold.",
         "low": "A low TSH usually means an overactive thyroid (hyperthyroidism). Can cause palpitations, weight loss and anxiety.",
         "advice": null,
         "adviceHigh": null,
@@ -1051,14 +1541,14 @@
       }
     },
     {
-      "pattern": "FREE\\s*T3|\\bFT3\\b|T3\\s*[-–]?\\s*FREE|TRI-?IODOTHYRONINE\\s*[-–]?\\s*FREE",
+      "pattern": "FREE\\s*T3|\\bFT3\\b|T3\\s*[-\u2013]?\\s*FREE|TRI-?IODOTHYRONINE\\s*[-\u2013]?\\s*FREE",
       "flags": "i",
       "codes": null,
       "info": {
-        "name": "Free T3 — Active Thyroid Hormone",
+        "name": "Free T3 \u2014 Active Thyroid Hormone",
         "categoryId": "thyroid",
         "what": "The unbound, active form of T3, the thyroid hormone that sets how fast your cells burn energy. Free T3 is the part actually available to the body.",
-        "high": "A high free T3 points to an overactive thyroid (hyperthyroidism) — often with weight loss, a fast heartbeat, heat intolerance or anxiety. Your doctor reads it with TSH and free T4.",
+        "high": "A high free T3 points to an overactive thyroid (hyperthyroidism) \u2014 often with weight loss, a fast heartbeat, heat intolerance or anxiety. Your doctor reads it with TSH and free T4.",
         "low": "A low free T3 can go with an underactive thyroid or with a general illness that lowers T3 without the thyroid being at fault; TSH and free T4 tell which.",
         "advice": null,
         "adviceHigh": null,
@@ -1083,11 +1573,11 @@
       }
     },
     {
-      "pattern": "FREE\\s*T4|\\bFT4\\b|T4\\s*[-–]?\\s*FREE|THYROXINE\\s*[-–]?\\s*FREE",
+      "pattern": "FREE\\s*T4|\\bFT4\\b|T4\\s*[-\u2013]?\\s*FREE|THYROXINE\\s*[-\u2013]?\\s*FREE",
       "flags": "i",
       "codes": null,
       "info": {
-        "name": "Free T4 — Thyroid Hormone Reserve",
+        "name": "Free T4 \u2014 Thyroid Hormone Reserve",
         "categoryId": "thyroid",
         "what": "The unbound form of T4, the main hormone the thyroid makes. The body converts it into active T3 as needed, so free T4 shows how much the gland is producing.",
         "high": "A high free T4 with a low TSH points to an overactive thyroid; your doctor will look at symptoms and may ask for antibodies or a scan.",
@@ -1122,7 +1612,7 @@
         "name": "Anti-TPO Antibody",
         "categoryId": "thyroid",
         "what": "An immune marker; when present, the immune system may be acting against the thyroid.",
-        "high": "A raised level supports an autoimmune thyroid condition (e.g. Hashimoto’s).",
+        "high": "A raised level supports an autoimmune thyroid condition (e.g. Hashimoto\u2019s).",
         "low": "A low or negative anti-TPO is reassuring: it means your immune system does not appear to be attacking your thyroid.",
         "advice": null,
         "adviceHigh": null,
@@ -1139,7 +1629,7 @@
         "categoryId": "blood",
         "what": "The protein in red blood cells that carries oxygen from your lungs to the rest of your body.",
         "high": "High haemoglobin can follow dehydration, smoking or living at altitude, and occasionally other conditions.",
-        "low": "Low haemoglobin means anaemia — common causes are low iron, B12 or folate, or blood loss. It can cause tiredness and breathlessness.",
+        "low": "Low haemoglobin means anaemia \u2014 common causes are low iron, B12 or folate, or blood loss. It can cause tiredness and breathlessness.",
         "advice": null,
         "adviceHigh": null,
         "adviceLow": null,
@@ -1153,7 +1643,7 @@
       "info": {
         "name": "Haematocrit (PCV)",
         "categoryId": "blood",
-        "what": "The proportion of your blood made up of red cells — part of the anaemia picture.",
+        "what": "The proportion of your blood made up of red cells \u2014 part of the anaemia picture.",
         "high": "A high value often just reflects dehydration.",
         "low": "A low value tracks with anaemia.",
         "advice": null,
@@ -1215,12 +1705,12 @@
       "flags": "i",
       "codes": null,
       "info": {
-        "name": "MCV — Red Cell Size",
+        "name": "MCV \u2014 Red Cell Size",
         "categoryId": "blood",
-        "what": "The average size of your red cells — a clue to the type of anaemia (small cells suggest iron deficiency, large cells suggest B12/folate).",
+        "what": "The average size of your red cells \u2014 a clue to the type of anaemia (small cells suggest iron deficiency, large cells suggest B12/folate).",
         "high": "A high MCV means red cells are larger than average, often reflecting low vitamin B12 or folate, alcohol use, or an underactive thyroid.",
         "low": "A low MCV means red cells are smaller than average, most commonly from iron deficiency or an inherited trait like thalassaemia.",
-        "advice": "Red-cell indices like this help pin down the type of anaemia — small, large or varied cells. Your doctor reads them together and may check iron, B12 or folate.",
+        "advice": "Red-cell indices like this help pin down the type of anaemia \u2014 small, large or varied cells. Your doctor reads them together and may check iron, B12 or folate.",
         "adviceHigh": null,
         "adviceLow": null,
         "adviceOk": null
@@ -1233,10 +1723,10 @@
       "info": {
         "name": "MCHC",
         "categoryId": "blood",
-        "what": "How concentrated the haemoglobin is inside each red cell — read alongside MCV and MCH to classify anaemia.",
+        "what": "How concentrated the haemoglobin is inside each red cell \u2014 read alongside MCV and MCH to classify anaemia.",
         "high": "A high MCHC means the haemoglobin is more concentrated than usual inside the red cells.",
         "low": "A low MCHC means the haemoglobin is less concentrated than usual, most often from iron deficiency.",
-        "advice": "Red-cell indices like this help pin down the type of anaemia — small, large or varied cells. Your doctor reads them together and may check iron, B12 or folate.",
+        "advice": "Red-cell indices like this help pin down the type of anaemia \u2014 small, large or varied cells. Your doctor reads them together and may check iron, B12 or folate.",
         "adviceHigh": null,
         "adviceLow": null,
         "adviceOk": null
@@ -1249,10 +1739,10 @@
       "info": {
         "name": "MCH",
         "categoryId": "blood",
-        "what": "The average amount of haemoglobin in each red cell — read alongside MCV to classify anaemia.",
+        "what": "The average amount of haemoglobin in each red cell \u2014 read alongside MCV to classify anaemia.",
         "high": "A high MCH means each red cell carries more haemoglobin than average, sometimes seen with larger cells from low B12 or folate.",
         "low": "A low MCH means each red cell carries less haemoglobin than average, most often from iron deficiency.",
-        "advice": "Red-cell indices like this help pin down the type of anaemia — small, large or varied cells. Your doctor reads them together and may check iron, B12 or folate.",
+        "advice": "Red-cell indices like this help pin down the type of anaemia \u2014 small, large or varied cells. Your doctor reads them together and may check iron, B12 or folate.",
         "adviceHigh": null,
         "adviceLow": null,
         "adviceOk": null
@@ -1265,10 +1755,10 @@
       "info": {
         "name": null,
         "categoryId": "blood",
-        "what": "How varied your red-cell sizes are — a helpful early hint about the cause of anaemia.",
+        "what": "How varied your red-cell sizes are \u2014 a helpful early hint about the cause of anaemia.",
         "high": "A high RDW means red cells vary more in size than usual, which can be an early clue to iron, B12, or folate shortfalls.",
         "low": "A low RDW means red cells are very uniform in size; this is normal and rarely significant.",
-        "advice": "Red-cell indices like this help pin down the type of anaemia — small, large or varied cells. Your doctor reads them together and may check iron, B12 or folate.",
+        "advice": "Red-cell indices like this help pin down the type of anaemia \u2014 small, large or varied cells. Your doctor reads them together and may check iron, B12 or folate.",
         "adviceHigh": null,
         "adviceLow": null,
         "adviceOk": null
@@ -1362,7 +1852,7 @@
         "name": "ESR",
         "categoryId": "blood",
         "what": "A simple, general marker of inflammation in the body.",
-        "high": "A raised ESR signals inflammation somewhere — non-specific, so it is read with your symptoms and other tests.",
+        "high": "A raised ESR signals inflammation somewhere \u2014 non-specific, so it is read with your symptoms and other tests.",
         "low": "A low ESR is usually not a concern; it simply means very little inflammation is being detected.",
         "advice": "Inflammation markers rise with many everyday causes, from a cold to a minor injury. Your doctor will read it alongside your symptoms and other results.",
         "adviceHigh": null,
@@ -1381,7 +1871,7 @@
         "high": "A high result almost always comes from taking too much vitamin D in supplements; it very rarely happens from food or sunshine.",
         "low": "Deficiency is very common and can cause tiredness, aches and weaker bones. It is corrected easily with sunlight and supplements.",
         "advice": null,
-        "adviceHigh": "High vitamin D usually comes from too much supplement. It’s worth reviewing your dose with your doctor and easing back, as very high levels can affect calcium balance.",
+        "adviceHigh": "High vitamin D usually comes from too much supplement. It\u2019s worth reviewing your dose with your doctor and easing back, as very high levels can affect calcium balance.",
         "adviceLow": "A little safe sunshine, plus foods like oily fish, eggs and fortified milk, can help rebuild your vitamin D. Your doctor may suggest a supplement and the right amount.",
         "adviceOk": null
       }
@@ -1395,9 +1885,9 @@
         "categoryId": "vitamins",
         "what": "Essential for healthy nerves and red blood cells.",
         "high": "Usually harmless and most often reflects taking B12 supplements or injections. Less commonly it can point to a liver or kidney issue worth checking.",
-        "low": "Low B12 can cause tiredness, tingling and a form of anaemia — common in vegetarians and treatable with supplements.",
+        "low": "Low B12 can cause tiredness, tingling and a form of anaemia \u2014 common in vegetarians and treatable with supplements.",
         "advice": null,
-        "adviceHigh": "High B12 rarely comes from food and usually needs no dietary change. If you don’t take supplements, your doctor may look into what’s raising it, just to be thorough.",
+        "adviceHigh": "High B12 rarely comes from food and usually needs no dietary change. If you don\u2019t take supplements, your doctor may look into what\u2019s raising it, just to be thorough.",
         "adviceLow": "Foods like meat, fish, eggs and dairy, or fortified options if you eat plant-based, can help restore B12. Your doctor may recommend supplements or injections depending on the cause.",
         "adviceOk": null
       }
@@ -1414,7 +1904,7 @@
         "low": "Low folate can cause anaemia and is easily corrected through diet or supplements.",
         "advice": null,
         "adviceHigh": "A high folate level is usually harmless and needs no action. Keep enjoying your varied diet, and your doctor can review any supplements if it seems worth checking.",
-        "adviceLow": "Eat more folate-rich foods like leafy greens, beans, citrus and fortified cereals. Your doctor may suggest a folic-acid supplement, especially important if you’re pregnant or planning to be.",
+        "adviceLow": "Eat more folate-rich foods like leafy greens, beans, citrus and fortified cereals. Your doctor may suggest a folic-acid supplement, especially important if you\u2019re pregnant or planning to be.",
         "adviceOk": null
       }
     },
@@ -1423,9 +1913,9 @@
       "flags": "i",
       "codes": null,
       "info": {
-        "name": "Ferritin — Iron Stores",
+        "name": "Ferritin \u2014 Iron Stores",
         "categoryId": "vitamins",
-        "what": "Reflects the iron your body has in reserve — the earliest marker of iron deficiency.",
+        "what": "Reflects the iron your body has in reserve \u2014 the earliest marker of iron deficiency.",
         "high": "High ferritin can follow inflammation, infection or iron overload.",
         "low": "Low ferritin means iron stores are running down, often before anaemia appears.",
         "advice": null,
@@ -1441,7 +1931,7 @@
       "info": {
         "name": "UIBC (Unsaturated Iron Binding Capacity)",
         "categoryId": "vitamins",
-        "what": "The spare capacity of your blood’s iron-carrying protein that isn’t yet holding iron — read together with iron and TIBC.",
+        "what": "The spare capacity of your blood\u2019s iron-carrying protein that isn\u2019t yet holding iron \u2014 read together with iron and TIBC.",
         "high": "A high UIBC usually reflects low iron stores, as more of the carrier protein sits empty and available.",
         "low": "A low UIBC can accompany iron overload or ongoing inflammation, when little spare carrying capacity is left.",
         "advice": null,
@@ -1457,7 +1947,7 @@
       "info": {
         "name": "TIBC (Total Iron Binding Capacity)",
         "categoryId": "vitamins",
-        "what": "The total amount of iron your blood could carry if its carrier protein were full — a marker of iron status.",
+        "what": "The total amount of iron your blood could carry if its carrier protein were full \u2014 a marker of iron status.",
         "high": "A high TIBC usually points to low iron stores (iron deficiency), as the body makes more carrier protein to grab what iron it can.",
         "low": "A low TIBC can occur with iron overload, chronic illness, or low protein.",
         "advice": null,
@@ -1473,8 +1963,8 @@
       "info": {
         "name": "Transferrin Saturation",
         "categoryId": "vitamins",
-        "what": "The percentage of your iron-carrying protein that is actually holding iron — one of the clearest single markers of iron status.",
-        "high": "A high saturation can indicate iron overload — too much iron in the body.",
+        "what": "The percentage of your iron-carrying protein that is actually holding iron \u2014 one of the clearest single markers of iron status.",
+        "high": "A high saturation can indicate iron overload \u2014 too much iron in the body.",
         "low": "A low saturation is an early sign of iron deficiency, before stores run fully down.",
         "advice": null,
         "adviceHigh": "Raised iron stores are worth looking into, so avoid iron or high-dose vitamin-C supplements unless advised, and go easy on alcohol. Your doctor will check the cause and next steps.",
@@ -1487,10 +1977,10 @@
       "flags": "i",
       "codes": null,
       "info": {
-        "name": "Transferrin — Iron Carrier",
+        "name": "Transferrin \u2014 Iron Carrier",
         "categoryId": "vitamins",
         "what": "The protein that carries iron around the blood. The liver makes more of it when iron is short, so it is read together with serum iron and ferritin.",
-        "high": "A high transferrin usually means the body is short of iron and has made more carrier protein to gather what it can — the pattern of iron-deficiency anaemia.",
+        "high": "A high transferrin usually means the body is short of iron and has made more carrier protein to gather what it can \u2014 the pattern of iron-deficiency anaemia.",
         "low": "A low transferrin can go with an iron overload, long-standing inflammation or illness, or poor nutrition; your doctor reads it with ferritin and the iron level.",
         "advice": null,
         "adviceHigh": null,
@@ -1615,10 +2105,10 @@
       "flags": "i",
       "codes": null,
       "info": {
-        "name": "PSA — Prostate Marker",
+        "name": "PSA \u2014 Prostate Marker",
         "categoryId": "hormones",
         "what": "A protein from the prostate gland, used to screen for and monitor prostate conditions in men.",
-        "high": "A raised PSA can follow benign enlargement, infection or, less often, prostate cancer — your doctor decides on any next steps.",
+        "high": "A raised PSA can follow benign enlargement, infection or, less often, prostate cancer \u2014 your doctor decides on any next steps.",
         "low": "A low PSA is reassuring. It generally points to a healthy prostate and a very low likelihood of prostate cancer.",
         "advice": null,
         "adviceHigh": null,
@@ -1665,7 +2155,7 @@
       "info": {
         "name": "Vitamin B9 (Folate)",
         "categoryId": "vitamins",
-        "what": "Another name for folate — needed to build red blood cells and DNA.",
+        "what": "Another name for folate \u2014 needed to build red blood cells and DNA.",
         "high": null,
         "low": null,
         "advice": null,
@@ -1729,7 +2219,7 @@
       "info": {
         "name": "Cortisol",
         "categoryId": "hormones",
-        "what": "The body’s main stress hormone; also regulates sugar and blood pressure.",
+        "what": "The body\u2019s main stress hormone; also regulates sugar and blood pressure.",
         "high": "Often reflects normal stress, illness, pregnancy, or steroid medicines; less commonly it points to an adrenal or pituitary condition.",
         "low": "Can reflect underactive adrenal glands; timing matters too, since cortisol is naturally lower later in the day.",
         "advice": null,
@@ -1759,10 +2249,10 @@
       "flags": "i",
       "codes": null,
       "info": {
-        "name": "CRP — Inflammation Marker",
+        "name": "CRP \u2014 Inflammation Marker",
         "categoryId": "infection",
         "what": "Rises quickly when there is inflammation or infection anywhere in the body.",
-        "high": "A raised CRP signals active inflammation or infection — non-specific, so it is read with your symptoms.",
+        "high": "A raised CRP signals active inflammation or infection \u2014 non-specific, so it is read with your symptoms.",
         "low": null,
         "advice": null,
         "adviceHigh": null,
@@ -1778,7 +2268,7 @@
         "name": "Hepatitis B (HBsAg)",
         "categoryId": "infection",
         "what": "A screen for current hepatitis B infection of the liver.",
-        "high": "A “reactive/positive” result needs confirmatory testing and medical follow-up.",
+        "high": "A \u201creactive/positive\u201d result needs confirmatory testing and medical follow-up.",
         "low": null,
         "advice": null,
         "adviceHigh": null,
@@ -1857,7 +2347,7 @@
       "info": {
         "name": "Urine Analysis",
         "categoryId": "urine",
-        "what": "A physical and chemical check of the urine — a window on the kidneys, sugar control and possible infection.",
+        "what": "A physical and chemical check of the urine \u2014 a window on the kidneys, sugar control and possible infection.",
         "high": null,
         "low": null,
         "advice": null,
@@ -1868,8 +2358,9 @@
     }
   ],
   "localAdditions": [
-    "Rheumatoid Factor (RA Factor) — added in Infinity on 2026-09-25; carry into Telo smartMeta.ts before the next regeneration",
-    "AMH, Anti-CCP, ANA, Peripheral Blood Smear, TORCH (Toxoplasma/Rubella/CMV/HSV IgG and IgM) — added in Infinity on 2026-09-26; carry into Telo smartMeta.ts before the next regeneration",
-    "2026-09-26 body-map audit: Hormones retitled \"Hormones & Fertility\" (pointed at the pelvis); sodium/potassium/chloride moved to kidney; Transferrin, Urine Albumin (microalbumin), Free T3 and Free T4 entries added — carry into Telo smartMeta.ts before the next regeneration"
+    "Rheumatoid Factor (RA Factor) \u2014 added in Infinity on 2026-09-25; carry into Telo smartMeta.ts before the next regeneration",
+    "AMH, Anti-CCP, ANA, Peripheral Blood Smear, TORCH (Toxoplasma/Rubella/CMV/HSV IgG and IgM) \u2014 added in Infinity on 2026-09-26; carry into Telo smartMeta.ts before the next regeneration",
+    "2026-09-26 body-map audit: Hormones retitled \"Hormones & Fertility\" (pointed at the pelvis); sodium/potassium/chloride moved to kidney; Transferrin, Urine Albumin (microalbumin), Free T3 and Free T4 entries added \u2014 carry into Telo smartMeta.ts before the next regeneration",
+    "2026-10-02: Pregnancy Screening and Haemoglobin Type chapters, with the double/triple/quadruple marker, dual-marker-plus and HPLC analytes \u2014 29 matchers placed FIRST (the TC:HDL \"RISK RATIO\" and the Haemoglobin matchers would otherwise claim them); carry into Telo smartMeta.ts before the next regeneration"
   ]
 }

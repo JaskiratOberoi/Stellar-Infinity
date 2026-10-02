@@ -199,6 +199,11 @@ const CATEGORY_VIS: Record<string, { icon: string; ink: string; soft: string }> 
   hormones: { icon: 'spark', ink: '#9333a8', soft: '#f6e9fa' },
   infection: { icon: 'shield', ink: '#1b6fb0', soft: '#e6f1fa' },
   urine: { icon: 'flask', ink: '#b7791f', soft: '#fdf4dc' },
+  // The prenatal screens (double / triple / quadruple marker) and the HPLC
+  // haemoglobin study: their own chapters, so a risk ratio or an HbA2 is
+  // explained rather than listed under Other.
+  pregnancy: { icon: 'embryo', ink: '#be5a8a', soft: '#fbeaf2' },
+  haemoglobin: { icon: 'cells', ink: '#8b2e3c', soft: '#f9e9eb' },
   other: { icon: 'flask', ink: '#4b5563', soft: '#eef0f3' },
 };
 
@@ -546,6 +551,23 @@ function OrganIcon({ name, color, size = 26 }: { name: string; color: string; si
       return (
         <svg {...box} fill={color}>
           <path d="M12 2.4l2 6 6-.6-4.7 4 2.4 5.6L12 18.2 6.3 21.4 8.7 15.8 4 11.8l6 .6z" />
+        </svg>
+      );
+    case 'embryo': // the curled figure inside the womb
+      return (
+        <svg {...box} fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 21.2c5 0 8.6-3.6 8.6-8.2S17 4.6 12 4.6 3.4 8.4 3.4 13s3.6 8.2 8.6 8.2z" />
+          <circle cx="11.2" cy="10.6" r="2.6" fill={color} stroke="none" />
+          <path d="M9.6 13.4c-1.6 1.3-1.4 3.6.6 4.2 1.6.5 3.2-.3 3.8-1.6" />
+        </svg>
+      );
+    case 'cells': // red cells, as the HPLC study separates their haemoglobin
+      return (
+        <svg {...box} fill={color}>
+          <circle cx="8" cy="9" r="4.3" />
+          <circle cx="15.8" cy="14.6" r="4.3" />
+          <circle cx="8" cy="9" r="1.6" fill="#fff" opacity=".55" />
+          <circle cx="15.8" cy="14.6" r="1.6" fill="#fff" opacity=".55" />
         </svg>
       );
     case 'shield':
