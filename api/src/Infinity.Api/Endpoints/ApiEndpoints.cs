@@ -244,13 +244,16 @@ public static class ApiEndpoints
     }
 
     /// <summary>A save carries only the switches it means to change.</summary>
-    public sealed record ReportingSettingsBody(bool? ThyroidFigure = null, bool? Trending = null);
+    public sealed record ReportingSettingsBody(bool? ThyroidFigure = null, bool? Trending = null, bool? TestInterpretation = null);
+
+    private static object ReportingView(Reports.ReportSettings s) =>
+        new { thyroidFigure = s.ThyroidFigure, trending = s.Trending, testInterpretation = s.TestInterpretation };
 
     private static async Task<IResult> GetPublicReportingSettings(
         Reports.ReportSettings settings, CancellationToken ct)
     {
         await settings.EnsureLoadedAsync(ct).ConfigureAwait(false);
-        return Results.Ok(new { thyroidFigure = settings.ThyroidFigure, trending = settings.Trending });
+        return Results.Ok(ReportingView(settings));
     }
 
     private static async Task<IResult> GetReportingSettings(
@@ -263,7 +266,7 @@ public static class ApiEndpoints
         if (!string.Equals(principal.Role(), InfinityRoles.SuperAdmin, StringComparison.Ordinal))
             return Results.NotFound();
         await settings.EnsureLoadedAsync(ct).ConfigureAwait(false);
-        return Results.Ok(new { thyroidFigure = settings.ThyroidFigure, trending = settings.Trending });
+        return Results.Ok(ReportingView(settings));
     }
 
     private static async Task<IResult> PutReportingSettings(
@@ -278,19 +281,25 @@ public static class ApiEndpoints
         if (principal.UserId() is not int actor) return Results.Unauthorized();
         if (!string.Equals(principal.Role(), InfinityRoles.SuperAdmin, StringComparison.Ordinal))
             return Results.NotFound();
-        var before = new { thyroidFigure = settings.ThyroidFigure, trending = settings.Trending };
+        var before = ReportingView(settings);
         if (body.ThyroidFigure is bool thy)
             await settings.SetAsync(Reports.ReportSettings.ThyroidFigureKey, thy ? "1" : "0", actor, ct).ConfigureAwait(false);
         if (body.Trending is bool trend)
             await settings.SetAsync(Reports.ReportSettings.TrendingKey, trend ? "1" : "0", actor, ct).ConfigureAwait(false);
+        if (body.TestInterpretation is bool ti)
+            await settings.SetAsync(Reports.ReportSettings.TestInterpretationKey, ti ? "1" : "0", actor, ct).ConfigureAwait(false);
         // The key already carries the switches' fingerprint; the flush is belt
         // and braces, so a flip back within the cache's 45 minutes redraws
         // too, and nothing rendered under the other setting lingers.
         var flushed = await cache.RemoveByPrefixAsync("rptpdf:", ct).ConfigureAwait(false);
-        var after = new { thyroidFigure = settings.ThyroidFigure, trending = settings.Trending };
+        var after = ReportingView(settings);
         audit.Log("settings.reporting", actor: actor, ip: Audit.AuditIp.From(http),
             details: new { from = before, to = after, pdfCacheFlushed = flushed });
-        return Results.Ok(new { after.thyroidFigure, after.trending, pdfCacheFlushed = flushed });
+        return Results.Ok(new
+        {
+            thyroidFigure = settings.ThyroidFigure, trending = settings.Trending,
+            testInterpretation = settings.TestInterpretation, pdfCacheFlushed = flushed,
+        });
     }
 
     /// <summary>

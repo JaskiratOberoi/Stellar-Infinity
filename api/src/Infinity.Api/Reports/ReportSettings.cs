@@ -32,11 +32,20 @@ public sealed class ReportSettings(NobleConnectionFactory db, SqlRetry retry, IL
     /// </summary>
     public bool Trending { get; private set; }
 
+    /// <summary>
+    /// Infinity's own per-test interpretation texts (inf_test_interpretation,
+    /// script 175) on reports. Off by default; the report procedure prints
+    /// them on the review centre ZZTEST01 regardless, so a draft is approved
+    /// on test reports before any real report shows it.
+    /// </summary>
+    public bool TestInterpretation { get; private set; }
+
     /// <summary>What the PDF cache key carries for the switches; changes with every save.</summary>
-    public static string Fingerprint { get; private set; } = "t1r0";
+    public static string Fingerprint { get; private set; } = "t1r0i0";
 
     public const string ThyroidFigureKey = "thyroid_figure";
     public const string TrendingKey = "trending_report";
+    public const string TestInterpretationKey = "test_interpretation";
 
     public Task StartAsync(CancellationToken ct) => EnsureLoadedAsync(ct);
     public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
@@ -80,7 +89,8 @@ public sealed class ReportSettings(NobleConnectionFactory db, SqlRetry retry, IL
     {
         ThyroidFigure = !map.TryGetValue(ThyroidFigureKey, out var v) || v.Trim() != "0";
         Trending = map.TryGetValue(TrendingKey, out var tr) && tr.Trim() == "1";
-        Fingerprint = $"t{(ThyroidFigure ? 1 : 0)}r{(Trending ? 1 : 0)}";
+        TestInterpretation = map.TryGetValue(TestInterpretationKey, out var ti) && ti.Trim() == "1";
+        Fingerprint = $"t{(ThyroidFigure ? 1 : 0)}r{(Trending ? 1 : 0)}i{(TestInterpretation ? 1 : 0)}";
     }
 
     /// <summary>Saves one switch and re-reads them all.</summary>

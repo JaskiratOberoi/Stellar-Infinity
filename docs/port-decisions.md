@@ -1460,3 +1460,17 @@ prices until their codes are settled; Jas has a review sheet with a "Your
 code" column. Deltas are reported against the centre's current B2B rate
 (special, else list price), never against MRP — his rule. A rate-list change
 is live for the LIS, Telo and Infinity the moment the script runs.
+
+## Infinity's own test interpretations, approved on ZZTEST01 first (2026-10-02)
+
+Serum Creatinine (BI089) and serum Calcium (BI064) print no interpretation:
+the shared catalogue has none, and the catalogue is the legacy LIS's and is
+never edited from here. Script 175 adds inf_test_interpretation, a sidecar
+of per-test text that usp_inf_report_by_sid prints where the catalogue is
+blank (or in its place when a row says override). It is gated twice: the
+Reporting setting "Infinity's own test interpretations" (off), and — whatever
+the switch says — the review centre ZZTEST01, so a draft is read on test
+reports before any real report carries it. Jas's instruction: drafts for
+both tests (test-interpretation-drafts-20261002.sql), four review orders
+ZZINT01–04 on ZZTEST01 (a normal and an abnormal value of each), and nothing
+on real reports until he approves and switches it on.

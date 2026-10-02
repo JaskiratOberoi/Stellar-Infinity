@@ -11,7 +11,7 @@ import { IS_STAGING } from '../lib/env';
  * and every thyroid profile prints exactly as it did before the figure —
  * the legacy interpretation text and the notes — without a deploy.
  */
-interface ReportingSettings { thyroidFigure: boolean; trending: boolean }
+interface ReportingSettings { thyroidFigure: boolean; trending: boolean; testInterpretation: boolean }
 
 export function ReportingSettingsPage() {
   const [data, setData] = useState<ReportingSettings | null>(null);
@@ -113,6 +113,34 @@ export function ReportingSettingsPage() {
               </span>
               <span className="muted" style={{ display: 'block', fontSize: '.78rem', marginTop: '.4rem' }}>
                 Currently <b>{data.trending ? 'on' : 'off'}</b>.
+              </span>
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: '.9rem', alignItems: 'flex-start', marginTop: '1.2rem', paddingTop: '1.2rem', borderTop: '1px solid var(--line)' }}>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={data.testInterpretation}
+              aria-label="Infinity's own test interpretations on reports"
+              className={`toggle${data.testInterpretation ? ' toggle--on' : ''}`}
+              disabled={busy}
+              title={data.testInterpretation ? 'On — reports print Infinity\'s interpretation texts' : 'Off — only ZZTEST01 review reports print them'}
+              style={{ marginTop: '.15rem', flex: 'none' }}
+              onClick={() => void save({ testInterpretation: !data.testInterpretation }, (r) => r.testInterpretation
+                ? 'On. Reports print Infinity\'s interpretation texts where the catalogue has none, from the next report opened or downloaded.'
+                : 'Off. Only ZZTEST01 review reports print them.')}
+            />
+            <span>
+              <span style={{ fontWeight: 700 }}>Infinity's own test interpretations</span>
+              <span className="muted" style={{ display: 'block', fontSize: '.82rem', marginTop: '.3rem', lineHeight: 1.6 }}>
+                Interpretation text written on the Infinity side for tests the shared catalogue has none for — serum
+                Creatinine and serum Calcium to begin with. The catalogue's own text, which the legacy LIS prints, is never
+                changed. Whatever this switch says, reports on the review centre ZZTEST01 print these texts, so a draft is
+                approved on test reports first; on, every report prints them.
+              </span>
+              <span className="muted" style={{ display: 'block', fontSize: '.78rem', marginTop: '.4rem' }}>
+                Currently <b>{data.testInterpretation ? 'on' : 'off'}</b>.
               </span>
             </span>
           </div>
