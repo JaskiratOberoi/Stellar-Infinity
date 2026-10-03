@@ -7,6 +7,7 @@ import { PaperSelect, usePaper } from '../components/PaperSelect';
 import { FORMAT_PICKER, FormatSelect, useReportFormat } from '../components/ReportFormat';
 import { IntroTip } from '../components/IntroTip';
 import { BuTag } from '../components/BuTag';
+import { RefDoctorLine } from '../components/RefDoctorLine';
 
 export interface TestResult {
   resultId: number;
@@ -135,11 +136,13 @@ export type FullRow = WorksheetRow & {
  * move a page break — seconds of blank white for a toggle.
  */
 export function ReportViewer({
-  sid, patientName, clientCode, businessUnit, onClose, onSmart, onDownloaded,
+  sid, patientName, clientCode, businessUnit, refDoctor, onClose, onSmart, onDownloaded,
 }: {
   sid: string;
   /** For the window title only; the report draws its own header. */
   patientName?: string | null;
+  /** Referring doctor, under the name in the bar — as the lists show it. */
+  refDoctor?: string | null;
   /** The centre and its processing lab, for the title bar's tag — the same
    *  pair the list row shows, from the row the caller already has. */
   clientCode?: string | null;
@@ -288,6 +291,7 @@ export function ReportViewer({
               {patientName || 'Report'} <span className="mono muted">· {sid}</span>
               {clientCode && <span className="muted"> · {clientCode}<BuTag unit={businessUnit} /></span>}
             </p>
+            <RefDoctorLine name={refDoctor} />
             {error && <p className="preview__err">{error}</p>}
             {!error && counts.total > 0 && counts.remaining < counts.total && (
               <p className="muted" style={{ fontSize: '.72rem' }}>

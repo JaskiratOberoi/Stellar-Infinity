@@ -921,6 +921,7 @@ export function Reports() {
           patientName={rows.find((r) => r.sid === openSid)?.patientName ?? null}
           clientCode={rows.find((r) => r.sid === openSid)?.clientCode ?? null}
           businessUnit={rows.find((r) => r.sid === openSid)?.businessUnit ?? null}
+          refDoctor={rows.find((r) => r.sid === openSid)?.refDoctor ?? null}
           onClose={() => setOpenSid(null)}
           onDownloaded={(s) => markPrinted([s])}
           // Offered ONLY where the patient bought it. Passing undefined is what
@@ -1156,6 +1157,8 @@ function PatientReportViewer({ pid, patientName, rows, onClose, overrideLock, on
                   : null;
               })()}
             </p>
+            {/* The patient's referring doctor: one visit, so any sample's row has it. */}
+            <RefDoctorLine name={rows.find((r) => r.refDoctor)?.refDoctor} />
             {error && <p className="preview__err">{error}</p>}
             {!error && (
               <p className="muted" style={{ fontSize: '.72rem' }}>
