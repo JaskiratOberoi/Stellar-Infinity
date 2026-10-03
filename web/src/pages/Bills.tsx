@@ -443,7 +443,7 @@ export function Bills() {
                 {(data?.rows ?? []).map((b) => {
                   const off = b.balance !== 0;
                   return (
-                    <tr key={b.billId} style={off ? { background: 'color-mix(in srgb, var(--danger) 6%, transparent)' } : undefined}>
+                    <tr key={b.billId} style={off ? { background: 'rgba(var(--danger-rgb), .06)' } : undefined}>
                       <td className="mono cell--lead">
                         <button type="button" className="pidlink" onClick={() => setViewing(b.billId)}>
                           <b>{b.billNumber ?? b.billId}</b>
