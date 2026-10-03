@@ -461,9 +461,11 @@ export function PrintReport() {
   }, [pdfMode, ready, sid, excluded, counts.total, counts.remaining]);
 
   /* ---- sections ----------------------------------------------------------
-     A profile is its own section, and so is a standalone test that carries its
-     OWN commentary — Vitamin D, Vitamin B12, anything with a long clinical
-     note. Only the bare standalones (T3, T4 …) run together.
+     A profile is its own section, and so is a multi-part test that carries
+     its OWN commentary. Standalone tests — bare (T3, T4 …) or with notes
+     (Ferritin, Transferrin Saturation …) — run together, packed by estimated
+     height so a run never outgrows a sheet; a vitamin with its page of notes
+     is the exception and takes a sheet of its own.
 
      That is not only about reading order. A section taller than one page
      fragments the reserved-footer layout and can push its whole table onto the
@@ -493,6 +495,54 @@ export function PrintReport() {
       }
       return false;
     };
+
+    /*
+     * The vitamin pair. B12 and D are the two commonly co-ordered standalones
+     * that both carry a page of clinical notes. An earlier version folded the
+     * two into ONE section so a single blood draw did not make two sheets —
+     * and that is what broke: Vitamin D's notes and comments run most of a
+     * page, so B12's value landed under them and its interpretation went to
+     * the next sheet on its own (PID 3646376, 06/09/2026). A value parted
+     * from its interpretation is the one thing a section exists to prevent.
+     *
+     * So each vitamin is its own section, and its own SHEET: a page break
+     * before and after it wherever sections flow (the department-per-sheet
+     * bundle, the continuous report). A page of notes is a page; two sheets
+     * out of one draw is the honest cost.
+     */
+    const isVitamin = (item: ReportItem): boolean =>
+      item.kind === 'single'
+      && /vit(?:amin)?\s*\.?-?\s*(d3?\b|b\s*-?\s*12\b)/i.test(item.row?.name ?? '');
+
+    /*
+     * The printed height of an item, estimated in sheet pixels, for packing
+     * standalones (see the loop below). The sheet: A4 less 40mm top and
+     * bottom is ~820px; the patient block, the column heads and the
+     * department band take ~170 of them on every page; the budget is set
+     * under what remains. A result row is ~24px, a line of interpretation
+     * ~17.5px at 13.5px/1.3 leading across a ~100-character measure, and a
+     * picture (the HBV/HCV graphs) is counted as a third of a sheet.
+     */
+    const LINE = 17.5;
+    const ROW = 24;
+    const textLines = (s: string, perLine: number): number =>
+      s.split(/\r?\n/).reduce((n, l) => n + Math.max(1, Math.ceil(l.trim().length / perLine)), 0);
+    const heightOf = (item: ReportItem): number => {
+      if (item.kind === 'single') {
+        let h = ROW + ((item.row?.name ?? '').length > 38 ? 18 : 0);
+        // A reference range set out by age and sex is a column of short
+        // lines (Ferritin's runs to eight); the row is as tall as they are.
+        h += Math.max(0, formatRange(item.row?.range).split('\n').length - 1) * 13;
+        if (item.interpretation) h += 34 + textLines(item.interpretation, 100) * LINE;
+        if (item.interpretationImage) h += 280;
+        const notes = notesForCodes([item.row?.code]);
+        if (notes.length > 0) h += 30 + notes.reduce((n, t) => n + textLines(t, 95), 0) * LINE;
+        return h;
+      }
+      if (item.kind === 'group' && item.group) return ROW * (item.group.rows.length + 1);
+      return Infinity;
+    };
+    const SHEET_BUDGET = 580;
 
     /** Under the renderer an item with nothing ticked under it is not there. */
     const survives = (item: ReportItem): boolean => {
@@ -544,50 +594,57 @@ export function PrintReport() {
       const tidOf = (item: ReportItem): number | null =>
         item.kind === 'panel' ? null : (item.group?.testId ?? item.testId ?? null);
 
+      /*
+       * Standalone tests PACK onto a sheet. A section is what the split
+       * layout prints on a sheet of its own, so what goes into one section
+       * decides how many sheets a draw makes. The rule used to be "a
+       * standalone with any note at all is a section by itself", which kept
+       * a value with its interpretation but fragmented anything with short
+       * notes: an iron profile — Iron, Ferritin, TIBC, Transferrin
+       * Saturation, four one-line tests with ten lines of notes on two of
+       * them — came out as four sheets, each mostly blank (SID 9631116,
+       * 03/10/2026), where the LIS prints the four on one.
+       *
+       * So standalones, notes and all, run together into one section until
+       * the ESTIMATE of their printed height would overflow a sheet; the
+       * next one starts a new section. The estimate is coarse — rows,
+       * lines of text at the interpretation's measure, a flat allowance
+       * for a picture — and errs short, because the cost of a section
+       * that proves too tall is the fragmented-footer blank page the
+       * section exists to prevent, while the cost of an early break is a
+       * sheet with room to spare. Profiles and multi-part tests keep their
+       * own sections as before; a vitamin keeps its own SHEET (below).
+       */
       let firstInDept = true;
       let cur: Section | null = null;
-      let curBare = false;
+      let curRun = false;
+      let curHeight = 0;
       let curTid: number | null = null;
       for (const entry of entries) {
-        const tid = tidOf(entry.item);
+        const item = entry.item;
+        const tid = tidOf(item);
+        const h = heightOf(item);
         if (cur && tid != null && tid === curTid) {
           cur.entries.push(entry);
-        } else if (entry.item.kind === 'panel' || hasOwnContent(entry.item)) {
-          cur = { deptName: dept.name, deptStart: firstInDept, entries: [entry] };
+          curHeight += h;
+        } else if (item.kind === 'panel' || (item.kind === 'group' && hasOwnContent(item)) || isVitamin(item)) {
+          cur = { deptName: dept.name, deptStart: firstInDept, entries: [entry], ownSheet: isVitamin(item) };
           out.push(cur);
-          curBare = false;
-        } else if (cur && curBare) {
+          curRun = false;
+          curHeight = h;
+        } else if (cur && curRun && curHeight + h <= SHEET_BUDGET) {
           cur.entries.push(entry);
+          curHeight += h;
         } else {
           cur = { deptName: dept.name, deptStart: firstInDept, entries: [entry] };
           out.push(cur);
-          curBare = true;
+          curRun = true;
+          curHeight = h;
         }
         curTid = tid;
         firstInDept = false;
       }
     }
-    /*
-     * The vitamin pair. B12 and D are the two commonly co-ordered standalones
-     * that both carry a page of clinical notes. An earlier version folded the
-     * two into ONE section so a single blood draw did not make two sheets —
-     * and that is what broke: Vitamin D's notes and comments run most of a
-     * page, so B12's value landed under them and its interpretation went to
-     * the next sheet on its own (PID 3646376, 06/09/2026). A value parted
-     * from its interpretation is the one thing a section exists to prevent.
-     *
-     * So each vitamin is its own section, and its own SHEET: a page break
-     * before and after it wherever sections flow (the department-per-sheet
-     * bundle, the continuous report). A page of notes is a page; two sheets
-     * out of one draw is the honest cost.
-     */
-    const isVitamin = (sec: Section) =>
-      sec.entries.length === 1
-      && sec.entries[0].item.kind === 'single'
-      && /vit(?:amin)?\s*\.?-?\s*(d3?\b|b\s*-?\s*12\b)/i.test(
-        sec.entries[0].item.row?.name ?? '');
-
-    for (const sec of out) if (isVitamin(sec)) sec.ownSheet = true;
     return out;
   }, [report, interactive, excluded, deptFilter]);
 
