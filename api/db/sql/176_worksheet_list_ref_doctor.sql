@@ -1,0 +1,387 @@
+SET QUOTED_IDENTIFIER ON;
+GO
+/*
+ * 176_worksheet_list_ref_doctor.sql
+ *
+ * usp_inf_worksheet_list returns the referring doctor, so the worksheet and
+ * reporting lists can show it under the patient's name (asked 04/10/2026).
+ * The sample and by-SID procedures already return it; this is the same
+ * expression — the doctor master's name, else the freehand ref_doctor_other —
+ * added to the list. Otherwise the procedure is 156's, unchanged.
+ */
+CREATE OR ALTER PROCEDURE dbo.usp_inf_worksheet_list
+    @client_codes    dbo.ClientCodeList READONLY,
+    @from_date       DATE,
+    @to_date         DATE,
+    @patient_name    NVARCHAR(200) = NULL,
+    @sid             NVARCHAR(50)  = NULL,
+    -- CSV of sample_status values, e.g. '2,4,5,6'. NULL means every status.
+    -- A set, not a scalar: this is the whole point of the procedure.
+    @status_ids      VARCHAR(200)  = NULL,
+    -- ---- the rest of the legacy worksheet's filter set ----------------------
+    -- Hour-of-day bounds on the date window, as the LIS's two time dropdowns.
+    -- A night shift filters 20:00 to 08:00 by narrowing these, not the dates.
+    @from_hour       TINYINT       = 0,
+    @to_hour         TINYINT       = 24,
+    -- Patient number. tbl_med_mcc_patient_master.id, which the LIS labels
+    -- "Patient Number" and Infinity shows in the PID column.
+    @pid             INT           = NULL,
+    -- ONE client code. Narrows within the caller's scope and can never widen
+    -- it: the scope TVP below is applied as well, not instead.
+    @client_code     NVARCHAR(50)  = NULL,
+    @department_id   INT           = NULL,
+    @business_unit_id INT          = NULL,
+    @test_code       NVARCHAR(50)  = NULL,
+    -- Comma-separated codes, OR-combined: a sample matches if it carries ANY
+    -- of them. Supersedes @test_code (kept for callers deployed before the
+    -- filter went multi-select).
+    @test_codes      NVARCHAR(1000) = NULL,
+    @page            INT           = 1,
+    @page_size       INT           = 100,
+    -- Upper bound on modifieddate, pinned by the caller so that paging walks a
+    -- fixed set. NULL means "now", which the procedure returns for the caller
+    -- to send back on subsequent pages.
+    @as_of           DATETIME      = NULL,
+    -- 1 (the default): a patient's samples are listed TOGETHER, the group
+    -- placed by its latest registration, so two tubes of one visit registered
+    -- an hour apart on a busy day no longer land fifty rows — and a page —
+    -- apart. Reporting always asks for this; the worksheet passes its own
+    -- toggle, since a bench sometimes works in pure registration order (0).
+    @group_by_patient BIT          = 1
+AS
+BEGIN
+    SET NOCOUNT ON;
+    -- Matches the legacy procedure deliberately. This is a read of a live LIS
+    -- that clinicians are writing to; taking shared locks across a date range
+    -- would block result entry, and a worklist tolerates a dirty read.
+    SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+
+    -- Hour bounds exactly as the legacy procedure computes them: @to_hour of 24
+    -- means "to the last second of the to-date", not midnight at its start.
+    DECLARE @from DATETIME = DATEADD(HOUR, @from_hour, CAST(@from_date AS DATETIME));
+    DECLARE @to   DATETIME =
+        CASE WHEN @to_hour >= 24
+             THEN DATEADD(SECOND, -1, DATEADD(DAY, 1, CAST(@to_date AS DATETIME)))
+             ELSE DATEADD(HOUR, @to_hour, CAST(@to_date AS DATETIME))
+        END;
+
+    -- The snapshot. Never widens the requested window — it only ever pins the
+    -- upper edge earlier, so a caller cannot use it to read outside its dates.
+    DECLARE @snapshot DATETIME = ISNULL(@as_of, GETDATE());
+    IF @snapshot < @to SET @to = @snapshot;
+
+    DECLARE @pageSafe INT = CASE WHEN @page < 1 THEN 1 ELSE @page END;
+    -- Ceiling of 1000 rather than the legacy 5000: this is a per-request
+    -- transfer limit, not a limit on what the operator can reach. Every row is
+    -- still reachable by paging, and total_count tells the client how far to go.
+    DECLARE @size INT =
+        CASE WHEN @page_size < 1 THEN 100
+             WHEN @page_size > 1000 THEN 1000
+             ELSE @page_size END;
+    DECLARE @offset INT = (@pageSafe - 1) * @size;
+
+    -- Empty TVP means "no client-code filter", matching the legacy contract.
+    -- Callers must never pass an empty list to mean "this user sees nothing" —
+    -- the endpoint short-circuits that case before it gets here.
+    DECLARE @codeCount INT = (SELECT COUNT(*) FROM @client_codes);
+
+    -- The status set, parsed once into a table so the WHERE clause is a plain
+    -- EXISTS rather than a LIKE over a string (which would match 5 inside 15).
+    DECLARE @statuses TABLE (status_id INT PRIMARY KEY);
+    IF @status_ids IS NOT NULL AND LTRIM(RTRIM(@status_ids)) <> ''
+    BEGIN
+        INSERT INTO @statuses (status_id)
+        SELECT DISTINCT TRY_CONVERT(INT, LTRIM(RTRIM(value)))
+        FROM STRING_SPLIT(@status_ids, ',')
+        WHERE TRY_CONVERT(INT, LTRIM(RTRIM(value))) IS NOT NULL;
+    END
+    DECLARE @statusCount INT = (SELECT COUNT(*) FROM @statuses);
+
+    /*
+     * Sample Sent (1): a tube the centre has barcoded and dispatched but the
+     * lab has not received. Excluded from every list by default — it is not
+     * on any bench and has no report — exactly as the legacy portal's
+     * usp_pcc_samplestatus leaves it out of "--All--". But that portal DOES
+     * show it when the centre picks the status: it is how a centre sees
+     * what is in transit, and Infinity gave it no way at all (the worksheet
+     * procedure dropped status 1 unconditionally, 24,000 rows a month with
+     * nowhere to be seen). So status 1 rows are listed ONLY when asked for
+     * by id. The date window uses the row's added date where the LIS left
+     * modifieddate NULL, which it does for most of them — the sample has
+     * not been modified; it has only been sent.
+     */
+    DECLARE @wantsSent BIT = CASE WHEN EXISTS (SELECT 1 FROM @statuses WHERE status_id = 1) THEN 1 ELSE 0 END;
+
+    ;WITH H AS (
+        SELECT
+            P.id                    AS pid,
+            U.MCCUnitCode           AS client_code,
+            BU.BusinessUnitCode     AS business_unit,
+            P.name                  AS patient_name,
+            -- Who sent the patient: the doctor master's name, else the
+            -- freehand one typed at booking (176, 2026-10-04).
+            COALESCE(NULLIF(LTRIM(RTRIM(DOC.doctor_name)), ''),
+                     NULLIF(LTRIM(RTRIM(P.ref_doctor_other)), '')) AS ref_doctor,
+            CASE P.gender WHEN 1 THEN 'Male' ELSE 'Female' END AS sex,
+            P.age,
+            CASE P.age_type
+                WHEN 1 THEN 'Year(s)'
+                WHEN 2 THEN 'Month(s)'
+                WHEN 3 THEN 'Day(s)'
+                ELSE 'Unknown'
+            END                     AS age_unit,
+            S.vailid                AS sid,
+            -- The drawn stamp is TWO legacy columns: sample_date holds the day (at
+                        -- midnight) and sample_time the clock time on whatever day the record
+                        -- was saved — a 23:39 draw keyed in after midnight carries the next
+                        -- day's date there. The LIS shows date from the first and time from
+                        -- the second; so does this. (156, 2026-09-23)
+            CASE WHEN P.sample_date IS NULL OR P.sample_time IS NULL THEN COALESCE(P.sample_time, P.sample_date)
+                             ELSE DATEADD(DAY, DATEDIFF(DAY, 0, P.sample_date), CAST(CAST(P.sample_time AS TIME) AS DATETIME)) END AS sample_drawn,
+            S.modifieddate          AS regd_at,
+            S.lastmodified_date     AS last_modified_at,
+            STAT.id                 AS status_code,
+            STAT.status             AS status,
+            S.testnames             AS test_names_csv,
+            -- The per-code type CSV the LIS writes beside testnames: 't'/'p'
+            -- for a test or profile booked on its own, 'mt'/'mp' for one that
+            -- came out of a package (a "master profile"). Not returned; it is
+            -- what decides whether the package lookup below applies to this
+            -- tube at all.
+            S.testtypes             AS test_types_csv,
+            S.patient_id            AS visit_id,
+            P.order_number,
+            P.bill_number,
+            S.Sample_Comments       AS sample_comments,
+            S.Sample_ClinicalHistory AS clinical_history,
+            SM.Sampletype           AS sample_type,
+            -- The bench walks a patient's tubes in a fixed order: EDTA,
+            -- fluoride (the NaF plasma family), serum, urine, then whatever
+            -- else. Matched on the NAME because the master holds 150 rows of
+            -- freehand variants ("Plasma- NaF (F)", "24 Hr Urine Collection")
+            -- and an id list would rot the first time someone adds one.
+            CASE
+                WHEN UPPER(SM.Sampletype) LIKE '%EDTA%' THEN 1
+                WHEN UPPER(SM.Sampletype) LIKE '%NAF%'
+                  OR UPPER(SM.Sampletype) LIKE '%FLUORIDE%'
+                  OR UPPER(SM.Sampletype) LIKE '%FLOURIDE%' THEN 2
+                WHEN UPPER(SM.Sampletype) LIKE '%SERUM%' THEN 3
+                WHEN UPPER(SM.Sampletype) LIKE '%URINE%' THEN 4
+                ELSE 5
+            END AS specimen_rank
+        FROM dbo.tbl_med_mcc_patient_samples S
+        INNER JOIN dbo.tbl_med_mcc_patient_master P ON S.patient_id = P.id
+        INNER JOIN dbo.tbl_med_mcc_unit_master U ON P.mcc_code = U.id
+        LEFT JOIN dbo.tbl_med_business_unit_master BU ON BU.id = S.business_unit_id
+        LEFT JOIN dbo.tbl_med_mcc_patient_samples_status_master STAT ON STAT.id = S.sample_status
+        LEFT JOIN dbo.tbl_med_sample_master SM ON SM.id = S.sampleid
+        LEFT JOIN dbo.tbl_med_mcc_doctors DOC ON DOC.id = P.ref_doctor
+        WHERE (
+                (S.sample_status > 1 AND S.modifieddate BETWEEN @from AND @to)
+             OR (S.sample_status = 1 AND @wantsSent = 1
+                 AND COALESCE(S.modifieddate, S.addeddate) BETWEEN @from AND @to)
+              )
+          AND (@statusCount = 0 OR EXISTS (SELECT 1 FROM @statuses st WHERE st.status_id = S.sample_status))
+          AND (
+                @sid IS NULL
+                OR S.vailid LIKE '%' + @sid + '%'
+                OR P.bill_number LIKE '%' + @sid + '%'
+              )
+          AND (
+                @codeCount = 0
+                OR EXISTS (SELECT 1 FROM @client_codes c WHERE c.code = U.MCCUnitCode)
+              )
+          AND (
+                @patient_name IS NULL
+                OR P.name LIKE '%' + @patient_name + '%'
+                OR P.MRNID = @patient_name
+              )
+          AND (@pid IS NULL OR P.id = @pid)
+          -- Narrows WITHIN the scope filter above, never instead of it. A
+          -- caller naming a code they were not granted still matches nothing.
+          AND (@client_code IS NULL OR U.MCCUnitCode = @client_code)
+          AND (@business_unit_id IS NULL OR S.business_unit_id = @business_unit_id)
+          AND (
+                @department_id IS NULL
+                OR EXISTS (
+                    SELECT 1
+                    FROM dbo.tbl_med_mcc_patient_test_result r
+                    INNER JOIN dbo.tbl_med_test_master m ON r.testid = m.id
+                    WHERE r.vailid = S.vailid
+                      AND m.DepartmentId = @department_id
+                      -- 'Head' as well as 'Test': a profile's heading row
+                      -- carries the department for panels whose members do not.
+                      AND r.testtype IN (N'Test', N'Head')
+                )
+              )
+          AND (
+                @test_code IS NULL
+                -- The denormalised CSV on the sample answers most lookups
+                -- without touching the results table at all.
+                OR S.testcodes LIKE '%' + @test_code + '%'
+                OR EXISTS (
+                    SELECT 1
+                    FROM dbo.tbl_med_mcc_patient_test_result r
+                    WHERE r.vailid = S.vailid
+                      AND (r.testcode = @test_code OR r.testname LIKE '%' + @test_code + '%')
+                )
+              )
+          -- The multi-select form: any one of the listed codes matching admits
+          -- the sample. Same per-code match as @test_code above.
+          AND (
+                @test_codes IS NULL
+                OR EXISTS (
+                    SELECT 1
+                    FROM STRING_SPLIT(@test_codes, ',') c
+                    CROSS APPLY (SELECT code = LTRIM(RTRIM(c.value))) t
+                    WHERE t.code <> ''
+                      AND (
+                            S.testcodes LIKE '%' + t.code + '%'
+                            OR EXISTS (
+                                SELECT 1
+                                FROM dbo.tbl_med_mcc_patient_test_result r
+                                WHERE r.vailid = S.vailid
+                                  AND (r.testcode = t.code OR r.testname LIKE '%' + t.code + '%')
+                            )
+                          )
+                )
+              )
+    )
+    SELECT
+        page.client_code,
+        page.business_unit,
+        page.pid,
+        page.patient_name,
+        page.ref_doctor,
+        page.sex,
+        page.age,
+        page.age_unit,
+        page.sid,
+        page.sample_drawn,
+        page.regd_at,
+        page.last_modified_at,
+        page.status_code,
+        page.status,
+        page.test_names_csv,
+        page.order_number,
+        page.bill_number,
+        page.sample_comments,
+        page.clinical_history,
+        page.sample_type,
+        page.specimen_rank,
+        page.total_count,
+        page.patient_count,
+        page.as_of,
+        /*
+         * The package this tube was booked under — what the LIS calls a master
+         * profile (ROHTAK HR203A, GENOMIC 20) — so the worklist can name it the
+         * way the legacy grid did.
+         *
+         * NOT read off testnames. The LIS appends "[PACKAGE]" to that CSV on
+         * only some of a package's tubes: a four-tube ROHTAK order tags the
+         * serum and EDTA tubes and leaves the fluoride and urine tubes as bare
+         * "Glucose - Fasting" and "Complete Urine Examination". The order line
+         * (tbl_med_mcc_patient_tests, test_type = 'Master') is the one record
+         * every tube shares, so it is read from there, and only for a tube
+         * whose type CSV says one of its codes came out of a package — a tube
+         * of tests booked on their own beside the package must not inherit it.
+         *
+         * Computed AFTER paging, on the derived table, so it costs one indexed
+         * seek per row shown rather than one per row matched.
+         */
+        CASE WHEN page.test_types_csv LIKE '%m%' THEN
+            (SELECT STRING_AGG(CONVERT(NVARCHAR(MAX), LTRIM(RTRIM(t.test_name))), N', ')
+                        WITHIN GROUP (ORDER BY t.id)
+             FROM dbo.tbl_med_mcc_patient_tests t
+             WHERE t.patient_id = page.visit_id
+               AND t.test_type = 'Master'
+               AND NULLIF(LTRIM(RTRIM(t.test_name)), '') IS NOT NULL)
+        END AS package_names
+    FROM (
+        SELECT
+            H.client_code,
+            H.business_unit,
+            H.pid,
+            H.patient_name,
+            H.ref_doctor,
+            H.sex,
+            H.age,
+            H.age_unit,
+            H.sid,
+            H.sample_drawn,
+            H.regd_at,
+            H.last_modified_at,
+            H.status_code,
+            H.status,
+            H.test_names_csv,
+            H.test_types_csv,
+            H.visit_id,
+            H.order_number,
+            H.bill_number,
+            H.sample_comments,
+            H.clinical_history,
+            H.sample_type,
+            H.specimen_rank,
+            H.pid_last,
+            -- The count of the FILTERED set, before paging. This is what lets the
+            -- client say "showing 51-100 of 3,412" instead of guessing.
+            COUNT(*) OVER() AS total_count,
+            -- Distinct patients over the same set. COUNT(DISTINCT) has no windowed
+            -- form, so this is the textbook substitute: the highest dense rank
+            -- over pid IS the number of distinct pids, in the same single pass.
+            MAX(H.pid_rank) OVER () AS patient_count,
+            -- Echoed back by the client on every later page so the set stays fixed.
+            @snapshot AS as_of
+        FROM (SELECT H0.*,
+                     pid_rank = DENSE_RANK() OVER (ORDER BY H0.pid),
+                     -- The patient's latest registration in this set: the key a
+                     -- grouped list sorts the GROUP by, so a patient sits where
+                     -- their newest tube would have, with the older tubes
+                     -- beside it rather than pages below.
+                     pid_last = MAX(H0.regd_at) OVER (PARTITION BY H0.pid)
+              FROM H H0) H
+        -- sid is unique per sample, so this ordering is total. Without the
+        -- tiebreak, OFFSET paging over tied regd_at values silently duplicates and
+        -- drops rows between pages. Grouped: latest-visit patients first, one
+        -- patient's tubes contiguous (pid), newest tube first within them.
+        ORDER BY
+            CASE WHEN @group_by_patient = 1 THEN H.pid_last END DESC,
+            CASE WHEN @group_by_patient = 1 THEN H.pid END DESC,
+            H.regd_at DESC, H.sid DESC
+        OFFSET @offset ROWS FETCH NEXT @size ROWS ONLY
+    ) AS page
+    -- Restated on the outside: a derived table's ORDER BY only serves its
+    -- OFFSET, and the rows it hands out carry no ordering guarantee.
+    ORDER BY
+        CASE WHEN @group_by_patient = 1 THEN page.pid_last END DESC,
+        CASE WHEN @group_by_patient = 1 THEN page.pid END DESC,
+        page.regd_at DESC, page.sid DESC
+    /* ----------------------------------------------------------------------
+     * A plan per call, deliberately.
+     *
+     * This procedure has twelve optional filters, and the shapes it is asked
+     * for differ by orders of magnitude: "today, pending" is a few hundred
+     * rows; "ninety days, authorised" is half a million; a patient-name search
+     * is a handful. One cached plan has to serve all of them, and whichever
+     * shape compiled it wins — every other caller then runs someone else's
+     * plan. That is what the API's db.slow log was recording as
+     * op=reports.worklist swinging between 570ms and 18.7 SECONDS for the same
+     * screen: not load, but whose plan happened to be cached.
+     *
+     * Measured, with the cache primed by a narrow name search and then asked
+     * for the ordinary worksheet page:
+     *
+     *     worksheet default (2 days, 100 rows)   486ms -> 26ms
+     *     page size 1000                         832ms -> 82ms
+     *     patient-name search                    519ms -> 75ms
+     *     reporting default (7 days)             609ms -> 371ms
+     *
+     * The trade is real and worth stating: a 90-day window measured slightly
+     * SLOWER (2088ms -> 2800ms). Recompiling cannot help a query whose work is
+     * genuinely reading half a million rows, and the compilation is then pure
+     * cost. That case is rare — the screens default to 1 and 7 days — and a
+     * predictable two seconds is a better trade than an unpredictable eighteen.
+     * ---------------------------------------------------------------------- */
+    OPTION (RECOMPILE);
+END
+GO

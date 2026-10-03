@@ -10,6 +10,7 @@ import { Pager } from '../components/Pager';
 import { useAuth } from '../auth/AuthContext';
 import { TestList } from '../components/TestList';
 import { BuTag } from '../components/BuTag';
+import { RefDoctorLine } from '../components/RefDoctorLine';
 import {
   SampleFilters, ActiveFilterChips, useFilterOptions, applyFilterParams,
   initialFilters, SAMPLE_STATUSES, type SampleFilterValues,
@@ -51,6 +52,8 @@ export interface WorksheetRow {
    * a package's tubes.
    */
   packageNames?: string | null;
+  /** Referring doctor — the master row's name, else the one typed at booking. */
+  refDoctor?: string | null;
   /**
    * Did this patient's order include the paid Smart Report (SMART-RPT)?
    *
@@ -762,6 +765,7 @@ export function Reports() {
                           <div className="muted" style={{ fontSize: '.72rem' }}>
                             {[r.sex, r.age != null ? `${r.age}${r.ageUnit?.[0] ?? ''}` : null].filter(Boolean).join(' · ')}
                           </div>
+                          <RefDoctorLine name={r.refDoctor} />
                         </>
                       )}
                     </td>

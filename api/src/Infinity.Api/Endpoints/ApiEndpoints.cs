@@ -581,6 +581,8 @@ public static class ApiEndpoints
                 // The package the tube was booked under, named on the row as
                 // the legacy worklist named it.
                 r.PackageNames,
+                // Who sent the patient — shown under the name on both lists.
+                r.RefDoctor,
                 SmartReport = smartPids.Contains(r.Pid),
             }),
             // count is this page; total is the whole filtered set. Both are

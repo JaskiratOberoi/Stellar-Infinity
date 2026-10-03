@@ -461,7 +461,9 @@ public sealed class ReportsRepository(NobleConnectionFactory db, SqlRetry retry)
                         SampleType: TryStr(reader, "sample_type"),
                         SpecimenRank: TryInt(reader, "specimen_rank"),
                         SampleComments: TryStr(reader, "sample_comments"),
-                        PackageNames: TryStr(reader, "package_names")));
+                        PackageNames: TryStr(reader, "package_names"),
+                        // Tolerant for the same reason: arrives with 176's redeploy.
+                        RefDoctor: TryStr(reader, "ref_doctor")));
                 }
 
                 return new WorksheetListPage(rows, total, pageNo, size, NobleTime.ToIst(snapshot), patients);

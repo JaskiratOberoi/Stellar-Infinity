@@ -4,6 +4,7 @@ import { downloadFile, fmtDateTime } from '../lib/format';
 import { useAuth } from '../auth/AuthContext';
 import { StatusBadge, StatusLegend, statusRowClass, REPORTABLE_STATUSES, type WorksheetRow } from './Reports';
 import { BuTag } from '../components/BuTag';
+import { RefDoctorLine } from '../components/RefDoctorLine';
 import { WorksheetEntry } from './WorksheetEntry';
 import { Pager } from '../components/Pager';
 import { InfinityLoader } from '../components/InfinityLoader';
@@ -513,6 +514,7 @@ export function Worksheet() {
                             <div className="muted" style={{ fontSize: '.72rem' }}>
                               {[r.sex, r.age != null ? `${r.age}${r.ageUnit?.[0] ?? ''}` : null].filter(Boolean).join(' · ')}
                             </div>
+                            <RefDoctorLine name={r.refDoctor} />
                           </>
                         )}
                       </td>
