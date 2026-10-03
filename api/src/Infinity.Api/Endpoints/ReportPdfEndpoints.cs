@@ -147,14 +147,22 @@ public static class ReportPdfEndpoints
         RenderClient render,
         Caching.InfinityCache cache,
         Audit.AuditLog audit,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool overrideLock = false)
     {
         var list = SmartReportGate.ParseSids(sids);
         var (fail, ok) = await SmartReportGate
-            .PassAsync(list, principal, scopes, repo, locks, extras, smartAccess, loggers, ct)
+            .PassAsync(list, principal, scopes, repo, locks, extras, smartAccess, loggers, overrideLock, ct)
             .ConfigureAwait(false);
         if (fail is not null) return fail;
         var rows = ok!.Rows;
+
+        // A release over a hold is its own event, with what was owed.
+        foreach (var (sid, held) in ok.Overrode)
+        {
+            audit.Log("report.lock_override", actor: principal.UserId(), sid: sid, ip: Audit.AuditIp.From(http),
+                details: new { reason = held.Reason, dueAmount = held.DueAmount, via = "smart_pdf" });
+        }
 
         // One audit line per sample: the trail is read per SID.
         foreach (var r in rows)

@@ -1243,13 +1243,22 @@ public static class ApiEndpoints
         Reports.ReportLockRepository locks,
         Audit.AuditLog audit,
         HttpContext http,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool overrideLock = false)
     {
         var list = Reports.SmartReportGate.ParseSids(sids);
         var (fail, ok) = await Reports.SmartReportGate
-            .PassAsync(list, principal, scopes, repo, locks, extras, smartAccess, loggers, ct)
+            .PassAsync(list, principal, scopes, repo, locks, extras, smartAccess, loggers, overrideLock, ct)
             .ConfigureAwait(false);
         if (fail is not null) return fail;
+
+        // A release over a hold is its own event, with what was owed, as the
+        // clinical report's override records it.
+        foreach (var (sid, held) in ok!.Overrode)
+        {
+            audit.Log("report.lock_override", actor: principal.UserId(), sid: sid, ip: Audit.AuditIp.From(http),
+                details: new { reason = held.Reason, dueAmount = held.DueAmount, via = "smart" });
+        }
 
         // The booklet carries the patient's results too; on the trail like the
         // report view, one row per sample it covers.

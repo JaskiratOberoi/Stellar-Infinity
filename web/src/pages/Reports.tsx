@@ -123,7 +123,7 @@ export function Reports() {
    * from, and every way in — the row, either viewer — resolves the same set:
    * the patient's samples on this page that have a report and are not held.
    */
-  const [smartSids, setSmartSids] = useState<string[] | null>(null);
+  const [smartSids, setSmartSids] = useState<{ sids: string[]; overrideLock: boolean } | null>(null);
 
   /*
    * Balance locks for the page, keyed by SID — the advisory mirror of the
@@ -305,14 +305,18 @@ export function Reports() {
 
   const openSmart = (row: WorksheetRow) => {
     const group = grouped.find((g) => g.rows.some((x) => x.sid === row.sid))?.rows ?? [row];
-    const eligible = group
-      .filter((x) => REPORTABLE_STATUSES.includes(x.statusCode ?? -1) && !locks[x.sid])
-      .map((x) => x.sid);
+    // A Super Admin's booklet covers the held samples too, under the same
+    // override the PID download carries; the server audits each release.
+    // Anyone else gets the samples that are not on hold.
+    const ready = group.filter((x) => REPORTABLE_STATUSES.includes(x.statusCode ?? -1));
+    const held = ready.some((x) => locks[x.sid]);
+    const eligible = (superAdmin ? ready : ready.filter((x) => !locks[x.sid])).map((x) => x.sid);
     if (eligible.length === 0) {
       showToast(nothingTo(group, 'open as a Smart Report'));
       return;
     }
-    setSmartSids(eligible);
+    if (superAdmin && held) showToast('Opened including held reports — recorded in the audit trail.');
+    setSmartSids({ sids: eligible, overrideLock: superAdmin && held });
   };
 
   /*
@@ -931,7 +935,7 @@ export function Reports() {
           }
         />
       )}
-      {smartSids && <SmartReportModal sids={smartSids} onClose={() => setSmartSids(null)} />}
+      {smartSids && <SmartReportModal sids={smartSids.sids} overrideLock={smartSids.overrideLock} onClose={() => setSmartSids(null)} />}
       {pidView && (
         <PatientReportViewer
           pid={pidView.pid}

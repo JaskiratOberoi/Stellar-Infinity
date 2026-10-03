@@ -61,13 +61,18 @@ export interface SmartReportData {
  * sample passed in. The routes take the SID list because the booklet is per
  * patient, not per tube — a four-tube profile is one summary, not four.
  */
-export function SmartReportModal({ sids, onClose }: { sids: string[]; onClose: () => void }) {
+export function SmartReportModal({ sids, overrideLock = false, onClose }: {
+  sids: string[];
+  /** A Super Admin's release of the patient's held samples; the server honours it for that role alone and audits each. */
+  overrideLock?: boolean;
+  onClose: () => void;
+}) {
   const [busy, setBusy] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   // No format choice here: the body-map booklet is the Smart Report, and the
   // route renders it by default. The clinical report's per-desk Format
   // select is its own affair and does not reach the booklet.
-  const query = `sids=${encodeURIComponent(sids.join(','))}`;
+  const query = `sids=${encodeURIComponent(sids.join(','))}${overrideLock ? '&overrideLock=true' : ''}`;
 
   const download = async () => {
     setBusy(true);

@@ -37,10 +37,12 @@ public static class SmartReportGate
 
     /// <param name="Signers">Union across the samples, at most three.</param>
     /// <param name="ProcessedAt">The first sample's processing unit — one lab ran the visit.</param>
+    /// <param name="Overrode">The held samples a Super Admin let through, with what was owed — for the audit trail.</param>
     public sealed record Passed(
         IReadOnlyList<WorksheetRow> Rows,
         IReadOnlyList<ReportSigner> Signers,
-        ProcessingUnit? ProcessedAt);
+        ProcessingUnit? ProcessedAt,
+        IReadOnlyList<(string Sid, ReportLockRepository.ReportLock Lock)> Overrode);
 
     /// <summary>The comma-separated <c>sids</c> query, trimmed, deduplicated and capped.</summary>
     public static IReadOnlyList<string> ParseSids(string? sids) =>
@@ -60,9 +62,15 @@ public static class SmartReportGate
         ReportExtrasRepository extras,
         SmartReportAccessRepository access,
         ILoggerFactory loggers,
+        bool overrideLock,
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return (Results.Unauthorized(), null);
+        // The same release the clinical report's PID download carries: the
+        // Super Admin role alone, and each held sample is reported back so
+        // the caller can put the release on the trail.
+        var mayOverride = overrideLock && Endpoints.ReportPdfEndpoints.CanOverrideLock(principal);
+        var overrode = new List<(string, ReportLockRepository.ReportLock)>();
         if (sids.Count == 0)
             return (Results.BadRequest(new { error = "At least one SID is required." }), null);
 
@@ -89,7 +97,11 @@ public static class SmartReportGate
             }
 
             var lockState = await locks.GetAsync(sid, ct).ConfigureAwait(false);
-            if (lockState.Locked)
+            if (lockState.Locked && mayOverride)
+            {
+                overrode.Add((row.Sid, lockState));
+            }
+            else if (lockState.Locked)
             {
                 return (Results.Json(new
                 {
@@ -133,6 +145,6 @@ public static class SmartReportGate
             }
         }
 
-        return (null, new Passed(rows, signers, unit));
+        return (null, new Passed(rows, signers, unit, overrode));
     }
 }

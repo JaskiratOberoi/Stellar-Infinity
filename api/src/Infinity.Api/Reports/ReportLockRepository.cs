@@ -31,8 +31,10 @@ namespace Infinity.Api.Reports;
 /// balance, because that is what has to be paid to release the report.
 /// </para>
 /// <para>
-/// <c>PerminentUnlock</c> on the client overrides everything, exactly as the
-/// legacy LIS treats it.
+/// <c>PerminentUnlock</c> on the client, and a live temporary unlock, override
+/// everything — the patient's own bill included — exactly as the legacy LIS
+/// treats a release: its lock is client-level, so unlocking a centre there
+/// releases every report of that centre, walk-in patients' included.
 /// </para>
 /// <para>
 /// This is a revenue rule, not a security boundary — scope is what decides who
@@ -106,6 +108,61 @@ public sealed class ReportLockRepository(
                 decimal patientDue = 0m;
                 var hasOwnBill = false;
 
+                /*
+                 * The client's release comes FIRST, ahead of the patient's own
+                 * bill. The legacy LIS's lock is client-level only — permanent
+                 * unlock, temporary unlock, wallet against the credit limit —
+                 * and it has no notion of a per-patient bill, so when the lab
+                 * unlocks a centre there, every report of that centre is
+                 * released. Infinity read the patient's bill first, which meant
+                 * a centre the lab had explicitly released still had its
+                 * walk-in patients' reports held for a half-paid cash bill
+                 * (JK0213, 3 Oct 2026: unlocked in the LIS, 87 such bills
+                 * under 5 released clients in the month). A release the lab
+                 * granted is honoured for the whole centre, as the lab expects.
+                 */
+                var clientFound = false;
+                var clientReleased = false;
+                decimal walletBalance = 0m, creditLimit = 0m;
+                if (code.Length > 0)
+                {
+                    await using var wallet = NobleConnectionFactory.CreateCommand(conn,
+                        """
+                        SELECT a.currentbalance, u.creditlimit, u.PerminentUnlock,
+                               temp_unlock = (
+                                   SELECT TOP 1 l.expire_unlock
+                                   FROM dbo.tbl_med_mcc_lockunlock l
+                                   WHERE l.mcc_code = u.id
+                                     AND l.expire_unlock > GETDATE()
+                                   ORDER BY l.expire_unlock DESC)
+                        FROM dbo.tbl_med_mcc_unit_master u
+                        LEFT JOIN dbo.tbl_med_mcc_account_master a ON a.mcccode = u.id
+                        WHERE UPPER(u.MCCUnitCode) = @code;
+                        """);
+                    wallet.Parameters.Add("@code", SqlDbType.VarChar, 50).Value = code;
+
+                    await using var w = await wallet.ExecuteReaderAsync(inner).ConfigureAwait(false);
+                    if (await w.ReadAsync(inner).ConfigureAwait(false))
+                    {
+                        clientFound = true;
+                        walletBalance = w.IsDBNull(0) ? 0m : Convert.ToDecimal(w.GetValue(0));
+                        creditLimit = w.IsDBNull(1) ? 0m : Convert.ToDecimal(w.GetValue(1));
+                        var permanent = !w.IsDBNull(2) && Convert.ToBoolean(w.GetValue(2));
+                        /*
+                         * The TEMPORARY unlock. LockUnlock_MCC.aspx lets the lab
+                         * release one client for N hours — "pay tomorrow, send
+                         * today" — and it is used constantly. Read as an EXPIRY
+                         * rather than a flag: `number_of_hours` is decoration,
+                         * `expire_unlock` is the fact, compared to GETDATE() so
+                         * the decision is on the database's clock. TOP 1 by
+                         * latest expiry because the table is append-only.
+                         */
+                        var temporary = !w.IsDBNull(3);
+                        clientReleased = permanent || temporary;
+                    }
+                }
+                if (clientReleased) return ReportLock.Unlocked;
+
                 if (pid > 0)
                 {
                     // medid compared as a STRING on purpose. The obvious
@@ -155,54 +212,12 @@ public sealed class ReportLockRepository(
                 // Only when the patient has no bill of their own does the client
                 // wallet decide. Checking it for a B2C patient would read a
                 // balance their payments never post to.
-                if (hasOwnBill || code.Length == 0) return ReportLock.Unlocked;
+                if (hasOwnBill || !clientFound) return ReportLock.Unlocked;
 
-                await using var wallet = NobleConnectionFactory.CreateCommand(conn,
-                    """
-                    SELECT a.currentbalance, u.creditlimit, u.PerminentUnlock,
-                           temp_unlock = (
-                               SELECT TOP 1 l.expire_unlock
-                               FROM dbo.tbl_med_mcc_lockunlock l
-                               WHERE l.mcc_code = u.id
-                                 AND l.expire_unlock > GETDATE()
-                               ORDER BY l.expire_unlock DESC)
-                    FROM dbo.tbl_med_mcc_unit_master u
-                    LEFT JOIN dbo.tbl_med_mcc_account_master a ON a.mcccode = u.id
-                    WHERE UPPER(u.MCCUnitCode) = @code;
-                    """);
-                wallet.Parameters.Add("@code", SqlDbType.VarChar, 50).Value = code;
+                var floor = creditLimit < 0m ? creditLimit : 0m;
 
-                await using var w = await wallet.ExecuteReaderAsync(inner).ConfigureAwait(false);
-                if (!await w.ReadAsync(inner).ConfigureAwait(false)) return ReportLock.Unlocked;
-
-                if (!w.IsDBNull(2) && Convert.ToBoolean(w.GetValue(2))) return ReportLock.Unlocked;
-
-                /*
-                 * The TEMPORARY unlock, which Infinity did not previously read.
-                 *
-                 * LockUnlock_MCC.aspx lets the lab release one client for N
-                 * hours — "pay tomorrow, send today". It is used constantly: 65
-                 * clients held a live unlock at the moment this was written,
-                 * several granted that morning, including centres owing lakhs.
-                 * Ignoring the table meant Infinity kept refusing reports the
-                 * lab had explicitly released, and the operator's only clue was
-                 * a 423 that named a balance they had already waived.
-                 *
-                 * Read as an EXPIRY rather than a flag: `number_of_hours` is
-                 * decoration, `expire_unlock` is the fact, and letting SQL
-                 * compare it to GETDATE() keeps the decision on the database's
-                 * clock rather than the API container's. TOP 1 by latest expiry
-                 * because the table is append-only — re-unlocking a client adds
-                 * a row rather than updating one, so the newest wins.
-                 */
-                if (!w.IsDBNull(3)) return ReportLock.Unlocked;
-
-                var balance = w.IsDBNull(0) ? 0m : Convert.ToDecimal(w.GetValue(0));
-                var limit = w.IsDBNull(1) ? 0m : Convert.ToDecimal(w.GetValue(1));
-                var floor = limit < 0m ? limit : 0m;
-
-                return balance < floor
-                    ? new ReportLock(true, "client", floor - balance)
+                return walletBalance < floor
+                    ? new ReportLock(true, "client", floor - walletBalance)
                     : ReportLock.Unlocked;
             }, token), ct).ConfigureAwait(false);
     }
