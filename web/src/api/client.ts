@@ -106,6 +106,39 @@ interface RequestOptions extends RequestInit {
   timeoutMs?: number | null;
 }
 
+/*
+ * The two AbortSignal helpers below exist for the browsers Windows 7, 8 and
+ * 8.1 are stuck on: Chrome and Edge 109, Firefox ESR 115. AbortSignal.any
+ * arrived in Chrome 116 and Firefox 124, so on those machines the plain call
+ * threw "AbortSignal.any is not a function" before fetch ran — on EVERY
+ * request, the sign-in included, which is how the lab's older PCs could not
+ * log in at all (3 Oct 2026). Feature-detected, so a current browser uses
+ * the native call and gets exactly what it had before.
+ */
+
+/** AbortSignal.timeout, or a timer that aborts with the same TimeoutError name the catch below reads. */
+function timeoutSignal(ms: number): AbortSignal {
+  if (typeof AbortSignal.timeout === 'function') return AbortSignal.timeout(ms);
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(new DOMException(`Timed out after ${ms}ms`, 'TimeoutError')), ms);
+  return controller.signal;
+}
+
+/** AbortSignal.any, or a signal wired by hand to follow whichever input aborts first. */
+function anySignal(signals: AbortSignal[]): AbortSignal {
+  if (signals.length === 1) return signals[0];
+  if (typeof AbortSignal.any === 'function') return AbortSignal.any(signals);
+  const controller = new AbortController();
+  for (const s of signals) {
+    if (s.aborted) {
+      controller.abort(s.reason);
+      break;
+    }
+    s.addEventListener('abort', () => controller.abort(s.reason), { once: true });
+  }
+  return controller.signal;
+}
+
 async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
   const { isCredentialCheck = false, timeoutMs = TIMEOUT_MS, ...fetchInit } = init;
   const headers = new Headers(fetchInit.headers);
@@ -125,8 +158,8 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
   // of the timeout and their own signal is the only way to end it early.
   const signals: AbortSignal[] = [];
   if (fetchInit.signal) signals.push(fetchInit.signal);
-  if (timeoutMs != null) signals.push(AbortSignal.timeout(timeoutMs));
-  const signal = signals.length > 0 ? AbortSignal.any(signals) : undefined;
+  if (timeoutMs != null) signals.push(timeoutSignal(timeoutMs));
+  const signal = signals.length > 0 ? anySignal(signals) : undefined;
 
   let res: Response;
   try {
