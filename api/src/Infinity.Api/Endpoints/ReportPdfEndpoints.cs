@@ -400,7 +400,7 @@ public static class ReportPdfEndpoints
     // 24: a long text value spans into the Unit / empty Reference column, unit inline.
     // 25: the fit also pulls a light last page back onto the sheet, with two more zoom steps.
     // 29: the smart cover's headline loses its text-shadow (printed as a raster box).
-    private const string PdfCacheV = "31";
+    private const string PdfCacheV = "32";
     private static readonly TimeSpan PdfCacheTtl = TimeSpan.FromMinutes(45);
 
     // The lab's report switches ride in the key (ReportSettings.Fingerprint),

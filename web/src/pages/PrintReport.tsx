@@ -16,7 +16,8 @@ import type { TrendAnalyte } from '../lib/trendBands';
 import type { ResultTrendResponse } from '../api/client';
 import { IS_STAGING } from '../lib/env';
 import {
-  ageLabel, fmtDob, fmtStamp, formatRange, genderLabel, splitInterp,
+  ageLabel, fmtDob, fmtStamp, formatRange, genderLabel, rangeForPatient, splitInterp,
+  type RangePatient,
 } from '../lib/reportFormat';
 import {
   buildSampleReport, isTitleHead, isDescriptive, descriptiveMethod, COLLECTED_AT_KEY, COLLECTED_ADDRESS_KEY,
@@ -35,6 +36,8 @@ import '../report.css';
  * than a prop: the row sits five components down from the page.
  */
 const TrendContext = createContext<Map<string, TrendAnalyte>>(new Map());
+/** Whose report this is, for the reference-interval cell to show the band that applies. */
+const PatientContext = createContext<RangePatient>({ age: null, ageUnit: null, sex: null });
 
 /**
  * The printed report — and the PDF, and the preview.
@@ -301,6 +304,8 @@ export function PrintReport() {
 
   // Departments → panels → groups → rows, in the order the LIS wrote them.
   const report = useMemo(() => buildSampleReport(row?.results ?? []), [row]);
+  const patientRef = useMemo<RangePatient>(
+    () => ({ age: row?.age ?? null, ageUnit: row?.ageUnit ?? null, sex: row?.sex ?? null }), [row]);
 
   const interactive = !pdfMode;
 
@@ -532,7 +537,7 @@ export function PrintReport() {
         let h = ROW + ((item.row?.name ?? '').length > 38 ? 18 : 0);
         // A reference range set out by age and sex is a column of short
         // lines (Ferritin's runs to eight); the row is as tall as they are.
-        h += Math.max(0, formatRange(item.row?.range).split('\n').length - 1) * 13;
+        h += Math.max(0, rangeForPatient(formatRange(item.row?.range), patientRef).split('\n').length - 1) * 13;
         if (item.interpretation) h += 34 + textLines(item.interpretation, 100) * LINE;
         if (item.interpretationImage) h += 280;
         const notes = notesForCodes([item.row?.code]);
@@ -798,6 +803,7 @@ export function PrintReport() {
 
   return (
     <TrendContext.Provider value={trendMap}>
+    <PatientContext.Provider value={patientRef}>
     <div ref={rootRef} className={shell} data-print-ready={ready ? 'true' : 'false'} data-print-fit={fit ?? undefined}>
       {/* The page box depends on the paper. A client's own stationery gets a
           full 40mm head and foot; Noble's letterhead — composited in, or
@@ -960,6 +966,7 @@ export function PrintReport() {
         </>
       )}
     </div>
+    </PatientContext.Provider>
     </TrendContext.Provider>
   );
 }
@@ -1918,7 +1925,9 @@ function ResultRow({
  * Everything else falls back to one band per line.
  */
 function RangeCell({ range }: { range: string | null }) {
-  const text = formatRange(range);
+  // The band for this patient where one can be told apart safely; the
+  // whole range otherwise — see rangeForPatient.
+  const text = rangeForPatient(formatRange(range), useContext(PatientContext));
   if (text === '—') return <>—</>;
 
   const lines = text.split('\n');
