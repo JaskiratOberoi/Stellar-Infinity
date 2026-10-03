@@ -319,7 +319,13 @@ public sealed class AccessionRepository(NobleConnectionFactory db, SqlRetry retr
                         r.Str("testNames"),
                         r.Str("existingVailid")));
                 }
-                return (IReadOnlyList<OrderTube>)tubes;
+                // The bench order the order form uses — serum, EDTA, fluoride,
+                // urine, heparin, citrate — so the barcode fields here run the
+                // same way they did when the order was placed.
+                return (IReadOnlyList<OrderTube>)tubes
+                    .OrderBy(t => OrderWriteRepository.TubeRank(t.SampleTypeName))
+                    .ThenBy(t => t.SampleTypeName, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
             }, token), ct);
 
     /// <summary>
