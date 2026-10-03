@@ -335,8 +335,35 @@ public sealed class OrderWriteRepository(NobleConnectionFactory db, SqlRetry ret
                         ItemCount: r.NullableInt("itemCount") ?? 0));
                 }
 
-                return (IReadOnlyList<SampleGroup>)groups;
+                // In the order the counter labels them, not the order the
+                // procedure happened to find them in.
+                return (IReadOnlyList<SampleGroup>)groups
+                    .OrderBy(g => TubeRank(g.SampleTypeName))
+                    .ThenBy(g => g.SampleTypeName, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
             }, token), ct);
+    }
+
+    /// <summary>
+    /// The bench order of tubes — serum, EDTA, fluoride, urine container,
+    /// sodium heparin, sodium citrate — as the lab asked for the barcode fields
+    /// on a client order to run top to bottom (04/10/2026). Matched on the
+    /// sample master's NAME because that master holds 150 freehand variants
+    /// ("Plasma- NaF (F)", "WB - EDTA", "Peripheral Blood / Citrated Plasma")
+    /// and an id list would rot the first time one was added. The first rule
+    /// that matches wins, so a name naming two tubes sorts by the earlier one;
+    /// anything unmatched follows the six, alphabetically.
+    /// </summary>
+    internal static int TubeRank(string? sampleTypeName)
+    {
+        var n = (sampleTypeName ?? string.Empty).ToUpperInvariant();
+        if (n.Contains("SERUM")) return 1;
+        if (n.Contains("EDTA")) return 2;
+        if (n.Contains("NAF") || n.Contains("FLUORID") || n.Contains("FLOURID")) return 3;
+        if (n.Contains("URINE")) return 4;
+        if (n.Contains("HEPARIN")) return 5;
+        if (n.Contains("CITRAT")) return 6;
+        return 7;
     }
 
     /// <summary>
