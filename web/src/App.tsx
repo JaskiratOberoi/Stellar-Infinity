@@ -220,7 +220,10 @@ const NAV: NavEntry[] = [
   {
     label: 'Lab',
     items: [
-      { to: '/worksheet', label: 'Worksheet', icon: 'worksheet', cap: 'result:enter' },
+      // TEMPORARY (04/10/2026): the Worksheet is hidden from everyone but the
+      // Super Admin while it is being reworked. Drop onlyForRole here and the
+      // role check on the route below to give it back.
+      { to: '/worksheet', label: 'Worksheet', icon: 'worksheet', cap: 'result:enter', onlyForRole: 'super_admin' },
       { to: '/reports', label: 'Reporting', icon: 'reporting', cap: 'report:view' },
       { to: '/instruments', label: 'Instruments', icon: 'instruments', cap: 'result:enter' },
       // The remote-lab middleware fleet. Its own capability: it was gated on
@@ -485,7 +488,8 @@ export function App() {
         {/* billing:view to look; rate:manage is checked inside for every edit,
             and independently by the API on each write. */}
         <Route path="/rate-lists" element={can('rate:manage') ? <RateLists /> : <Navigate to="/" replace />} />
-        <Route path="/worksheet" element={can('result:enter') ? <Worksheet /> : <Navigate to="/" replace />} />
+        {/* Temporarily Super Admin only — see the nav entry. */}
+        <Route path="/worksheet" element={can('result:enter') && user.role === 'super_admin' ? <Worksheet /> : <Navigate to="/" replace />} />
         <Route path="/reports" element={can('report:view') ? <Reports /> : <Navigate to="/" replace />} />
         <Route path="/instruments" element={can('result:enter') ? <Instruments /> : <Navigate to="/" replace />} />
         <Route path="/interfacing" element={can('interfacing:view') ? <Interfacing /> : <Navigate to="/" replace />} />
