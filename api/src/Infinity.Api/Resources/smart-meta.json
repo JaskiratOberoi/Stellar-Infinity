@@ -2117,6 +2117,24 @@
       }
     },
     {
+      "pattern": "CANCER\\s*ANTIGEN\\s*-?\\s*125|\\bCA\\s*-?\\s*125\\b",
+      "flags": "i",
+      "codes": [
+        "BI058"
+      ],
+      "info": {
+        "name": "CA 125 \u2014 Ovarian Marker",
+        "categoryId": "hormones",
+        "what": "A protein that can rise with changes in the ovaries and the lining of the abdomen. It is a screening pointer, not a diagnosis: many harmless conditions raise it too.",
+        "high": "Often reflects something benign \u2014 a period, endometriosis, fibroids, an ovarian cyst, pelvic inflammation, or recent abdominal illness. Persistently or markedly raised levels need a doctor to look further, usually with an ultrasound scan.",
+        "low": null,
+        "advice": "A raised CA 125 on its own is not a diagnosis of anything. Your doctor will read it alongside your symptoms and history, and may suggest a pelvic ultrasound or a repeat test after your next cycle.",
+        "adviceHigh": null,
+        "adviceLow": null,
+        "adviceOk": "A normal CA 125 is reassuring. It does not replace routine gynaecological check-ups, which your doctor can schedule for you."
+      }
+    },
+    {
       "pattern": "TESTOSTERONE",
       "flags": "i",
       "codes": null,
