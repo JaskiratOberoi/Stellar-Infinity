@@ -1518,3 +1518,21 @@ and precedence rules stay Telo's to the word; only the look is ours, which
 retires the earlier "indistinguishable from Telo" rule for this document.
 Same day: the saved PDF is named "<bill no> <client code> <patient>" rather
 than Report.pdf.
+
+## The order basket is per sign-in, not per user (2026-10-05)
+
+Jas: a test tapped in the search results on a phone under UP0804 "did not
+get selected". The prod web log had the answer: the add returned 400
+"Choose a client before adding tests", on a phone and on a desktop, each
+time seconds after ANOTHER device signed in or out on the same UP0804
+login. The basket was keyed on the user id alone, and a client login is one
+username shared by every desk and phone at the centre; login cleared the
+basket (so a stale one never greeted a sign-in) and so emptied it under
+everyone else mid-order. The lab never saw it because staff have their own
+logins. Now the key carries the token's jti (CartOwner), one basket per
+sign-in; login no longer clears anything, sign-out drops its own, the
+24-hour TTL sweeps the rest. The form also heals the one legitimate case
+left — a basket that lost its client — by pointing it back at the client it
+is on and adding again, instead of an error banner a phone has scrolled out
+of sight. The touch handling itself was sound: a synthetic touch sequence on
+staging added the test.

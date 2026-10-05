@@ -61,7 +61,7 @@ public static class AuthEndpoints
             }
             try
             {
-                await carts.ClearAsync(uid, ct).ConfigureAwait(false);
+                await carts.ClearAsync(Orders.CartOwner.Of(principal), ct).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -152,13 +152,11 @@ public static class AuthEndpoints
         // capabilities are baked into the token and this is the only moment
         // they exist; the grant procedure bumps the session version so a
         // revoke cannot outlive it.
-        // A NEW session starts with an empty order form. Logout clears the
-        // cart too, but sessions also end by expiry or a closed browser, and
-        // this is the one gate every fresh session passes through — without
-        // it, a basket abandoned days ago greets every login. Best-effort:
-        // an unreachable Redis must not block a sign-in.
-        try { await carts.ClearAsync(row.UserId, ct).ConfigureAwait(false); }
-        catch (Exception ex) { logger.LogWarning(ex, "login.cart.clear.failed userId={UserId}", row.UserId); }
+        // A NEW session starts with an empty order form by construction: the
+        // cart is keyed on the sign-in (CartOwner), so a fresh token has a
+        // fresh, empty basket. It used to be cleared here by user id, which
+        // emptied the basket under every OTHER desk signed in on the same
+        // client login — see CartStore.
 
         var grants = await authRepo.GrantedCapabilitiesAsync(row.UserId, ct).ConfigureAwait(false);
         var user = ToAuthenticatedUser(row, grants);

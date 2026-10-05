@@ -561,7 +561,20 @@ export function NewOrder() {
    * mouse trip or select-all in between.
    */
   const addSuggestion = (i: CatalogItem) => {
-    void act(() => cartApi.add({ kind: i.kind, id: i.id, code: i.code, name: i.name }));
+    const item = { kind: i.kind, id: i.id, code: i.code, name: i.name };
+    // If the server's basket has lost its client (a session that expired and
+    // was re-established, or the shared-login clobber that 2026-10-05's
+    // per-session keys fixed) this form still knows which client it is on:
+    // point the basket back at it and add again, rather than fail with an
+    // error banner that on a phone is scrolled out of sight.
+    void act(async () => {
+      try { return await cartApi.add(item); }
+      catch (e) {
+        if (cart.mcc == null || !(e instanceof Error) || !/choose a client/i.test(e.message)) throw e;
+        await cartApi.setClient(cart.mcc);
+        return cartApi.add(item);
+      }
+    });
     setSearch('');
     setSuggOpen(false);
     searchRef.current?.focus();

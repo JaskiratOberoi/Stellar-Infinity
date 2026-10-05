@@ -125,7 +125,7 @@ public static class OrderEntryEndpoints
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
-        return Results.Ok(await carts.GetAsync(userId, ct).ConfigureAwait(false));
+        return Results.Ok(await carts.GetAsync(CartOwner.Of(principal), ct).ConfigureAwait(false));
     }
     public sealed record SetClientRequest(int Mcc);
     private static async Task<IResult> SetCartClient(
@@ -138,7 +138,7 @@ public static class OrderEntryEndpoints
         if (principal.UserId() is not int userId) return Results.Unauthorized();
         if (!await InScopeAsync(scopes, userId, body.Mcc, ct).ConfigureAwait(false))
             return Results.NotFound();
-        return Results.Ok(await carts.SetClientAsync(userId, body.Mcc, ct).ConfigureAwait(false));
+        return Results.Ok(await carts.SetClientAsync(CartOwner.Of(principal), body.Mcc, ct).ConfigureAwait(false));
     }
     public sealed record AddItemRequest(string Kind, int Id, string? Code, string? Name);
     private static async Task<IResult> AddCartItem(
@@ -150,11 +150,11 @@ public static class OrderEntryEndpoints
         if (principal.UserId() is not int userId) return Results.Unauthorized();
         if (body.Kind is not ("test" or "profile" or "master"))
             return Results.BadRequest(new { error = "kind must be test, profile or master." });
-        var cart = await carts.GetAsync(userId, ct).ConfigureAwait(false);
+        var cart = await carts.GetAsync(CartOwner.Of(principal), ct).ConfigureAwait(false);
         if (cart.Mcc is null)
             return Results.BadRequest(new { error = "Choose a client before adding tests — the price depends on it." });
         return Results.Ok(await carts
-            .AddAsync(userId, new CartItem(body.Kind, body.Id, body.Code, body.Name), ct)
+            .AddAsync(CartOwner.Of(principal), new CartItem(body.Kind, body.Id, body.Code, body.Name), ct)
             .ConfigureAwait(false));
     }
     private static async Task<IResult> RemoveCartItem(
@@ -164,7 +164,7 @@ public static class OrderEntryEndpoints
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
-        return Results.Ok(await carts.RemoveAsync(userId, kind, id, ct).ConfigureAwait(false));
+        return Results.Ok(await carts.RemoveAsync(CartOwner.Of(principal), kind, id, ct).ConfigureAwait(false));
     }
     private static async Task<IResult> ClearCart(
         System.Security.Claims.ClaimsPrincipal principal,
@@ -172,7 +172,7 @@ public static class OrderEntryEndpoints
         CancellationToken ct)
     {
         if (principal.UserId() is not int userId) return Results.Unauthorized();
-        await carts.ClearAsync(userId, ct).ConfigureAwait(false);
+        await carts.ClearAsync(CartOwner.Of(principal), ct).ConfigureAwait(false);
         return Results.Ok(Cart.Empty);
     }
     // ---- preview -----------------------------------------------------------
@@ -203,7 +203,7 @@ public static class OrderEntryEndpoints
         var (chan, chanError) = ResolveChannel(principal, channel);
         if (chanError is not null) return chanError;
         var b2b = chan == B2b;
-        var cart = await carts.GetAsync(userId, ct).ConfigureAwait(false);
+        var cart = await carts.GetAsync(CartOwner.Of(principal), ct).ConfigureAwait(false);
         if (cart.Mcc is not int mcc)
             return Results.BadRequest(new { error = "No client selected." });
         if (!await InScopeAsync(scopes, userId, mcc, ct).ConfigureAwait(false))
@@ -759,7 +759,7 @@ public static class OrderEntryEndpoints
         // every run failed with "Choose a client before adding tests" while
         // the screen showed the client still picked: a batch feature that only
         // ever booked one order.
-        await carts.SaveAsync(userId, new Cart(body.Mcc, []), ct).ConfigureAwait(false);
+        await carts.SaveAsync(CartOwner.Of(principal), new Cart(body.Mcc, []), ct).ConfigureAwait(false);
         return Results.Ok(result);
     }
     // ---- the draft queue ----------------------------------------------------
