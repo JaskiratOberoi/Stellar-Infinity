@@ -1474,3 +1474,24 @@ reports before any real report carries it. Jas's instruction: drafts for
 both tests (test-interpretation-drafts-20261002.sql), four review orders
 ZZINT01–04 on ZZTEST01 (a normal and an abnormal value of each), and nothing
 on real reports until he approves and switches it on.
+
+## MDCARE's revised prices reach back to 1 September (2026-10-05)
+
+Jas: LFT 500→550, KFT with electrolytes 500→550, Lipid profile 450→495,
+PSA Total 650→715 for MDCARE, "and update the same in the bills/invoices/
+patients from 1st September onwards till date". List 139 is MDCARE's alone,
+so the list rows moved (both KFT-with-electrolytes profiles, KFTELEC01 and
+CP116, were at 500 and both are billed); PSA's list row already said 715
+behind a July special rate of 650, which is what moved. The data explained
+the second half of the ask: from 4 September MDCARE's counter was already
+collecting the new rates against bills still printed at the old ones — 70
+bills overpaid by exactly the delta. So every bill from 1 September carrying
+one of these at the old price was re-rated on its invoice line, its order
+line and its header; a bill that was settled took the delta as collected
+(receipt dated the bill, the bill's own pay mode) by Jas's decision, a bill
+overpaid or due was moved by the delta and left in that state. MDCARE's
+account ledger carried 29 of these at the old price; they were re-rated and
+every later running balance shifted, the account balance with them (Jas's
+decision). Nothing dated before 1 September was touched; backups in
+inf_mdcare_rerate_backup_20261005_*. Scripts: mdcare-rates-20261005.sql,
+mdcare-rerate-bills-20261005.sql.
