@@ -1495,3 +1495,11 @@ every later running balance shifted, the account balance with them (Jas's
 decision). Nothing dated before 1 September was touched; backups in
 inf_mdcare_rerate_backup_20261005_*. Scripts: mdcare-rates-20261005.sql,
 mdcare-rerate-bills-20261005.sql.
+
+Same day, second batch, same way: CEA 770→1100, Thyroid Profile I ("TFT")
+500→550, Iron profile 500→550, GTT (3-sample) 250→275, Creatinine 24-hr
+urine 165→330, Bilirubin total/direct/indirect 220→330, TORCH IgM
+1000→1100. Each sheet name was mapped to the one catalogue item MDCARE had
+billed at the sheet's old price since 1 September. Scripts
+mdcare-rates-20261005b.sql and mdcare-rerate-bills-20261005b.sql; backups
+inf_mdcare_rerate_backup_20261005b_*.
