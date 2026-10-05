@@ -2293,6 +2293,13 @@ tbody tr:hover { background: var(--accent-softer); }
 
 /* ---------- segmented filter ---------- */
 
+/* The accessioning deck: the scan gun on the left, the rack button on
+   the right — the one action the desk repeats all day, sized like it
+   (2026-10-05). On a narrow screen the button drops under the gun. */
+.acc__deck { display: flex; align-items: flex-start; gap: .75rem; flex-wrap: wrap; margin-bottom: .7rem; }
+.acc__deck > form { flex: 1 1 420px; min-width: 0; }
+.acc__register { margin-left: auto; font-size: .95rem; font-weight: 700; padding: .62rem 1.15rem; white-space: nowrap; }
+
 .seg { display: inline-flex; border: 1px solid var(--line-soft); border-radius: 7px; overflow: hidden; }
 .seg__btn {
   padding: .28rem .7rem;

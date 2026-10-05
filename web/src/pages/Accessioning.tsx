@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   accessionApi, api, orderTubesApi,
   type OrderChannel, type OrderTube, type PendingAccession, type PendingRegistration,
@@ -104,18 +104,23 @@ export function Accessioning() {
 
   /*
    * The accessioning queue's filters — the legacy Accession page's, made
-   * optional. It opens on the last seven days: the legacy opens on TODAY,
-   * which is exactly how a tube registered on the 14th became invisible to
-   * the technician holding it on the 18th. The text filters apply on Enter
-   * or when the field loses focus, so typing a SID does not fire a query per
-   * keystroke against a 345,000-row backlog.
+   * optional. It opens on TODAY, as the legacy does (Jas, 2026-10-05; it
+   * opened on the last seven days before, which buried the day's tubes
+   * under a week of stragglers). A tube from an earlier day is found by
+   * scanning it — the scan ignores the dates — or by widening them. The
+   * text filters apply on Enter or when the field loses focus, so typing a
+   * SID does not fire a query per keystroke against a 345,000-row backlog.
    */
-  const [filter, setFilter] = useState<RegistrationFilter>({ from: localDay(-7), to: localDay() });
+  const [filter, setFilter] = useState<RegistrationFilter>({ from: localDay(), to: localDay() });
   const [sidDraft, setSidDraft] = useState('');
   const [patientDraft, setPatientDraft] = useState('');
 
   /* Scan-to-register: the barcode gun at the desk. One SID, straight through. */
   const [scan, setScan] = useState('');
+  /** The SID the last scan FOUND. Scanning the same tube again registers it
+   *  — see onScan. Cleared by any other scan, and by registering. */
+  const [found, setFound] = useState<string | null>(null);
+  const scanRef = useRef<HTMLInputElement>(null);
   /*
    * Patient history, attached BEFORE or WHILE the tube is registered. The
    * referral note or prescription arrives in the box with the tube, and the
@@ -267,6 +272,11 @@ export function Accessioning() {
     setPatientDraft('');
     setFilter((f) => ({ ...f, from: undefined, to: undefined, sid, patient: '' }));
     setUnregPage(1);
+    setFound(sid);
+    // The SID stays in the box so the technician can read what was scanned,
+    // SELECTED, so the next scan replaces it rather than appending to it —
+    // a scanner types; it does not clear the field first.
+    requestAnimationFrame(() => { scanRef.current?.focus(); scanRef.current?.select(); });
   }
 
   /** The secondary action: the scanned tube, registered whatever the list shows. */
@@ -274,7 +284,25 @@ export function Accessioning() {
     const sid = scan.trim();
     if (!sid) return;
     setScan('');
+    setFound(null);
     await register([sid]);
+    requestAnimationFrame(() => scanRef.current?.focus());
+  }
+
+  /*
+   * One gun, two scans (Jas, 2026-10-05). The first scan of a tube finds it:
+   * the list narrows to that SID so the technician reads the patient and
+   * the tests. The SECOND scan of the same tube — the same SID, while it is
+   * the one found and on the list — registers it. A different SID is a new
+   * first scan. A tube the first scan did not find cannot be registered by
+   * scanning it again; that stays with the deliberate button.
+   */
+  function onScan() {
+    const sid = scan.trim();
+    if (!sid) return;
+    const onList = unreg.some((r) => r.vailid === sid);
+    if (found === sid && onList && !busy) { void quickRegister(); return; }
+    findScanned();
   }
 
   const applyText = () => setFilter((f) => ({ ...f, sid: sidDraft, patient: patientDraft }));
@@ -433,18 +461,22 @@ export function Accessioning() {
             Registering is what hands it to the bench; rejecting records why it never will be.
           </p>
 
-          {/* The barcode gun. Its Enter FINDS the tube — the list narrows to
-              that Sample ID, dates ignored — and registering is the second,
-              deliberate button. A scanner must never be able to register a
-              tube by itself. */}
-          <form className="row" style={{ gap: '.5rem', marginBottom: '.7rem', flexWrap: 'wrap' }}
-                onSubmit={(e) => { e.preventDefault(); findScanned(); }}>
-            <input className="input mono" inputMode="numeric" placeholder="Scan or type a Sample ID to find it"
-                   aria-label="Scan or type a Sample ID to find it"
-                   value={scan} onChange={(e) => setScan(e.target.value.trim())}
-                   disabled={busy} style={{ width: 260 }} autoFocus />
-            <button className="btn btn--primary btn--sm" type="submit" disabled={busy || !scan.trim()}>
-              Find
+          {/* The barcode gun. Its first Enter FINDS the tube — the list
+              narrows to that Sample ID, dates ignored — and a second scan of
+              the SAME tube registers it (onScan). A scanner can never
+              register a tube it has not first shown. The big button on the
+              right is the rack: register everything ticked below. */}
+          <div className="acc__deck">
+          <form className="row" style={{ gap: '.5rem', flexWrap: 'wrap' }}
+                onSubmit={(e) => { e.preventDefault(); onScan(); }}>
+            <input ref={scanRef} className="input mono" inputMode="numeric"
+                   placeholder="Scan a Sample ID to find it · scan again to register"
+                   aria-label="Scan or type a Sample ID. Scan the same tube again to register it."
+                   value={scan} onChange={(e) => { setScan(e.target.value.trim()); }}
+                   disabled={busy} style={{ width: 330 }} autoFocus />
+            <button className="btn btn--primary btn--sm" type="submit" disabled={busy || !scan.trim()}
+                    title={found && found === scan.trim() ? 'Scan again or press Enter to register this tube' : 'Find this tube on the list'}>
+              {found && found === scan.trim() && unreg.some((r) => r.vailid === found) ? 'Register' : 'Find'}
             </button>
             <button className="btn btn--ghost btn--sm" type="button" disabled={busy || !scan.trim()}
                     onClick={() => void quickRegister()}
@@ -464,6 +496,15 @@ export function Accessioning() {
               <ClipGlyph /> Attach history
             </button>
           </form>
+          <button className="btn btn--primary acc__register"
+                  disabled={selected.size === 0 || busy}
+                  onClick={() => void register([...selected])}
+                  title="Register every ticked tube — they go onto the worksheet">
+            {busy ? 'Registering…'
+              : selected.size === 0 ? 'Register ticked tubes'
+              : `Register ${selected.size} tube${selected.size === 1 ? '' : 's'} to the worksheet`}
+          </button>
+          </div>
 
           {/* The filters, the legacy page's own — dates on the registration
               date, SID, patient — plus who registered it. Text fields apply
@@ -516,11 +557,6 @@ export function Accessioning() {
           </div>
 
           <div className="row" style={{ marginBottom: '.7rem', flexWrap: 'wrap', gap: '.5rem' }}>
-            <button className="btn btn--primary btn--sm"
-                    disabled={selected.size === 0 || busy}
-                    onClick={() => void register([...selected])}>
-              {busy ? 'Working…' : `Register ${selected.size || ''} selected`}
-            </button>
             <button className="btn btn--ghost btn--sm"
                     disabled={selected.size === 0 || busy}
                     onClick={() => setRejecting((v) => !v)}
