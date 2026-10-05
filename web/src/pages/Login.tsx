@@ -16,12 +16,27 @@ import { ReliefField } from '../components/ReliefField';
  * people signing in at 3am are running the night bench. They should not be
  * greeted with a generic "good evening" nine hours after the evening ended.
  */
-function greeting(): { title: string; sub: string } {
+/* In English and in Hindi (Jas, 2026-10-06): the desks and the night bench
+   read both, and the greeting is the one line on this page that is for the
+   person rather than the system. */
+function greeting(): { title: string; titleHi: string; sub: string; subHi: string } {
   const h = new Date().getHours();
-  if (h >= 5 && h < 12) return { title: 'Good morning', sub: 'The day list is waiting for you.' };
-  if (h >= 12 && h < 17) return { title: 'Good afternoon', sub: 'Pick up right where you left off.' };
-  if (h >= 17 && h < 22) return { title: 'Good evening', sub: 'Let’s close out the day’s worklist.' };
-  return { title: 'Burning the midnight oil?', sub: 'The night bench appreciates you.' };
+  if (h >= 5 && h < 12) return {
+    title: 'Good morning', titleHi: 'सुप्रभात',
+    sub: 'The day list is waiting for you.', subHi: 'आज की सूची आपका इंतज़ार कर रही है।',
+  };
+  if (h >= 12 && h < 17) return {
+    title: 'Good afternoon', titleHi: 'शुभ दोपहर',
+    sub: 'Pick up right where you left off.', subHi: 'जहाँ छोड़ा था, वहीं से शुरू करें।',
+  };
+  if (h >= 17 && h < 22) return {
+    title: 'Good evening', titleHi: 'शुभ संध्या',
+    sub: 'Let’s close out the day’s worklist.', subHi: 'चलिए, आज की वर्कलिस्ट पूरी करें।',
+  };
+  return {
+    title: 'Burning the midnight oil?', titleHi: 'रात भर जाग रहे हैं?',
+    sub: 'The night bench appreciates you.', subHi: 'नाइट बेंच आपका आभारी है।',
+  };
 }
 
 /** Beat 1: how long the card takes to implode into the spark. Commit hands
@@ -203,8 +218,14 @@ export function Login() {
         </p>
 
         <div>
-          <h1 className="login__title">{greet.title}</h1>
-          <p className="login__hint">{greet.sub}</p>
+          <h1 className="login__title">
+            {greet.title}
+            <span className="login__title-hi" lang="hi">{greet.titleHi}</span>
+          </h1>
+          <p className="login__hint">
+            {greet.sub}
+            <span className="login__hint-hi" lang="hi">{greet.subHi}</span>
+          </p>
         </div>
 
         {error && <div className="alert alert--error login__error">{error}</div>}
