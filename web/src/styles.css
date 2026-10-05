@@ -1287,212 +1287,252 @@ button, input, select { font: inherit; color: inherit; }
 .audit__ip { font-size: .72rem; }
 
 /* =========================================================
-   The bill — Telo's bill-invoice.tsx, measurement for measurement.
+   The bill (PrintInvoice.tsx) — patient bill, client bill, lab copy.
 
-   Every rule here is a Tailwind class from that file written out as its
-   literal value (px-5 = 20px, text-[13px] = 13px, gray-400 = #9ca3af, …),
-   because the two systems print bills for the same clients against the same
-   database and the documents must be indistinguishable. Do not restyle this
-   to Infinity's own idiom; if the bill changes, it changes in Telo first.
+   One chassis for three documents, designed for the printer most clients
+   actually own: a mono laser. Nothing here depends on colour. Hierarchy is
+   weight, size and rule; the one solid fill (the title band and the
+   balance box) is black, which every printer renders solid. The frame and
+   tinted bands the first version carried are gone — on paper they read as
+   a photocopied form; the band structure survives as white space.
+
+   Measurements are px on screen and print 1:1 at 96dpi inside the
+   `invoice` page box (14mm margins, styles.css above).
    ========================================================= */
 
 .bill {
   width: 100%;
   background: #fff;
-  color: #000;
-  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
-  font-size: 13px;
-  line-height: 1.375;
-  border: 1px solid #9ca3af;
+  color: #111;
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, ui-sans-serif, system-ui, sans-serif;
+  font-size: 12.5px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums lining-nums;
 }
 .bill p { margin: 0; }
 
-.bill__band { border-bottom: 1px solid #9ca3af; padding: 12px 20px; }
-.bill__band--slim { padding: 8px 20px; }
+/* ---- masthead: the marks, then the band ---- */
 
-/* Equal fixed side columns keep the centre block page-centred whether 0/1/2
-   logos are present; oversized artwork shrinks to its column. */
-.bill__head {
-  padding: 16px 20px;
-  display: grid;
-  grid-template-columns: 96px 1fr 96px;
+/* Logos sit on white above the band — artwork is supplied by the client at
+   whatever colour it comes in, and a mark on black is not ours to decide. */
+.bill__marks {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
+  gap: 16px;
+  padding: 0 0 10px;
+}
+.bill__mark { display: flex; align-items: center; min-height: 40px; }
+.bill__mark--right { margin-left: auto; }
+.bill__logo { width: auto; max-width: 180px; object-fit: contain; display: block; }
+.bill__logo--noble { height: 44px; }
+.bill__logo--custom { height: 52px; }
+
+/* The band. Who is billing on the left, what this document is on the right.
+   Solid black with the type reversed out: the one place the page shouts. */
+.bill__title {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 24px;
+  padding: 14px 18px 13px;
+  background: #000;
+  color: #fff;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.bill__labname {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+.bill__headline { margin-top: 3px; font-size: 11px; color: #fff; opacity: .85; }
+.bill__sep { margin: 0 7px; opacity: .5; }
+
+.bill__title-no { text-align: right; }
+.bill__doc {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  opacity: .8;
+}
+.bill__no { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.1; margin-top: 2px; }
+.bill__date { font-size: 11px; margin-top: 3px; opacity: .85; white-space: nowrap; }
+
+/* ---- sections ---- */
+
+.bill__band { padding: 11px 0 0; }
+.bill__band--slim { padding-top: 10px; }
+
+/* Section heading: small capitals over a hairline, the way a form is ruled. */
+.bill__label {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: #111;
+}
+.bill__section-label {
+  padding-bottom: 4px;
+  margin-bottom: 8px;
+  border-bottom: .75px solid #111;
+}
+.bill__section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
   gap: 12px;
 }
-.bill__head-side { display: flex; align-items: center; overflow: hidden; }
-.bill__head-side--left { justify-content: flex-start; }
-.bill__head-side--right { justify-content: flex-end; }
-.bill__head-centre { text-align: center; min-width: 0; }
-.bill__labname { font-size: 20px; font-weight: 700; letter-spacing: -0.025em; }
-.bill__headline { margin-top: 2px; color: #4b5563; }
-.bill__sep { margin: 0 8px; color: #d1d5db; }
+.bill__section-head .bill__section-label { flex: 1; }
 
-.bill__logo { width: auto; max-width: 100%; object-fit: contain; display: block; }
-.bill__logo--noble { height: 48px; }
-.bill__logo--custom { height: 56px; }
+/* The patient, by name first. */
+.bill__patient { font-size: 15px; font-weight: 700; letter-spacing: -0.005em; margin-bottom: 6px; }
 
-.bill__label {
-  font-weight: 600;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: .025em;
-  color: #6b7280;
-}
-.bill__section-label { margin-bottom: 6px; }
+.bill__rows { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; row-gap: 3px; }
+.bill__row { display: flex; align-items: baseline; gap: 8px; }
+.bill__row-label { color: #666; flex: none; width: 70px; font-size: 11.5px; }
 
-.bill__meta { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; }
-.bill__meta-item { display: flex; align-items: baseline; gap: 8px; }
-.bill__meta-no { font-weight: 700; }
+.bill__mono { font-family: ui-monospace, 'Cascadia Mono', Consolas, 'Liberation Mono', monospace; font-size: 11.5px; letter-spacing: .01em; }
+.bill__mono--dim { color: #555; }
 
-.bill__rows { display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; row-gap: 4px; }
-.bill__row { display: flex; align-items: baseline; gap: 6px; }
-.bill__row-label { color: #6b7280; flex: none; width: 64px; }
+.bill__history { margin-top: 8px; padding-top: 6px; border-top: .5px solid #ccc; }
+.bill__history p { margin-top: 2px; }
 
-.bill__mono { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 12px; color: #374151; }
-.bill__mono--dim { color: #4b5563; }
-
-.bill__history { margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb; }
-.bill__history p { margin-top: 2px; color: #374151; }
+/* ---- tables ---- */
 
 .bill__table { width: 100%; border-collapse: collapse; }
-.bill__table thead tr { border-bottom: 1px solid #d1d5db; background: #f9fafb; }
 .bill__table th {
-  padding: 4px 8px 4px 0;
+  padding: 0 8px 5px 0;
   text-align: left;
-  font-weight: 600;
-  font-size: 11px;
+  font-weight: 700;
+  font-size: 9.5px;
+  letter-spacing: .14em;
   text-transform: uppercase;
-  letter-spacing: .025em;
-  color: #6b7280;
+  color: #111;
+  border-bottom: 1.25px solid #111;
 }
-.bill__th-idx { width: 24px; }
-.bill__th-amt { width: 112px; text-align: right !important; padding-right: 0 !important; }
-.bill__table tbody tr { border-bottom: 1px solid #f3f4f6; }
-.bill__table td { padding: 2px 8px 2px 0; vertical-align: top; }
-.bill__td-idx { color: #6b7280; }
-.bill__td-amt { text-align: right; padding-right: 0 !important; }
-.bill__td-amt--refund { color: #b91c1c; }
-.bill__ext { color: #6b7280; }
-.bill__cancelled { color: #6b7280; }
-.bill__table tfoot tr { border-top: 1px solid #d1d5db; background: #f9fafb; }
-.bill__subtotal-label { padding: 4px 8px 4px 0; font-weight: 600; text-align: right; color: #4b5563; }
-.bill__subtotal-amt { padding-top: 4px; padding-bottom: 4px; font-weight: 600; }
+.bill__th-idx { width: 22px; }
+.bill__th-amt { width: 110px; text-align: right !important; padding-right: 0 !important; }
+.bill__table tbody tr { border-bottom: .5px solid #d4d4d4; }
+.bill__table tbody tr:last-child { border-bottom: 0; }
+.bill__table td { padding: 3.5px 8px 3.5px 0; vertical-align: top; }
+.bill__td-idx { color: #888; }
+.bill__td-date { white-space: nowrap; }
+.bill__td-amt { text-align: right; padding-right: 0 !important; white-space: nowrap; }
+.bill__td-amt--refund { font-style: italic; }
+.bill__ext { color: #555; }
+.bill__cancelled { color: #777; font-style: italic; }
+.bill__table tfoot tr { border-top: 1.25px solid #111; }
+.bill__subtotal-label { padding: 6px 8px 0 0; font-weight: 700; text-align: right; font-size: 11.5px; letter-spacing: .02em; }
+.bill__subtotal-amt { padding-top: 6px; padding-bottom: 0; font-weight: 700; }
 
 .bill__refund-badge {
   margin-left: 6px;
-  border: 1px solid #fca5a5;
-  border-radius: 4px;
-  padding: 2px 4px;
+  border: 1px solid #111;
+  border-radius: 2px;
+  padding: 1px 4px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  vertical-align: 1px;
+}
+
+/* ---- the money ---- */
+
+.bill__summary { margin-left: auto; width: 300px; max-width: 100%; }
+.bill__sumrow { display: flex; justify-content: space-between; gap: 16px; padding: 1.5px 0; }
+.bill__sumrow > span:first-child { color: #555; }
+.bill__sumrow > span:last-child { white-space: nowrap; }
+.bill__sumrow--bold { font-weight: 700; }
+/* What is owed, in the one other black box on the page. Nothing else on
+   the sheet competes with it, which is the point of a bill. */
+.bill__sumdue {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #000;
+  color: #fff;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.bill__sumdue .bill__sumrow { padding: 0; align-items: baseline; }
+.bill__sumdue .bill__sumrow > span:first-child { color: #fff; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; }
+.bill__sumdue .bill__sumrow > span:last-child { font-size: 16px; }
+.bill__behalf { margin-top: 6px; text-align: right; font-size: 11px; font-style: italic; color: #555; }
+
+/* ---- lab copy ---- */
+
+.bill__labuse {
+  margin-top: 10px;
+  padding: 6px 0;
+  border-top: 1px dashed #111;
+  border-bottom: 1px dashed #111;
+  text-align: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+}
+.bill__labuse-badge { display: inline; }
+
+.bill__pill {
+  display: inline-block;
+  border: 1.25px solid #111;
+  border-radius: 2px;
+  padding: 2px 10px;
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: .05em;
-  color: #b91c1c;
-}
-
-.bill__summary { margin-left: auto; max-width: 320px; }
-.bill__sumrow { display: flex; justify-content: space-between; gap: 16px; }
-.bill__sumrow + .bill__sumrow { margin-top: 2px; }
-.bill__sumrow > span:first-child { color: #4b5563; }
-.bill__sumrow--bold { font-weight: 700; }
-.bill__sumrow--bold > span:first-child { color: #000; }
-.bill__sumdue { border-top: 1px solid #d1d5db; padding-top: 4px; margin-top: 4px; }
-.bill__behalf { margin-top: 6px; text-align: right; font-size: 12px; font-style: italic; color: #6b7280; }
-
-/* ---- lab copy: text-only header, internal-use banner, status pill ---- */
-
-.bill__head--centre { padding: 16px 20px; text-align: center; }
-
-.bill__labuse {
-  border-bottom: 2px dashed #b45309;
-  background: #fffbeb;
-  padding: 10px 20px;
-  text-align: center;
-}
-.bill__labuse-badge {
-  display: inline-block;
-  border: 2px solid #92400e;
-  border-radius: 4px;
-  background: #fef3c7;
-  padding: 4px 20px;
-  font-size: 13px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
-  color: #451a03;
-}
-
-.bill__meta--3 { grid-template-columns: 1fr 1fr 1fr; align-items: center; }
-.bill__meta-pill { display: flex; justify-content: flex-end; }
-.bill__pill {
-  border: 1px solid;
-  border-radius: 4px;
-  padding: 4px 10px;
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .05em;
-}
-.bill__pill--paid { border-color: #15803d; color: #15803d; background: #f0fdf4; }
-.bill__pill--pending { border-color: #b91c1c; color: #b91c1c; background: #fef2f2; }
-.bill__pill--free { border-color: #9ca3af; color: #4b5563; background: #f9fafb; }
-
-.bill__samples { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
-.bill__sample {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  border-left: 2px solid #d1d5db;
-  padding-left: 8px;
-}
-.bill__sample-type { font-weight: 500; }
-.bill__sample-codes {
-  color: #9ca3af;
-  font-size: 11px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  letter-spacing: .12em;
   white-space: nowrap;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
+.bill__pill--paid { background: #000; color: #fff; }
+.bill__pill--pending { background: #fff; color: #111; }
+.bill__pill--free { border-color: #888; color: #555; }
 
-.bill__prepared { font-size: 12px; color: #374151; }
-.bill__prepared-label {
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .025em;
-  color: #4b5563;
-}
+.bill__samples { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 20px; }
+.bill__sample { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.bill__sample-type { font-weight: 600; flex: none; }
+.bill__sample-codes { color: #777; font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.bill__notes-label {
-  margin-bottom: 4px;
-  font-weight: 600;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: .025em;
-  color: #4b5563;
-}
-.bill__notes { margin: 0; padding-left: 16px; list-style: decimal; font-size: 12px; color: #374151; }
-.bill__notes li + li { margin-top: 2px; }
+/* ---- the small print ---- */
 
-.bill__disclaimer { font-size: 11px; font-style: italic; color: #4b5563; }
+.bill__prepared { font-size: 11.5px; }
+.bill__prepared-label { font-weight: 700; font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; margin-right: 4px; }
+
+.bill__notes-label { margin-bottom: 3px; font-weight: 700; font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; }
+.bill__notes { margin: 0; padding-left: 16px; list-style: decimal; font-size: 11px; color: #333; }
+.bill__notes li + li { margin-top: 1px; }
+
+.bill__disclaimer { font-size: 10.5px; font-style: italic; color: #444; }
 
 .bill__foot {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr auto;
   align-items: end;
-  padding: 16px 20px;
+  gap: 24px;
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: .75px solid #111;
 }
-.bill__generated { color: #9ca3af; font-size: 11px; }
+.bill__generated { color: #777; font-size: 10.5px; }
 .bill__sign { text-align: right; }
-.bill__sign-line { margin-bottom: 24px; border-bottom: 1px solid #9ca3af; display: inline-block; width: 144px; }
-.bill__sign-title { font-weight: 600; }
-.bill__sign-name { color: #6b7280; }
+.bill__sign-line { margin-bottom: 4px; margin-top: 28px; border-bottom: 1px solid #111; display: inline-block; width: 160px; }
+.bill__sign-title { font-weight: 700; font-size: 11px; letter-spacing: .04em; }
+.bill__sign-name { color: #555; font-size: 11px; }
 
 @media print {
   /* The app's graph-paper backdrop must never print behind a document. */
   body { background: #fff; }
   .bill { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .bill__logo--noble { height: 14mm; }
-  .bill__logo--custom { height: 16mm; }
+  .bill__logo--noble { height: 12mm; }
+  .bill__logo--custom { height: 14mm; }
+  .bill__title, .bill__sumdue, .bill__foot, .bill__table tr { break-inside: avoid; }
   /* Chromium's UA default (thead/tfoot break-inside: avoid) makes a table
      with a footer group jump wholesale to the next page — a one-line bill
      printed on two sheets. These tables are a few rows; let them fragment. */

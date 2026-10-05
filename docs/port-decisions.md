@@ -1503,3 +1503,18 @@ urine 165→330, Bilirubin total/direct/indirect 220→330, TORCH IgM
 billed at the sheet's old price since 1 September. Scripts
 mdcare-rates-20261005b.sql and mdcare-rerate-bills-20261005b.sql; backups
 inf_mdcare_rerate_backup_20261005b_*.
+
+## The bill gets Infinity's own look, built for a mono laser (2026-10-05)
+
+Jas asked for the plain bill to look professional and aesthetic "even when
+printed black and white", and chose the modern-clean direction over a
+classic ledger: a solid black title band with the lab name reversed out and
+the bill number large on its right, the client's and Noble's marks on white
+above it, hairline-ruled sections headed in small capitals, tabular
+figures, and the balance due in the one other black box on the page. No
+colour anywhere — the lab copy's amber banner and the green/red pills became
+black dashes and black/outlined pills. Content, section order, labels, notes
+and precedence rules stay Telo's to the word; only the look is ours, which
+retires the earlier "indistinguishable from Telo" rule for this document.
+Same day: the saved PDF is named "<bill no> <client code> <patient>" rather
+than Report.pdf.

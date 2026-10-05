@@ -14,12 +14,13 @@ import { plainText } from '../lib/format';
  *             pill). It travels with the specimens, so it must not double as a
  *             price list.
  *
- * The document is Telo's bill-invoice.tsx, transcribed band for band — both
- * systems print bills against the same database, often for the same client on
- * the same day, and two documents for one bill must not look like two vendors.
- * Where Telo writes a Tailwind class this writes the same measurements into
- * .bill rules in styles.css; the section order, labels, casing and column
- * widths are Telo's, not a redesign. If a band changes there, change it here.
+ * The CONTENT is Telo's bill-invoice.tsx, band for band — the same bills
+ * against the same database, so what is on the document (section order,
+ * labels, the notes, the precedence rules) must agree to the word. The LOOK
+ * is Infinity's own since 2026-10-05, on Jas's instruction: a document built
+ * for the mono laser most clients print on — a solid black title band, a
+ * black balance box, hairline rules, tabular figures, no colour anywhere.
+ * See the .bill rules in styles.css.
  *
  * One component rather than Telo's two files (bill-invoice / lab-invoice, which
  * have already drifted apart there): the lab copy is the same document plus one
@@ -140,6 +141,35 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
     <div className="bill__row">
       <span className="bill__row-label">{label}</span>
       <span className={mono ? 'bill__mono' : undefined}>{value}</span>
+    </div>
+  );
+}
+
+/** The black band: who is billing on the left, what this document is and its
+ *  number on the right. The one place the page shouts, so the three copies
+ *  all shout the same way. */
+function TitleBand({ name, addressLine, phone, email, doc, no, date }: {
+  name: string; addressLine?: string | null; phone?: string | null; email?: string | null;
+  doc: string; no: number | string; date: string;
+}) {
+  return (
+    <div className="bill__title">
+      <div className="bill__title-who">
+        <p className="bill__labname">{name}</p>
+        {addressLine && <p className="bill__headline">{addressLine}</p>}
+        {(phone || email) && (
+          <p className="bill__headline">
+            {phone && <>Ph: {phone}</>}
+            {phone && email && <span className="bill__sep">|</span>}
+            {email && <>Email: {email}</>}
+          </p>
+        )}
+      </div>
+      <div className="bill__title-no">
+        <p className="bill__doc">{doc}</p>
+        <p className="bill__no">{no}</p>
+        <p className="bill__date">{date}</p>
+      </div>
     </div>
   );
 }
@@ -306,44 +336,30 @@ export function PrintInvoice() {
         </div>
 
         <div className="bill">
-          {/* ── Header: text only — the lab copy never carries branding ── */}
-          <div className="bill__band bill__head--centre">
-            <p className="bill__labname">{labName}</p>
-            {addressLine && <p className="bill__headline">{addressLine}</p>}
-            {(config?.phone || config?.email) && (
-              <p className="bill__headline">
-                {config?.phone && <>Ph: {config.phone}</>}
-                {config?.phone && config?.email && <span className="bill__sep">|</span>}
-                {config?.email && <>Email: {config.email}</>}
-              </p>
-            )}
-          </div>
+          {/* ── Title band: text only — the lab copy never carries branding ── */}
+          <TitleBand
+            name={labName}
+            addressLine={addressLine}
+            phone={config?.phone}
+            email={config?.email}
+            doc="Lab copy · Receipt"
+            no={order.billNumber ?? order.billId}
+            date={fmtIST(order.billDate)}
+          />
 
           {/* ── Internal use marker ── */}
           <div className="bill__labuse">
             <span className="bill__labuse-badge">Internal — Lab use only</span>
           </div>
 
-          {/* ── Receipt meta + payment status ── */}
-          <div className="bill__band bill__meta bill__meta--3">
-            <div className="bill__meta-item">
-              <span className="bill__label">Receipt No.</span>
-              <span className="bill__meta-no">{order.billNumber ?? order.billId}</span>
-            </div>
-            <div className="bill__meta-item">
-              <span className="bill__label">Date</span>
-              <span>{fmtIST(order.billDate)}</span>
-            </div>
-            <div className="bill__meta-pill">
+          {/* ── Patient details + payment status — no Payment row on the lab copy ── */}
+          <div className="bill__band">
+            <div className="bill__section-head">
+              <p className="bill__label bill__section-label">Patient</p>
               <span className={`bill__pill bill__pill--${paymentStatus}`}>{pillLabel}</span>
             </div>
-          </div>
-
-          {/* ── Patient details — no Payment row on the lab copy ── */}
-          <div className="bill__band">
-            <p className="bill__label bill__section-label">Patient Details</p>
+            <p className="bill__patient">{order.patientName ?? '—'}</p>
             <div className="bill__rows">
-              <Row label="Name" value={order.patientName ?? '—'} />
               {order.patientId != null && <Row label="PID" value={String(order.patientId)} mono />}
               <Row label="Age / Sex" value={`${order.age ?? '—'} / ${genderLabel}`} />
               <Row label="Mobile" value={order.mobile ?? '—'} />
@@ -447,34 +463,25 @@ export function PrintInvoice() {
         </div>
 
         <div className="bill">
-          {/* ── Header: Qugen is the biller, so Noble's mark and no other ── */}
-          <div className="bill__band bill__head">
-            <div className="bill__head-side bill__head-side--left">
+          {/* ── Masthead: Qugen is the biller, so Noble's mark and no other ── */}
+          <div className="bill__marks">
+            <div className="bill__mark bill__mark--left">
               <img className="bill__logo bill__logo--noble" src="/branding/noble-logo.png" alt="Noble Diagnostics" />
             </div>
-            <div className="bill__head-centre">
-              <p className="bill__labname">{BILLING_ENTITY}</p>
-              <p className="bill__headline">Noble Diagnostics</p>
-            </div>
-            <div className="bill__head-side bill__head-side--right" />
           </div>
-
-          <div className="bill__band bill__meta">
-            <div className="bill__meta-item">
-              <span className="bill__label">Bill No.</span>
-              <span className="bill__meta-no">{order.billNumber ?? order.billId}</span>
-            </div>
-            <div className="bill__meta-item">
-              <span className="bill__label">Date</span>
-              <span>{fmtIST(order.billDate)}</span>
-            </div>
-          </div>
+          <TitleBand
+            name={BILLING_ENTITY}
+            addressLine="Noble Diagnostics"
+            doc="Client bill"
+            no={order.billNumber ?? order.billId}
+            date={fmtIST(order.billDate)}
+          />
 
           {/* ── Who owes it, and whose patient it was ── */}
           <div className="bill__band">
             <p className="bill__label bill__section-label">Bill To</p>
+            <p className="bill__patient">{order.clientCode ?? ''} — {labName}</p>
             <div className="bill__rows">
-              <Row label="Client" value={`${order.clientCode ?? ''} — ${labName}`} />
               {addressLine && <Row label="Address" value={addressLine} />}
               {config?.phone && <Row label="Phone" value={config.phone} />}
               <Row label="Patient" value={order.patientName ?? '—'} />
@@ -565,40 +572,28 @@ export function PrintInvoice() {
       </div>
 
       <div className="bill">
-        {/* ── Header: [left logo] | lab name block | [right logo] ── */}
-        <div className="bill__band bill__head">
-          <div className="bill__head-side bill__head-side--left">{leftPane}</div>
-          <div className="bill__head-centre">
-            <p className="bill__labname">{labName}</p>
-            {addressLine && <p className="bill__headline">{addressLine}</p>}
-            {(config?.phone || config?.email) && (
-              <p className="bill__headline">
-                {config?.phone && <>Ph: {config.phone}</>}
-                {config?.phone && config?.email && <span className="bill__sep">|</span>}
-                {config?.email && <>Email: {config.email}</>}
-              </p>
-            )}
+        {/* ── Masthead: the marks on white, then the band ── */}
+        {(leftPane || rightPane) && (
+          <div className="bill__marks">
+            {leftPane && <div className="bill__mark bill__mark--left">{leftPane}</div>}
+            {rightPane && <div className="bill__mark bill__mark--right">{rightPane}</div>}
           </div>
-          <div className="bill__head-side bill__head-side--right">{rightPane}</div>
-        </div>
-
-        {/* ── Bill meta ── */}
-        <div className="bill__band bill__meta">
-          <div className="bill__meta-item">
-            <span className="bill__label">Bill No.</span>
-            <span className="bill__meta-no">{order.billNumber ?? order.billId}</span>
-          </div>
-          <div className="bill__meta-item">
-            <span className="bill__label">Date</span>
-            <span>{fmtIST(order.billDate)}</span>
-          </div>
-        </div>
+        )}
+        <TitleBand
+          name={labName}
+          addressLine={addressLine}
+          phone={config?.phone}
+          email={config?.email}
+          doc="Bill"
+          no={order.billNumber ?? order.billId}
+          date={fmtIST(order.billDate)}
+        />
 
         {/* ── Patient details ── */}
         <div className="bill__band">
-          <p className="bill__label bill__section-label">Patient Details</p>
+          <p className="bill__label bill__section-label">Patient</p>
+          <p className="bill__patient">{order.patientName ?? '—'}</p>
           <div className="bill__rows">
-            <Row label="Name" value={order.patientName ?? '—'} />
             {order.patientId != null && <Row label="PID" value={String(order.patientId)} mono />}
             <Row label="Age / Sex" value={`${order.age ?? '—'} / ${genderLabel}`} />
             <Row label="Mobile" value={order.mobile ?? '—'} />
@@ -658,8 +653,8 @@ export function PrintInvoice() {
               <thead>
                 <tr>
                   <th className="bill__th-idx">#</th>
-                  <th style={{ width: '6rem' }}>Date</th>
-                  <th style={{ width: '5rem' }}>Method</th>
+                  <th style={{ width: '8.5rem' }}>Date</th>
+                  <th style={{ width: '6rem' }}>Method</th>
                   <th>Reference</th>
                   <th style={{ width: '6rem' }}>Txn ID</th>
                   <th className="bill__th-amt" style={{ width: '6rem' }}>Amount (₹)</th>
@@ -671,7 +666,7 @@ export function PrintInvoice() {
                   return (
                     <tr key={rcpt.receiptId}>
                       <td className="bill__td-idx">{idx + 1}</td>
-                      <td>{rcpt.date ? fmtIST(rcpt.date) : '—'}</td>
+                      <td className="bill__td-date">{rcpt.date ? fmtIST(rcpt.date) : '—'}</td>
                       <td>
                         {rcpt.method ?? 'Cash'}
                         {isRefund && <span className="bill__refund-badge">refund</span>}
