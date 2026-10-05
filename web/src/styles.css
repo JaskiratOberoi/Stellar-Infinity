@@ -5309,6 +5309,16 @@ html:has(.rcpt), body:has(.rcpt) {
   padding-bottom: .15rem;
 }
 
+/* What the draft holds — the tests, then the tubes — on a second line
+   under the name, full width, so two drafts for two Rahuls tell apart. */
+.runlist__detail {
+  grid-column: 1 / -1;
+  display: flex; flex-wrap: wrap; gap: .15rem 1rem;
+  font-size: .72rem; color: var(--ink-dim);
+  margin-top: -.1rem; padding-bottom: .1rem;
+}
+.runlist__detail .mono { color: var(--ink); }
+
 .runlist__acts { display: flex; gap: .3rem; }
 .runlist__acts .btn { padding: .1rem .5rem; font-size: .72rem; }
 

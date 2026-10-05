@@ -833,6 +833,9 @@ export interface OrderDraft {
   /** Why the last Submit All left this one behind, if it did. */
   lastError: string | null;
   updatedAt: string | null;
+  /** The test names and the Sample IDs, comma-joined, from the stored request. */
+  tests: string | null;
+  sidList: string | null;
 }
 
 /**

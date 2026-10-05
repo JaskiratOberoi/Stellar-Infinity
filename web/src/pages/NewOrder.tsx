@@ -1383,10 +1383,9 @@ export function NewOrder() {
                   {d.sids} of {d.tubes} tube{d.tubes === 1 ? '' : 's'}
                 </span>
                 {!hidePrices && <span className="mono">{inr(d.total)}</span>}
-                {/* The reason the last Submit All left this one behind, on the
-                    row itself: a toast would have gone by the time the
-                    operator got to fixing it. */}
-                {d.lastError && <span className="runlist__why">{d.lastError}</span>}
+                {/* What is in it: the tests, then the tubes' Sample IDs
+                    (2026-10-06, Jas) — enough to tell two drafts apart and to
+                    see the right tube went with the right patient. */}
                 <span className="runlist__acts">
                   <button className="btn btn--ghost btn--sm"
                           disabled={draftBusy || submitting != null}
@@ -1399,6 +1398,18 @@ export function NewOrder() {
                     Delete
                   </button>
                 </span>
+                {/* After the buttons in DOM order, so the first grid row keeps
+                    name · tubes · total · buttons and this spans the second. */}
+                {(d.tests || d.sidList) && (
+                  <span className="runlist__detail">
+                    {d.tests && <span>{d.tests}</span>}
+                    {d.sidList && <span>SID <span className="mono">{d.sidList}</span></span>}
+                  </span>
+                )}
+                {/* The reason the last Submit All left this one behind, on the
+                    row itself: a toast would have gone by the time the
+                    operator got to fixing it. */}
+                {d.lastError && <span className="runlist__why">{d.lastError}</span>}
               </li>
             ))}
           </ol>

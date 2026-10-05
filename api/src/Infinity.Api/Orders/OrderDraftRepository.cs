@@ -8,7 +8,9 @@ namespace Infinity.Api.Orders;
 /// <summary>A draft as the list draws it — everything but the payload.</summary>
 public sealed record OrderDraft(
     int Id, int Mcc, string? PatientName, int Total, int Tubes, int Sids,
-    string? LastError, DateTimeOffset? UpdatedAt);
+    string? LastError, DateTimeOffset? UpdatedAt,
+    /// <summary>The test names and the Sample IDs, read out of the stored request (176).</summary>
+    string? Tests = null, string? SidList = null);
 
 /// <summary>
 /// The queue of orders typed but not yet booked — see
@@ -47,7 +49,9 @@ public sealed class OrderDraftRepository(NobleConnectionFactory db, SqlRetry ret
                         r.Date("updated_at") is DateTime u
                             ? new DateTimeOffset(DateTime.SpecifyKind(u, DateTimeKind.Unspecified),
                                                  TimeSpan.FromMinutes(330))
-                            : null));
+                            : null,
+                        r.Str("tests"),
+                        r.Str("sid_list")));
                 }
                 return (IReadOnlyList<OrderDraft>)list;
             }, token), ct);
