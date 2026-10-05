@@ -1291,10 +1291,10 @@ button, input, select { font: inherit; color: inherit; }
 
    One chassis for three documents, designed for the printer most clients
    actually own: a mono laser. Nothing here depends on colour. Hierarchy is
-   weight, size and rule; the one solid fill (the title band and the
-   balance box) is black, which every printer renders solid. The frame and
-   tinted bands the first version carried are gone — on paper they read as
-   a photocopied form; the band structure survives as white space.
+   weight, size and rule; there is no fill anywhere — a black band cost
+   real toner per bill (Jas, 2026-10-05) — so the title and the balance sit in
+   ruled boxes. The frame and tinted bands the first version carried are gone
+   — on paper they read as a photocopied form; the structure is white space.
 
    Measurements are px on screen and print 1:1 at 96dpi inside the
    `invoice` page box (14mm margins, styles.css above).
@@ -1329,17 +1329,17 @@ button, input, select { font: inherit; color: inherit; }
 .bill__logo--custom { height: 52px; }
 
 /* The band. Who is billing on the left, what this document is on the right.
-   Solid black with the type reversed out: the one place the page shouts. */
+   A ruled box, not a black fill: the fill cost a tenth of a toner cartridge
+   per hundred bills (Jas, 2026-10-05), so the band keeps its weight in the
+   rule and the type instead. */
 .bill__title {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: end;
   gap: 24px;
-  padding: 14px 18px 13px;
-  background: #000;
-  color: #fff;
-  -webkit-print-color-adjust: exact;
-  print-color-adjust: exact;
+  padding: 12px 16px 11px;
+  border: 1.5px solid #111;
+  color: #111;
 }
 .bill__labname {
   font-size: 19px;
@@ -1347,8 +1347,8 @@ button, input, select { font: inherit; color: inherit; }
   letter-spacing: -0.01em;
   line-height: 1.15;
 }
-.bill__headline { margin-top: 3px; font-size: 11px; color: #fff; opacity: .85; }
-.bill__sep { margin: 0 7px; opacity: .5; }
+.bill__headline { margin-top: 3px; font-size: 11px; color: #333; }
+.bill__sep { margin: 0 7px; color: #999; }
 
 .bill__title-no { text-align: right; }
 .bill__doc {
@@ -1356,10 +1356,10 @@ button, input, select { font: inherit; color: inherit; }
   font-weight: 700;
   letter-spacing: .2em;
   text-transform: uppercase;
-  opacity: .8;
+  color: #444;
 }
 .bill__no { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.1; margin-top: 2px; }
-.bill__date { font-size: 11px; margin-top: 3px; opacity: .85; white-space: nowrap; }
+.bill__date { font-size: 11px; margin-top: 3px; color: #333; white-space: nowrap; }
 
 /* ---- sections ---- */
 
@@ -1448,18 +1448,15 @@ button, input, select { font: inherit; color: inherit; }
 .bill__sumrow > span:first-child { color: #555; }
 .bill__sumrow > span:last-child { white-space: nowrap; }
 .bill__sumrow--bold { font-weight: 700; }
-/* What is owed, in the one other black box on the page. Nothing else on
+/* What is owed, in the one other ruled box on the page. Nothing else on
    the sheet competes with it, which is the point of a bill. */
 .bill__sumdue {
   margin-top: 8px;
-  padding: 8px 12px;
-  background: #000;
-  color: #fff;
-  -webkit-print-color-adjust: exact;
-  print-color-adjust: exact;
+  padding: 7px 12px;
+  border: 1.5px solid #111;
 }
 .bill__sumdue .bill__sumrow { padding: 0; align-items: baseline; }
-.bill__sumdue .bill__sumrow > span:first-child { color: #fff; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; }
+.bill__sumdue .bill__sumrow > span:first-child { color: #111; font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
 .bill__sumdue .bill__sumrow > span:last-child { font-size: 16px; }
 .bill__behalf { margin-top: 6px; text-align: right; font-size: 11px; font-style: italic; color: #555; }
 
@@ -1491,8 +1488,8 @@ button, input, select { font: inherit; color: inherit; }
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
-.bill__pill--paid { background: #000; color: #fff; }
-.bill__pill--pending { background: #fff; color: #111; }
+.bill__pill--paid { border-width: 2px; color: #111; }
+.bill__pill--pending { border-style: dashed; color: #111; }
 .bill__pill--free { border-color: #888; color: #555; }
 
 .bill__samples { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 20px; }
@@ -1533,6 +1530,7 @@ button, input, select { font: inherit; color: inherit; }
   .bill__logo--noble { height: 12mm; }
   .bill__logo--custom { height: 14mm; }
   .bill__title, .bill__sumdue, .bill__foot, .bill__table tr { break-inside: avoid; }
+  /* Nothing on the sheet is a fill any more; this stays for the hairlines. */
   /* Chromium's UA default (thead/tfoot break-inside: avoid) makes a table
      with a footer group jump wholesale to the next page — a one-line bill
      printed on two sheets. These tables are a few rows; let them fragment. */

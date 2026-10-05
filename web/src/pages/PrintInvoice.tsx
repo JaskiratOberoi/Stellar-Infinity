@@ -18,8 +18,8 @@ import { plainText } from '../lib/format';
  * against the same database, so what is on the document (section order,
  * labels, the notes, the precedence rules) must agree to the word. The LOOK
  * is Infinity's own since 2026-10-05, on Jas's instruction: a document built
- * for the mono laser most clients print on — a solid black title band, a
- * black balance box, hairline rules, tabular figures, no colour anywhere.
+ * for the mono laser most clients print on — a ruled title box, a ruled
+ * balance box, hairline rules, tabular figures, no fill and no colour.
  * See the .bill rules in styles.css.
  *
  * One component rather than Telo's two files (bill-invoice / lab-invoice, which
