@@ -381,11 +381,17 @@ button, input, select { font: inherit; color: inherit; }
 @keyframes mark-drift { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
 
 .login__title { font-size: 1.45rem; font-weight: 300; letter-spacing: .04em; }
-/* The Hindi line under each English one, in the same voice a step quieter.
-   Devanagari sets taller than Latin, so it gets its own line rather than
-   sitting beside the English and pushing the baseline about. */
-.login__title-hi { display: block; font-size: 1.15rem; letter-spacing: 0; color: var(--ink-dim); margin-top: .1rem; }
-.login__hint-hi { display: block; margin-top: .1rem; }
+/* The greeting takes turns: English, then Hindi, each arriving with a soft
+   fade (Login.tsx). */
+.login__swap { animation: loginSwap .55s ease-out both; }
+/* Devanagari sets taller than Latin: a fixed line-height keeps the card from
+   breathing as the two take turns. */
+.login__title { line-height: 1.35; }
+@keyframes loginSwap {
+  from { opacity: 0; transform: translateY(4px); filter: blur(2px); }
+  to   { opacity: 1; transform: none; filter: none; }
+}
+@media (prefers-reduced-motion: reduce) { .login__swap { animation: none; } }
 .login__hint { font-size: .8rem; color: var(--ink-dim); line-height: 1.6; margin-top: .15rem; }
 
 /* A failed sign-in should be felt, not just printed. One short shake; the

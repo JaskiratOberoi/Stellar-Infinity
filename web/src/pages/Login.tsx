@@ -74,6 +74,13 @@ export function Login() {
   const [leaving, setLeaving] = useState(false);
 
   const greet = useMemo(greeting, []);
+  /* Which language the greeting is showing. English first, then Hindi,
+     and round again while the page is open. */
+  const [greetLang, setGreetLang] = useState<'en' | 'hi'>('en');
+  useEffect(() => {
+    const id = setInterval(() => setGreetLang((l) => (l === 'en' ? 'hi' : 'en')), 4200);
+    return () => clearInterval(id);
+  }, []);
 
   // Checked once — a preference toggled mid-login can wait for the next mount.
   const still = useMemo(
@@ -218,13 +225,14 @@ export function Login() {
         </p>
 
         <div>
-          <h1 className="login__title">
-            {greet.title}
-            <span className="login__title-hi" lang="hi">{greet.titleHi}</span>
+          {/* One line, two languages in turn: English, then Hindi, a few
+              seconds each, each arrival a soft fade (Jas, 2026-10-06 — not a
+              second line). Keyed on the language so the fade re-runs. */}
+          <h1 key={`t-${greetLang}`} className="login__title login__swap" lang={greetLang}>
+            {greetLang === 'hi' ? greet.titleHi : greet.title}
           </h1>
-          <p className="login__hint">
-            {greet.sub}
-            <span className="login__hint-hi" lang="hi">{greet.subHi}</span>
+          <p key={`s-${greetLang}`} className="login__hint login__swap" lang={greetLang}>
+            {greetLang === 'hi' ? greet.subHi : greet.sub}
           </p>
         </div>
 
