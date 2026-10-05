@@ -3,6 +3,7 @@ import { api } from '../api/client';
 import { OrderDetailModal } from './OrderDetail';
 import { inr, fmtDate } from '../lib/format';
 import { InfinityLoader } from '../components/InfinityLoader';
+import { useAuth } from '../auth/AuthContext';
 
 export interface OrderSummary {
   billId: number;
@@ -16,6 +17,11 @@ export interface OrderSummary {
 }
 
 export function Orders() {
+  const { user } = useAuth();
+  // A centre reaches this page as "Patient orders": its own order book, which
+  // the API has already scoped to its codes. The heading says so, in its
+  // words; the lab's heading stays "Orders".
+  const isCentre = user?.role === 'client' || user?.role === 'sub_client';
   const [rows, setRows] = useState<OrderSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [canSeeMoney, setCanSeeMoney] = useState(true);
@@ -63,9 +69,11 @@ export function Orders() {
     <div className="page">
       <div className="page__head">
         <div>
-          <h1 className="page__title">Orders</h1>
+          <h1 className="page__title">{isCentre ? 'Patient orders' : 'Orders'}</h1>
           <p className="page__sub">
-            {total.toLocaleString('en-IN')} bill{total === 1 ? '' : 's'} in your scope
+            {isCentre
+              ? `${total.toLocaleString('en-IN')} order${total === 1 ? '' : 's'} placed under your centre — open one for its bill`
+              : `${total.toLocaleString('en-IN')} bill${total === 1 ? '' : 's'} in your scope`}
           </p>
         </div>
 

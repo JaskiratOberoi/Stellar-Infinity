@@ -151,13 +151,14 @@ const NAV: NavEntry[] = [
         to: '/accessioning?kind=b2b', label: 'Patient orders', icon: 'orders',
         cap: 'order:accession', search: 'kind=b2b', hideForRole: 'client',
       },
-      // To a CENTRE it is the booking form. Accessioning is the lab's
-      // receiving desk: it answers "has the lab got the tube yet", which is
-      // not a question a centre can act on. The thing a centre opens Infinity
-      // to do is raise an order, so the link goes straight there.
+      // To a CENTRE it is its own order book (2026-10-05, Jas): every order
+      // the centre has placed, scoped to its codes by the API, with the
+      // search and date filters, and each row opening to the bill downloads.
+      // It pointed at the booking form before; raising an order is the
+      // floating button on every page, so the link is free to be the list.
       {
-        to: '/orders/new', label: 'Patient orders', icon: 'orders',
-        cap: 'order:create', onlyForRoles: ['client', 'sub_client'],
+        to: '/orders', label: 'Patient orders', icon: 'orders',
+        cap: 'order:view', onlyForRoles: ['client', 'sub_client'],
       },
       // The transit scan desk. It was kept OUT of the flat bar because a
       // fourteenth pill put a horizontal scrollbar on every full-width role;
