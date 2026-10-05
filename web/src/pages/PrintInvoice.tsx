@@ -208,6 +208,16 @@ export function PrintInvoice() {
     return () => { live = false; };
   }, [billId]);
 
+  /* The browser names a saved PDF after the document title, and the print
+     shell's title is "Report" — so every bill downloaded was Report.pdf. The
+     bill number is what the desk files it under; the other two copies say
+     which copy they are so three downloads of one bill do not overwrite. */
+  useEffect(() => {
+    if (!order) return;
+    const no = String(order.billNumber ?? order.billId);
+    document.title = mode === 'lab' ? `${no} lab copy` : mode === 'client' ? `${no} client copy` : no;
+  }, [order, mode]);
+
   if (error) {
     return <div className="print"><p style={{ color: '#b00' }}>{error}</p></div>;
   }
