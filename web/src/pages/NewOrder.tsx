@@ -1286,7 +1286,7 @@ export function NewOrder() {
   );
 
   return (
-    <div className="page">
+    <div className="page page--order">
       {/* The channel lives in the header now, as a segmented control.
           It was a full card with two description blocks — 112px of the
           viewport spent on a two-way choice. Telo does not spend any: its
@@ -1552,53 +1552,48 @@ export function NewOrder() {
               once it is stored. The calculated age sits beside the boxes so
               the operator can see the answer agrees with the person in front
               of them before it is committed. */}
-          <div className="grid2 grid2--tight">
+          {/* One row: date of birth, age, sex. The age used to sit UNDER the
+              date with its own hint, which cost the form two lines it did
+              not need (2026-10-05, Jas: the B2B form should take ~70% of
+              the viewport). The three wrap on a narrow screen. */}
+          <div className="dob-row">
             <div className="field">
               <label htmlFor="p-dob-d">Date of birth</label>
               <div className="row" style={{ gap: '.35rem', alignItems: 'center' }}>
                 <input id="p-dob-d" className="input mono" value={patient.dobDay} inputMode="numeric"
-                       maxLength={2} style={{ width: 58 }} placeholder="DD" aria-label="Day of birth"
+                       maxLength={2} style={{ width: 54 }} placeholder="DD" aria-label="Day of birth"
                        onChange={(e) => setPatient({ ...patient, dobDay: e.target.value.replace(/\D/g, '') })} />
                 <input id="p-dob-m" className="input mono" value={patient.dobMonth} inputMode="numeric"
-                       maxLength={2} style={{ width: 58 }} placeholder="MM" aria-label="Month of birth"
+                       maxLength={2} style={{ width: 54 }} placeholder="MM" aria-label="Month of birth"
                        onChange={(e) => setPatient({ ...patient, dobMonth: e.target.value.replace(/\D/g, '') })} />
                 <input id="p-dob-y" className="input mono" value={patient.dobYear} inputMode="numeric"
-                       maxLength={4} style={{ width: 74 }} placeholder="YYYY" aria-label="Year of birth"
+                       maxLength={4} style={{ width: 70 }} placeholder="YYYY" aria-label="Year of birth"
                        onChange={(e) => setPatient({ ...patient, dobYear: e.target.value.replace(/\D/g, '') })} />
               </div>
+            </div>
 
-              {/* The age, typed or told. With a valid birth date these boxes
-                  READ BACK the derived age and lock — the date is the record,
-                  and two authorities for one fact is how they disagree. With
-                  the date blank they are the input, for the patient who knows
-                  only their age. */}
-              <div className="row" style={{ gap: '.35rem', alignItems: 'center', marginTop: '.45rem' }}>
+            {/* The age, typed or told. With a valid birth date these boxes
+                READ BACK the derived age and lock — the date is the record,
+                and two authorities for one fact is how they disagree. With
+                the date blank they are the input, for the patient who knows
+                only their age. */}
+            <div className="field">
+              <label htmlFor="p-age-y">{dobAge ? 'Age · from the date' : 'Or age · yrs / mo'}</label>
+              <div className="row" style={{ gap: '.35rem', alignItems: 'center' }}>
                 <input id="p-age-y" className="input mono" inputMode="numeric" maxLength={3}
-                       style={{ width: 58 }} placeholder="Age" aria-label="Age in years"
+                       style={{ width: 54 }} placeholder="Age" aria-label="Age in years"
                        value={dobAge ? String(dobAge.years) : patient.ageYears}
                        disabled={dobAge !== null}
                        onChange={(e) => setPatient({ ...patient, ageYears: e.target.value.replace(/\D/g, '') })} />
                 <input id="p-age-m" className="input mono" inputMode="numeric" maxLength={2}
-                       style={{ width: 58 }} placeholder="Mo" aria-label="Age, months part"
+                       style={{ width: 54 }} placeholder="Mo" aria-label="Age, months part"
                        value={dobAge ? String(dobAge.months) : patient.ageMonths}
                        disabled={dobAge !== null}
                        onChange={(e) => setPatient({ ...patient, ageMonths: e.target.value.replace(/\D/g, '') })} />
-                <span className="muted" style={{ fontSize: '.72rem' }}>
-                  {dobAge ? 'age — from the date of birth' : 'years · months — when the date is not known'}
-                </span>
               </div>
-
-              <span className="muted" style={{ fontSize: '.7rem' }}>
-                {!dobStarted && !ageStarted
-                  ? 'Date of birth when known — the age alone works too.'
-                  : age
-                    ? `Recorded as ${age.age} ${age.ageType === 2 ? 'month' : 'year'}${age.age === 1 ? '' : 's'}.`
-                    : dobStarted
-                      ? <b style={{ color: 'var(--danger)' }}>Not a real past date — check the day, month and year.</b>
-                      : <b style={{ color: 'var(--danger)' }}>Not a usable age — months run 0–11 past age two.</b>}
-              </span>
             </div>
-            <div className="field">
+
+            <div className="field dob-row__sex">
               <label htmlFor="p-gender">Sex</label>
               <select id="p-gender" className="input" value={patient.gender}
                       onChange={(e) => setPatient({ ...patient, gender: Number(e.target.value) })}>
@@ -1606,6 +1601,17 @@ export function NewOrder() {
                 <option value={2}>Female</option>
               </select>
             </div>
+
+            {/* The one line that says what will be recorded, or what is wrong. */}
+            <span className="muted dob-row__note" style={{ fontSize: '.7rem' }}>
+              {!dobStarted && !ageStarted
+                ? 'Date of birth when known — the age alone works too.'
+                : age
+                  ? `Recorded as ${age.age} ${age.ageType === 2 ? 'month' : 'year'}${age.age === 1 ? '' : 's'}.`
+                  : dobStarted
+                    ? <b style={{ color: 'var(--danger)' }}>Not a real past date — check the day, month and year.</b>
+                    : <b style={{ color: 'var(--danger)' }}>Not a usable age — months run 0–11 past age two.</b>}
+            </span>
           </div>
 
           {/* Referrers. The create procedure has always accepted these —
@@ -1707,20 +1713,13 @@ export function NewOrder() {
           {/* Identity, then how to reach them. Both are optional and neither
               is asked at the counter until the clinical part is done, so they
               sit at the end rather than between the patient and their tests. */}
-          <div className="field">
-            <label htmlFor="p-mrn">Passport / Aadhaar ID</label>
-            {/* Written to patient_master.MRNID. Left blank, the create
-                procedure backfills the patient id, as the LIS form does. */}
-            <input id="p-mrn" className="input mono" value={patient.mrnId} maxLength={50}
-                   placeholder="Optional"
-                   onChange={(e) => setPatient({ ...patient, mrnId: e.target.value })} />
-          </div>
-
-          <div className="grid2">
+          {/* One row for the three (2026-10-05): the ID had its own row,
+              which was a line of the form for an optional field. */}
+          <div className="grid2 contact-row">
             <div className="field">
               <label htmlFor="p-mobile">Mobile</label>
               <input id="p-mobile" className="input mono" value={patient.mobile} inputMode="numeric"
-                     maxLength={10} style={{ maxWidth: 190 }}
+                     maxLength={10}
                      onChange={(e) => setPatient({ ...patient, mobile: e.target.value.replace(/\D/g, '') })} />
               <span className="muted" style={{ fontSize: '.7rem' }}>
                 {patient.mobile.trim() !== '' && patient.mobile.trim().length !== 10
@@ -1737,6 +1736,15 @@ export function NewOrder() {
               <label htmlFor="p-email">Email</label>
               <input id="p-email" className="input" type="email" value={patient.email} maxLength={100}
                      onChange={(e) => setPatient({ ...patient, email: e.target.value })} />
+            </div>
+
+            <div className="field">
+              <label htmlFor="p-mrn">Passport / Aadhaar ID</label>
+              {/* Written to patient_master.MRNID. Left blank, the create
+                  procedure backfills the patient id, as the LIS form does. */}
+              <input id="p-mrn" className="input mono" value={patient.mrnId} maxLength={50}
+                     placeholder="Optional"
+                     onChange={(e) => setPatient({ ...patient, mrnId: e.target.value })} />
             </div>
           </div>
         </fieldset>

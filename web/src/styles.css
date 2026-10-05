@@ -2464,6 +2464,37 @@ fieldset.bare {
 .order-grid fieldset > .grid2 + .field,
 .order-grid fieldset > .field + .field { margin-top: 1.1rem; }
 
+/* ---- density (2026-10-05) ----
+   Jas: the B2B form should take about 70% of the viewport, not all of it.
+   Scoped to the order grid so the rest of the app keeps its spacing: the
+   cards lose a third of their padding, the rows half their gap, the inputs
+   a third of their height, and the date-of-birth / age / sex sit on one row
+   (.dob-row). Nothing is removed; it is the same form, closer together. */
+.order-grid .card { padding: .8rem .95rem .9rem; }
+.order-grid, .order-grid__col { gap: .6rem; }
+.order-grid .order-step__head { margin-bottom: .45rem; }
+.order-grid .field { gap: .2rem; }
+.order-grid fieldset > .grid2 + .grid2,
+.order-grid fieldset > .field + .grid2,
+.order-grid fieldset > .grid2 + .field,
+.order-grid fieldset > .field + .field,
+.order-grid fieldset > .dob-row + .grid2,
+.order-grid fieldset > .dob-row + .field,
+.order-grid fieldset > .field + .dob-row,
+.order-grid fieldset > .grid2 + .dob-row { margin-top: .6rem; }
+.order-grid .field input, .order-grid .field select, .order-grid .input { padding: .45rem .7rem; }
+.order-grid .grid2 { gap: .6rem .9rem; }
+.dob-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .4rem .9rem; }
+.dob-row__sex { flex: 1 1 120px; min-width: 120px; }
+.dob-row__note { flex-basis: 100%; }
+.order-grid .contact-row { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+/* The order page itself sits a little higher: less air above the title and
+   under it, so the form's 70% starts nearer the top. */
+.page--order { padding-top: 1.1rem; }
+.page--order .page__head { margin-bottom: .7rem; }
+.order-grid .field input, .order-grid .field select, .order-grid .input { padding: .4rem .7rem; }
+
+
 /* A label sits closer to its OWN input than to the field above it - that gap
    is what says which control a label belongs to. */
 .order-grid .field label { margin-bottom: .05rem; }
