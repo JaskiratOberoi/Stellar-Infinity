@@ -214,8 +214,11 @@ export function PrintInvoice() {
      which copy they are so three downloads of one bill do not overwrite. */
   useEffect(() => {
     if (!order) return;
-    const no = String(order.billNumber ?? order.billId);
-    document.title = mode === 'lab' ? `${no} lab copy` : mode === 'client' ? `${no} client copy` : no;
+    // "26100263 MDCARE KHATEEJA BANO" — number, client code, patient; the
+    // name loses characters a file name cannot carry.
+    const name = (order.patientName ?? '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const base = [String(order.billNumber ?? order.billId), order.clientCode?.trim(), name].filter(Boolean).join(' ');
+    document.title = mode === 'lab' ? `${base} lab copy` : mode === 'client' ? `${base} client copy` : base;
   }, [order, mode]);
 
   if (error) {
