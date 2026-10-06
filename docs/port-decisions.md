@@ -1553,3 +1553,17 @@ brands and ZZTEST01) gates the channel on the API for every role, and the
 form flips a client code to a client order and disables Walk-in for it. The
 three bills were re-tagged b2b (lkr0236-walkin-to-b2b-20261006.sql); their
 ₹385 cash stays on record pending Jas's word.
+
+## The microbiologist signs microbiology only (2026-10-06)
+
+Jas: Dr Shoaib's signature should appear on Microbiology reports in the
+Srinagar unit and nowhere else. 169 had matched the LIS's fallback — with no
+primary bound to the report's department, the unit's first primary by
+department_id signs — which in Srinagar put the microbiologist (dept 4)
+ahead of the pathologist (dept 8) on every Biochemistry and Haematology
+report. Script 177 skips a Microbiology-bound primary in that fallback; a
+Microbiology report still gets him by department match. Verified on a
+Srinagar biochemistry sample (now Dr Jasneet Kaur with Dr Aijaz Muzamil
+second) and a microbiology one (still Dr Shoaib). A departure from LIS
+parity, Infinity-side only; the Signature Master is untouched. Cached PDFs
+on prod and staging were flushed so no report re-serves the old signature.
