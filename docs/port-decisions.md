@@ -1567,3 +1567,16 @@ Srinagar biochemistry sample (now Dr Jasneet Kaur with Dr Aijaz Muzamil
 second) and a microbiology one (still Dr Shoaib). A departure from LIS
 parity, Infinity-side only; the Signature Master is untouched. Cached PDFs
 on prod and staging were flushed so no report re-serves the old signature.
+
+Same day, after 177: Jas wants Srinagar's Biochemistry signed by Dr Aijaz
+Muzamil alone — not the histopathologist. Script 178: the unit-wide
+fallback uses a department-bound primary only where the unit has no
+secondary of its own, and Delhi's department default no longer back-fills a
+unit that names any primary. Measured on one sample per unit and
+department: Srinagar Biochemistry and Haematology now carry Dr Aijaz alone,
+Microbiology Dr Shoaib alone, Histopathology Dr Jasneet Kaur with Dr Aijaz;
+Jammu, Karnal, Agra, Lucknow and Haldwani unchanged from 169. Found on the
+way: 177's "department_id <> 4" dropped UNBOUND primaries (NULL), so for the
+two and a half hours it was live Karnal lost Dr Jasneet Kaur and Agra lost
+Dr Divya P to Delhi's defaults; 178 uses ISNULL and the caches were flushed
+again.
