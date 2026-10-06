@@ -59,6 +59,19 @@ public static class DiscountPolicy
     public static bool IsB2cClientCode(string? clientCode) =>
         clientCode is not null && B2cClientCodes.Contains(clientCode.Trim());
 
+    /// <summary>
+    /// Where a walk-in (B2C) order may be raised at all: the B2C brands, and
+    /// the throwaway test centre. Every other code is a client whose patients
+    /// are billed to its account at accessioning — a walk-in there raised a
+    /// cash bill on top of that charge and held the report for its unpaid
+    /// half (LKR0236, 2026-10-06: three bookings by a lab front desk; 40-odd
+    /// more under other client codes since August). Jas's rule: walk-in is
+    /// MDCARE only. Enforced here for every role, the lab's included.
+    /// </summary>
+    public static bool IsWalkInCentre(string? clientCode) =>
+        IsB2cClientCode(clientCode)
+        || string.Equals(clientCode?.Trim(), "ZZTEST01", StringComparison.OrdinalIgnoreCase);
+
     public static decimal CapPct(string? clientCode) =>
         clientCode is not null && ClientCapPct.TryGetValue(clientCode.Trim(), out var pct)
             ? pct

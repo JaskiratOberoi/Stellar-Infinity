@@ -509,6 +509,15 @@ public static class OrderEntryEndpoints
              * mcc id — the browser never gets to say which client this is.
              */
             var b2cClientCode = await catalog.ClientCodeAsync(body.Mcc, ct).ConfigureAwait(false);
+            // Walk-in is for the B2C brands only — see DiscountPolicy.IsWalkInCentre.
+            if (!DiscountPolicy.IsWalkInCentre(b2cClientCode))
+            {
+                return Results.BadRequest(new
+                {
+                    error = $"Walk-in orders are for MDCARE only. {b2cClientCode ?? "This centre"} is a client — book this patient as a client order, billed to its account.",
+                    code = "WALKIN_NOT_ALLOWED",
+                });
+            }
             if (DiscountPolicy.IsB2cClientCode(b2cClientCode))
             {
                 var mobile = (body.Mobile ?? "").Trim();

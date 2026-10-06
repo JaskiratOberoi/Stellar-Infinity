@@ -8,7 +8,7 @@ import { inr, plainText } from '../lib/format';
 import { InfinityLoader } from '../components/InfinityLoader';
 import { ClientPicker } from '../components/ClientPicker';
 import {
-  discountCapLabel, discountCapPct, discountableTotal, isB2cClientCode,
+  discountCapLabel, discountCapPct, discountableTotal, isB2cClientCode, isWalkInCentre,
   isValidGoldCardHolder, isValidGoldCardNumber,
 } from '../lib/discountPolicy';
 import { useAuth } from '../auth/AuthContext';
@@ -267,6 +267,16 @@ export function NewOrder() {
     if (!mayB2c && mayB2b) { setChannel('b2b'); return; }
     if (mayB2b && user?.role === 'super_admin') setChannel('b2b');
   }, [mayB2c, mayB2b, user?.role]);
+
+  /* Walk-in is for the B2C brands only (Jas, 2026-10-06). A client code
+     picked while the form is on Walk-in flips it to a client order, and the
+     Walk-in button below is disabled for that code; the API refuses the
+     order anyway (WALKIN_NOT_ALLOWED), this just keeps the desk off a path
+     that ends in a refusal. */
+  const walkInAllowed = clientCode == null || isWalkInCentre(clientCode);
+  useEffect(() => {
+    if (!walkInAllowed && mayB2b && channel === 'b2c') setChannel('b2b');
+  }, [walkInAllowed, mayB2b, channel]);
 
   const [cart, setCart] = useState<Cart>({ mcc: null, items: [] });
   const [preview, setPreview] = useState<OrderPreview | null>(null);
@@ -1315,6 +1325,8 @@ export function NewOrder() {
                style={{ marginLeft: 'auto', alignSelf: 'center' }}>
             <button type="button" role="radio" aria-checked={!isB2b}
                     className={`seg__btn${!isB2b ? ' is-on' : ''}`}
+                    disabled={!walkInAllowed}
+                    title={walkInAllowed ? undefined : `${clientCode} is a client — its patients are billed to its account. Walk-in is for MDCARE only.`}
                     onClick={() => setChannel('b2c')}>
               Walk-in
             </button>

@@ -98,3 +98,12 @@ export function isValidGoldCardHolder(raw: string | null | undefined): boolean {
   const v = (raw ?? '').trim();
   return v.length >= 3 && /[A-Za-z]/.test(v);
 }
+
+/**
+ * Where a walk-in order may be raised at all: the B2C brands and the test
+ * centre. Mirrors DiscountPolicy.IsWalkInCentre on the API, which is the
+ * rule that is enforced; this one only keeps the form from offering it.
+ */
+export function isWalkInCentre(code: string | null | undefined): boolean {
+  return isB2cClientCode(code) || (code ?? '').trim().toUpperCase() === 'ZZTEST01';
+}

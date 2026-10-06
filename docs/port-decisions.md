@@ -1536,3 +1536,20 @@ left — a basket that lost its client — by pointing it back at the client it
 is on and adding again, instead of an error banner a phone has scrolled out
 of sight. The touch handling itself was sound: a synthetic touch sequence on
 staging added the test.
+
+## Walk-in is for the B2C brands only, whoever is at the keyboard (2026-10-06)
+
+Jas asked why three LKR0236 reports were locked with the account in credit.
+They were booked on the Walk-in channel by a lab front-desk login (entry
+role) with LKR0236 as the client: priced at the client's contract rate and
+charged to its account at accessioning like any client order, but ALSO
+raised as a patient bill with half collected in cash, whose unpaid half
+held the report — the lock reads the patient's own bill before the account.
+The walk-in restriction Jas believed was in force was per LOGIN (client
+accounts hold no order:b2c unless granted), and lab-side roles hold both
+channels for every code; 40-odd such walk-ins under client codes since
+August, from several desks. Now DiscountPolicy.IsWalkInCentre (the B2C
+brands and ZZTEST01) gates the channel on the API for every role, and the
+form flips a client code to a client order and disables Walk-in for it. The
+three bills were re-tagged b2b (lkr0236-walkin-to-b2b-20261006.sql); their
+₹385 cash stays on record pending Jas's word.
