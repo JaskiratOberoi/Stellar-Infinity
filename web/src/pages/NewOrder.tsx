@@ -268,16 +268,6 @@ export function NewOrder() {
     if (mayB2b && user?.role === 'super_admin') setChannel('b2b');
   }, [mayB2c, mayB2b, user?.role]);
 
-  /* Walk-in is for the B2C brands only (Jas, 2026-10-06). A client code
-     picked while the form is on Walk-in flips it to a client order, and the
-     Walk-in button below is disabled for that code; the API refuses the
-     order anyway (WALKIN_NOT_ALLOWED), this just keeps the desk off a path
-     that ends in a refusal. */
-  const walkInAllowed = clientCode == null || isWalkInCentre(clientCode);
-  useEffect(() => {
-    if (!walkInAllowed && mayB2b && channel === 'b2c') setChannel('b2b');
-  }, [walkInAllowed, mayB2b, channel]);
-
   const [cart, setCart] = useState<Cart>({ mcc: null, items: [] });
   const [preview, setPreview] = useState<OrderPreview | null>(null);
   const [patient, setPatient] = useState<PatientForm>(EMPTY_PATIENT);
@@ -300,6 +290,16 @@ export function NewOrder() {
   const [customPicked, setCustomPicked] = useState<Record<number, number>>({});
   /** The selected client's CODE — discount policy is keyed on it. */
   const [clientCode, setClientCode] = useState<string | null>(null);
+
+  /* Walk-in is for the B2C brands only (Jas, 2026-10-06). A client code
+     picked while the form is on Walk-in flips it to a client order, and the
+     Walk-in button below is disabled for that code; the API refuses the
+     order anyway (WALKIN_NOT_ALLOWED), this just keeps the desk off a path
+     that ends in a refusal. */
+  const walkInAllowed = clientCode == null || isWalkInCentre(clientCode);
+  useEffect(() => {
+    if (!walkInAllowed && mayB2b && channel === 'b2c') setChannel('b2b');
+  }, [walkInAllowed, mayB2b, channel]);
 
   useEffect(() => {
     if (cart.mcc == null) { setCustomTests([]); setCustomPicked({}); return; }
