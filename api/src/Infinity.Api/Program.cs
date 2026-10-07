@@ -41,6 +41,7 @@ builder.Services.AddSingleton<UserTipRepository>();
 builder.Services.AddSingleton<Infinity.Api.Reports.ReportSettings>();
 builder.Services.AddSingleton<Infinity.Api.Reports.LetterheadRepository>();
 builder.Services.AddSingleton<Infinity.Api.Catalogue.MasterProfileRepository>();
+builder.Services.AddSingleton<Infinity.Api.Reads.SalesLedgerRepository>();
 builder.Services.AddSingleton<Infinity.Api.Reports.LetterheadPapers>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<Infinity.Api.Reports.ReportSettings>());
 builder.Services.AddSingleton<RevenueRepository>();
@@ -313,6 +314,7 @@ app.MapReportPdfEndpoints();
 app.MapPublicReportEndpoints();
 app.MapLetterheadEndpoints();
 app.MapMasterProfileEndpoints();
+app.MapSalesLedgerEndpoints();
 app.MapWhatsAppEndpoints();
 
 app.Run();

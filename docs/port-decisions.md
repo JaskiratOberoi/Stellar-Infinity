@@ -1606,3 +1606,21 @@ with the Smart Report, cannot be deleted (switch it off); a delete removes
 every row of the package including rates and special rates, with the
 package's full shape in the audit row. Every write is audited as
 catalogue.master_profile. CreatedBy/ModifiedBy are stamped inf:<user>.
+
+## Company sales: the ledger and its dashboard (2026-10-07)
+
+Jas asked for a company-wide page that lists each sale as it happens and a
+dashboard of the same data, with a master-profile filter "to see which
+client code sold a master profile at which rate". Script 181: one filtered
+set of sale lines in the lab's own definition — amount-checked test rows
+dated by updateddate at test_rate, plus the charged extras — paged newest
+first (usp_inf_sales_ledger) or grouped (usp_inf_sales_summary: by day,
+business unit, client, kind, item with its lowest and highest rate, source,
+and item × client × rate). A package order is one line of kind Master at
+the package rate, so the kind filter on Packages is the package book.
+Billing › Company sales, for super admin, admin, Sales Admin and lab
+manager; the ledger re-reads every 30 s while today is in the range and
+exports the filter as CSV (10,000 lines). Checked on staging: the day's
+ledger total equals the dashboard's Lab-sales figure, as both sum the same
+rows. Indexes (amount_checked, updateddate) carry it: a week of packages
+summed in under a second.

@@ -5809,3 +5809,38 @@ tbody tr.row-status--quiet > td:first-child {
 .mp__usage-table th { position: sticky; top: 0; background: var(--surface); font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-dim); }
 .mp__usage-table tr:last-child td { border-bottom: 0; }
 .mp__usage-table .num { text-align: right; white-space: nowrap; }
+
+/* ---------- company sales: the ledger and its dashboard ---------- */
+.sl__filters { display: flex; flex-wrap: wrap; gap: .5rem .7rem; align-items: flex-end; margin-bottom: .8rem; }
+.sl__f { margin: 0; min-width: 0; }
+.sl__f > span:first-child { font-size: .66rem; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-dim); }
+.sl__f--grow { flex: 1 1 180px; }
+.sl__presets { align-self: flex-end; height: 32px; }
+.sl__totals { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; font-size: .86rem; align-items: baseline; }
+.sl__totals b { font-weight: 600; }
+.sl__live { font-size: .74rem; display: inline-flex; align-items: center; gap: .35rem; }
+.sl__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 0 0 var(--teal); animation: slPulse 2s ease-out infinite; }
+@keyframes slPulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--teal) 55%, transparent); } 100% { box-shadow: 0 0 0 7px transparent; } }
+@media (prefers-reduced-motion: reduce) { .sl__dot { animation: none; } }
+.sl__sub { display: block; font-size: .7rem; line-height: 1.25; }
+.sl__table td { vertical-align: top; }
+.sl__kind { font-size: .62rem; padding: .1rem .4rem; }
+.sl__kind--master { color: var(--teal); border-color: color-mix(in srgb, var(--teal) 45%, transparent); }
+.sl__kind--extra { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.sl__kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .8rem; margin-bottom: .9rem; }
+.sl__h { font-size: .68rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-dim); margin-bottom: .6rem; display: flex; gap: .6rem; align-items: baseline; flex-wrap: wrap; }
+.sl__h-sub { font-weight: 400; letter-spacing: 0; text-transform: none; font-size: .72rem; }
+.sl__bars { display: flex; align-items: flex-end; gap: 3px; height: 150px; padding-top: .2rem; }
+.sl__bar { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; height: 100%; position: relative; }
+.sl__bar-fill { background: linear-gradient(180deg, var(--accent-grad-from), var(--accent-grad-mid)); border-radius: 3px 3px 0 0; min-height: 2px; }
+.sl__bar:hover .sl__bar-fill { filter: brightness(1.15); }
+.sl__bar-label { position: absolute; bottom: -1.1rem; left: 0; right: 0; text-align: center; font-size: .6rem; color: var(--ink-dim); overflow: hidden; }
+.sl__bars { margin-bottom: 1.2rem; }
+.sl__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: .9rem; }
+.sl__panel { min-width: 0; }
+.sl__panel-body { max-height: 24rem; overflow: auto; }
+.sl__panel-body table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+.sl__panel-body th, .sl__panel-body td { padding: .3rem .45rem; text-align: left; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+.sl__panel-body th { position: sticky; top: 0; background: var(--surface); font-size: .64rem; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-dim); z-index: 1; }
+.sl__panel-body .num { text-align: right; white-space: nowrap; }
+.sl__dim { opacity: .55; transition: opacity .2s; }

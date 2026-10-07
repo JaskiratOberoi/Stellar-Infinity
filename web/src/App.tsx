@@ -36,6 +36,7 @@ import { InvoiceConfigPage } from './pages/InvoiceConfig';
 import { ReportingSettingsPage } from './pages/ReportingSettings';
 import { LetterheadsPage } from './pages/Letterheads';
 import { MasterProfilesPage } from './pages/MasterProfiles';
+import { CompanySalesPage } from './pages/CompanySales';
 import { WhatsAppSettingsPage } from './pages/WhatsAppSettings';
 import { ThemeToggle } from './theme/ThemeToggle';
 import { IntroTip, resetIntroTips } from './components/IntroTip';
@@ -202,6 +203,12 @@ const NAV: NavEntry[] = [
       },
       // The field force against its targets. The salesperson's own picture
       // is the dashboard at "/"; this is the team, for whoever runs it.
+      // Every sale line in the lab and the same lines summed up — the lab's
+      // roles only; a client's own figures are the Sales entry above.
+      {
+        to: '/sales/company', label: 'Company sales', icon: 'dashboard', cap: 'analytics:view',
+        onlyForRoles: ['super_admin', 'admin', 'sales', 'lab_manager'],
+      },
       {
         to: '/sales-team', label: 'Sales team', icon: 'dashboard', cap: 'sales:view',
         onlyForRoles: ['super_admin', 'admin', 'sales'],
@@ -484,6 +491,8 @@ export function App() {
         {/* The sales team and a member's dashboard: Sales Admin and above.
             The API refuses a salesperson these regardless; the role check
             here only decides who is pointed at them. */}
+        <Route path="/sales/company" element={
+          can('analytics:view') && ['super_admin', 'admin', 'sales', 'lab_manager'].includes(user.role) ? <CompanySalesPage /> : <Navigate to="/" replace />} />
         <Route path="/sales-team" element={
           can('sales:view') && ['super_admin', 'admin', 'sales'].includes(user.role) ? <SalesTeam /> : <Navigate to="/" replace />} />
         <Route path="/sales-team/:userId" element={

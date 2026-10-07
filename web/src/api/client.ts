@@ -1789,3 +1789,47 @@ export const masterProfileApi = {
   picker: (kind: 'profile' | 'test', search: string) =>
     api.get<PickerItem[]>(`/api/catalogue/master-profiles/picker?kind=${kind}&search=${encodeURIComponent(search)}`),
 };
+
+/* ---- the company sales ledger and dashboard — script 181 ---- */
+
+export type SalesKind = 'Master' | 'Profile' | 'Test' | 'Extra';
+export type SalesSource = 'lis' | 'infinity' | 'telo';
+export interface SalesLedgerQuery {
+  from: string; to: string; client?: string; bu?: number | null; kind?: SalesKind | '';
+  search?: string; source?: SalesSource | '';
+}
+export interface SalesLedgerLine {
+  soldAt: string; lineId: number; kind: SalesKind; itemId: number | null; code: string | null; name: string | null;
+  amount: number; mrp: number | null; pid: number; patient: string | null; clientCode: string | null; clientName: string | null;
+  buId: number | null; buCode: string | null; sid: string | null; source: SalesSource; chargedBy: string | null;
+}
+export interface SalesTotals { lines: number; amount: number; clients: number; patients: number; days: number }
+export interface SalesSummary {
+  totals: SalesTotals;
+  byDay: { day: string; lines: number; amount: number; patients: number }[];
+  byBusinessUnit: { buId: number | null; buCode: string | null; buName: string | null; lines: number; amount: number; clients: number }[];
+  byClient: { clientCode: string | null; clientName: string | null; lines: number; amount: number; patients: number }[];
+  byKind: { kind: SalesKind; lines: number; amount: number }[];
+  byItem: { kind: SalesKind; code: string | null; name: string | null; lines: number; amount: number; minRate: number; maxRate: number; clients: number }[];
+  bySource: { source: SalesSource; lines: number; amount: number }[];
+  byItemClientRate: { kind: SalesKind; code: string | null; name: string | null; clientCode: string | null; clientName: string | null; rate: number; lines: number; amount: number }[];
+  from: string; to: string;
+}
+
+function salesQuery(q: SalesLedgerQuery): string {
+  const p = new URLSearchParams({ from: q.from, to: q.to });
+  if (q.client?.trim()) p.set('client', q.client.trim());
+  if (q.bu != null) p.set('bu', String(q.bu));
+  if (q.kind) p.set('kind', q.kind);
+  if (q.search?.trim()) p.set('search', q.search.trim());
+  if (q.source) p.set('source', q.source);
+  return p.toString();
+}
+
+export const salesLedgerApi = {
+  ledger: (q: SalesLedgerQuery, page: number, pageSize: number) =>
+    api.get<{ rows: SalesLedgerLine[]; totals: SalesTotals; page: number; pageSize: number; from: string; to: string }>(
+      `/api/sales/ledger/?${salesQuery(q)}&page=${page}&pageSize=${pageSize}`),
+  summary: (q: SalesLedgerQuery) => api.get<SalesSummary>(`/api/sales/ledger/summary?${salesQuery(q)}`),
+  options: () => api.get<{ businessUnits: { id: number; code: string | null; name: string | null }[] }>('/api/sales/ledger/options'),
+};
