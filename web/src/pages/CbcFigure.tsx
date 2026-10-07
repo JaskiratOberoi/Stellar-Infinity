@@ -50,8 +50,10 @@ const glyph = (l: Level) => (l === 'high' ? '▲ ' : l === 'low' ? '▼ ' : '');
 const levelWord = (l: Level) => (l === 'normal' ? 'within range' : l === 'high' ? 'above range' : 'below range');
 
 const HEAD_W = 58;
-const CELL_W = 60;
-const CELL_H = 42;
+/* Five percent more room than the labels first had, so "(without anaemia)"
+   and "Lymphocytosis" sit inside their cells (asked 07/10/2026). */
+const CELL_W = 63;
+const CELL_H = 44;
 const GRID_W = HEAD_W + 3 * CELL_W;
 const GRID_H = 24 + 3 * CELL_H;
 
