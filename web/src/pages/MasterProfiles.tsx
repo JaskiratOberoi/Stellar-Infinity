@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   masterProfileApi,
-  type MasterProfileDetail, type MasterProfileRow, type MasterProfileSave, type PickerItem,
+  type MasterProfileDetail, type MasterProfileRow, type MasterProfileSave, type MasterProfileUsage, type PickerItem,
 } from '../api/client';
 import { Pager } from '../components/Pager';
 import { InfinityLoader } from '../components/InfinityLoader';
-import { inr } from '../lib/format';
+import { fmtDate, inr } from '../lib/format';
 
 /**
  * Master profiles — the packages (Lab → Master profiles).
@@ -196,6 +196,68 @@ export function MasterProfilesPage() {
 }
 
 /* ---------------------------------------------------------------------- */
+
+/**
+ * Who orders this package: client codes with order-line counts and the last
+ * date, from the order lines themselves. The legacy portal never had this —
+ * it has per-client sales pages to scan by eye (Jas, 2026-10-07).
+ */
+function UsedBy({ id }: { id: number }) {
+  const [days, setDays] = useState<90 | 365 | 0>(90);
+  const [rows, setRows] = useState<MasterProfileUsage[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    setRows(null); setError(null);
+    masterProfileApi.usage(id, days)
+      .then((r) => { if (live) setRows(r.rows); })
+      .catch((e) => { if (live) setError(e instanceof Error ? e.message : 'Could not load the usage.'); });
+    return () => { live = false; };
+  }, [id, days]);
+
+  const total = rows?.reduce((s, r) => s + r.orders, 0) ?? 0;
+  const span = days === 0 ? 'all time' : days === 365 ? 'the last year' : 'the last 90 days';
+
+  return (
+    <div className="mp__usage">
+      <div className="mp__usage-head">
+        <b>Used by</b>
+        <span className="muted" style={{ fontSize: '.78rem' }}>
+          {rows == null ? 'Loading…'
+            : rows.length === 0 ? `No orders in ${span}.`
+            : `${rows.length} client${rows.length === 1 ? '' : 's'} · ${total.toLocaleString('en-IN')} order line${total === 1 ? '' : 's'} in ${span}`}
+        </span>
+        <div className="seg" role="radiogroup" aria-label="Period" style={{ marginLeft: 'auto' }}>
+          {([[90, '90 days'], [365, '1 year'], [0, 'All time']] as const).map(([d, label]) => (
+            <button key={d} type="button" role="radio" aria-checked={days === d}
+                    className={`seg__btn${days === d ? ' is-on' : ''}`} onClick={() => setDays(d)}>{label}</button>
+          ))}
+        </div>
+      </div>
+      {error && <div className="alert alert--error" style={{ marginBottom: '.5rem' }}>{error}</div>}
+      {rows && rows.length > 0 && (
+        <div className="mp__usage-table">
+          <table>
+            <thead>
+              <tr><th>Client</th><th>Name</th><th className="num">Order lines</th><th className="num">Last ordered</th></tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.clientCode}>
+                  <td className="mono"><b>{r.clientCode}</b></td>
+                  <td>{r.clientName ?? '—'}</td>
+                  <td className="num mono">{r.orders.toLocaleString('en-IN')}</td>
+                  <td className="num muted">{fmtDate(r.lastOrdered)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function MasterProfileEditor({ id, onClose, onSaved }: {
   id: number; onClose: () => void; onSaved: (d: MasterProfileDetail, created: boolean) => void;
@@ -408,6 +470,8 @@ function MasterProfileEditor({ id, onClose, onSaved }: {
                 </p>
               </div>
             </div>
+
+            {!isNew && <UsedBy id={id} />}
 
             <div className="modal__actions">
               <button className="btn btn--ghost" onClick={onClose} disabled={saving}>Cancel</button>

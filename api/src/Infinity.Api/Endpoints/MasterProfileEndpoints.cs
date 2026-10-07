@@ -23,6 +23,7 @@ public static class MasterProfileEndpoints
         g.MapGet("/", List).WithName("ListMasterProfiles");
         g.MapGet("/picker", Picker).WithName("MasterProfilePicker");
         g.MapGet("/{id:int}", Get).WithName("GetMasterProfile");
+        g.MapGet("/{id:int}/usage", Usage).WithName("GetMasterProfileUsage");
         g.MapPost("/", Create).WithName("CreateMasterProfile");
         g.MapPut("/{id:int}", Update).WithName("UpdateMasterProfile");
         g.MapPut("/{id:int}/active", SetActive).WithName("SetMasterProfileActive");
@@ -64,6 +65,18 @@ public static class MasterProfileEndpoints
         if (!IsEditor(principal)) return Results.NotFound();
         var d = await repo.GetAsync(id, ct).ConfigureAwait(false);
         return d is null ? Results.NotFound() : Results.Ok(d);
+    }
+
+    /// <param name="days">Count order lines from this many days back; 0 = all time.</param>
+    private static async Task<IResult> Usage(
+        int id, System.Security.Claims.ClaimsPrincipal principal, MasterProfileRepository repo, CancellationToken ct,
+        int days = 90)
+    {
+        if (!IsEditor(principal)) return Results.NotFound();
+        if (await repo.GetAsync(id, ct).ConfigureAwait(false) is null) return Results.NotFound();
+        DateTime? since = days <= 0 ? null : DateTime.Now.Date.AddDays(-Math.Min(days, 3650));
+        var rows = await repo.UsageAsync(id, since, ct).ConfigureAwait(false);
+        return Results.Ok(new { rows, days = days <= 0 ? 0 : days, since });
     }
 
     private static (IReadOnlyList<MemberRef> Members, IResult? Error) ReadMembers(SaveBody body)

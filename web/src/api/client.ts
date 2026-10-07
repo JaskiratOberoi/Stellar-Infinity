@@ -1768,6 +1768,7 @@ export interface MasterProfileDetail {
   members: MasterProfileMember[];
 }
 export interface PickerItem { id: number; code: string | null; name: string | null; mrp: number | null; departmentId: number | null }
+export interface MasterProfileUsage { clientCode: string; clientName: string | null; orders: number; firstOrdered: string | null; lastOrdered: string | null }
 export interface MasterProfileSave {
   code: string; name: string; ct: number | null; mrp: number | null; isActive: boolean;
   members: { kind: 'profile' | 'test'; id: number }[];
@@ -1783,6 +1784,8 @@ export const masterProfileApi = {
   setActive: (id: number, active: boolean) =>
     api.put<MasterProfileDetail>(`/api/catalogue/master-profiles/${id}/active`, { active }),
   remove: (id: number) => api.delete<{ ok: boolean }>(`/api/catalogue/master-profiles/${id}`),
+  usage: (id: number, days: number) =>
+    api.get<{ rows: MasterProfileUsage[]; days: number; since: string | null }>(`/api/catalogue/master-profiles/${id}/usage?days=${days}`),
   picker: (kind: 'profile' | 'test', search: string) =>
     api.get<PickerItem[]>(`/api/catalogue/master-profiles/picker?kind=${kind}&search=${encodeURIComponent(search)}`),
 };

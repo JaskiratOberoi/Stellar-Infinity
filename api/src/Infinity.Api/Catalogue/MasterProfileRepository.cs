@@ -29,6 +29,9 @@ public sealed record PickerItem(int Id, string? Code, string? Name, int? Mrp, in
 
 public sealed record MemberRef(string Kind, int Id);
 
+/// <summary>One client code that has ordered a package, with how often and when last.</summary>
+public sealed record MasterProfileUsage(string ClientCode, string? ClientName, int Orders, DateTime? FirstOrdered, DateTime? LastOrdered);
+
 public sealed record SaveResult(bool Ok, string? ErrorCode, string? Message, int? Id);
 
 /// <summary>
@@ -140,6 +143,22 @@ public sealed class MasterProfileRepository(NobleConnectionFactory db, SqlRetry 
                 if (!await r.ReadAsync(inner).ConfigureAwait(false))
                     return new SaveResult(false, "UNKNOWN", "The delete returned nothing.", null);
                 return new SaveResult(r.Bool("ok"), r.Str("error_code"), r.Str("message"), null);
+            }, token), ct);
+
+    public Task<IReadOnlyList<MasterProfileUsage>> UsageAsync(int id, DateTime? since, CancellationToken ct = default) =>
+        retry.ExecuteAsync("masterprofile.usage", token =>
+            db.QueryAsync("masterprofile.usage", async (conn, inner) =>
+            {
+                await using var cmd = NobleConnectionFactory.CreateCommand(conn, "dbo.usp_inf_master_profile_usage");
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.Add("@id", SqlDbType.Int).Value = id;
+                cmd.Parameters.Add("@since", SqlDbType.DateTime).Value = (object?)since ?? DBNull.Value;
+                var list = new List<MasterProfileUsage>();
+                await using var r = await cmd.ExecuteReaderAsync(inner).ConfigureAwait(false);
+                while (await r.ReadAsync(inner).ConfigureAwait(false))
+                    list.Add(new MasterProfileUsage(r.Str("client_code") ?? string.Empty, r.Str("client_name"), r.Int("orders"),
+                                                    r.Date("first_ordered"), r.Date("last_ordered")));
+                return (IReadOnlyList<MasterProfileUsage>)list;
             }, token), ct);
 
     public Task<IReadOnlyList<PickerItem>> PickerAsync(string kind, string? search, CancellationToken ct = default) =>
