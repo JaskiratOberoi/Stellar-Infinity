@@ -11,7 +11,7 @@ import { IS_STAGING } from '../lib/env';
  * and every thyroid profile prints exactly as it did before the figure —
  * the legacy interpretation text and the notes — without a deploy.
  */
-interface ReportingSettings { thyroidFigure: boolean; trending: boolean; testInterpretation: boolean }
+interface ReportingSettings { thyroidFigure: boolean; cbcFigure: boolean; trending: boolean; testInterpretation: boolean }
 
 export function ReportingSettingsPage() {
   const [data, setData] = useState<ReportingSettings | null>(null);
@@ -81,6 +81,37 @@ export function ReportingSettingsPage() {
               </span>
               <span className="muted" style={{ display: 'block', fontSize: '.78rem', marginTop: '.4rem' }}>
                 Currently <b>{data.thyroidFigure ? 'on' : 'off'}</b>. Each change is on the audit trail and clears the
+                report PDF cache.
+              </span>
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: '.9rem', alignItems: 'flex-start', marginTop: '1.2rem', paddingTop: '1.2rem', borderTop: '1px solid var(--line)' }}>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={data.cbcFigure}
+              aria-label="Reading this CBC under Complete Blood Counts"
+              className={`toggle${data.cbcFigure ? ' toggle--on' : ''}`}
+              disabled={busy}
+              title={data.cbcFigure ? 'On — blood counts print the reading figure' : 'Off — blood counts print as before'}
+              style={{ marginTop: '.15rem', flex: 'none' }}
+              onClick={() => void save({ cbcFigure: !data.cbcFigure }, (r) => r.cbcFigure
+                ? 'On. Complete Blood Counts print the reading figure from the next report opened or downloaded.'
+                : 'Off. Complete Blood Counts print as before — the legacy interpretation text and the notes — from the next report opened or downloaded.')}
+            />
+            <span>
+              <span style={{ fontWeight: 700 }}>“Reading this CBC” under Complete Blood Counts</span>
+              <span className="muted" style={{ display: 'block', fontSize: '.82rem', marginTop: '.3rem', lineHeight: 1.6 }}>
+                The red-cell grid (haemoglobin against MCV), the white-cell grid (total count against which kind
+                predominates), the platelet count on its reference band, each pattern named with what it usually
+                means, and one line that puts the three together. The grid limits are the patient's own reference
+                intervals as printed on the report. Printed under any blood count carrying haemoglobin, MCV, total
+                count, the neutrophil and lymphocyte percentages and platelets, on its own or inside a profile.
+                While it prints, the count's catalogue interpretation stands down; the notes still print.
+              </span>
+              <span className="muted" style={{ display: 'block', fontSize: '.78rem', marginTop: '.4rem' }}>
+                Currently <b>{data.cbcFigure ? 'on' : 'off'}</b>. Each change is on the audit trail and clears the
                 report PDF cache.
               </span>
             </span>

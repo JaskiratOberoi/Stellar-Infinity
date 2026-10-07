@@ -11,6 +11,8 @@ import { code128 } from '../lib/code128';
 import { notesForCodes } from '../lib/reportNotes';
 import { thyroidPatternOf } from '../lib/thyroidPattern';
 import { ThyroidFigure } from './ThyroidFigure';
+import { cbcPatternOf, type CbcPattern } from '../lib/cbcPattern';
+import { CbcFigure } from './CbcFigure';
 import { PreviousValue, trendIndex, trendKey } from '../components/TrendStrip';
 import type { TrendAnalyte } from '../lib/trendBands';
 import type { ResultTrendResponse } from '../api/client';
@@ -194,6 +196,8 @@ export function PrintReport() {
   const [row, setRow] = useState<FullRow | null>(null);
   /** Reporting settings: "Reading this thyroid profile" under thyroid profiles. */
   const [thyroidOn, setThyroidOn] = useState(false);
+  /** Reporting settings: "Reading this CBC" under a Complete Blood Count. */
+  const [cbcOn, setCbcOn] = useState(false);
   /** The Trending report's history, when the setting is on (staging builds only while under test). */
   const [trend, setTrend] = useState<ResultTrendResponse | null>(null);
   const trendMap = useMemo(() => trendIndex(trend), [trend]);
@@ -290,13 +294,13 @@ export function PrintReport() {
       : `/api/reports/${encodeURIComponent(sid)}/trend`;
     Promise.all([
       api.get<FullRow>(url),
-      api.get<{ thyroidFigure: boolean; trending?: boolean }>('/api/public/reporting-settings').catch(() => ({ thyroidFigure: false, trending: false })),
+      api.get<{ thyroidFigure: boolean; cbcFigure?: boolean; trending?: boolean }>('/api/public/reporting-settings').catch(() => ({ thyroidFigure: false, cbcFigure: false, trending: false })),
     ])
       .then(async ([r, s]) => {
         const t = IS_STAGING && s.trending
           ? await api.get<ResultTrendResponse>(trendUrl).catch(() => null)
           : null;
-        if (live) { setThyroidOn(!!s.thyroidFigure); setTrend(t); setRow(r); }
+        if (live) { setThyroidOn(!!s.thyroidFigure); setCbcOn(!!s.cbcFigure); setTrend(t); setRow(r); }
       })
       .catch((e) => { if (live) setError(e instanceof Error ? e.message : 'Could not load this report.'); });
     return () => { live = false; };
@@ -683,7 +687,7 @@ export function PrintReport() {
 
   const profileInterpretations = row?.profileInterpretations;
 
-  const renderItem = ({ item, key }: Entry): ReactNode => {
+  const renderItem = ({ item, key }: Entry, hideInterpretation = false): ReactNode => {
     if (item.kind === 'panel' && item.panel) {
       return (
         <PanelBlock
@@ -694,6 +698,7 @@ export function PrintReport() {
           onToggle={toggle}
           pdf={pdfMode}
           thyroidFigure={thyroidOn}
+          cbcFigure={cbcOn}
           interpretation={
             item.panel.profileId != null
               ? (profileInterpretations?.[item.panel.profileId] ?? null)
@@ -712,6 +717,7 @@ export function PrintReport() {
           groupOff={excluded.has(item.group.resultId)}
           onToggle={toggle}
           pdf={pdfMode}
+          hideInterpretation={hideInterpretation}
         />
       );
     }
@@ -733,6 +739,49 @@ export function PrintReport() {
 
   // Screen media has no pages, so in split preview each section is drawn as its
   // own sheet. The PDF is a separate ?pdf=1 render and none of this reaches it.
+  /*
+   * A Complete Blood Count — several consecutive groups sharing one test id
+   * (the analyser counts, the differential in percent, the differential in
+   * absolute) — gets "Reading this CBC" after its LAST group, read from
+   * every row of the test still printed; the groups' own catalogue text
+   * stands down while it prints, since the figure is the interpretation,
+   * and the static notes still print. Any test whose rows carry the six
+   * axes qualifies — see lib/cbcPattern.
+   */
+  const renderEntries = (entries: Entry[]): ReactNode[] => {
+    const lastOf = new Map<number, number>();
+    entries.forEach((e, i) => {
+      const t = e.item.kind === 'group' ? e.item.group?.testId ?? null : null;
+      if (t != null) lastOf.set(t, i);
+    });
+    const figures = new Map<number, CbcPattern>();
+    if (cbcOn) {
+      for (const tid of lastOf.keys()) {
+        const rows: ReportRow[] = [];
+        for (const e of entries) {
+          if (e.item.kind !== 'group' || e.item.group?.testId !== tid) continue;
+          for (const r of e.item.group.rows) if (!excluded.has(r.resultId)) rows.push(r);
+        }
+        const p = cbcPatternOf(rows);
+        if (p) figures.set(tid, p);
+      }
+    }
+    const out: ReactNode[] = [];
+    entries.forEach((e, i) => {
+      const tid = e.item.kind === 'group' ? e.item.group?.testId ?? null : null;
+      const fig = tid != null ? figures.get(tid) : undefined;
+      out.push(renderItem(e, !!fig));
+      if (fig && tid != null && lastOf.get(tid) === i) {
+        out.push(
+          <tr key={`cbc-${tid}`} className="lr__attach">
+            <td colSpan={5} className="lr__fig-cell"><CbcFigure p={fig} /></td>
+          </tr>,
+        );
+      }
+    });
+    return out;
+  };
+
   const previewSheets = !pdfMode && split;
   const ghostFooter = pdfMode || previewSheets;
 
@@ -787,7 +836,7 @@ export function PrintReport() {
               <td colSpan={5} className="lr__dept">{deptName}</td>
             </tr>
           )}
-          {sec.entries.map(renderItem)}
+          {renderEntries(sec.entries)}
           {last && showEnd && i === secs.length - 1 && <EndOfReport />}
         </tbody>
       ))}
@@ -939,7 +988,7 @@ export function PrintReport() {
                       <td colSpan={5} className="lr__dept">{sec.deptName}</td>
                     </tr>
                   )}
-                  {sec.entries.map(renderItem)}
+                  {renderEntries(sec.entries)}
                 </tbody>
               ))}
               {showEnd && (
@@ -1444,7 +1493,7 @@ function IncludeToggle({
  *  under FSH, LH's under LH. Hiding those too printed such profiles with no
  *  interpretation at all, which is a report the lab has never issued. */
 function PanelBlock({
-  panel, interactive, excluded, onToggle, pdf, interpretation, thyroidFigure,
+  panel, interactive, excluded, onToggle, pdf, interpretation, thyroidFigure, cbcFigure,
 }: {
   panel: ReportPanel;
   interactive: boolean;
@@ -1454,6 +1503,8 @@ function PanelBlock({
   interpretation: string | null;
   /** The Reporting setting: draw "Reading this thyroid profile" under a thyroid profile. */
   thyroidFigure: boolean;
+  /** The Reporting setting: draw "Reading this CBC" under a blood count inside the profile. */
+  cbcFigure: boolean;
 }) {
   const panelOff = excluded.has(panel.resultId);
 
@@ -1502,6 +1553,32 @@ function PanelBlock({
   }
   const thyroid = thyroidFigure ? thyroidPatternOf(printedRows) : null;
 
+  /*
+   * A blood count INSIDE a profile (a Hemogram, a health package) — its
+   * groups share a test id — gets "Reading this CBC" after its last group,
+   * and those groups stay quiet, exactly as it prints on its own.
+   */
+  const childTid = (c: ReportBlock): number | null => (c.kind === 'group' ? c.group?.testId ?? null : null);
+  const cbcLast = new Map<number, number>();
+  visible.forEach((c, i) => { const t = childTid(c); if (t != null) cbcLast.set(t, i); });
+  const cbcFigures = new Map<number, CbcPattern>();
+  if (cbcFigure) {
+    for (const tid of cbcLast.keys()) {
+      const rows: ReportRow[] = [];
+      for (const c of visible) {
+        if (childTid(c) !== tid || !c.group) continue;
+        for (const r of c.group.rows) if (!excluded.has(r.resultId)) rows.push(r);
+      }
+      const p = cbcPatternOf(rows);
+      if (p) cbcFigures.set(tid, p);
+    }
+  }
+  const cbcOf = (c: ReportBlock, i: number): CbcPattern | null => {
+    const t = childTid(c);
+    return t != null && cbcLast.get(t) === i ? cbcFigures.get(t) ?? null : null;
+  };
+  const underCbc = (c: ReportBlock): boolean => { const t = childTid(c); return t != null && cbcFigures.has(t); };
+
   const childText = (c: ReportBlock): string | null =>
     c.kind === 'group' ? (c.group?.interpretation ?? null) : (c.interpretation ?? null);
   const lastCarrier = new Map<string, number>();
@@ -1513,6 +1590,7 @@ function PanelBlock({
   }
   const speaks = (c: ReportBlock, i: number): boolean => {
     if (interpretation || thyroid) return false;
+    if (underCbc(c)) return false;
     const t = childText(c);
     if (!t) return c.kind === 'group' ? !!c.group?.interpretationImage : !!c.interpretationImage;
     return lastCarrier.get(t) === i;
@@ -1575,6 +1653,11 @@ function PanelBlock({
             </tr>
           )}
           {renderChild(child, { interactive, excluded, panelOff, pdf, onToggle, showInterpretation: speaks(child, i) })}
+          {cbcOf(child, i) && (
+            <tr className={`lr__attach${panelOff ? ' lr__off' : ''}`}>
+              <td colSpan={5} className="lr__fig-cell"><CbcFigure p={cbcOf(child, i)!} /></td>
+            </tr>
+          )}
         </Fragment>
       ))}
       {thyroid && (

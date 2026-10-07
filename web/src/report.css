@@ -868,6 +868,21 @@
 .lr__fig-text { font-size: 12.5px; line-height: 1.3; color: #000; margin: 2px 0 0; }
 .lr__fig-note { font-size: 10px; line-height: 1.3; color: #3f3f46; margin: 3px 0 0; }
 .lr--fit1 .lr__fig { padding: 4px 8px 3px; }
+
+/* "Reading this CBC": three readings in three columns under the three
+   panels, the one-line summary in a framed strip, the standing notes. */
+.lr__cbc-readings { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 10px; margin-top: 4px; }
+.lr__cbc-reading { min-width: 0; }
+.lr__cbc-pattern { font-size: 10.5px; line-height: 1.3; color: #000; margin: 0; }
+.lr__cbc-pattern b { font-weight: 700; }
+.lr__cbc-meaning { font-size: 9.5px; line-height: 1.3; color: #1f2937; margin: 1px 0 0; }
+.lr__cbc-final { margin-top: 6px; border: 1px solid #9ca3af; border-left: 4px solid #111827; padding: 4px 8px; }
+.lr__cbc-final-head { font-size: 10.5px; font-weight: 700; color: #111827; margin: 0; }
+.lr__cbc-final-line { font-size: 11.5px; font-weight: 700; color: #000; line-height: 1.3; margin: 2px 0 0; }
+.lr__cbc-final-note { font-size: 9.5px; line-height: 1.3; color: #3f3f46; margin: 2px 0 0; }
+.lr__cbc-notes { font-size: 9px; line-height: 1.35; color: #3f3f46; margin: 4px 0 0; padding-left: 16px; }
+.lr__cbc-notes li { margin: 0; }
+.lr--fit2 .lr__cbc-meaning, .lr--fit2 .lr__cbc-final-note { line-height: 1.22; }
 .lr--fit2 .lr__fig-text { line-height: 1.22; }
 /* The v2 cells uppercase their contents (the rule above); the figure is
    prose and a diagram, set in ordinary case whatever the format. */

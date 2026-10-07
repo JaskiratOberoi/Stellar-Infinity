@@ -24,6 +24,9 @@ public sealed class ReportSettings(NobleConnectionFactory db, SqlRetry retry, IL
     /// <summary>"Reading this thyroid profile" under a thyroid profile's rows.</summary>
     public bool ThyroidFigure { get; private set; } = true;
 
+    /// <summary>"Reading this CBC" under a Complete Blood Count's rows.</summary>
+    public bool CbcFigure { get; private set; } = true;
+
     /// <summary>
     /// The Trending report — each analyte's earlier visits as bands and
     /// columns — on the standard report and in the Smart Report. Off by
@@ -41,9 +44,10 @@ public sealed class ReportSettings(NobleConnectionFactory db, SqlRetry retry, IL
     public bool TestInterpretation { get; private set; }
 
     /// <summary>What the PDF cache key carries for the switches; changes with every save.</summary>
-    public static string Fingerprint { get; private set; } = "t1r0i0";
+    public static string Fingerprint { get; private set; } = "t1r0i0c1";
 
     public const string ThyroidFigureKey = "thyroid_figure";
+    public const string CbcFigureKey = "cbc_figure";
     public const string TrendingKey = "trending_report";
     public const string TestInterpretationKey = "test_interpretation";
 
@@ -90,7 +94,8 @@ public sealed class ReportSettings(NobleConnectionFactory db, SqlRetry retry, IL
         ThyroidFigure = !map.TryGetValue(ThyroidFigureKey, out var v) || v.Trim() != "0";
         Trending = map.TryGetValue(TrendingKey, out var tr) && tr.Trim() == "1";
         TestInterpretation = map.TryGetValue(TestInterpretationKey, out var ti) && ti.Trim() == "1";
-        Fingerprint = $"t{(ThyroidFigure ? 1 : 0)}r{(Trending ? 1 : 0)}i{(TestInterpretation ? 1 : 0)}";
+        CbcFigure = !map.TryGetValue(CbcFigureKey, out var cb) || cb.Trim() != "0";
+        Fingerprint = $"t{(ThyroidFigure ? 1 : 0)}r{(Trending ? 1 : 0)}i{(TestInterpretation ? 1 : 0)}c{(CbcFigure ? 1 : 0)}";
     }
 
     /// <summary>Saves one switch and re-reads them all.</summary>

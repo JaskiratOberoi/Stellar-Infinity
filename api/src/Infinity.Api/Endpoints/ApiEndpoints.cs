@@ -254,10 +254,10 @@ public static class ApiEndpoints
     }
 
     /// <summary>A save carries only the switches it means to change.</summary>
-    public sealed record ReportingSettingsBody(bool? ThyroidFigure = null, bool? Trending = null, bool? TestInterpretation = null);
+    public sealed record ReportingSettingsBody(bool? ThyroidFigure = null, bool? Trending = null, bool? TestInterpretation = null, bool? CbcFigure = null);
 
     private static object ReportingView(Reports.ReportSettings s) =>
-        new { thyroidFigure = s.ThyroidFigure, trending = s.Trending, testInterpretation = s.TestInterpretation };
+        new { thyroidFigure = s.ThyroidFigure, cbcFigure = s.CbcFigure, trending = s.Trending, testInterpretation = s.TestInterpretation };
 
     private static async Task<IResult> GetPublicReportingSettings(
         Reports.ReportSettings settings, CancellationToken ct)
@@ -298,6 +298,8 @@ public static class ApiEndpoints
             await settings.SetAsync(Reports.ReportSettings.TrendingKey, trend ? "1" : "0", actor, ct).ConfigureAwait(false);
         if (body.TestInterpretation is bool ti)
             await settings.SetAsync(Reports.ReportSettings.TestInterpretationKey, ti ? "1" : "0", actor, ct).ConfigureAwait(false);
+        if (body.CbcFigure is bool cbc)
+            await settings.SetAsync(Reports.ReportSettings.CbcFigureKey, cbc ? "1" : "0", actor, ct).ConfigureAwait(false);
         // The key already carries the switches' fingerprint; the flush is belt
         // and braces, so a flip back within the cache's 45 minutes redraws
         // too, and nothing rendered under the other setting lingers.
@@ -307,7 +309,7 @@ public static class ApiEndpoints
             details: new { from = before, to = after, pdfCacheFlushed = flushed });
         return Results.Ok(new
         {
-            thyroidFigure = settings.ThyroidFigure, trending = settings.Trending,
+            thyroidFigure = settings.ThyroidFigure, cbcFigure = settings.CbcFigure, trending = settings.Trending,
             testInterpretation = settings.TestInterpretation, pdfCacheFlushed = flushed,
         });
     }
