@@ -19,8 +19,9 @@ public static class SalesLedgerEndpoints
         g.MapGet("/options", Options).WithName("GetSalesLedgerOptions");
     }
 
+    // Super admin only (Jas, 2026-10-07): the whole lab's money, line by line.
     private static bool MaySee(System.Security.Claims.ClaimsPrincipal p) =>
-        p.Role() is InfinityRoles.SuperAdmin or InfinityRoles.Admin or InfinityRoles.Sales or InfinityRoles.LabManager;
+        p.Role() is InfinityRoles.SuperAdmin;
 
     private static readonly HashSet<string> Kinds = new(StringComparer.OrdinalIgnoreCase) { "Master", "Profile", "Test", "Extra" };
     private static readonly HashSet<string> Sources = new(StringComparer.OrdinalIgnoreCase) { "lis", "infinity", "telo" };
