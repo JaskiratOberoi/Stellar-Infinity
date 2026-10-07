@@ -98,8 +98,9 @@ export function MasterProfilesPage() {
         <div>
           <h1 className="page__title">Master profiles</h1>
           <p className="page__sub">
-            {total.toLocaleString('en-IN')} package{total === 1 ? '' : 's'} in the catalogue — what the LIS calls
-            Technical › Master Profile. A change here is the catalogue's: the LIS and every order see it at once.
+            {search.trim()
+              ?               : }
+            {' — what the LIS calls Technical › Master Profile. A change here is the catalogue's: the LIS and every order see it at once.'}
           </p>
         </div>
         <div className="row" style={{ marginLeft: 'auto', flexWrap: 'wrap', gap: '.5rem' }}>
