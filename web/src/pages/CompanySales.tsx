@@ -4,6 +4,7 @@ import {
   type SalesKind, type SalesLedgerLine, type SalesLedgerQuery, type SalesSource, type SalesSummary, type SalesTotals,
 } from '../api/client';
 import { Pager } from '../components/Pager';
+import { MenuSelect } from '../components/MenuSelect';
 import { InfinityLoader } from '../components/InfinityLoader';
 import { fmtDateTime, inr } from '../lib/format';
 
@@ -28,7 +29,7 @@ import { fmtDateTime, inr } from '../lib/format';
 
 const KINDS: { value: SalesKind | ''; label: string }[] = [
   { value: '', label: 'All kinds' },
-  { value: 'Master', label: 'Packages' },
+  { value: 'Master', label: 'Master profiles' },
   { value: 'Profile', label: 'Profiles' },
   { value: 'Test', label: 'Tests' },
   { value: 'Extra', label: 'Extras' },
@@ -39,7 +40,7 @@ const SOURCES: { value: SalesSource | ''; label: string }[] = [
   { value: 'infinity', label: 'Infinity' },
   { value: 'telo', label: 'Telo' },
 ];
-const KIND_LABEL: Record<SalesKind, string> = { Master: 'Package', Profile: 'Profile', Test: 'Test', Extra: 'Extra' };
+const KIND_LABEL: Record<SalesKind, string> = { Master: 'Master profile', Profile: 'Profile', Test: 'Test', Extra: 'Extra' };
 
 /** yyyy-mm-dd on the local calendar. */
 function isoDay(d: Date): string {
@@ -82,7 +83,7 @@ export function CompanySalesPage() {
           <h1 className="page__title">Company sales</h1>
           <p className="page__sub">
             Every sale line in the lab, LIS included, at the rate the centre was charged — the same lines the
-            Lab-sales figure adds up. A package is one line at its package rate.
+            Lab-sales figure adds up. A master profile is one line at its package rate.
           </p>
         </div>
         <div className="seg" role="tablist" aria-label="View" style={{ marginLeft: 'auto', alignSelf: 'center' }}>
@@ -109,25 +110,20 @@ export function CompanySalesPage() {
           <button type="button" className={`seg__btn${from === today.slice(0, 8) + '01' && to === today ? ' is-on' : ''}`}
                   onClick={() => { setFrom(today.slice(0, 8) + '01'); setTo(today); }}>This month</button>
         </div>
-        <label className="field sl__f">
+        <div className="field sl__f">
           <span>Kind</span>
-          <select className="input input--sm" value={kind} onChange={(e) => setKind(e.target.value as SalesKind | '')}>
-            {KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
-          </select>
-        </label>
-        <label className="field sl__f">
+          <MenuSelect ariaLabel="Kind of sale line" value={kind} options={KINDS} onChange={setKind} width={150} />
+        </div>
+        <div className="field sl__f">
           <span>Business unit</span>
-          <select className="input input--sm" value={bu ?? ''} onChange={(e) => setBu(e.target.value ? Number(e.target.value) : null)}>
-            <option value="">All units</option>
-            {units.map((u) => <option key={u.id} value={u.id}>{u.code}</option>)}
-          </select>
-        </label>
-        <label className="field sl__f">
+          <MenuSelect ariaLabel="Business unit" value={bu} width={160}
+                      options={[{ value: null, label: 'All units' }, ...units.map((u) => ({ value: u.id, label: u.code ?? String(u.id), hint: u.name }))]}
+                      onChange={setBu} />
+        </div>
+        <div className="field sl__f">
           <span>Source</span>
-          <select className="input input--sm" value={source} onChange={(e) => setSource(e.target.value as SalesSource | '')}>
-            {SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
-        </label>
+          <MenuSelect ariaLabel="Where the patient was registered" value={source} options={SOURCES} onChange={setSource} width={130} />
+        </div>
         <label className="field sl__f sl__f--grow">
           <span>Client</span>
           <input className="input input--sm" placeholder="code or name" value={client} onChange={(e) => setClient(e.target.value)} />
@@ -337,9 +333,9 @@ function Dashboard({ query, kind }: { query: SalesLedgerQuery; kind: SalesKind |
       )}
 
       {kind === 'Master' && (
-        <Panel title="Package · client · rate" sub="Which client sold which package at what rate — one row per rate charged, by amount">
+        <Panel title="Master profile · client · rate" sub="Which client sold which master profile at what rate — one row per rate charged, by amount">
           <table>
-            <thead><tr><th>Package</th><th>Client</th><th className="num">Rate</th><th className="num">Lines</th><th className="num">Amount</th></tr></thead>
+            <thead><tr><th>Master profile</th><th>Client</th><th className="num">Rate</th><th className="num">Lines</th><th className="num">Amount</th></tr></thead>
             <tbody>
               {data.byItemClientRate.map((r, i) => (
                 <tr key={i}>

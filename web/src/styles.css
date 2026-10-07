@@ -5844,3 +5844,14 @@ tbody tr.row-status--quiet > td:first-child {
 .sl__panel-body th { position: sticky; top: 0; background: var(--surface); font-size: .64rem; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-dim); z-index: 1; }
 .sl__panel-body .num { text-align: right; white-space: nowrap; }
 .sl__dim { opacity: .55; transition: opacity .2s; }
+
+/* ---------- menu select: a styled select for short fixed lists ---------- */
+.menu { display: inline-block; }
+.menu__btn {
+  display: inline-flex; align-items: center; justify-content: space-between; gap: .5rem;
+  width: 100%; text-align: left; cursor: pointer; font: inherit; font-size: .82rem; color: var(--ink);
+}
+.menu__btn .combo__caret { position: static; margin: 0; }
+.menu__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu__list { min-width: 100%; width: max-content; max-width: 320px; }
+.combo__opt .combo__mark { margin-left: auto; color: var(--teal); }
