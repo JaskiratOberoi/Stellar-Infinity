@@ -34,7 +34,7 @@ const MUTED = '#3f3f46';
 
 /* Red-cell grid labels, [row (Hb normal / low / high)][col (MCV low / normal / high)]. */
 const RED_CELLS: string[][][] = [
-  [['Microcytosis', '(without anaemia)'], ['Normal', 'red-cell profile'], ['Macrocytosis', '(without anaemia)']],
+  [['Microcytosis', '(w/o anaemia)'], ['Normal', 'red-cell profile'], ['Macrocytosis', '(w/o anaemia)']],
   [['Microcytic', 'anaemia'], ['Normocytic', 'anaemia'], ['Macrocytic', 'anaemia']],
   [['Raised Hb,', 'small cells'], ['Raised Hb', '(erythrocytosis)'], ['Raised Hb,', 'large cells']],
 ];
