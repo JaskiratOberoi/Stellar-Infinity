@@ -869,19 +869,48 @@
 .lr__fig-note { font-size: 10px; line-height: 1.3; color: #3f3f46; margin: 3px 0 0; }
 .lr--fit1 .lr__fig { padding: 4px 8px 3px; }
 
-/* "Reading this CBC": three readings in three columns under the three
-   panels, the one-line summary in a framed strip, the standing notes. */
-.lr__cbc-readings { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 10px; margin-top: 4px; }
-.lr__cbc-reading { min-width: 0; }
-.lr__cbc-pattern { font-size: 10.5px; line-height: 1.3; color: #000; margin: 0; }
-.lr__cbc-pattern b { font-weight: 700; }
-.lr__cbc-meaning { font-size: 9.5px; line-height: 1.3; color: #1f2937; margin: 1px 0 0; }
-.lr__cbc-final { margin-top: 6px; border: 1px solid #9ca3af; border-left: 4px solid #111827; padding: 4px 8px; }
-.lr__cbc-final-head { font-size: 10.5px; font-weight: 700; color: #111827; margin: 0; }
-.lr__cbc-final-line { font-size: 11.5px; font-weight: 700; color: #000; line-height: 1.3; margin: 2px 0 0; }
-.lr__cbc-final-note { font-size: 9.5px; line-height: 1.3; color: #3f3f46; margin: 2px 0 0; }
-.lr__cbc-notes { font-size: 9px; line-height: 1.35; color: #3f3f46; margin: 4px 0 0; padding-left: 16px; }
+/* "Reading this CBC": a navy header band, three colour-themed cards (red
+   cells, white cells, platelets) each with its grid or gauges and its
+   reading, the navy "Final CBC Interpretation" strip, the standing notes.
+   The colour is theme, not meaning — see CbcFigure. */
+.lr__fig--cbc { border: 1.5px solid #1e2f6b; border-radius: 6px; padding: 0 0 5px; overflow: hidden; }
+.lr__cbc-head {
+  display: flex; align-items: baseline; gap: 6px; background: #1e2f6b; color: #ffffff; padding: 5px 10px 4px;
+}
+.lr__cbc-head h3 { font-size: 14px; font-weight: 700; margin: 0; color: #ffffff; }
+.lr__cbc-head span { font-size: 10.5px; color: #dbe3f8; }
+.lr__cbc-cards { display: grid; grid-template-columns: 1.3fr 1.3fr 1fr; gap: 6px; padding: 6px 6px 0; }
+.lr__cbc-card { border: 1.5px solid; border-radius: 6px; padding: 5px 7px 6px; min-width: 0; background: #ffffff; }
+.lr__cbc-card-head { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
+.lr__cbc-num {
+  display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 999px;
+  color: #ffffff; font-size: 9px; font-weight: 700; flex: none;
+}
+.lr__cbc-card-title { font-size: 9.5px; font-weight: 700; letter-spacing: .02em; flex: 1 1 auto; min-width: 0; }
+.lr__cbc-art { flex: none; line-height: 0; }
+.lr__cbc-art svg { width: 34px; height: auto; }
+.lr__cbc-grid { display: block; width: 100%; height: auto; }
+.lr__cbc-gauges { padding: 2px 0 0; }
+.lr__cbc-gauge { display: block; width: 100%; height: auto; margin-top: 2px; }
+.lr__cbc-pattern { font-size: 10.5px; font-weight: 700; line-height: 1.3; margin: 5px 0 0; }
+.lr__cbc-meaning { font-size: 9.2px; line-height: 1.32; color: #1f2937; margin: 2px 0 0; }
+.lr__cbc-values { font-size: 8px; line-height: 1.3; color: #6b7280; margin: 3px 0 0; }
+.lr__cbc-final { margin: 6px 6px 0; border: 1.5px solid #1e2f6b; border-radius: 6px; overflow: hidden; }
+.lr__cbc-final-head {
+  display: flex; align-items: center; gap: 7px; background: #1e2f6b; color: #ffffff; padding: 3px 8px;
+  font-size: 11px; font-weight: 700;
+}
+/* The figure's own rule makes every svg full-width; the icon and the cell
+   illustrations are inline glyphs. */
+.lr__fig--cbc .lr__cbc-final-head svg { display: inline-block; width: 18px; height: 18px; flex: none; }
+.lr__fig--cbc .lr__cbc-art svg { display: inline-block; width: 34px; height: 25px; }
+.lr__cbc-final-body { padding: 4px 9px 5px; }
+.lr__cbc-final-line { font-size: 11.5px; font-weight: 700; color: #1e2f6b; line-height: 1.3; margin: 0; }
+.lr__cbc-final-note { font-size: 9.2px; line-height: 1.32; color: #374151; margin: 3px 0 0; }
+.lr__cbc-notes-head { font-size: 10.5px; font-weight: 700; color: #1e2f6b; margin: 6px 8px 0; }
+.lr__cbc-notes { font-size: 8.8px; line-height: 1.35; color: #374151; margin: 1px 8px 0; padding-left: 16px; }
 .lr__cbc-notes li { margin: 0; }
+.lr--fit1 .lr__fig--cbc { padding-bottom: 3px; }
 .lr--fit2 .lr__cbc-meaning, .lr--fit2 .lr__cbc-final-note { line-height: 1.22; }
 .lr--fit2 .lr__fig-text { line-height: 1.22; }
 /* The v2 cells uppercase their contents (the rule above); the figure is

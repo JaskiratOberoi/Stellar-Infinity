@@ -5,105 +5,100 @@ import type { CbcAxis, CbcPattern, Level } from '../lib/cbcPattern';
  * rows in the standard report, the blood-count counterpart of
  * ThyroidFigure.
  *
- * Three panels across, one per family of the count. RED CELLS: a
+ * Three cards across, one per family of the count, each in its own colour
+ * as the lab's reference layout has them: RED CELLS in crimson — a
  * three-by-three grid, MCV low / normal / high across and haemoglobin
- * normal / low / high down, each cell named for the pattern it is
- * (microcytic anaemia, macrocytosis without anaemia …) and the patient's
- * cell picked out and tagged. WHITE CELLS: the same grid, which kind
- * predominates across and the total count high / normal / low down.
- * PLATELETS: the count on its reference band, and MPV below it where the
- * lab reports one. The grid axes are labelled with the patient's OWN
- * reference limits, read off the rows above, so the figure can never
- * disagree with the ▲▼ flags beside the numbers. Under each panel, the
+ * normal / low / high down, each cell named for the pattern it is and the
+ * patient's cell picked out and tagged; WHITE CELLS in blue — the same
+ * grid, which kind predominates across and the total count high / normal /
+ * low down; PLATELETS in green — the count on its reference band, and MPV
+ * below it where the lab reports one. The grid axes carry the patient's
+ * OWN reference limits, read off the rows above, so the figure can never
+ * disagree with the ▲▼ flags beside the numbers. Under each grid, the
  * pattern's name and a few sentences on what it usually means; under all
- * three, one line that puts them together, and the standing notes.
+ * three, one line that puts them together in a navy "Final CBC
+ * Interpretation" strip, and the standing notes.
  *
- * Greyscale by design, like the thyroid figure: in range and out of range
- * are told apart by weight, glyph and hatching, the chosen cell by a heavy
- * border and a darker fill, so a black-and-white printer loses nothing.
+ * Colour carries the theme, never the meaning: in range and out of range
+ * are still told apart by weight, by the ▲▼ glyph and by the band on the
+ * scales, and the chosen cell by its tag and heavy border, so a
+ * black-and-white printer loses nothing but the tint.
  */
 
+interface Theme { ink: string; soft: string; line: string; mid: string }
+const RED: Theme = { ink: '#c0182f', soft: '#fff3f4', line: '#f1b8c1', mid: '#e5a0ab' };
+const BLUE: Theme = { ink: '#1d4ed8', soft: '#eef4ff', line: '#b9cdf5', mid: '#9ab7ee' };
+const GREEN: Theme = { ink: '#15803d', soft: '#f0fdf4', line: '#b7e4c4', mid: '#86cfa0' };
 const INK = '#111827';
 const MUTED = '#3f3f46';
-const FAINT = '#595959';
-const LINE = '#9ca3af';
-const CELL = '#fafafa';
-const CELL_LINE = '#c4c7cd';
-const HERE_FILL = '#e4e4e7';
-
-const PANEL_W = 232;
-const PANEL_GAP = 2;
-const PANEL_H = 196;
-const CELL_W = 56;
-const CELL_H = 40;
-/* Room on the grid's left for "TLC normal ▸" and its limits under it. */
-const ROW_HEAD_W = 58;
 
 /* Red-cell grid labels, [row (Hb normal / low / high)][col (MCV low / normal / high)]. */
 const RED_CELLS: string[][][] = [
-  [['Microcytosis', '(no anaemia)'], ['Normal', 'red cells'], ['Macrocytosis', '(no anaemia)']],
+  [['Microcytosis', '(without anaemia)'], ['Normal', 'red-cell profile'], ['Macrocytosis', '(without anaemia)']],
   [['Microcytic', 'anaemia'], ['Normocytic', 'anaemia'], ['Macrocytic', 'anaemia']],
   [['Raised Hb,', 'small cells'], ['Raised Hb', '(erythrocytosis)'], ['Raised Hb,', 'large cells']],
 ];
 /* White-cell grid labels, [row (TLC high / normal / low)][col (neutrophils / balanced / lymphocytes)]. */
 const WHITE_CELLS: string[][][] = [
-  [['Neutrophil', 'leukocytosis'], ['Mixed', 'leukocytosis'], ['Lymphocytosis']],
+  [['Neutrophil-', 'predominant', 'leukocytosis'], ['Mixed', 'leukocytosis'], ['Lymphocytosis', '(viral / other)']],
   [['Relative', 'neutrophilia'], ['Normal', 'white cells'], ['Relative', 'lymphocytosis']],
-  [['Leukopenia,', 'lymphopenia'], ['Leukopenia'], ['Leukopenia,', 'neutropenia']],
+  [['Leukopenia', 'with lymphopenia'], ['Leukopenia'], ['Leukopenia', 'with neutropenia']],
 ];
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : String(Math.round(n * 10) / 10));
-const levelWord = (l: Level) => (l === 'normal' ? 'within range' : l === 'high' ? 'above range' : 'below range');
 const glyph = (l: Level) => (l === 'high' ? '▲ ' : l === 'low' ? '▼ ' : '');
+const levelWord = (l: Level) => (l === 'normal' ? 'within range' : l === 'high' ? 'above range' : 'below range');
 
+const HEAD_W = 58;
+const CELL_W = 60;
+const CELL_H = 42;
+const GRID_W = HEAD_W + 3 * CELL_W;
+const GRID_H = 24 + 3 * CELL_H;
+
+/** The three-by-three pattern grid, in a card's colour. */
 function Grid({
-  x, y, labels, colHeads, rowHeads, col, row, normalRow, normalCol,
+  t, labels, colHeads, rowHeads, col, row, normalRow, normalCol,
 }: {
-  x: number; y: number; labels: string[][][];
-  colHeads: string[][]; rowHeads: string[][];
+  t: Theme; labels: string[][][]; colHeads: string[][]; rowHeads: string[][];
   col: 0 | 1 | 2; row: 0 | 1 | 2; normalRow: number; normalCol: number;
 }) {
-  const gx = x + ROW_HEAD_W;
   return (
-    <g>
-      {/* column heads above the grid */}
+    <svg viewBox={`0 0 ${GRID_W} ${GRID_H}`} className="lr__cbc-grid" role="img" aria-label="pattern grid">
       {colHeads.map((lines, c) => lines.map((l, li) => (
-        <text key={`${c}${li}`} x={gx + c * CELL_W + CELL_W / 2} y={y + 8 + li * 9}
-              fontSize={li === 0 ? 8.2 : 7.2} fontWeight={c === col ? 700 : 500} fill={c === col ? INK : MUTED} textAnchor="middle">
-          {li === 0 && c === col ? '▾ ' : ''}{l}
+        <text key={`${c}${li}`} x={HEAD_W + c * CELL_W + CELL_W / 2} y={9 + li * 9}
+              fontSize={li === 0 ? 8.4 : 7.4} fontWeight={li === 0 ? 700 : 500} fill={c === col ? INK : MUTED} textAnchor="middle">
+          {l}
         </text>
       )))}
-      {/* row heads down the left */}
       {rowHeads.map((lines, r) => lines.map((l, li) => (
-        <text key={`${r}${li}`} x={gx - 4} y={y + 22 + r * CELL_H + CELL_H / 2 - 2 + li * 9}
-              fontSize={li === 0 ? 8.2 : 7.2} fontWeight={r === row ? 700 : 500} fill={r === row ? INK : MUTED} textAnchor="end">
-          {l}{li === 0 && r === row ? ' ▸' : ''}
+        <text key={`${r}${li}`} x={HEAD_W - 5} y={24 + r * CELL_H + CELL_H / 2 - 2 + li * 9}
+              fontSize={li === 0 ? 8.4 : 7.4} fontWeight={li === 0 ? 700 : 500} fill={r === row ? INK : MUTED} textAnchor="end">
+          {l}
         </text>
       )))}
       {labels.map((rowLabels, r) => rowLabels.map((lines, c) => {
         const here = r === row && c === col;
         const normal = r === normalRow && c === normalCol;
-        const cx = gx + c * CELL_W;
-        const cy = y + 22 + r * CELL_H;
+        const x = HEAD_W + c * CELL_W;
+        const y = 24 + r * CELL_H;
         return (
           <g key={`${r}${c}`}>
-            <rect x={cx + 1} y={cy + 1} width={CELL_W - 2} height={CELL_H - 2} rx="4"
-                  fill={here ? HERE_FILL : normal ? '#ffffff' : CELL}
-                  stroke={here ? INK : normal ? MUTED : CELL_LINE}
-                  strokeWidth={here ? 2.2 : normal ? 1 : 0.8}
-                  strokeDasharray={normal && !here ? '3 2' : undefined} />
+            <rect x={x + 1} y={y + 1} width={CELL_W - 2} height={CELL_H - 2} rx="4"
+                  fill={here ? '#ffffff' : normal ? '#ffffff' : t.soft}
+                  stroke={here ? t.ink : t.line}
+                  strokeWidth={here ? 2 : 0.8} />
             {lines.map((l, i) => (
-              <text key={i} x={cx + CELL_W / 2}
-                    y={cy + CELL_H / 2 + (i - (lines.length - 1) / 2) * 9.5 + (here ? 6 : 3)}
-                    fontSize={here ? 7.8 : 7.4} fontWeight={here || normal ? 700 : 500}
-                    fill={here || normal ? INK : MUTED} textAnchor="middle">
+              <text key={i} x={x + CELL_W / 2}
+                    y={y + CELL_H / 2 + (i - (lines.length - 1) / 2) * 8.6 + (here ? 6 : 3)}
+                    fontSize={here ? 7.6 : 7.1} fontWeight={here ? 700 : normal ? 600 : 500}
+                    fill={here ? t.ink : INK} textAnchor="middle">
                 {l}
               </text>
             ))}
             {here && (
               <g>
-                <rect x={cx + CELL_W / 2 - 24} y={cy + 3} width={48} height={9} rx="4.5" fill={INK} />
-                <text x={cx + CELL_W / 2} y={cy + 9.8} fontSize="5.8" fontWeight="700" fill="#ffffff" textAnchor="middle">
+                <rect x={x + CELL_W / 2 - 23} y={y + 3} width={46} height={9} rx="2" fill={t.ink} />
+                <text x={x + CELL_W / 2} y={y + 9.8} fontSize="5.8" fontWeight="700" fill="#ffffff" textAnchor="middle">
                   THIS RESULT
                 </text>
               </g>
@@ -111,155 +106,189 @@ function Grid({
           </g>
         );
       }))}
-    </g>
+    </svg>
   );
 }
 
-function RangeBar({ a, x, y, w }: { a: CbcAxis; x: number; y: number; w: number }) {
+/** A value on its reference band: grey track, green band, dark marker. */
+function Gauge({ a, t }: { a: CbcAxis; t: Theme }) {
+  const W = 176;
   const span = a.hi - a.lo;
-  const min = Math.max(0, a.lo - span * 0.6);
-  const max = a.hi + span * 0.6;
-  const px = (v: number) => x + ((Math.min(max, Math.max(min, v)) - min) / (max - min)) * w;
+  const min = Math.max(0, a.lo - span * 0.55);
+  const max = a.hi + span * 0.55;
+  const px = (v: number) => 8 + ((Math.min(max, Math.max(min, v)) - min) / (max - min)) * (W - 16);
   const lo = px(a.lo);
   const hi = px(a.hi);
   const at = px(a.value);
-  const barY = y + 10;
   const off = a.level !== 'normal';
+  const unit = (a.unit ?? '').replace(/10\^3/g, '×10³').replace(/10\^6/g, '×10⁶').replace(/x1000/i, '×10³');
   return (
-    <g>
-      <text x={x} y={y} fontSize="8.5" fontWeight="700" fill={INK}>{a.label}</text>
-      <text x={x + w} y={y} fontSize="8.5" fontWeight={off ? 700 : 500} fill={INK} textAnchor="end">
-        {glyph(a.level)}{a.text}{a.unit ? ` ${a.unit}` : ''}
+    <svg viewBox={`0 0 ${W} 54`} className="lr__cbc-gauge" role="img" aria-label={`${a.label} ${a.text}`}>
+      <text x={0} y={9} fontSize="8.8" fontWeight="700" fill={INK}>{a.label}</text>
+      <text x={at} y={22} fontSize="8" fontWeight={off ? 700 : 600} fill={INK} textAnchor={at < 40 ? 'start' : at > W - 40 ? 'end' : 'middle'}>
+        {glyph(a.level)}{a.text}{unit ? ` ${unit}` : ''}
         <tspan fontWeight="400" fill={MUTED}> · {levelWord(a.level)}</tspan>
       </text>
-      <rect x={x} y={barY} width={w} height={9} rx="4.5" fill="url(#cf-hatch)" />
-      <rect x={lo} y={barY} width={Math.max(2, hi - lo)} height={9} fill="#ffffff" stroke={INK} strokeWidth="0.9" />
-      <rect x={x} y={barY} width={w} height={9} rx="4.5" fill="none" stroke={LINE} strokeWidth="0.7" />
-      <path d={`M${at} ${barY + 1} l-4 -6 h8 z`} fill={INK} />
-      <line x1={at} y1={barY} x2={at} y2={barY + 9} stroke={INK} strokeWidth="1.6" />
-      <text x={lo} y={barY + 19} fontSize="7.5" fill={FAINT} textAnchor="middle">{fmt(a.lo)}</text>
-      <text x={hi} y={barY + 19} fontSize="7.5" fill={FAINT} textAnchor="middle">{fmt(a.hi)}</text>
-    </g>
+      <rect x={8} y={30} width={W - 16} height={9} rx="4.5" fill="#e5e7eb" />
+      <rect x={lo} y={30} width={Math.max(2, hi - lo)} height={9} fill={t.mid} />
+      <rect x={8} y={30} width={W - 16} height={9} rx="4.5" fill="none" stroke="#cbd5e1" strokeWidth="0.7" />
+      <path d={`M${at} ${31} l-4 -6 h8 z`} fill={INK} />
+      <line x1={at} y1={30} x2={at} y2={39} stroke={INK} strokeWidth="1.6" />
+      <text x={lo} y={50} fontSize="7.8" fill={MUTED} textAnchor="middle">{fmt(a.lo)}</text>
+      <text x={hi} y={50} fontSize="7.8" fill={MUTED} textAnchor="middle">{fmt(a.hi)}</text>
+    </svg>
   );
 }
 
-function PanelFrame({ x, n, title, children }: { x: number; n: number; title: string; children: React.ReactNode }) {
-  return (
+/* ---- the illustrations: a few cells, drawn simply ---------------------- */
+
+function RedCells({ size = 44 }: { size?: number }) {
+  const disc = (cx: number, cy: number, r: number) => (
     <g>
-      <rect x={x + 0.5} y={0.5} width={PANEL_W - 1} height={PANEL_H - 1} rx="5" fill="none" stroke={LINE} strokeWidth="0.8" />
-      <circle cx={x + 13} cy={13} r={7.5} fill={INK} />
-      <text x={x + 13} y={16} fontSize="8.5" fontWeight="700" fill="#ffffff" textAnchor="middle">{n}</text>
-      <text x={x + 25} y={16.5} fontSize="9.5" fontWeight="700" fill={INK}>{title}</text>
-      <line x1={x + 6} y1={23} x2={x + PANEL_W - 6} y2={23} stroke={CELL_LINE} strokeWidth="0.7" />
-      {children}
+      <circle cx={cx} cy={cy} r={r} fill="#e3414f" />
+      <circle cx={cx} cy={cy} r={r * 0.55} fill="#f28c95" />
+      <circle cx={cx} cy={cy} r={r * 0.3} fill="#e3414f" />
     </g>
+  );
+  return (
+    <svg viewBox="0 0 60 44" width={size} height={size * 44 / 60} aria-hidden="true">
+      {disc(16, 15, 12)}
+      {disc(40, 26, 13)}
+      {disc(26, 34, 8)}
+    </svg>
+  );
+}
+
+function WhiteCells({ size = 44 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 60 44" width={size} height={size * 44 / 60} aria-hidden="true">
+      <circle cx={18} cy={20} r={15} fill="#dbe7ff" stroke="#8fb0ea" strokeWidth="1" />
+      <path d="M11 20 q3 -8 9 -6 q4 1 5 6 q-2 7 -8 6 q-5 -1 -6 -6z" fill="#6d5ac8" />
+      <circle cx={43} cy={24} r={13} fill="#e6e0ff" stroke="#a79be4" strokeWidth="1" />
+      <circle cx={43} cy={24} r={8} fill="#4f3fb0" />
+      <circle cx={9} cy={38} r={5} fill="#c7d7fb" />
+      <circle cx={54} cy={8} r={5} fill="#c7d7fb" />
+    </svg>
+  );
+}
+
+function Platelets({ size = 44 }: { size?: number }) {
+  const blob = (cx: number, cy: number, r: number, rot: number) => (
+    <ellipse cx={cx} cy={cy} rx={r} ry={r * 0.62} transform={`rotate(${rot} ${cx} ${cy})`} fill="#5b4ea6" opacity="0.85" />
+  );
+  return (
+    <svg viewBox="0 0 60 44" width={size} height={size * 44 / 60} aria-hidden="true">
+      {blob(14, 14, 9, -20)}
+      {blob(38, 12, 7, 30)}
+      {blob(26, 30, 8, 10)}
+      {blob(48, 32, 6, -35)}
+      <circle cx={30} cy={16} r={2} fill="#a79be4" />
+      <circle cx={8} cy={32} r={2} fill="#a79be4" />
+    </svg>
+  );
+}
+
+function ClipboardIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+      <rect x={4} y={3} width={16} height={19} rx="2" fill="#ffffff" />
+      <rect x={8} y={1.5} width={8} height={4} rx="1" fill="#c9d4f2" />
+      <rect x={7} y={9} width={10} height={1.8} fill="#1e2f6b" />
+      <rect x={7} y={13} width={10} height={1.8} fill="#1e2f6b" />
+      <rect x={7} y={17} width={6} height={1.8} fill="#1e2f6b" />
+    </svg>
+  );
+}
+
+function Card({ t, n, title, cls, art, children }: {
+  t: Theme; n: number; title: string; cls: string; art: React.ReactNode; children: React.ReactNode;
+}) {
+  return (
+    <div className={`lr__cbc-card lr__cbc-card--${cls}`} style={{ borderColor: t.mid, ['--cbc-ink' as string]: t.ink }}>
+      <div className="lr__cbc-card-head">
+        <span className="lr__cbc-num" style={{ background: t.ink }}>{n}</span>
+        <span className="lr__cbc-card-title" style={{ color: t.ink }}>{title}</span>
+        <span className="lr__cbc-art">{art}</span>
+      </div>
+      {children}
+    </div>
   );
 }
 
 export function CbcFigure({ p }: { p: CbcPattern }) {
-  const x1 = 0;
-  const x2 = PANEL_W + PANEL_GAP;
-  const x3 = 2 * (PANEL_W + PANEL_GAP);
-  const width = 3 * PANEL_W + 2 * PANEL_GAP;
-
   const redCols = [
     ['MCV low', `(<${fmt(p.mcv.lo)})`], ['MCV normal', `(${fmt(p.mcv.lo)} – ${fmt(p.mcv.hi)})`], ['MCV high', `(>${fmt(p.mcv.hi)})`],
   ];
   const redRows = [
     ['Hb normal', `(${fmt(p.hb.lo)} – ${fmt(p.hb.hi)})`], ['Hb low', `(<${fmt(p.hb.lo)})`], ['Hb high', `(>${fmt(p.hb.hi)})`],
   ];
-  const whiteCols = [
-    ['Neutrophils', 'predominant'], ['Balanced', 'differential'], ['Lymphocytes', 'predominant'],
-  ];
+  const whiteCols = [['Neutrophils', 'predominant'], ['Normal', 'differential'], ['Lymphocytes', 'predominant']];
   const whiteRows = [
     ['TLC high', `(>${fmt(p.tlc.hi)})`], ['TLC normal', `(${fmt(p.tlc.lo)} – ${fmt(p.tlc.hi)})`], ['TLC low', `(<${fmt(p.tlc.lo)})`],
   ];
 
-  const readings = [
-    { n: 1, r: p.red }, { n: 2, r: p.white }, { n: 3, r: p.platelet },
-  ];
-
   return (
     <div className="lr__fig lr__fig--cbc">
-      <div className="lr__fig-head">
+      <div className="lr__cbc-head">
         <h3>Reading this CBC</h3>
-        <span>a guide to the pattern the results make, not a diagnosis</span>
+        <span>– a guide to the pattern made by the results, not a diagnosis</span>
       </div>
-      <svg viewBox={`0 0 ${width} ${PANEL_H}`} role="img" aria-label={`CBC pattern: ${p.summary}`}>
-        <defs>
-          <pattern id="cf-hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-            <rect width="5" height="5" fill="#f4f4f5" />
-            <line x1="0" y1="0" x2="0" y2="5" stroke="#8a8f98" strokeWidth="1.2" />
-          </pattern>
-        </defs>
 
-        <PanelFrame x={x1} n={1} title="Red cells (anaemia pattern)">
-          <Grid x={x1 + 4} y={30} labels={RED_CELLS} colHeads={redCols} rowHeads={redRows}
+      <div className="lr__cbc-cards">
+        <Card t={RED} n={1} title="RED CELL (ANAEMIA) PATTERN" cls="red" art={<RedCells />}>
+          <Grid t={RED} labels={RED_CELLS} colHeads={redCols} rowHeads={redRows}
                 col={p.redCol} row={p.redRow} normalRow={0} normalCol={1} />
-          <text x={x1 + 8} y={PANEL_H - 7} fontSize="7" fill={FAINT}>
+          <p className="lr__cbc-pattern" style={{ color: RED.ink }}>Pattern: {p.red.title}</p>
+          <p className="lr__cbc-meaning">{p.red.meaning}</p>
+          <p className="lr__cbc-values">
             Hb {glyph(p.hb.level)}{p.hb.text} {p.hb.unit ?? ''} · MCV {glyph(p.mcv.level)}{p.mcv.text} {p.mcv.unit ?? ''}
-            {p.rdw ? ` · RDW ${glyph(p.rdw.level)}${p.rdw.text}` : ''}
-          </text>
-        </PanelFrame>
+            {p.rdw ? ` · RDW ${glyph(p.rdw.level)}${p.rdw.text}${p.rdw.unit ? ` ${p.rdw.unit}` : ''}` : ''}
+            {p.mchc ? ` · MCHC ${glyph(p.mchc.level)}${p.mchc.text}` : ''}
+          </p>
+        </Card>
 
-        <PanelFrame x={x2} n={2} title="White cells">
-          <Grid x={x2 + 4} y={30} labels={WHITE_CELLS} colHeads={whiteCols} rowHeads={whiteRows}
+        <Card t={BLUE} n={2} title="WHITE CELL PATTERN" cls="blue" art={<WhiteCells />}>
+          <Grid t={BLUE} labels={WHITE_CELLS} colHeads={whiteCols} rowHeads={whiteRows}
                 col={p.whiteCol} row={p.whiteRow} normalRow={1} normalCol={1} />
-          <text x={x2 + 8} y={PANEL_H - 7} fontSize="7" fill={FAINT}>
-            TLC {glyph(p.tlc.level)}{p.tlc.text} · N {glyph(p.neut.level)}{p.neut.text}% · L {glyph(p.lymph.level)}{p.lymph.text}%
-            {p.eos ? ` · E ${glyph(p.eos.level)}${p.eos.text}%` : ''}
-          </text>
-        </PanelFrame>
+          <p className="lr__cbc-pattern" style={{ color: BLUE.ink }}>Pattern: {p.white.title}</p>
+          <p className="lr__cbc-meaning">{p.white.meaning}</p>
+          <p className="lr__cbc-values">
+            TLC {glyph(p.tlc.level)}{p.tlc.text} · Neutrophils {glyph(p.neut.level)}{p.neut.text}% · Lymphocytes {glyph(p.lymph.level)}{p.lymph.text}%
+            {p.eos ? ` · Eosinophils ${glyph(p.eos.level)}${p.eos.text}%` : ''}
+            {p.anc ? ` · ANC ${glyph(p.anc.level)}${p.anc.text}` : ''}
+            {p.alc ? ` · ALC ${glyph(p.alc.level)}${p.alc.text}` : ''}
+          </p>
+        </Card>
 
-        <PanelFrame x={x3} n={3} title="Platelets">
-          <RangeBar a={p.plt} x={x3 + 12} y={44} w={PANEL_W - 24} />
-          {p.mpv
-            ? <RangeBar a={p.mpv} x={x3 + 12} y={100} w={PANEL_W - 24} />
-            : (
-              <text x={x3 + 12} y={104} fontSize="7.5" fill={FAINT}>
-                Mean platelet volume is not part of this count.
-              </text>
-            )}
-          {p.anc && p.alc && (
-            <>
-              <text x={x3 + 12} y={PANEL_H - 50} fontSize="7.8" fontWeight="700" fill={INK}>Absolute white-cell counts</text>
-              <text x={x3 + 12} y={PANEL_H - 39} fontSize="7.2" fill={MUTED}>
-                Neutrophils {glyph(p.anc.level)}{p.anc.text} · band {fmt(p.anc.lo)} – {fmt(p.anc.hi)}
-              </text>
-              <text x={x3 + 12} y={PANEL_H - 29} fontSize="7.2" fill={MUTED}>
-                Lymphocytes {glyph(p.alc.level)}{p.alc.text} · band {fmt(p.alc.lo)} – {fmt(p.alc.hi)}
-              </text>
-            </>
-          )}
-          <text x={x3 + 12} y={PANEL_H - 8} fontSize="6.8" fill={FAINT}>
-            clear: within the band · hatched: outside it
-          </text>
-        </PanelFrame>
-      </svg>
-
-      <div className="lr__cbc-readings">
-        {readings.map(({ n, r }) => (
-          <div key={n} className="lr__cbc-reading">
-            <p className="lr__cbc-pattern"><b>Pattern:</b> {r.title}</p>
-            <p className="lr__cbc-meaning">{r.meaning}</p>
+        <Card t={GREEN} n={3} title="PLATELET PATTERN" cls="green" art={<Platelets />}>
+          <div className="lr__cbc-gauges">
+            <Gauge a={p.plt} t={GREEN} />
+            {p.mpv
+              ? <Gauge a={p.mpv} t={GREEN} />
+              : <p className="lr__cbc-values">Mean platelet volume is not part of this count.</p>}
           </div>
-        ))}
+          <p className="lr__cbc-pattern" style={{ color: GREEN.ink }}>Pattern: {p.platelet.title}</p>
+          <p className="lr__cbc-meaning">{p.platelet.meaning}</p>
+        </Card>
       </div>
 
       <div className="lr__cbc-final">
-        <p className="lr__cbc-final-head">Final CBC interpretation</p>
-        <p className="lr__cbc-final-line">{p.summary}</p>
-        <p className="lr__cbc-final-note">
-          This is a pattern-based reading and not a diagnosis. The findings should be correlated with the clinical
-          history, examination and other relevant investigations; further tests such as iron studies, a peripheral
-          smear or inflammatory markers may be considered on clinical grounds.
-        </p>
+        <div className="lr__cbc-final-head"><ClipboardIcon /><span>Final CBC Interpretation</span></div>
+        <div className="lr__cbc-final-body">
+          <p className="lr__cbc-final-line">{p.summary}</p>
+          <p className="lr__cbc-final-note">
+            This is a pattern-based interpretation and not a diagnosis. The findings should be correlated with the
+            clinical history, examination findings and other relevant investigations. Further tests such as iron
+            studies, peripheral smear and inflammatory markers may be considered based on clinical context.
+          </p>
+        </div>
       </div>
 
+      <p className="lr__cbc-notes-head">Note</p>
       <ol className="lr__cbc-notes">
         <li>Reference intervals are age and sex specific and may vary between laboratories.</li>
         <li>Abnormal results should always be interpreted in the clinical context.</li>
-        <li>This reading is based on commonly seen patterns and may not cover every clinical situation.</li>
+        <li>This interpretation is based on commonly seen patterns and may not cover all possible clinical situations.</li>
         <li>Please consult your doctor for appropriate evaluation and management.</li>
       </ol>
     </div>
