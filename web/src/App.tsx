@@ -236,8 +236,8 @@ const NAV: NavEntry[] = [
       { to: '/reports', label: 'Reporting', icon: 'reporting', cap: 'report:view' },
       { to: '/instruments', label: 'Instruments', icon: 'instruments', cap: 'result:enter' },
       // The packages — the LIS's Technical › Master Profile, re-homed. The
-      // API answers 404 to anyone but super admin and admin.
-      { to: '/catalogue/master-profiles', label: 'Master profiles', icon: 'orders', cap: 'order:view', onlyForRoles: ['super_admin', 'admin'] },
+      // API answers 404 to anyone but the super admin.
+      { to: '/catalogue/master-profiles', label: 'Master profiles', icon: 'orders', cap: 'order:view', onlyForRole: 'super_admin' },
       // The remote-lab middleware fleet. Its own capability: it was gated on
       // analytics:view, which every dashboard reader holds — including the
       // Sales Admin login, which has no business on the lab's instrument
@@ -503,7 +503,7 @@ export function App() {
             and independently by the API on each write. */}
         <Route path="/rate-lists" element={can('rate:manage') ? <RateLists /> : <Navigate to="/" replace />} />
         <Route path="/catalogue/master-profiles"
-               element={user?.role === 'super_admin' || user?.role === 'admin' ? <MasterProfilesPage /> : <Navigate to="/" replace />} />
+               element={user?.role === 'super_admin' ? <MasterProfilesPage /> : <Navigate to="/" replace />} />
         {/* Temporarily Super Admin only — see the nav entry. */}
         <Route path="/worksheet" element={can('result:enter') && user.role === 'super_admin' ? <Worksheet /> : <Navigate to="/" replace />} />
         <Route path="/reports" element={can('report:view') ? <Reports /> : <Navigate to="/" replace />} />

@@ -5,8 +5,8 @@ namespace Infinity.Api.Endpoints;
 
 /// <summary>
 /// Master Profiles (packages) — the port of the legacy Technical > Master
-/// Profile page (script 179). Super admin and admin only, as the LIS page is
-/// a Technical-menu screen; 404 for everyone else, like the other editors.
+/// Profile page (script 179). Super admin only; 404 for everyone else, like
+/// the other editors.
 ///
 /// Writes land in the SHARED catalogue tables through the script's
 /// procedures, so the LIS, Telo and every order procedure see the same
@@ -34,8 +34,9 @@ public static class MasterProfileEndpoints
     public sealed record SaveBody(string? Code, string? Name, int? Ct, int? Mrp, bool? IsActive, IReadOnlyList<MemberBody>? Members);
     public sealed record ActiveBody(bool Active);
 
+    // Super admin only (Jas, 2026-10-07): the shared catalogue is the lab's, not a desk's.
     private static bool IsEditor(System.Security.Claims.ClaimsPrincipal p) =>
-        p.Role() is InfinityRoles.SuperAdmin or InfinityRoles.Admin;
+        p.Role() is InfinityRoles.SuperAdmin;
 
     private static string By(int actor) => $"inf:{actor}";
 
