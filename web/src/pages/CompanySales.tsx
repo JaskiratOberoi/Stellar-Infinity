@@ -261,7 +261,7 @@ function Ledger({ query, live }: { query: SalesLedgerQuery; live: boolean }) {
                     <td className="muted cell--meta" data-label="Unit">{l.buCode ?? '—'}</td>
                     <td className="cell--head">{l.patient ?? '—'}<span className="muted sl__sub mono">{l.pid}</span></td>
                     <td className="mono cell--meta" data-label="SID">{l.sid ?? '—'}</td>
-                    <td className="cell--meta" data-label="Kind"><span className={`badge sl__kind sl__kind--${l.kind.toLowerCase()}`}>{KIND_LABEL[l.kind]}</span></td>
+                    <td className="cell--meta" data-label="Kind"><span className={`badge sl__kind sl__kind--${l.kind.toLowerCase()}`} title={KIND_LABEL[l.kind]}>{KIND_BADGE[l.kind]}</span></td>
                     <td data-label="Item">{l.name ?? l.code}<span className="muted sl__sub mono">{l.code}</span></td>
                     <td className="mono cell--tag" style={{ textAlign: 'right' }}>{inr(l.amount)}</td>
                     <td className="mono muted cell--meta" data-label="MRP" style={{ textAlign: 'right' }}>{l.mrp != null ? inr(l.mrp) : '—'}</td>
@@ -406,7 +406,7 @@ function Dashboard({ query, kind }: { query: SalesLedgerQuery; kind: SalesKind |
             <tbody>
               {data.byItem.map((i) => (
                 <tr key={`${i.kind}:${i.code}`}>
-                  <td><span className={`badge sl__kind sl__kind--${i.kind.toLowerCase()}`}>{KIND_LABEL[i.kind]}</span> {i.name}<span className="muted sl__sub mono">{i.code}</span></td>
+                  <td><span className={`badge sl__kind sl__kind--${i.kind.toLowerCase()}`} title={KIND_LABEL[i.kind]}>{KIND_BADGE[i.kind]}</span> {i.name}<span className="muted sl__sub mono">{i.code}</span></td>
                   <td className="num">{i.clients}</td><td className="num">{i.lines.toLocaleString('en-IN')}</td>
                   <td className="num mono">{i.minRate === i.maxRate ? inr(i.minRate) : `${inr(i.minRate)} – ${inr(i.maxRate)}`}</td>
                   <td className="num mono">{inr(i.amount)}</td>
@@ -423,7 +423,7 @@ function Dashboard({ query, kind }: { query: SalesLedgerQuery; kind: SalesKind |
               <tbody>
                 {data.byItemClientRate.map((r, i) => (
                   <tr key={i}>
-                    <td><span className={`badge sl__kind sl__kind--${r.kind.toLowerCase()}`}>{KIND_LABEL[r.kind]}</span> {r.name}<span className="muted sl__sub mono">{r.code}</span></td>
+                    <td><span className={`badge sl__kind sl__kind--${r.kind.toLowerCase()}`} title={KIND_LABEL[r.kind]}>{KIND_BADGE[r.kind]}</span> {r.name}<span className="muted sl__sub mono">{r.code}</span></td>
                     <td><b className="mono">{r.clientCode}</b></td>
                     <td className="num mono">{inr(r.rate)}</td><td className="num">{r.lines.toLocaleString('en-IN')}</td><td className="num mono">{inr(r.amount)}</td>
                   </tr>
