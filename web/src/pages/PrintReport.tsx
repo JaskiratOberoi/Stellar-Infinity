@@ -644,6 +644,11 @@ export function PrintReport() {
         } else if (cur && curRun && curHeight + h <= SHEET_BUDGET) {
           cur.entries.push(entry);
           curHeight += h;
+        } else if (cur && isEsrItem(item) && cur.entries.some((e) => e.item.kind === 'group')) {
+          // An ESR stays with the count it was booked with, budget or no:
+          // one row, and the CBC reading is drawn after it.
+          cur.entries.push(entry);
+          curHeight += h;
         } else {
           cur = { deptName: dept.name, deptStart: firstInDept, entries: [entry] };
           out.push(cur);
@@ -754,6 +759,14 @@ export function PrintReport() {
       const t = e.item.kind === 'group' ? e.item.group?.testId ?? null : null;
       if (t != null) lastOf.set(t, i);
     });
+    // An ESR booked with the count (CBC with ESR, a Hemogram) prints right
+    // after it, and the reading goes after the ESR, not between the two:
+    // the figure closes the blood picture, it does not split it.
+    for (const [t, i] of lastOf) {
+      let j = i;
+      while (j + 1 < entries.length && isEsrItem(entries[j + 1].item)) j++;
+      if (j !== i) lastOf.set(t, j);
+    }
     const figures = new Map<number, CbcPattern>();
     if (cbcOn) {
       for (const tid of lastOf.keys()) {
@@ -771,10 +784,14 @@ export function PrintReport() {
       const tid = e.item.kind === 'group' ? e.item.group?.testId ?? null : null;
       const fig = tid != null ? figures.get(tid) : undefined;
       out.push(renderItem(e, !!fig));
-      if (fig && tid != null && lastOf.get(tid) === i) {
+      // After the count's last group — or after the ESR that follows it.
+      const closes = [...lastOf].find(([t, at]) => at === i && figures.has(t));
+      if (closes) {
+        const [t] = closes;
+        const p = figures.get(t)!;
         out.push(
-          <tr key={`cbc-${tid}`} className="lr__attach">
-            <td colSpan={5} className="lr__fig-cell"><CbcFigure p={fig} /></td>
+          <tr key={`cbc-${t}`} className="lr__attach">
+            <td colSpan={5} className="lr__fig-cell"><CbcFigure p={p} /></td>
           </tr>,
         );
       }
@@ -1561,6 +1578,13 @@ function PanelBlock({
   const childTid = (c: ReportBlock): number | null => (c.kind === 'group' ? c.group?.testId ?? null : null);
   const cbcLast = new Map<number, number>();
   visible.forEach((c, i) => { const t = childTid(c); if (t != null) cbcLast.set(t, i); });
+  // The reading goes after an ESR that follows the count (CBC with ESR),
+  // not between the two — see renderEntries.
+  for (const [t, i] of cbcLast) {
+    let j = i;
+    while (j + 1 < visible.length && isEsrChild(visible[j + 1])) j++;
+    if (j !== i) cbcLast.set(t, j);
+  }
   const cbcFigures = new Map<number, CbcPattern>();
   if (cbcFigure) {
     for (const tid of cbcLast.keys()) {
@@ -1573,9 +1597,9 @@ function PanelBlock({
       if (p) cbcFigures.set(tid, p);
     }
   }
-  const cbcOf = (c: ReportBlock, i: number): CbcPattern | null => {
-    const t = childTid(c);
-    return t != null && cbcLast.get(t) === i ? cbcFigures.get(t) ?? null : null;
+  const cbcOf = (_c: ReportBlock, i: number): CbcPattern | null => {
+    for (const [t, at] of cbcLast) if (at === i && cbcFigures.has(t)) return cbcFigures.get(t)!;
+    return null;
   };
   const underCbc = (c: ReportBlock): boolean => { const t = childTid(c); return t != null && cbcFigures.has(t); };
 
@@ -1826,6 +1850,18 @@ function GroupBlock({
       {!hideNotes && <NoteRow notes={notesForCodes(includedCodes)} dim={groupOff} />}
     </>
   );
+}
+
+/** An ESR, as a row of its own or a one-row group — the test that rides with a CBC. */
+const ESR = /SEDIMENTATION|\bESR\b/i;
+function isEsrItem(item: ReportItem): boolean {
+  if (item.kind === 'single') return ESR.test(item.row?.name ?? '');
+  if (item.kind === 'group' && item.group) return ESR.test(item.group.title ?? '') || (item.group.rows.length === 1 && ESR.test(item.group.rows[0].name ?? ''));
+  return false;
+}
+function isEsrChild(c: ReportBlock): boolean {
+  if (c.kind === 'group' && c.group) return ESR.test(c.group.title ?? '') || (c.group.rows.length === 1 && ESR.test(c.group.rows[0].name ?? ''));
+  return ESR.test(c.row?.name ?? '');
 }
 
 /** A standalone test row and its own interpretation. */
