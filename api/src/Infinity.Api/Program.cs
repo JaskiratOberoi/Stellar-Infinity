@@ -40,6 +40,7 @@ builder.Services.AddSingleton<UserTipRepository>();
 // hosted service), re-read on every save.
 builder.Services.AddSingleton<Infinity.Api.Reports.ReportSettings>();
 builder.Services.AddSingleton<Infinity.Api.Reports.LetterheadRepository>();
+builder.Services.AddSingleton<Infinity.Api.Catalogue.MasterProfileRepository>();
 builder.Services.AddSingleton<Infinity.Api.Reports.LetterheadPapers>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<Infinity.Api.Reports.ReportSettings>());
 builder.Services.AddSingleton<RevenueRepository>();
@@ -311,6 +312,7 @@ app.MapInvoiceEndpoints();
 app.MapReportPdfEndpoints();
 app.MapPublicReportEndpoints();
 app.MapLetterheadEndpoints();
+app.MapMasterProfileEndpoints();
 app.MapWhatsAppEndpoints();
 
 app.Run();

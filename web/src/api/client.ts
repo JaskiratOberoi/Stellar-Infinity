@@ -1745,3 +1745,44 @@ export const whatsappApi = {
   status: (pids: number[]) =>
     api.get<Record<string, { status: WaStatus; at: string; phone: string; error: string | null }>>(`/api/reports/whatsapp/status?pids=${pids.join(',')}`),
 };
+
+/* ---- master profiles (packages) — script 179 ---- */
+
+export interface MasterProfileRow {
+  id: number; code: string; name: string; ct: number | null; mrp: number | null; isActive: boolean;
+  profileCount: number; testCount: number; members: string | null;
+  createdBy: string | null; createdDate: string | null; modifiedBy: string | null; modifiedDate: string | null;
+}
+export interface MasterProfileMember {
+  kind: 'profile' | 'test'; id: number; code: string | null;
+  /** The name stored on the package at save time — what the order and the report print. */
+  snapshotName: string | null;
+  /** What the catalogue calls it now. */
+  currentName: string | null;
+  mrp: number | null; isActive: boolean; existsNow: boolean;
+}
+export interface MasterProfileDetail {
+  id: number; code: string; name: string; ct: number | null; mrp: number | null; isActive: boolean;
+  createdBy: string | null; createdDate: string | null; modifiedBy: string | null; modifiedDate: string | null;
+  orderedCount: number; smartReport: boolean;
+  members: MasterProfileMember[];
+}
+export interface PickerItem { id: number; code: string | null; name: string | null; mrp: number | null; departmentId: number | null }
+export interface MasterProfileSave {
+  code: string; name: string; ct: number | null; mrp: number | null; isActive: boolean;
+  members: { kind: 'profile' | 'test'; id: number }[];
+}
+
+export const masterProfileApi = {
+  list: (search: string, page: number, pageSize: number) =>
+    api.get<{ rows: MasterProfileRow[]; total: number; page: number; pageSize: number }>(
+      `/api/catalogue/master-profiles/?search=${encodeURIComponent(search)}&page=${page}&pageSize=${pageSize}`),
+  get: (id: number) => api.get<MasterProfileDetail>(`/api/catalogue/master-profiles/${id}`),
+  create: (body: MasterProfileSave) => api.post<MasterProfileDetail>('/api/catalogue/master-profiles/', body),
+  update: (id: number, body: MasterProfileSave) => api.put<MasterProfileDetail>(`/api/catalogue/master-profiles/${id}`, body),
+  setActive: (id: number, active: boolean) =>
+    api.put<MasterProfileDetail>(`/api/catalogue/master-profiles/${id}/active`, { active }),
+  remove: (id: number) => api.delete<{ ok: boolean }>(`/api/catalogue/master-profiles/${id}`),
+  picker: (kind: 'profile' | 'test', search: string) =>
+    api.get<PickerItem[]>(`/api/catalogue/master-profiles/picker?kind=${kind}&search=${encodeURIComponent(search)}`),
+};

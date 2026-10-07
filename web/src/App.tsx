@@ -35,6 +35,7 @@ import { Referrers } from './pages/Referrers';
 import { InvoiceConfigPage } from './pages/InvoiceConfig';
 import { ReportingSettingsPage } from './pages/ReportingSettings';
 import { LetterheadsPage } from './pages/Letterheads';
+import { MasterProfilesPage } from './pages/MasterProfiles';
 import { WhatsAppSettingsPage } from './pages/WhatsAppSettings';
 import { ThemeToggle } from './theme/ThemeToggle';
 import { IntroTip, resetIntroTips } from './components/IntroTip';
@@ -227,6 +228,9 @@ const NAV: NavEntry[] = [
       { to: '/worksheet', label: 'Worksheet', icon: 'worksheet', cap: 'result:enter', onlyForRole: 'super_admin' },
       { to: '/reports', label: 'Reporting', icon: 'reporting', cap: 'report:view' },
       { to: '/instruments', label: 'Instruments', icon: 'instruments', cap: 'result:enter' },
+      // The packages — the LIS's Technical › Master Profile, re-homed. The
+      // API answers 404 to anyone but super admin and admin.
+      { to: '/catalogue/master-profiles', label: 'Master profiles', icon: 'orders', cap: 'order:view', onlyForRoles: ['super_admin', 'admin'] },
       // The remote-lab middleware fleet. Its own capability: it was gated on
       // analytics:view, which every dashboard reader holds — including the
       // Sales Admin login, which has no business on the lab's instrument
@@ -489,6 +493,8 @@ export function App() {
         {/* billing:view to look; rate:manage is checked inside for every edit,
             and independently by the API on each write. */}
         <Route path="/rate-lists" element={can('rate:manage') ? <RateLists /> : <Navigate to="/" replace />} />
+        <Route path="/catalogue/master-profiles"
+               element={user?.role === 'super_admin' || user?.role === 'admin' ? <MasterProfilesPage /> : <Navigate to="/" replace />} />
         {/* Temporarily Super Admin only — see the nav entry. */}
         <Route path="/worksheet" element={can('result:enter') && user.role === 'super_admin' ? <Worksheet /> : <Navigate to="/" replace />} />
         <Route path="/reports" element={can('report:view') ? <Reports /> : <Navigate to="/" replace />} />

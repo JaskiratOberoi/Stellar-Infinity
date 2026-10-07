@@ -1580,3 +1580,29 @@ way: 177's "department_id <> 4" dropped UNBOUND primaries (NULL), so for the
 two and a half hours it was live Karnal lost Dr Jasneet Kaur and Agra lost
 Dr Divya P to Delhi's defaults; 178 uses ISNULL and the caches were flushed
 again.
+
+## Master Profiles authored from Infinity (2026-10-07)
+
+Jas asked for the legacy Technical › Master Profile page in Infinity, after
+a reading of its source (MasterProfile_Master.aspx, MasterProfileClass,
+Utilities.BindListViewWithProfiles, TestMasterClass.GetTestRate). What the
+LIS does: a paged, searchable list (code, name, CT, MRP, status toggle,
+edit, delete); an editor with name, code, C/T, MRP, status, and two list
+boxes — profiles or tests on the left by radio, selected on the right with
+the members' MRP total; save replaces the members wholesale in
+tbl_med_test_master_profile_param / _test_param with the names snapshotted,
+checks the code is unique, and on CREATE seeds a rate row at MRP on every
+rate list; delete removes the header and the profile members and leaves the
+test members and rate rows orphaned.
+
+Infinity (script 179, /api/catalogue/master-profiles, Lab › Master
+profiles; super admin and admin): the same tables written the same way —
+the "no catalogue changes from Infinity" rule stands for everything else,
+but this page IS the catalogue's author, re-homed — with the LIS's gaps
+closed: members are validated against the catalogue; the editor searches
+both lists, shows each member's code and MRP, and says when a member was
+renamed or retired since it was added; a package on any order line, or sold
+with the Smart Report, cannot be deleted (switch it off); a delete removes
+every row of the package including rates and special rates, with the
+package's full shape in the audit row. Every write is audited as
+catalogue.master_profile. CreatedBy/ModifiedBy are stamped inf:<user>.
