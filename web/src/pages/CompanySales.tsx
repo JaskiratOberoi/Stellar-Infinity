@@ -41,6 +41,8 @@ const SOURCES: { value: SalesSource | ''; label: string }[] = [
   { value: 'telo', label: 'Telo' },
 ];
 const KIND_LABEL: Record<SalesKind, string> = { Master: 'Master profile', Profile: 'Profile', Test: 'Test', Extra: 'Extra' };
+/** The badge on a line: short, so the kind column stays one word wide (Jas, 2026-10-07). */
+const KIND_BADGE: Record<SalesKind, string> = { Master: 'MPro', Profile: 'Pro', Test: 'Test', Extra: 'Extra' };
 
 /** yyyy-mm-dd on the local calendar. */
 function isoDay(d: Date): string {
